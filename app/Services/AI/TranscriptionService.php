@@ -57,28 +57,56 @@ class TranscriptionService implements TranscriptionServiceInterface
         $transcript->update(['status' => 'processing']);
 
         try {
-            $audioPath = Storage::disk('public')->path($transcript->audio_path);
+            $audioUrl = $transcript->audio_path;   // ← now a full Cloudinary URL
 
-            if (! file_exists($audioPath)) {
-                throw new \RuntimeException("Audio file not found at [{$audioPath}].");
+            if (blank($audioUrl)) {
+                throw new \RuntimeException('No audio URL found on transcript.');
             }
 
-            $fileSizeMb = filesize($audioPath) / 1024 / 1024;
+            // ── Fetch audio bytes from Cloudinary ─────────────────────────────
+            $context = stream_context_create([
+                'http' => ['timeout' => 30, 'follow_location' => true],
+                'ssl'  => ['verify_peer' => false, 'verify_peer_name' => false],
+            ]);
+
+            $audioBytes = @file_get_contents($audioUrl, false, $context);
+
+            if ($audioBytes === false || $audioBytes === '') {
+                throw new \RuntimeException("Could not fetch audio from Cloudinary: {$audioUrl}");
+            }
+
+            // Check 25 MB Groq limit
+            $fileSizeMb = strlen($audioBytes) / 1024 / 1024;
             if ($fileSizeMb > 25) {
                 throw new \RuntimeException(
-                    "File size {$fileSizeMb} MB exceeds Groq's 25 MB limit."
+                    "Audio file {$fileSizeMb} MB exceeds Groq's 25 MB limit."
                 );
             }
 
-            // ── Call Groq Whisper ─────────────────────────────────────────
-            $response = Http::withToken($this->apiKey)
-                ->timeout(300)
-                ->attach('file', fopen($audioPath, 'r'), basename($audioPath))
-                ->post($this->whisperUrl, [
-                    'model'           => $this->whisperModel,
-                    'response_format' => 'verbose_json',
-                    'temperature'     => 0,
-                ]);
+            // ── Get filename + extension for Groq ─────────────────────────────
+            // Groq needs the filename to detect format
+            $filename = basename(parse_url($audioUrl, PHP_URL_PATH));
+            if (! pathinfo($filename, PATHINFO_EXTENSION)) {
+                $filename .= '.mp3';   // fallback extension
+            }
+
+            // ── Write bytes to a temp file (Groq needs a real file handle) ────
+            $tmpPath = tempnam(sys_get_temp_dir(), 'groq_audio_') . '.' . pathinfo($filename, PATHINFO_EXTENSION);
+            file_put_contents($tmpPath, $audioBytes);
+
+            try {
+                // ── Call Groq Whisper ─────────────────────────────────────────
+                $response = Http::withToken($this->apiKey)
+                    ->timeout(300)
+                    ->attach('file', fopen($tmpPath, 'r'), $filename)
+                    ->post($this->whisperUrl, [
+                        'model'           => $this->whisperModel,
+                        'response_format' => 'verbose_json',
+                        'temperature'     => 0,
+                    ]);
+            } finally {
+                @unlink($tmpPath);   // always clean up temp file
+            }
 
             if ($response->failed()) {
                 $error = $response->json('error.message') ?? $response->body();
@@ -89,12 +117,12 @@ class TranscriptionService implements TranscriptionServiceInterface
             $segments = $this->normalizeSegments($data['segments'] ?? []);
             $text     = $data['text'] ?? '';
 
-            // ── Generate notes via Groq LLM (non-blocking) ───────────────
+            // ── Generate notes via Groq LLaMA ─────────────────────────────────
             $notes = null;
             try {
                 $notes = $this->generateNotes($text, $transcript->title);
             } catch (\Throwable $e) {
-                Log::warning("Speech notes generation failed for #{$transcript->id}: {$e->getMessage()}");
+                Log::warning("Notes generation failed for #{$transcript->id}: {$e->getMessage()}");
             }
 
             $transcript->update([
@@ -105,10 +133,7 @@ class TranscriptionService implements TranscriptionServiceInterface
                 'status'          => 'done',
             ]);
 
-            Log::info(
-                "Transcript #{$transcript->id} done via Groq. " .
-                "Lang: {$transcript->language}. Model: {$this->whisperModel}."
-            );
+            Log::info("Transcript #{$transcript->id} done. Lang: {$transcript->language}.");
 
         } catch (\Throwable $e) {
             Log::error("TranscriptionService failed for #{$transcript->id}: {$e->getMessage()}");

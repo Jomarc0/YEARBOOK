@@ -18,7 +18,16 @@ export const presenceApi = {
 };
 
 export const voiceNotesApi = {
-  list:   ()   => api.get('/voice-notes'),
-  upload: (fd) => api.post('/voice-notes', fd, { headers: { 'Content-Type': 'multipart/form-data' } }),
-  delete: (id) => api.delete(`/voice-notes/${id}`),
+  // Received (approved) notes
+  inbox:      ()           => client.get('/voice-notes/inbox'),
+  // Sent notes (all statuses — pending/approved/rejected)
+  outbox:     ()           => client.get('/voice-notes/outbox'),
+  // Notes shown on a student's public profile
+  forProfile: (userId)     => client.get(`/voice-notes/profile/${userId}`),
+  // Send a voice note to a classmate
+  send:       (formData)   => client.post('/voice-notes', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  }),
+  // Sender deletes their own note
+  delete:     (id)         => client.delete(`/voice-notes/${id}`),
 };

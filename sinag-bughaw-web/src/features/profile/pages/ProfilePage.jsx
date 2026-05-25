@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import { studentsApi } from '@/api/student.api';
 import { profileApi } from '@/api/gallery.api';
 import { yearbookApi } from '@/api/yearbook.api';
@@ -12,6 +12,7 @@ import StudentPhotosSection from '../components/StudentPhotosSection';
 import ProfileUploadModal from '../components/ProfileUploadModal';
 import PostContextMenu from '../components/PostContextMenu';
 import ShareModal from '../components/ShareModal';
+import MessageModal from '@/components/feedback/MessageModal'; // ← ADDED
 
 const TABS = [
   { key: 'posts',        icon: 'fas fa-th',            label: 'POSTS'        },
@@ -23,6 +24,7 @@ const TABS = [
 export default function ProfilePage() {
   const { id }             = useParams();
   const { user: authUser } = useAuth();
+  const navigate           = useNavigate();
 
   const [student,      setStudent]      = useState(null);
   const [loading,      setLoading]      = useState(true);
@@ -32,6 +34,7 @@ export default function ProfilePage() {
   const [activeTab,    setActiveTab]    = useState('posts');
   const [showUpload,   setShowUpload]   = useState(false);
   const [showShare,    setShowShare]    = useState(false);
+  const [showMsg,      setShowMsg]      = useState(false); // ← ADDED
   const [posts,        setPosts]        = useState([]);
   const [postsLoading, setPostsLoading] = useState(false);
   const [contextMenu,  setContextMenu]  = useState(null);
@@ -138,9 +141,18 @@ export default function ProfilePage() {
 
       <Navbar />
 
-      {/* Modals */}
+      {/* ── Modals ── */}
       {showUpload && <ProfileUploadModal onClose={() => setShowUpload(false)} onSuccess={loadPosts} />}
       <ShareModal isOpen={showShare} onClose={() => setShowShare(false)} student={student} />
+
+      {/* ✅ ADDED: MessageModal — opens instead of navigating to /messages/:id */}
+      <MessageModal
+        isOpen={showMsg}
+        onClose={() => setShowMsg(false)}
+        student={student}
+        authUser={authUser}
+      />
+
       {contextMenu && (
         <PostContextMenu
           post={contextMenu.post}
@@ -218,7 +230,6 @@ export default function ProfilePage() {
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, paddingTop: 10, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
                 {isOwn ? (
                   <>
-                    {/* Premium / Upgrade button */}
                     {isPremium ? (
                       <Link to="/premium" className="nu-btn" style={{
                         display: 'inline-flex', alignItems: 'center', gap: 6,
@@ -262,8 +273,26 @@ export default function ProfilePage() {
                   </>
                 ) : (
                   <>
-                    <button className="nu-btn" style={{ padding: '8px 22px', borderRadius: 10, border: 'none', background: '#1d2b4b', color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
-                      <i className="fas fa-paper-plane" style={{ marginRight: 6, fontSize: 11 }} />Message
+                    {/* ✅ FIXED: opens MessageModal instead of navigating to /messages/:id */}
+                    <button
+                      className="nu-btn"
+                      onClick={() => setShowMsg(true)}
+                      style={{
+                        display:      'inline-flex',
+                        alignItems:   'center',
+                        gap:          6,
+                        padding:      '8px 22px',
+                        borderRadius: 10,
+                        border:       'none',
+                        background:   '#1d2b4b',
+                        color:        '#fff',
+                        fontSize:     13,
+                        fontWeight:   600,
+                        cursor:       'pointer',
+                      }}
+                    >
+                      <i className="fas fa-paper-plane" style={{ marginRight: 6, fontSize: 11 }} />
+                      Message
                     </button>
                   </>
                 )}
@@ -369,7 +398,6 @@ export default function ProfilePage() {
         {/* ══ POSTS TAB ══ */}
         {activeTab === 'posts' && (
           <div>
-            {/* Upload bar */}
             {isOwn && (
               <div onClick={() => setShowUpload(true)}
                 style={{ background: '#fff', borderRadius: 14, padding: '10px 14px', marginBottom: 4, boxShadow: '0 1px 4px rgba(29,43,75,0.06)', border: '1px solid #e8edf5', display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', transition: 'box-shadow 0.15s' }}
@@ -418,13 +446,11 @@ export default function ProfilePage() {
                       <img src={post.file_path} alt={post.caption ?? ''} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
                     )}
 
-                    {/* Hover overlay */}
                     <div className="ig-overlay" style={{ position: 'absolute', inset: 0, background: 'rgba(29,43,75,0.55)', opacity: 0, transition: 'opacity 0.2s', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 20 }}>
                       <span style={{ color: '#fff', fontSize: 14, fontWeight: 700 }}><i className="fas fa-heart" style={{ marginRight: 5, color: '#fdb813' }} />0</span>
                       <span style={{ color: '#fff', fontSize: 14, fontWeight: 700 }}><i className="fas fa-comment" style={{ marginRight: 5, color: '#fdb813' }} />0</span>
                     </div>
 
-                    {/* Badges */}
                     {post.ai_metadata?.resource_type === 'video' && (
                       <i className="fas fa-play-circle" style={{ position: 'absolute', top: 8, right: 8, color: '#fff', fontSize: 16, filter: 'drop-shadow(0 1px 4px rgba(0,0,0,0.6))' }} />
                     )}
@@ -435,7 +461,6 @@ export default function ProfilePage() {
                       </div>
                     )}
 
-                    {/* Menu button */}
                     {isOwn && (
                       <button className="ig-menu-btn"
                         onClick={e => { e.stopPropagation(); const rect = e.currentTarget.getBoundingClientRect(); setContextMenu({ post, x: rect.left, y: rect.bottom + 6 }); }}
@@ -444,7 +469,6 @@ export default function ProfilePage() {
                       </button>
                     )}
 
-                    {/* Caption */}
                     {post.caption && (
                       <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, background: 'linear-gradient(transparent, rgba(29,43,75,0.85))', padding: '24px 10px 10px', fontSize: 11, color: '#fff', fontWeight: 500, lineHeight: 1.3 }}>
                         {post.caption.length > 38 ? post.caption.slice(0, 38) + '…' : post.caption}

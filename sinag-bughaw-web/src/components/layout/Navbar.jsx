@@ -5,7 +5,6 @@ import NotificationBell                 from '@/components/feedback/Notification
 import { useState, useRef, useEffect }  from 'react';
 import { messagesApi }                  from '@/api/messaging.api';
 
-// ── Tiny hook: keeps the unread count fresh without prop-drilling ─────────────
 function useUnreadMessages() {
   const [count, setCount] = useState(0);
 
@@ -14,37 +13,28 @@ function useUnreadMessages() {
       const { data } = await messagesApi.unreadCount();
       setCount(data.unread_count ?? 0);
     } catch {
-      // silently ignore — badge just won't update
+      // silently ignore
     }
   };
 
   useEffect(() => {
     refresh();
-
-    // Poll every 30 s as a fallback (WebSocket is the primary delivery)
     const interval = setInterval(refresh, 30_000);
-
-    // Listen for the custom event fired by useMessaging when a WS message arrives
     window.addEventListener('messaging:unread-updated', refresh);
-
     return () => {
       clearInterval(interval);
       window.removeEventListener('messaging:unread-updated', refresh);
     };
   }, []);
 
-  // Also clear the badge when the user navigates to /messages
   const location = useLocation();
   useEffect(() => {
-    if (location.pathname.startsWith('/messages')) {
-      setCount(0);
-    }
+    if (location.pathname.startsWith('/messages')) setCount(0);
   }, [location.pathname]);
 
   return count;
 }
 
-// ── Badge component ───────────────────────────────────────────────────────────
 function UnreadBadge({ count }) {
   if (!count || count < 1) return null;
   return (
@@ -62,20 +52,19 @@ function UnreadBadge({ count }) {
       minWidth:     '15px',
       textAlign:    'center',
       pointerEvents:'none',
-      border:       '1.5px solid #1d2b4b',   // matches nav background
+      border:       '1.5px solid #1d2b4b',
     }}>
       {count > 99 ? '99+' : count}
     </span>
   );
 }
 
-// ── Main Navbar ───────────────────────────────────────────────────────────────
 export default function Navbar() {
   const { user, logout } = useAuth();
   const location         = useLocation();
   const [dropOpen, setDropOpen] = useState(false);
-  const dropRef = useRef(null);
-  const unreadMessages  = useUnreadMessages();    // ← new
+  const dropRef        = useRef(null);
+  const unreadMessages = useUnreadMessages();
 
   const avatarSrc = storageUrl(user?.profile_picture)
     || `https://ui-avatars.com/api/?name=${encodeURIComponent(user?.name ?? 'U')}&background=fdb813&color=1d2b4b&size=64`;
@@ -85,7 +74,7 @@ export default function Navbar() {
     { to: '/directory', label: 'Directory' },
     { to: '/faculty',   label: 'Faculty'   },
     { to: '/gallery',   label: 'Gallery'   },
-    { to: '/flipbook',  label: 'Yearbook'  },
+    { to: '/yearbook',  label: 'Yearbook'  }, // ← was /flipbook
     { to: '/sections',  label: 'Sections'  },
     { to: '/discover',  label: 'Discovery' },
   ];
@@ -113,7 +102,7 @@ export default function Navbar() {
       boxShadow: '0 2px 20px rgba(0,0,0,0.15)',
     }}>
 
-      {/* Logo — unchanged */}
+      {/* Logo */}
       <Link to="/dashboard" style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 10 }}>
         <img src="/images/NU_logo.png" alt="NU Lipa" style={{ width: 36, height: 36, objectFit: 'contain' }} />
         <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
@@ -122,7 +111,7 @@ export default function Navbar() {
         </div>
       </Link>
 
-      {/* Nav Links — unchanged */}
+      {/* Nav links */}
       <div style={{ display: 'flex', gap: 2 }}>
         {links.map(link => {
           const isActive = location.pathname === link.to || location.pathname.startsWith(link.to + '/');
@@ -130,8 +119,8 @@ export default function Navbar() {
             <Link key={link.to} to={link.to}
               style={{
                 textDecoration: 'none', fontSize: 13,
-                color: isActive ? '#fdb813' : 'rgba(255,255,255,0.6)',
-                padding: '7px 16px', borderRadius: 7,
+                color:      isActive ? '#fdb813' : 'rgba(255,255,255,0.6)',
+                padding:    '7px 16px', borderRadius: 7,
                 background: isActive ? 'rgba(253,184,19,0.12)' : 'transparent',
                 transition: 'all 0.15s', fontWeight: isActive ? 600 : 400,
               }}
@@ -147,28 +136,20 @@ export default function Navbar() {
       {/* Right side */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
 
-        {/* Existing notification bell — unchanged */}
         <NotificationBell />
 
-        {/* ── NEW: Messages icon with unread badge ── */}
+        {/* Messages icon */}
         <Link
           to="/messages"
           style={{
             position:       'relative',
-            width:          34,
-            height:         34,
+            width:          34, height: 34,
             borderRadius:   8,
-            display:        'flex',
-            alignItems:     'center',
-            justifyContent: 'center',
-            color:          location.pathname.startsWith('/messages')
-                              ? '#fdb813'
-                              : 'rgba(255,255,255,0.6)',
+            display:        'flex', alignItems: 'center', justifyContent: 'center',
+            color:          location.pathname.startsWith('/messages') ? '#fdb813' : 'rgba(255,255,255,0.6)',
             textDecoration: 'none',
             transition:     'all 0.15s',
-            background:     location.pathname.startsWith('/messages')
-                              ? 'rgba(253,184,19,0.12)'
-                              : 'transparent',
+            background:     location.pathname.startsWith('/messages') ? 'rgba(253,184,19,0.12)' : 'transparent',
           }}
           onMouseEnter={e => {
             if (!location.pathname.startsWith('/messages')) {
@@ -186,11 +167,10 @@ export default function Navbar() {
           <i className="fas fa-comment-dots" style={{ fontSize: 16 }} />
           <UnreadBadge count={unreadMessages} />
         </Link>
-        {/* ── end messages icon ── */}
 
         <div style={{ width: 1, height: 20, background: 'rgba(255,255,255,0.12)', margin: '0 4px' }} />
 
-        {/* Avatar dropdown — completely unchanged below */}
+        {/* Avatar dropdown */}
         <div ref={dropRef} style={{ position: 'relative' }}>
           <button
             onClick={() => setDropOpen(v => !v)}
@@ -253,9 +233,9 @@ export default function Navbar() {
               </div>
 
               {[
-                { icon: 'fa-user',    color: '#3f51b5', label: 'View Profile', to: `/profile/${user?.id}` },
-                { icon: 'fa-cog',     color: '#64748b', label: 'Settings',     to: '/settings'            },
-                { icon: 'fa-crown',   color: '#fdb813', label: 'Go Premium',   to: '/premium'             },
+                { icon: 'fa-user',  color: '#3f51b5', label: 'View Profile', to: `/profile/${user?.id}` },
+                { icon: 'fa-cog',   color: '#64748b', label: 'Settings',     to: '/settings'            },
+                { icon: 'fa-crown', color: '#fdb813', label: 'Go Premium',   to: '/premium'             },
               ].map(item => (
                 <Link key={item.label} to={item.to}
                   onClick={() => setDropOpen(false)}

@@ -1,13 +1,22 @@
 import axios from 'axios';
 
-const BASE_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000/api';
-const STORAGE_ROOT = import.meta.env.VITE_APP_URL || 'http://127.0.0.1:8000';
+const BASE_URL         = import.meta.env.VITE_API_URL             || 'http://127.0.0.1:8000/api';
+const STORAGE_ROOT     = import.meta.env.VITE_APP_URL             || 'http://127.0.0.1:8000';
+const CLOUDINARY_CLOUD = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME;
 
 export function storageUrl(path) {
   if (!path) return null;
-  if (path.startsWith('http://') || path.startsWith('https://')) return path; 
-  const BASE = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000';
-  return `${BASE}/storage/${path}`;
+
+  // Already a full Cloudinary or any http URL — return as-is
+  if (path.startsWith('http://') || path.startsWith('https://')) return path;
+
+  // Reconstruct Cloudinary URL from stored public_id / relative path
+  if (CLOUDINARY_CLOUD) {
+    return `https://res.cloudinary.com/${CLOUDINARY_CLOUD}/image/upload/${path}`;
+  }
+
+  // Last resort fallback — local storage (development only)
+  return `${STORAGE_ROOT}/storage/${path}`;
 }
 
 const api = axios.create({

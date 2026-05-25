@@ -30,7 +30,10 @@ class MessageController extends Controller
                     ? $message->receiver_id
                     : $message->sender_id;
 
+                // Skip if other user doesn't exist or already shown
+                if (!$otherId)             return false;
                 if (isset($seen[$otherId])) return false;
+
                 $seen[$otherId] = true;
                 return true;
             })
@@ -39,27 +42,30 @@ class MessageController extends Controller
                     ? $message->receiver
                     : $message->sender;
 
+                // Skip if related user was deleted
+                if (!$other) return null;
+
                 return [
-                    'id'           => $message->id,
-                    'body'         => $message->body,
-                    'is_read'      => $message->is_read,
-                    'sender_id'    => $message->sender_id,
-                    'receiver_id'  => $message->receiver_id,
-                    'created_at'   => $message->created_at->toISOString(),
-                    'sender'       => $message->sender,
-                    'receiver'     => $message->receiver,
-                    'other_user'   => $other,
-                    'unread_count' => Message::where('sender_id', $other?->id)
+                    'id'          => $message->id,
+                    'body'        => $message->body,
+                    'is_read'     => $message->is_read,
+                    'sender_id'   => $message->sender_id,
+                    'receiver_id' => $message->receiver_id,
+                    'created_at'  => $message->created_at->toISOString(),
+                    'sender'      => $message->sender,
+                    'receiver'    => $message->receiver,
+                    'other_user'  => $other,
+                    'unread_count'=> Message::where('sender_id', $other->id)
                         ->where('receiver_id', $userId)
                         ->where('is_read', false)
                         ->count(),
                 ];
             })
+            ->filter()   // remove any nulls
             ->values();
 
         return response()->json($conversations);
     }
-
     // ── Unread badge count ────────────────────────────────────────────────────
 
     public function unreadCount(Request $request): JsonResponse

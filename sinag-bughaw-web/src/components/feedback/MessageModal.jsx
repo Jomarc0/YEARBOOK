@@ -1,369 +1,509 @@
-import { useEffect, useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
-import Navbar from '@/components/layout/Navbar';
-import Footer from '@/components/layout/Footer';
-import { studentsApi } from '@/api/student.api';
-import { useAuth } from '@/features/auth/hooks/useAuth';
-import MessageModal from '@/components/feedback/MessageModal';
-import ShareModal from '@/features/profile/components/ShareModal';
-import PremiumBadge from '@/features/subscription/components/PremiumBadge';
-import StudentPhotosSection from '../../features/profile/components/StudentPhotosSection';
-import { imageUrl, avatarUrl as makeAvatar } from '@/utils/imageUrl';
+import { useEffect, useRef, useState, useCallback } from 'react';
+import api from '@/api/client';   // ← your existing axios instance
 
-const MOCK_ACHIEVEMENTS = [
-  { title: 'Sinag-Bughaw Developer', subtitle: 'Capstone Project 2026'       },
-  { title: 'Tech Innovator Award',   subtitle: 'NU Lipa Exhibit'             },
-  { title: "Dean's Lister",          subtitle: '1st Semester A.Y. 2025-2026' },
-];
-
-const COURSE_SHORT = {
-  'Bachelor of Science in Computer Science':       'BSCS',
-  'Bachelor of Science in Information Technology': 'BSIT',
-  'Bachelor of Science in Civil Engineering':      'BSCE',
-  'Bachelor of Science in Mechanical Engineering': 'BSME',
-  'Bachelor of Science in Nursing':                'BSN',
-  'Bachelor of Science in Accountancy':            'BSA',
-  'Bachelor of Science in Psychology':             'BSPsych',
-  'Bachelor of Education':                         'BEd',
-};
+// ── Helpers ───────────────────────────────────────────────────────────────────
 
 function getInitials(name = '') {
-  return name.trim().split(/\s+/).map(w => w[0]?.toUpperCase() || '').slice(0, 2).join('');
+  return name.trim().split(/\s+/).map((w) => w[0]?.toUpperCase() || '').slice(0, 2).join('');
 }
 
-export default function StudentProfileView() {
-  const { id }             = useParams();
-  const { user: authUser } = useAuth();
-  const navigate           = useNavigate();
+function formatTime(dateStr) {
+  if (!dateStr) return '';
+  const d   = new Date(dateStr);
+  const now = new Date();
+  const diffDays = Math.floor((now - d) / 86400000);
+  if (diffDays === 0) return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  if (diffDays === 1) return 'Yesterday';
+  return d.toLocaleDateString([], { month: 'short', day: 'numeric' });
+}
 
-  const [student,      setStudent]      = useState(null);
-  const [loading,      setLoading]      = useState(true);
-  const [visibility,   setVisibility]   = useState(null);
-  const [showMsg,      setShowMsg]      = useState(false);
-  const [showShare,    setShowShare]    = useState(false);
-  const [taggedPhotos, setTaggedPhotos] = useState([]);
+/**
+ * Resolve a profile picture to a usable URL.
+ * Handles: Cloudinary https URLs, local storage paths, and null.
+ */
+function resolveAvatar(picture, name) {
+  if (!picture) return `https://ui-avatars.com/api/?name=${encodeURIComponent(name ?? 'U')}&background=1d2b4b&color=fdb813`;
+  if (picture.startsWith('http')) return picture;
+  return `${import.meta.env.VITE_APP_URL ?? 'http://127.0.0.1:8000'}/storage/${picture}`;
+}
+
+// ── Component ─────────────────────────────────────────────────────────────────
+
+export default function MessageModal({ isOpen, onClose, student, authUser }) {
+  const [messages,     setMessages]     = useState([]);
+  const [input,        setInput]        = useState('');
+  const [sending,      setSending]      = useState(false);
+  const [loading,      setLoading]      = useState(false);
+  const [error,        setError]        = useState('');
+  const [isTyping,     setIsTyping]     = useState(false);
+  const [minimized,    setMinimized]    = useState(false);
+
+  const inputRef       = useRef(null);
+  const bottomRef      = useRef(null);
+  const channelRef     = useRef(null);
+  const typingTimerRef = useRef(null);
+  const iAmTypingRef   = useRef(false);
+
+  // ── Load thread ────────────────────────────────────────────────────────────
+
+  const loadThread = useCallback(async () => {
+    if (!student?.id) return;
+    setLoading(true);
+    setError('');
+    try {
+      const { data } = await api.get(`/messages/${student.id}`);
+      // Laravel paginator wraps in { data: [...] }
+      const msgs = Array.isArray(data) ? data : (data.data ?? []);
+      setMessages(msgs);
+    } catch {
+      setError('Could not load messages.');
+    } finally {
+      setLoading(false);
+    }
+  }, [student?.id]);
+
+  // ── Open / close lifecycle ─────────────────────────────────────────────────
 
   useEffect(() => {
-    if (!id) return;
-    if (parseInt(id) === authUser?.id) {
-      navigate('/profile', { replace: true });
-      return;
+    if (isOpen) {
+      setInput('');
+      setMinimized(false);
+      setIsTyping(false);
+      setError('');
+      loadThread();
+      setTimeout(() => inputRef.current?.focus(), 150);
+    } else {
+      // Leave Echo channel when modal closes
+      if (window.Echo && authUser?.id) {
+        window.Echo.leave(`chat.${authUser.id}`);
+        channelRef.current = null;
+      }
+      // Cancel any pending typing timer
+      clearTimeout(typingTimerRef.current);
+      iAmTypingRef.current = false;
     }
-    setLoading(true);
-    studentsApi.show(id)
-      .then(({ data }) => setStudent(data))
-      .catch((err) => {
-        const vis = err.response?.data?.visibility;
-        if (vis) setVisibility(vis);
-        setStudent(null);
+  }, [isOpen]);
+
+  // ── WebSocket: subscribe to private chat channel ───────────────────────────
+
+  useEffect(() => {
+    if (!isOpen || !authUser?.id || !window.Echo) return;
+
+    channelRef.current = window.Echo
+      .private(`chat.${authUser.id}`)
+
+      // New incoming message
+      .listen('.message.sent', (payload) => {
+        if (String(payload.sender_id) === String(student?.id)) {
+          setMessages((prev) => {
+            if (prev.find((m) => m.id === payload.id)) return prev;
+            return [...prev, payload];
+          });
+          // Auto mark as read since modal is open
+          api.patch(`/messages/${payload.id}/read`).catch(() => {});
+        }
+        // Update Navbar unread badge
+        window.dispatchEvent(new Event('messaging:unread-updated'));
       })
-      .finally(() => setLoading(false));
 
-    studentsApi.getTaggedPhotos(id)
-      .then(({ data }) => setTaggedPhotos(data.photos ?? []))
-      .catch(() => {});
-  }, [id, authUser]);
+      // Typing indicator from recipient
+      .listen('.user.typing', (payload) => {
+        if (String(payload.sender_id) === String(student?.id)) {
+          setIsTyping(payload.is_typing);
+          if (payload.is_typing) {
+            clearTimeout(typingTimerRef.current);
+            typingTimerRef.current = setTimeout(() => setIsTyping(false), 3000);
+          }
+        }
+      });
 
-  if (loading) return (
-    <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f4f7fe' }}>
-      <div style={{ textAlign: 'center' }}>
-        <div style={{ width: 36, height: 36, borderRadius: '50%', border: '3px solid #e2e8f0', borderTopColor: '#3f51b5', animation: 'spin 0.8s linear infinite', margin: '0 auto 12px' }} />
-        <p style={{ fontSize: 13, color: '#94a3b8' }}>Loading profile...</p>
-        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
-      </div>
-    </div>
-  );
+    return () => {
+      if (window.Echo) window.Echo.leave(`chat.${authUser.id}`);
+    };
+  }, [isOpen, authUser?.id, student?.id]);
 
-  if (!student) return (
-    <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: '#f4f7fe', gap: 12 }}>
-      <i
-        className={`fas ${
-          visibility === 'private'     ? 'fa-lock' :
-          visibility === 'alumni_only' ? 'fa-user-shield' :
-                                         'fa-user-slash'
-        }`}
-        style={{ fontSize: 48, color: '#e2e8f0' }}
-      />
-      <h2 style={{ fontSize: 18, fontWeight: 700, color: '#1d2b4b', margin: 0 }}>
-        {visibility === 'private'     && 'This profile is private.'}
-        {visibility === 'alumni_only' && 'Log in to view this profile.'}
-        {!visibility                  && 'Student not found.'}
-      </h2>
-      <p style={{ fontSize: 13, color: '#94a3b8', margin: 0 }}>
-        {visibility === 'private'     && 'The student has restricted access to their profile.'}
-        {visibility === 'alumni_only' && 'This profile is visible to logged-in users only.'}
-      </p>
-      <button onClick={() => navigate('/directory')} style={{ background: 'none', border: 'none', color: '#3f51b5', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
-        ← Back to Directory
-      </button>
-    </div>
-  );
+  // ── Auto-scroll ────────────────────────────────────────────────────────────
 
-  const batchYear   = student.section?.batch_year || new Date().getFullYear();
-  const courseShort = COURSE_SHORT[student.course] || student.course || 'Student';
+  useEffect(() => {
+    if (!minimized) {
+      bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [messages, isTyping, minimized]);
 
-  // ✅ Fixed: handles both Cloudinary URLs and local paths
-  const avatar = imageUrl(student.profile_picture) || makeAvatar(student.name);
+  // ── Escape key ─────────────────────────────────────────────────────────────
+
+  useEffect(() => {
+    const fn = (e) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', fn);
+    return () => window.removeEventListener('keydown', fn);
+  }, [onClose]);
+
+  if (!isOpen) return null;
+
+  const avatarSrc = resolveAvatar(student?.profile_picture, student?.name);
+
+  // ── Outbound typing indicator ──────────────────────────────────────────────
+
+  const handleTyping = () => {
+    if (!iAmTypingRef.current) {
+      iAmTypingRef.current = true;
+      api.post('/messages/typing', { receiver_id: student.id, is_typing: true }).catch(() => {});
+    }
+    clearTimeout(typingTimerRef.current);
+    typingTimerRef.current = setTimeout(() => {
+      iAmTypingRef.current = false;
+      api.post('/messages/typing', { receiver_id: student.id, is_typing: false }).catch(() => {});
+    }, 1500);
+  };
+
+  // ── Send ───────────────────────────────────────────────────────────────────
+
+  const handleSend = async () => {
+    if (!input.trim() || sending) return;
+    const text = input.trim();
+    setInput('');
+    setError('');
+
+    // Stop typing immediately
+    clearTimeout(typingTimerRef.current);
+    if (iAmTypingRef.current) {
+      iAmTypingRef.current = false;
+      api.post('/messages/typing', { receiver_id: student.id, is_typing: false }).catch(() => {});
+    }
+
+    // Optimistic message
+    const tempId  = `temp_${Date.now()}`;
+    const tempMsg = {
+      id:          tempId,
+      sender_id:   authUser?.id,
+      receiver_id: student?.id,
+      body:        text,
+      is_read:     false,
+      created_at:  new Date().toISOString(),
+      _pending:    true,
+    };
+    setMessages((prev) => [...prev, tempMsg]);
+    setSending(true);
+
+    try {
+      const { data } = await api.post('/messages', {
+        receiver_id: student.id,
+        body:        text,
+      });
+      // Replace optimistic with real message from server
+      setMessages((prev) => prev.map((m) => m.id === tempId ? data : m));
+    } catch {
+      setError('Failed to send. Try again.');
+      setMessages((prev) => prev.filter((m) => m.id !== tempId));
+      setInput(text); // restore input
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const handleKey = (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSend();
+    }
+  };
+
+  // ── Render ─────────────────────────────────────────────────────────────────
 
   return (
-    <div style={{ minHeight: '100vh', background: '#f4f7fe', display: 'flex', flexDirection: 'column' }}>
-      <style>{`
-        @keyframes spin   { to { transform: rotate(360deg); } }
-        @keyframes fadeIn { from{opacity:0;transform:translateY(10px)} to{opacity:1;transform:translateY(0)} }
-      `}</style>
-
-      <Navbar />
-
-      {/* Modals */}
-      <MessageModal
-        isOpen={showMsg}
-        onClose={() => setShowMsg(false)}
-        student={student}
-        authUser={authUser}
-      />
-      <ShareModal
-        isOpen={showShare}
-        onClose={() => setShowShare(false)}
-        student={student}
+    <>
+      {/* Invisible backdrop — click outside to close */}
+      <div
+        style={{ position: 'fixed', inset: 0, zIndex: 40 }}
+        onClick={onClose}
       />
 
-      {/* Banner */}
-      <div style={{
-        height: 200,
-        background: 'linear-gradient(135deg, #1d2b4b 0%, #3f51b5 60%, #5c6bc0 100%)',
-        position: 'relative', overflow: 'hidden',
-      }}>
-        <div style={{ position: 'absolute', top: -40, right: -40, width: 240, height: 240, borderRadius: '50%', background: 'rgba(255,255,255,0.04)' }} />
-        <div style={{ position: 'absolute', bottom: -60, left: -20, width: 180, height: 180, borderRadius: '50%', background: 'rgba(255,255,255,0.04)' }} />
-        <div style={{ position: 'absolute', top: 30, right: '25%', width: 90, height: 90, borderRadius: '50%', background: 'rgba(253,184,19,0.08)' }} />
-        <button onClick={() => navigate(-1)} style={{
-          position: 'absolute', top: 20, left: 24,
-          display: 'flex', alignItems: 'center', gap: 6,
-          color: 'rgba(255,255,255,0.7)', background: 'none', border: 'none',
-          cursor: 'pointer', fontSize: 13, fontWeight: 600,
-        }}>
-          <i className="fas fa-arrow-left" /> Back
-        </button>
-        <div style={{
-          position: 'absolute', top: 20, right: 24,
-          background: 'rgba(255,255,255,0.1)', backdropFilter: 'blur(8px)',
-          border: '1px solid rgba(255,255,255,0.15)',
-          borderRadius: 10, padding: '6px 14px',
-          display: 'flex', alignItems: 'center', gap: 6,
-          fontSize: 11, fontWeight: 700, color: '#fff',
-        }}>
-          <i className="fas fa-graduation-cap" style={{ color: '#fdb813' }} /> Batch {batchYear}
+      {/* ── Chat window ── */}
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          position:      'fixed',
+          bottom:        16,
+          right:         16,
+          zIndex:        50,
+          width:         300,
+          height:        minimized ? 'auto' : 420,
+          display:       'flex',
+          flexDirection: 'column',
+          background:    '#fff',
+          borderRadius:  16,
+          boxShadow:     '0 8px 40px rgba(0,0,0,0.2)',
+          border:        '1px solid #e5e7eb',
+          overflow:      'hidden',
+          animation:     'messengerIn .28s cubic-bezier(0.34,1.56,0.64,1)',
+          transition:    'height .2s ease',
+        }}
+      >
+
+        {/* ── Header ── */}
+        <div
+          style={{
+            background:  '#1d2b4b',
+            padding:     '10px 12px',
+            display:     'flex',
+            alignItems:  'center',
+            gap:         10,
+            flexShrink:  0,
+            cursor:      'pointer',
+            userSelect:  'none',
+          }}
+          onClick={() => setMinimized(v => !v)}
+        >
+          {/* Avatar */}
+          <div style={{ position: 'relative', flexShrink: 0 }}>
+            <img
+              src={avatarSrc}
+              alt={student?.name}
+              style={{ width: 34, height: 34, borderRadius: '50%', objectFit: 'cover', border: '2px solid #fdb813', display: 'block' }}
+              onError={e => { e.target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(student?.name ?? 'U')}&background=fdb813&color=1d2b4b`; }}
+            />
+            {/* Online dot */}
+            <span style={{ position: 'absolute', bottom: 0, right: 0, width: 9, height: 9, borderRadius: '50%', background: '#22c55e', border: '2px solid #1d2b4b' }} />
+          </div>
+
+          {/* Name + status */}
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <p style={{ margin: 0, color: '#fff', fontWeight: 700, fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {student?.name}
+            </p>
+            <p style={{ margin: 0, fontSize: 10, display: 'flex', alignItems: 'center', gap: 4, color: isTyping ? '#fdb813' : '#4ade80' }}>
+              <span style={{ width: 6, height: 6, borderRadius: '50%', background: isTyping ? '#fdb813' : '#4ade80', display: 'inline-block' }} />
+              {isTyping ? 'typing…' : 'Active now'}
+            </p>
+          </div>
+
+          {/* Minimize button */}
+          <button
+            onClick={(e) => { e.stopPropagation(); setMinimized(v => !v); }}
+            title={minimized ? 'Expand' : 'Minimize'}
+            style={{ width: 22, height: 22, borderRadius: '50%', background: 'rgba(255,255,255,0.12)', border: 'none', cursor: 'pointer', color: 'rgba(255,255,255,0.7)', fontSize: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
+            onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.25)'}
+            onMouseLeave={e => e.currentTarget.style.background = 'rgba(255,255,255,0.12)'}
+          >
+            {minimized ? '▲' : '—'}
+          </button>
+
+          {/* Close button */}
+          <button
+            onClick={(e) => { e.stopPropagation(); onClose(); }}
+            title="Close"
+            style={{ width: 22, height: 22, borderRadius: '50%', background: 'rgba(255,255,255,0.12)', border: 'none', cursor: 'pointer', color: 'rgba(255,255,255,0.7)', fontSize: 11, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
+            onMouseEnter={e => e.currentTarget.style.background = 'rgba(239,68,68,0.5)'}
+            onMouseLeave={e => e.currentTarget.style.background = 'rgba(255,255,255,0.12)'}
+          >
+            ✕
+          </button>
         </div>
+
+        {/* ── Body — hidden when minimized ── */}
+        {!minimized && (
+          <>
+            {/* ── Messages area ── */}
+            <div
+              className="mm-scroll"
+              style={{
+                flex:          1,
+                overflowY:     'auto',
+                padding:       '12px',
+                background:    '#f9fafb',
+                display:       'flex',
+                flexDirection: 'column',
+                gap:           6,
+              }}
+            >
+              {/* Loading spinner */}
+              {loading && (
+                <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', paddingTop: 40 }}>
+                  <div style={{ width: 24, height: 24, borderRadius: '50%', border: '2px solid #e2e8f0', borderTopColor: '#1d2b4b', animation: 'mmSpin 0.7s linear infinite' }} />
+                </div>
+              )}
+
+              {/* Empty state */}
+              {!loading && messages.length === 0 && (
+                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 10, textAlign: 'center', paddingTop: 24 }}>
+                  <img
+                    src={avatarSrc}
+                    alt={student?.name}
+                    style={{ width: 52, height: 52, borderRadius: '50%', objectFit: 'cover', border: '3px solid #e2e8f0' }}
+                    onError={e => { e.target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(student?.name ?? 'U')}&background=fdb813&color=1d2b4b`; }}
+                  />
+                  <div>
+                    <p style={{ margin: '0 0 4px', fontSize: 12, fontWeight: 700, color: '#1d2b4b' }}>{student?.name}</p>
+                    <p style={{ margin: 0, fontSize: 11, color: '#94a3b8' }}>Say hi to your fellow Pioneer! 👋</p>
+                  </div>
+                </div>
+              )}
+
+              {/* Message bubbles */}
+              {!loading && messages.map((msg) => {
+                const isMe = String(msg.sender_id) === String(authUser?.id);
+                return (
+                  <div key={msg.id}>
+                    <div style={{ display: 'flex', justifyContent: isMe ? 'flex-end' : 'flex-start', alignItems: 'flex-end', gap: 6 }}>
+
+                      {/* Recipient avatar (left side) */}
+                      {!isMe && (
+                        <img
+                          src={avatarSrc}
+                          alt=""
+                          style={{ width: 22, height: 22, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }}
+                          onError={e => { e.target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(student?.name ?? 'U')}&background=fdb813&color=1d2b4b`; }}
+                        />
+                      )}
+
+                      {/* Bubble */}
+                      <div style={{
+                        maxWidth:     '75%',
+                        padding:      '8px 12px',
+                        fontSize:     12,
+                        lineHeight:   1.45,
+                        background:   isMe ? '#1d2b4b' : '#fff',
+                        color:        isMe ? '#fff'     : '#1d2b4b',
+                        borderRadius: isMe ? '16px 16px 3px 16px' : '16px 16px 16px 3px',
+                        boxShadow:    '0 1px 3px rgba(0,0,0,0.07)',
+                        border:       isMe ? 'none' : '1px solid #e5e7eb',
+                        wordBreak:    'break-word',
+                        opacity:      msg._pending ? 0.55 : 1,
+                        transition:   'opacity .2s',
+                      }}>
+                        {msg.body}
+                      </div>
+                    </div>
+
+                    {/* Timestamp + read receipt */}
+                    <p style={{ margin: '2px 0 0', fontSize: 9, color: '#cbd5e1', textAlign: isMe ? 'right' : 'left', paddingLeft: isMe ? 0 : 28 }}>
+                      {formatTime(msg.created_at)}
+                      {isMe && msg.is_read && (
+                        <span style={{ marginLeft: 4, color: '#3f51b5' }}>
+                          <i className="fas fa-check-double" style={{ fontSize: 8 }} /> Seen
+                        </span>
+                      )}
+                    </p>
+                  </div>
+                );
+              })}
+
+              {/* Typing indicator — recipient is typing */}
+              {isTyping && (
+                <div style={{ display: 'flex', justifyContent: 'flex-start', alignItems: 'flex-end', gap: 6 }}>
+                  <img
+                    src={avatarSrc}
+                    alt=""
+                    style={{ width: 22, height: 22, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }}
+                    onError={e => { e.target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(student?.name ?? 'U')}&background=fdb813&color=1d2b4b`; }}
+                  />
+                  <div style={{ padding: '8px 12px', background: '#fff', borderRadius: '16px 16px 16px 3px', border: '1px solid #e5e7eb', display: 'flex', gap: 4, alignItems: 'center' }}>
+                    {[0, 1, 2].map(i => (
+                      <span key={i} style={{ width: 5, height: 5, borderRadius: '50%', background: '#94a3b8', display: 'inline-block', animation: `mmBounce .9s ${i * 0.15}s infinite` }} />
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Sending dots — my message is sending */}
+              {sending && (
+                <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                  <div style={{ padding: '8px 12px', background: 'rgba(29,43,75,0.1)', borderRadius: '16px 16px 3px 16px', display: 'flex', gap: 4, alignItems: 'center' }}>
+                    {[0, 1, 2].map(i => (
+                      <span key={i} style={{ width: 5, height: 5, borderRadius: '50%', background: '#1d2b4b', display: 'inline-block', animation: `mmBounce .9s ${i * 0.15}s infinite` }} />
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Error */}
+              {error && (
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 10px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8 }}>
+                  <p style={{ margin: 0, fontSize: 10, color: '#ef4444' }}>{error}</p>
+                  <button onClick={() => setError('')} style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: 11, padding: 0, marginLeft: 8 }}>✕</button>
+                </div>
+              )}
+
+              <div ref={bottomRef} />
+            </div>
+
+            {/* ── Input bar ── */}
+            <div style={{ padding: '8px 10px', borderTop: '1px solid #f1f5f9', display: 'flex', alignItems: 'flex-end', gap: 8, background: '#fff', flexShrink: 0 }}>
+              <div style={{ flex: 1, background: '#f1f5f9', borderRadius: 20, padding: '7px 12px' }}>
+                <textarea
+                  ref={inputRef}
+                  value={input}
+                  onChange={(e) => {
+                    setInput(e.target.value);
+                    handleTyping();
+                    // Auto-grow
+                    e.target.style.height = 'auto';
+                    e.target.style.height = Math.min(e.target.scrollHeight, 64) + 'px';
+                  }}
+                  onKeyDown={handleKey}
+                  rows={1}
+                  placeholder="Aa"
+                  maxLength={500}
+                  style={{
+                    width:        '100%',
+                    background:   'transparent',
+                    border:       'none',
+                    outline:      'none',
+                    resize:       'none',
+                    fontSize:     12,
+                    color:        '#374151',
+                    lineHeight:   1.4,
+                    maxHeight:    64,
+                    overflow:     'hidden',
+                    scrollbarWidth: 'none',
+                    fontFamily:   'inherit',
+                  }}
+                />
+              </div>
+
+              <button
+                onClick={handleSend}
+                disabled={!input.trim() || sending}
+                style={{
+                  width:          34,
+                  height:         34,
+                  borderRadius:   '50%',
+                  border:         'none',
+                  flexShrink:     0,
+                  cursor:         input.trim() ? 'pointer' : 'default',
+                  background:     input.trim() ? '#1d2b4b' : '#e5e7eb',
+                  display:        'flex',
+                  alignItems:     'center',
+                  justifyContent: 'center',
+                  transition:     'background .15s, transform .1s',
+                }}
+                onMouseEnter={e => { if (input.trim()) { e.currentTarget.style.background = '#3f51b5'; e.currentTarget.style.transform = 'scale(1.08)'; } }}
+                onMouseLeave={e => { e.currentTarget.style.background = input.trim() ? '#1d2b4b' : '#e5e7eb'; e.currentTarget.style.transform = 'scale(1)'; }}
+              >
+                <i className="fas fa-paper-plane" style={{ fontSize: 11, color: input.trim() ? '#fdb813' : '#94a3b8' }} />
+              </button>
+            </div>
+          </>
+        )}
       </div>
 
-      <main style={{ flex: 1, maxWidth: 935, margin: '0 auto 40px', padding: '0 20px', width: '100%' }}>
+      {/* ── Keyframes ── */}
+      <style>{`
+        .mm-scroll::-webkit-scrollbar { display: none; }
+        .mm-scroll { scrollbar-width: none; }
 
-        {/* Profile Card */}
-        <div style={{
-          background: '#fff', borderRadius: 20, padding: '32px 40px',
-          marginBottom: 20, border: '1px solid #f1f5f9',
-          marginTop: -80, position: 'relative', zIndex: 10,
-          animation: 'fadeIn 0.4s ease',
-        }}>
-          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 40 }}>
-
-            {/* Avatar */}
-            <div style={{ position: 'relative', flexShrink: 0, marginTop: -60 }}>
-              <div style={{
-                width: 130, height: 130, borderRadius: '50%',
-                background: 'linear-gradient(45deg, #fdb813, #3f51b5)', padding: 3,
-              }}>
-                {avatar ? (
-                  <img src={avatar} alt={student.name} style={{
-                    width: '100%', height: '100%', borderRadius: '50%',
-                    objectFit: 'cover', border: '3px solid #fff', display: 'block',
-                  }}
-                    onError={e => { e.target.src = makeAvatar(student.name); }}
-                  />
-                ) : (
-                  <div style={{
-                    width: '100%', height: '100%', borderRadius: '50%',
-                    background: '#1d2b4b', border: '3px solid #fff',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  }}>
-                    <span style={{ fontSize: 36, fontWeight: 800, color: '#fdb813' }}>{getInitials(student.name)}</span>
-                  </div>
-                )}
-              </div>
-              <div style={{
-                position: 'absolute', bottom: 10, right: 8,
-                width: 16, height: 16, borderRadius: '50%',
-                background: '#10b981', border: '3px solid #fff',
-              }} />
-            </div>
-
-            {/* Info */}
-            <div style={{ flex: 1, paddingTop: 8 }}>
-
-              {/* Name row */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 8 }}>
-                <h1 style={{ fontSize: '1.4rem', fontWeight: 700, color: '#1d2b4b', margin: 0 }}>{student.name}</h1>
-                <span style={{
-                  display: 'inline-flex', alignItems: 'center',
-                  background: '#eef0fb', color: '#3f51b5',
-                  fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 20,
-                }}>{courseShort}</span>
-                {student.is_premium && <PremiumBadge size="sm" />}
-              </div>
-
-              <p style={{ fontSize: 13, color: '#3f51b5', fontWeight: 500, margin: '0 0 12px' }}>
-                {student.course || 'Pioneer Student'} · Batch {batchYear}
-              </p>
-
-              {/* Stats row */}
-              <div style={{ display: 'flex', gap: 28, marginBottom: 14, paddingBottom: 14, borderBottom: '1px solid #f1f5f9' }}>
-                {[
-                  { label: 'Course',  value: courseShort         },
-                  { label: 'Batch',   value: batchYear           },
-                  { label: 'Photos',  value: taggedPhotos.length },
-                  { label: 'Status',  value: 'Enrolled'          },
-                ].map(s => (
-                  <div key={s.label}>
-                    <div style={{ fontSize: 14, fontWeight: 700, color: '#1d2b4b', lineHeight: 1 }}>{s.value}</div>
-                    <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 2 }}>{s.label}</div>
-                  </div>
-                ))}
-              </div>
-
-              {/* Bio */}
-              <div style={{ marginBottom: 10 }}>
-                <div style={{ fontSize: 12, fontWeight: 700, color: '#1d2b4b', marginBottom: 3 }}>{student.name?.split(' ')[0]}</div>
-                <div style={{ fontSize: 12, color: '#64748b', marginBottom: 8 }}>{student.course ?? 'Pioneer Student'} · National University Lipa</div>
-
-                {student.bio ? (
-                  <p style={{ fontSize: 13, color: '#475569', fontStyle: 'italic', lineHeight: 1.7, margin: '0 0 8px' }}>
-                    "{student.bio}"
-                  </p>
-                ) : (
-                  <p style={{ fontSize: 13, color: '#cbd5e1', fontStyle: 'italic', margin: '0 0 8px' }}>No yearbook quote yet.</p>
-                )}
-
-                {student.motto && (
-                  <div style={{
-                    display: 'inline-flex', alignItems: 'center', gap: 6,
-                    background: '#fffbeb', border: '1px solid #fde68a',
-                    borderRadius: 8, padding: '5px 12px', marginBottom: 8,
-                  }}>
-                    <i className="fas fa-quote-left" style={{ fontSize: 10, color: '#fdb813' }} />
-                    <span style={{ fontSize: 12, color: '#92400e', fontStyle: 'italic' }}>{student.motto}</span>
-                  </div>
-                )}
-              </div>
-
-              {/* Location */}
-              <div style={{ display: 'flex', gap: 16, marginBottom: 16 }}>
-                <span style={{ fontSize: 12, color: '#94a3b8', display: 'flex', alignItems: 'center', gap: 4 }}>
-                  <i className="fas fa-map-marker-alt" style={{ color: '#ef4444', fontSize: 11 }} /> Lipa City, Batangas
-                </span>
-                <span style={{ fontSize: 12, color: '#94a3b8', display: 'flex', alignItems: 'center', gap: 4 }}>
-                  <i className="fas fa-university" style={{ color: '#3f51b5', fontSize: 11 }} /> NU Lipa
-                </span>
-              </div>
-
-              {/* ✅ Fixed: Message button now properly opens modal */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <button
-                  onClick={() => setShowMsg(true)}
-                  style={{
-                    display: 'inline-flex', alignItems: 'center', gap: 8,
-                    background: '#1d2b4b', color: '#fff', border: 'none',
-                    padding: '10px 22px', borderRadius: 10,
-                    fontSize: 13, fontWeight: 600, cursor: 'pointer',
-                    transition: 'background 0.15s',
-                  }}
-                  onMouseEnter={e => e.currentTarget.style.background = '#3f51b5'}
-                  onMouseLeave={e => e.currentTarget.style.background = '#1d2b4b'}
-                >
-                  <i className="fas fa-paper-plane" style={{ fontSize: 11 }} /> Message
-                </button>
-                <button
-                  onClick={() => setShowShare(true)}
-                  style={{
-                    width: 38, height: 38, borderRadius: 10,
-                    border: '1.5px solid #e2e8f0',
-                    background: '#fff', color: '#64748b',
-                    cursor: 'pointer', fontSize: 14,
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    transition: 'background 0.15s',
-                  }}
-                  onMouseEnter={e => e.currentTarget.style.background = '#f8fafc'}
-                  onMouseLeave={e => e.currentTarget.style.background = '#fff'}
-                  title="Share Profile"
-                >
-                  <i className="fas fa-share-alt" />
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Bottom Grid */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20, animation: 'fadeIn 0.5s ease' }}>
-
-          {/* Tagged Photos */}
-          <div style={{ background: '#fff', borderRadius: 20, padding: 24, border: '1px solid #f1f5f9' }}>
-            <h4 style={{ fontSize: 14, fontWeight: 700, color: '#1d2b4b', marginBottom: 16, marginTop: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
-              <i className="fas fa-images" style={{ color: '#fdb813' }} /> Tagged Photos
-            </h4>
-            <StudentPhotosSection userId={parseInt(id)} compact />
-          </div>
-
-          {/* Right column */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-
-            {/* Academic Info */}
-            <div style={{ background: '#fff', borderRadius: 20, padding: 24, border: '1px solid #f1f5f9' }}>
-              <h4 style={{ fontSize: 14, fontWeight: 700, color: '#1d2b4b', marginBottom: 16, marginTop: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
-                <i className="fas fa-graduation-cap" style={{ color: '#fdb813' }} /> Academic Info
-              </h4>
-              {[
-                { label: 'Course',     value: student.course || 'N/A' },
-                { label: 'Year Level', value: student.year_level ? `${student.year_level}th Year` : '4th Year' },
-                { label: 'Status',     value: 'Enrolled', green: true },
-              ].map(row => (
-                <div key={row.label} style={{
-                  display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                  padding: '9px 0', borderBottom: '1px solid #f8fafc', fontSize: 13,
-                }}>
-                  <span style={{ color: '#94a3b8', fontWeight: 500 }}>{row.label}</span>
-                  <span style={{ fontWeight: 600, color: row.green ? '#10b981' : '#1d2b4b' }}>{row.value}</span>
-                </div>
-              ))}
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '9px 0', fontSize: 13 }}>
-                <span style={{ color: '#94a3b8', fontWeight: 500 }}>Student ID</span>
-                <span style={{ fontWeight: 600, color: '#cbd5e1', letterSpacing: 2 }}>••••••</span>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: 9, fontSize: 13 }}>
-                <span style={{ color: '#94a3b8', fontWeight: 500 }}>Membership</span>
-                {student.is_premium ? <PremiumBadge size="sm" /> : <span style={{ fontSize: 11, fontWeight: 600, color: '#94a3b8' }}>Free Plan</span>}
-              </div>
-            </div>
-
-            {/* Achievements */}
-            <div style={{ background: '#fff', borderRadius: 20, padding: 24, border: '1px solid #f1f5f9', flex: 1 }}>
-              <h4 style={{ fontSize: 14, fontWeight: 700, color: '#1d2b4b', marginBottom: 16, marginTop: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
-                <i className="fas fa-award" style={{ color: '#fdb813' }} /> Achievements
-              </h4>
-              {MOCK_ACHIEVEMENTS.map(a => (
-                <div key={a.title} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, marginBottom: 14 }}>
-                  <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#fdb813', marginTop: 5, flexShrink: 0 }} />
-                  <div>
-                    <div style={{ fontSize: 13, fontWeight: 600, color: '#1d2b4b', lineHeight: 1.3 }}>{a.title}</div>
-                    <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 2 }}>{a.subtitle}</div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      </main>
-
-      <Footer />
-    </div>
+        @keyframes messengerIn {
+          from { opacity: 0; transform: translateY(20px) scale(0.95); }
+          to   { opacity: 1; transform: translateY(0)    scale(1);    }
+        }
+        @keyframes mmBounce {
+          0%, 80%, 100% { transform: translateY(0); }
+          40%            { transform: translateY(-5px); }
+        }
+        @keyframes mmSpin {
+          to { transform: rotate(360deg); }
+        }
+      `}</style>
+    </>
   );
 }

@@ -5,7 +5,22 @@ import { studentsApi }                               from '@/api/student.api';
 import Navbar                                        from '@/components/layout/Navbar';
 import { useMessaging }                              from '@/features/messaging/hooks/useMessaging';
 
-// ── Tiny helpers ──────────────────────────────────────────────────────────────
+// ── Avatar helpers ─────────────────────────────────────────────────────────────
+
+function avatarSrc(profilePicture, name) {
+  const fallback = `https://ui-avatars.com/api/?name=${encodeURIComponent(name ?? 'User')}&background=1d2b4b&color=fff`;
+  if (!profilePicture?.trim()) return fallback;
+  if (profilePicture.startsWith('http')) return profilePicture;
+  // relative path → prepend storage base
+  return `${import.meta.env.VITE_API_URL}/storage/${profilePicture}`;
+}
+
+function avatarError(e, name) {
+  e.currentTarget.onerror = null; // prevent infinite loop
+  e.currentTarget.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(name ?? 'User')}&background=1d2b4b&color=fff`;
+}
+
+// ── Tiny helpers ───────────────────────────────────────────────────────────────
 
 function OnlineDot({ online }) {
   return (
@@ -34,7 +49,7 @@ function formatTime(iso) {
   return d.toLocaleDateString([], { month: 'short', day: 'numeric' });
 }
 
-// ── Component ─────────────────────────────────────────────────────────────────
+// ── Component ──────────────────────────────────────────────────────────────────
 
 export default function MessagesPage() {
   const { id: recipientId } = useParams();
@@ -57,23 +72,23 @@ export default function MessagesPage() {
   const [recipient, setRecipient] = useState(null);
   const [search,    setSearch]    = useState('');
 
-  const bottomRef  = useRef();
-  const inputRef   = useRef();
+  const bottomRef = useRef();
+  const inputRef  = useRef();
 
-  // ── Load recipient profile ─────────────────────────────────────────────────
+  // ── Load recipient profile ──────────────────────────────────────────────────
 
   useEffect(() => {
     if (!recipientId) { setRecipient(null); return; }
     studentsApi.show(recipientId).then(({ data }) => setRecipient(data)).catch(() => {});
   }, [recipientId]);
 
-  // ── Auto-scroll ────────────────────────────────────────────────────────────
+  // ── Auto-scroll ─────────────────────────────────────────────────────────────
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [thread, isTyping]);
 
-  // ── Send ───────────────────────────────────────────────────────────────────
+  // ── Send ────────────────────────────────────────────────────────────────────
 
   const handleSend = async (e) => {
     e.preventDefault();
@@ -87,13 +102,13 @@ export default function MessagesPage() {
     }
   };
 
-  // ── Typing ─────────────────────────────────────────────────────────────────
+  // ── Typing ──────────────────────────────────────────────────────────────────
 
   const handleKeyDown = useCallback(() => {
     if (recipientId) onKeystroke(Number(recipientId));
   }, [recipientId, onKeystroke]);
 
-  // ── Filtered conversations ─────────────────────────────────────────────────
+  // ── Filtered conversations ──────────────────────────────────────────────────
 
   const filtered = conversations.filter(conv => {
     if (!search.trim()) return true;
@@ -101,20 +116,20 @@ export default function MessagesPage() {
     return other?.name?.toLowerCase().includes(search.toLowerCase());
   });
 
-  // ── Styles (kept inline to avoid touching your global CSS) ────────────────
+  // ── Styles ──────────────────────────────────────────────────────────────────
 
   const S = {
-    page:         { display:'flex', flexDirection:'column', height:'100vh', background:'#f8fafc' },
-    body:         { display:'flex', flex:1, overflow:'hidden', maxWidth:'1400px', width:'100%', margin:'0 auto' },
-    sidebar:      { width:'300px', flexShrink:0, background:'white', borderRight:'1px solid #e2e8f0', display:'flex', flexDirection:'column', overflow:'hidden' },
-    sidebarHead:  { padding:'20px', borderBottom:'1px solid #e2e8f0', flexShrink:0 },
-    searchWrap:   { padding:'0 16px 12px', flexShrink:0 },
-    searchInput:  { width:'100%', padding:'8px 14px', borderRadius:'50px', border:'1px solid #e2e8f0', fontSize:'13px', outline:'none', background:'#f8fafc', boxSizing:'border-box' },
-    convList:     { overflowY:'auto', flex:1 },
-    chatArea:     { flex:1, display:'flex', flexDirection:'column', overflow:'hidden' },
-    chatHeader:   { background:'white', borderBottom:'1px solid #e2e8f0', padding:'16px 24px', display:'flex', alignItems:'center', gap:'12px', flexShrink:0 },
-    messages:     { flex:1, overflowY:'auto', padding:'24px', display:'flex', flexDirection:'column', gap:'12px', background:'#f8fafc' },
-    inputArea:    { background:'white', borderTop:'1px solid #e2e8f0', padding:'16px 24px', display:'flex', gap:'12px', alignItems:'center', flexShrink:0 },
+    page:        { display:'flex', flexDirection:'column', height:'100vh', background:'#f8fafc' },
+    body:        { display:'flex', flex:1, overflow:'hidden', maxWidth:'1400px', width:'100%', margin:'0 auto' },
+    sidebar:     { width:'300px', flexShrink:0, background:'white', borderRight:'1px solid #e2e8f0', display:'flex', flexDirection:'column', overflow:'hidden' },
+    sidebarHead: { padding:'20px', borderBottom:'1px solid #e2e8f0', flexShrink:0 },
+    searchWrap:  { padding:'0 16px 12px', flexShrink:0 },
+    searchInput: { width:'100%', padding:'8px 14px', borderRadius:'50px', border:'1px solid #e2e8f0', fontSize:'13px', outline:'none', background:'#f8fafc', boxSizing:'border-box' },
+    convList:    { overflowY:'auto', flex:1 },
+    chatArea:    { flex:1, display:'flex', flexDirection:'column', overflow:'hidden' },
+    chatHeader:  { background:'white', borderBottom:'1px solid #e2e8f0', padding:'16px 24px', display:'flex', alignItems:'center', gap:'12px', flexShrink:0 },
+    messages:    { flex:1, overflowY:'auto', padding:'24px', display:'flex', flexDirection:'column', gap:'12px', background:'#f8fafc' },
+    inputArea:   { background:'white', borderTop:'1px solid #e2e8f0', padding:'16px 24px', display:'flex', gap:'12px', alignItems:'center', flexShrink:0 },
   };
 
   return (
@@ -163,21 +178,23 @@ export default function MessagesPage() {
                   key={conv.id}
                   to={`/messages/${other.id}`}
                   style={{
-                    display:       'flex',
-                    alignItems:    'center',
-                    gap:           '12px',
-                    padding:       '14px 16px',
-                    borderBottom:  '1px solid #f1f5f9',
-                    background:    isActive ? '#eef2ff' : 'white',
-                    textDecoration:'none',
-                    color:         'inherit',
-                    transition:    'background .15s',
+                    display:        'flex',
+                    alignItems:     'center',
+                    gap:            '12px',
+                    padding:        '14px 16px',
+                    borderBottom:   '1px solid #f1f5f9',
+                    background:     isActive ? '#eef2ff' : 'white',
+                    textDecoration: 'none',
+                    color:          'inherit',
+                    transition:     'background .15s',
                   }}
                 >
-                  {/* Avatar + online dot */}
+                  {/* ✅ FIXED: Avatar with onError fallback */}
                   <div style={{ position:'relative', flexShrink:0 }}>
                     <img
-                      src={other.profile_picture || `https://ui-avatars.com/api/?name=${encodeURIComponent(other.name)}&background=1d2b4b&color=fff`}
+                      src={avatarSrc(other.profile_picture, other.name)}
+                      onError={e => avatarError(e, other.name)}
+                      alt={other.name}
                       style={{ width:'44px', height:'44px', borderRadius:'12px', objectFit:'cover' }}
                     />
                     <span style={{ position:'absolute', bottom:'-2px', right:'-2px' }}>
@@ -213,8 +230,10 @@ export default function MessagesPage() {
 
           {/* Find students CTA */}
           <div style={{ padding:'16px', borderTop:'1px solid #f1f5f9', flexShrink:0 }}>
-            <Link to="/directory"
-              style={{ display:'block', textAlign:'center', background:'var(--nu-blue)', color:'white', borderRadius:'12px', padding:'10px', fontSize:'13px', fontWeight:700, textDecoration:'none' }}>
+            <Link
+              to="/directory"
+              style={{ display:'block', textAlign:'center', background:'var(--nu-blue)', color:'white', borderRadius:'12px', padding:'10px', fontSize:'13px', fontWeight:700, textDecoration:'none' }}
+            >
               <i className="fas fa-search mr-2" />Find Students
             </Link>
           </div>
@@ -237,9 +256,12 @@ export default function MessagesPage() {
 
                 {recipient && (
                   <>
+                    {/* ✅ FIXED: Avatar with onError fallback */}
                     <div style={{ position:'relative' }}>
                       <img
-                        src={recipient.profile_picture || `https://ui-avatars.com/api/?name=${encodeURIComponent(recipient.name)}&background=1d2b4b&color=fff`}
+                        src={avatarSrc(recipient.profile_picture, recipient.name)}
+                        onError={e => avatarError(e, recipient.name)}
+                        alt={recipient.name}
                         style={{ width:'40px', height:'40px', borderRadius:'10px', objectFit:'cover' }}
                       />
                       <span style={{ position:'absolute', bottom:'-2px', right:'-2px' }}>
@@ -300,7 +322,7 @@ export default function MessagesPage() {
                 {isTyping && (
                   <div style={{ display:'flex', justifyContent:'flex-start' }}>
                     <div style={{ background:'white', borderRadius:'20px 20px 20px 4px', padding:'12px 18px', boxShadow:'0 2px 8px rgba(0,0,0,0.06)', display:'flex', gap:'4px', alignItems:'center' }}>
-                      {[0,1,2].map(i => (
+                      {[0, 1, 2].map(i => (
                         <span
                           key={i}
                           style={{
@@ -346,8 +368,10 @@ export default function MessagesPage() {
               <i className="fas fa-comment-dots" style={{ fontSize:'64px', opacity:0.2, marginBottom:'16px' }} />
               <p style={{ fontWeight:600, margin:0 }}>Select a conversation</p>
               <p style={{ fontSize:'13px', marginTop:'4px' }}>or find someone to chat with</p>
-              <Link to="/directory"
-                style={{ marginTop:'20px', background:'var(--nu-blue)', color:'white', padding:'12px 24px', borderRadius:'12px', fontWeight:700, fontSize:'13px', textDecoration:'none' }}>
+              <Link
+                to="/directory"
+                style={{ marginTop:'20px', background:'var(--nu-blue)', color:'white', padding:'12px 24px', borderRadius:'12px', fontWeight:700, fontSize:'13px', textDecoration:'none' }}
+              >
                 Find Students
               </Link>
             </div>

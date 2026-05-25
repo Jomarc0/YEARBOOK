@@ -11,19 +11,21 @@ export function useMessaging(recipientId = null) {
   const [thread,        setThread]          = useState([]);
   const [loading,       setLoading]         = useState(false);
   const [error,         setError]           = useState(null);
-  const [isTyping,      setIsTyping]        = useState(false);   // remote user typing
+  const [isTyping,      setIsTyping]        = useState(false);
   const [onlineUsers,   setOnlineUsers]     = useState(new Set());
   const [unreadTotal,   setUnreadTotal]     = useState(0);
 
   const typingTimerRef  = useRef(null);
-  const iAmTypingRef    = useRef(false);   // throttle outbound typing events
+  const iAmTypingRef    = useRef(false);
+  // Track real message IDs we've already added (prevents WS duplicate)
+  const seenIdsRef      = useRef(new Set());
 
   // ── Conversations ──────────────────────────────────────────────────────────
 
   const fetchConversations = useCallback(async () => {
     try {
       const { data } = await messagesApi.conversations();
-      setConversations(data);
+      setConversations(Array.isArray(data) ? data : []);
     } catch (err) {
       setError(err);
     }
@@ -36,8 +38,10 @@ export function useMessaging(recipientId = null) {
     try {
       setLoading(true);
       const { data } = await messagesApi.thread(id);
-      // API returns paginated — grab the data array
-      setThread(Array.isArray(data) ? data : (data.data ?? []));
+      const msgs = Array.isArray(data) ? data : (data.data ?? []);
+      // Populate seenIds so WS events don't duplicate
+      seenIdsRef.current = new Set(msgs.map(m => m.id));
+      setThread(msgs);
     } catch (err) {
       setError(err);
     } finally {
@@ -48,9 +52,11 @@ export function useMessaging(recipientId = null) {
   // ── Send ───────────────────────────────────────────────────────────────────
 
   const sendMessage = useCallback(async (receiverId, body) => {
-    // Optimistic update
+    const tempId = `opt-${Date.now()}`;
+
+    // Optimistic message
     const optimistic = {
-      id:          `opt-${Date.now()}`,
+      id:          tempId,
       sender_id:   user?.id,
       receiver_id: receiverId,
       body,
@@ -62,14 +68,18 @@ export function useMessaging(recipientId = null) {
 
     try {
       const { data } = await messagesApi.send(receiverId, body);
-      // Replace optimistic message with real one
-      setThread(prev => prev.map(m => m._optimistic ? data : m));
-      // Refresh conversation list to update last message preview
+
+      // Register the real ID so the WS event doesn't add it again
+      seenIdsRef.current.add(data.id);
+
+      // Replace optimistic with real message
+      setThread(prev => prev.map(m => m.id === tempId ? data : m));
+
       fetchConversations();
       return data;
     } catch (err) {
-      // Roll back optimistic on error
-      setThread(prev => prev.filter(m => !m._optimistic));
+      // Roll back
+      setThread(prev => prev.filter(m => m.id !== tempId));
       throw err;
     }
   }, [user?.id, fetchConversations]);
@@ -94,11 +104,6 @@ export function useMessaging(recipientId = null) {
 
   // ── Typing ─────────────────────────────────────────────────────────────────
 
-  /**
-   * Call this on every keystroke in the input box.
-   * Sends "is_typing: true" immediately, then "is_typing: false"
-   * after TYPING_DEBOUNCE_MS of silence — without spamming the server.
-   */
   const onKeystroke = useCallback((receiverId) => {
     if (!iAmTypingRef.current) {
       iAmTypingRef.current = true;
@@ -114,33 +119,29 @@ export function useMessaging(recipientId = null) {
   // ── WebSocket: private chat channel ───────────────────────────────────────
 
   useEffect(() => {
-      if (!user?.id) return;
+    if (!user?.id) return;
 
-      const channel = echo.private(`chat.${user.id}`);
+    const channel = echo.private(`chat.${user.id}`);
 
-  // New message arrives
-  channel.listen('.message.sent', (payload) => {
-    const msg = payload;
+    channel.listen('.message.sent', (payload) => {
+      // If we already have this message (sent by us + WS echo), skip it
+      if (seenIdsRef.current.has(payload.id)) return;
 
-    if (String(msg.sender_id) === String(recipientId)) {
-      setThread(prev => {
-        if (prev.some(m => m.id === msg.id)) return prev;
-        return [...prev, msg];
-      });
-      messagesApi.markRead(msg.id).catch(() => {});
-    }
+      // Only append to thread if it's from the person we're currently viewing
+      if (String(payload.sender_id) === String(recipientId)) {
+        seenIdsRef.current.add(payload.id);
+        setThread(prev => [...prev, payload]);
+        messagesApi.markRead(payload.id).catch(() => {});
+      }
 
-    fetchConversations();
-    fetchUnreadCount();
+      fetchConversations();
+      fetchUnreadCount();
+      window.dispatchEvent(new Event('messaging:unread-updated'));
+    });
 
-    window.dispatchEvent(new Event('messaging:unread-updated'));
-  });
-
-    // Typing indicator from the other user
     channel.listen('.user.typing', (payload) => {
       if (String(payload.sender_id) === String(recipientId)) {
         setIsTyping(payload.is_typing);
-        // Auto-clear after 3s in case the server event is missed
         if (payload.is_typing) {
           clearTimeout(typingTimerRef.current);
           typingTimerRef.current = setTimeout(() => setIsTyping(false), 3000);
@@ -158,7 +159,7 @@ export function useMessaging(recipientId = null) {
   useEffect(() => {
     if (!user?.id) return;
 
-    const presenceChannel = echo.join('online-users')
+    echo.join('online-users')
       .here((members) => {
         setOnlineUsers(new Set(members.map(m => m.id)));
       })
@@ -173,10 +174,8 @@ export function useMessaging(recipientId = null) {
         });
       });
 
-    // Mark self as online
     presenceApi.update(true).catch(() => {});
 
-    // Mark offline on tab close
     const handleUnload = () => presenceApi.update(false).catch(() => {});
     window.addEventListener('beforeunload', handleUnload);
 
@@ -186,16 +185,21 @@ export function useMessaging(recipientId = null) {
     };
   }, [user?.id]);
 
-  // ── Initial data load ─────────────────────────────────────────────────────
+  // ── Initial load ──────────────────────────────────────────────────────────
 
   useEffect(() => {
     fetchConversations();
     fetchUnreadCount();
   }, [fetchConversations, fetchUnreadCount]);
 
-  // Load thread when recipientId changes (replaces the old polling)
+  // Load thread when recipient changes
   useEffect(() => {
-    if (recipientId) fetchThread(recipientId);
+    if (recipientId) {
+      seenIdsRef.current = new Set(); // reset seen IDs for new thread
+      fetchThread(recipientId);
+    } else {
+      setThread([]);
+    }
   }, [recipientId, fetchThread]);
 
   return {

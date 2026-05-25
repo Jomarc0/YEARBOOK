@@ -285,7 +285,7 @@ function UploadModal({ onClose, onSuccess }) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// MAIN PAGE
+// MAIN PAGE  (premium-only — guarded by SubscriberRoute in App.jsx)
 // ─────────────────────────────────────────────────────────────────────────────
 export default function GraduationSpeechesPage() {
   const [searchParams]                  = useSearchParams();
@@ -309,7 +309,6 @@ export default function GraduationSpeechesPage() {
       .finally(() => setLoading(false));
   };
 
-  // Initial load + auto-select if ?video= param present
   useEffect(() => {
     fetchTranscripts('', 1);
   }, []);

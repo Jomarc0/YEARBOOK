@@ -7,6 +7,7 @@ use Cloudinary\Api\Upload\UploadApi;
 use Cloudinary\Configuration\Configuration;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\Schedule;
 
 Artisan::command('inspire', function () {
     $this->comment(Inspiring::quote());
@@ -64,18 +65,13 @@ Artisan::command('cloudinary:reupload-as-public', function () {
             $resourceType = $photo->ai_metadata['resource_type'] ?? 'image';
             $extension    = pathinfo($photo->public_id, PATHINFO_EXTENSION) ?: 'jpg';
 
-            // Build a signed URL manually using Cloudinary's signing spec
             $timestamp  = now()->addMinutes(10)->timestamp;
             $publicId   = $photo->public_id;
 
-            // Cloudinary signed URL format for authenticated assets:
-            // https://res.cloudinary.com/{cloud}/image/authenticated/s--{sig}--/v{ver}/{public_id}
-            // We use the existing file_path directly since it already has the signature
             $downloadUrl = $photo->file_path;
 
             $this->line(" Downloading Photo #{$photo->id} from Cloudinary...");
 
-            // Use curl for more reliable download
             $ch = curl_init($downloadUrl);
             curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
             curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
@@ -93,7 +89,6 @@ Artisan::command('cloudinary:reupload-as-public', function () {
             $tmpPath = sys_get_temp_dir() . '/cld_' . $photo->id . '.' . $extension;
             file_put_contents($tmpPath, $bytes);
 
-            // Re-upload as type='upload' (public) into the same folder
             $folder = implode('/', array_slice(explode('/', $publicId), 0, -1));
 
             $result = $uploadApi->upload($tmpPath, [
@@ -108,7 +103,6 @@ Artisan::command('cloudinary:reupload-as-public', function () {
 
             @unlink($tmpPath);
 
-            // Normalize ApiResponse to array
             if ($result instanceof \Traversable) {
                 $resultArr = iterator_to_array($result);
             } else {
@@ -123,7 +117,6 @@ Artisan::command('cloudinary:reupload-as-public', function () {
                 continue;
             }
 
-            // Delete old authenticated copy
             try {
                 $uploadApi->destroy($publicId, [
                     'resource_type' => $resourceType,
@@ -134,20 +127,25 @@ Artisan::command('cloudinary:reupload-as-public', function () {
                 $this->warn("Could not delete old asset for Photo #{$photo->id}: " . $e->getMessage());
             }
 
-            // Save new public URL + public_id
             $photo->update([
                 'file_path' => $newUrl,
                 'public_id' => $newPublicId,
             ]);
 
-            $this->info("✅ Photo #{$photo->id} → {$newUrl}");
+            $this->info("Photo #{$photo->id} → {$newUrl}");
 
         } catch (\Throwable $e) {
-            $this->error("❌ Photo #{$photo->id} failed: " . $e->getMessage());
+            $this->error("Photo #{$photo->id} failed: " . $e->getMessage());
         }
     }
 
     $this->info('Migration complete. Clearing cache...');
-    \Illuminate\Support\Facades\Artisan::call('cache:clear');
+    Artisan::call('cache:clear');
     $this->info('All done!');
 })->purpose('Re-upload authenticated Cloudinary profile photos as public (type=upload).');
+
+// ── Memory Digest Scheduler ────────────────────────────────────────────────
+Schedule::command('memories:send-digest')
+    ->dailyAt('08:00')
+    ->timezone('Asia/Manila')
+    ->withoutOverlapping();

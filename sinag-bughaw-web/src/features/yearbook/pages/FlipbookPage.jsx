@@ -1,137 +1,281 @@
-import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { useAuth } from '@/features/auth/hooks/useAuth';
-import FlipbookViewer from '../components/FlipbookViewer';
-import { yearbookApi } from '@/api/yearbook.api';
+import React, {
+  useRef, useState, useEffect, useCallback, forwardRef,
+} from 'react';
+import HTMLFlipBook from 'react-pageflip';
+import YearbookPageRenderer from '../components/flipbook/YearbookPageRenderer';
+import ControlBar     from '../components/controls/ControlBar';
+import ThumbnailSidebar from '../components/sidebar/ThumbnailSidebar';
+import SearchPanel    from '../components/sidebar/SearchPanel';
+import BookmarkPanel  from '../components/sidebar/BookmarkPanel';
 
-export default function FlipbookPage() {
-  const navigate              = useNavigate();
-  const { user: currentUser } = useAuth();
+const ZOOM_STEPS = [0.75, 1, 1.15, 1.3];
 
-  const [students,    setStudents]    = useState([]);
-  const [loading,     setLoading]     = useState(true);
-  const [error,       setError]       = useState(null);
-  const [downloading, setDownloading] = useState(false);
+export default function FlipbookViewer({
+  pages        = [],
+  meta         = {},
+  toc          = [],
+  bookmarks    = [],
+  searchResults = null,
+  onSearch,
+  onAddBookmark,
+  onRemoveBookmark,
+  onDownload,
+  currentUser,
+}) {
+  const bookRef      = useRef(null);
+  const wrapRef      = useRef(null);
 
-  useEffect(() => {
-    let cancelled = false;
+  const [currentPage,  setCurrentPage]  = useState(0);
+  const [totalPages,   setTotalPages]   = useState(0);
+  const [zoomIndex,    setZoomIndex]    = useState(1);     // index into ZOOM_STEPS
+  const [fullscreen,   setFullscreen]   = useState(false);
+  const [sidebarTab,   setSidebarTab]   = useState(null);  // null | 'toc' | 'search' | 'bookmarks'
+  const [isAnimating,  setIsAnimating]  = useState(false);
 
-    const load = async () => {
-      try {
-        const { data } = await yearbookApi.flipbookData();
+  const currentSpread = Math.floor(currentPage / 2);
+  const totalSpreads  = Math.ceil(pages.length / 2);
+  const zoom          = ZOOM_STEPS[zoomIndex];
 
-        // FIX: API returns a plain array directly — but handle both shapes:
-        // - Plain array:       data = [{id:1,...}, {id:2,...}]
-        // - Wrapped response:  data = { data: [{id:1,...}] }
-        const students = Array.isArray(data) ? data : (data?.data ?? []);
+  // ── Flipbook event handlers ───────────────────────────────────────────────
 
-        if (!cancelled) setStudents(students);
-      } catch (err) {
-        if (!cancelled) setError(err?.response?.data?.message ?? 'Failed to load yearbook.');
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    };
+  const handleFlip      = useCallback((e) => setCurrentPage(e.data), []);
+  const handleInit      = useCallback((e) => setTotalPages(e.object.getPageCount()), []);
+  const handleFlipStart = useCallback(() => setIsAnimating(true), []);
+  const handleFlipEnd   = useCallback(() => setIsAnimating(false), []);
 
-    load();
-    return () => { cancelled = true; };
+  // ── Navigation ────────────────────────────────────────────────────────────
+
+  const flipNext = useCallback(() => {
+    if (!isAnimating) bookRef.current?.pageFlip().flipNext();
+  }, [isAnimating]);
+
+  const flipPrev = useCallback(() => {
+    if (!isAnimating) bookRef.current?.pageFlip().flipPrev();
+  }, [isAnimating]);
+
+  const goToPage = useCallback((pageIndex) => {
+    bookRef.current?.pageFlip().flip(pageIndex);
+    setSidebarTab(null);
   }, []);
 
-  const handleDownload = async (userId) => {
-    if (downloading) return;
-    setDownloading(true);
+  const goToSpread = useCallback((spreadIndex) => {
+    goToPage(spreadIndex * 2);
+  }, [goToPage]);
 
-    try {
-      const request  = userId
-        ? yearbookApi.exportStudentPdf(userId)
-        : yearbookApi.exportCertificate();
+  // ── Keyboard navigation ───────────────────────────────────────────────────
 
-      const { data } = await request;
-      const blob     = new Blob([data], { type: 'application/pdf' });
-      const url      = URL.createObjectURL(blob);
-      const anchor   = document.createElement('a');
+  useEffect(() => {
+    const handler = (e) => {
+      if (e.target.tagName === 'INPUT') return;
+      switch (e.key) {
+        case 'ArrowRight': case 'ArrowDown':  flipNext(); break;
+        case 'ArrowLeft':  case 'ArrowUp':    flipPrev(); break;
+        case 'Home':  goToPage(0);                       break;
+        case 'End':   goToPage(pages.length - 1);        break;
+        case 'f': case 'F': toggleFullscreen();           break;
+        default: break;
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [flipNext, flipPrev, goToPage, pages.length]);
 
-      anchor.href     = url;
-      anchor.download = userId
-        ? `student-profile-${userId}.pdf`
-        : `graduation-certificate.pdf`;
+  // ── Zoom ──────────────────────────────────────────────────────────────────
 
-      document.body.appendChild(anchor);
-      anchor.click();
-      anchor.remove();
-      URL.revokeObjectURL(url);
-    } catch (err) {
-      console.error('PDF download failed:', err);
-    } finally {
-      setDownloading(false);
+  const zoomIn  = () => setZoomIndex((i) => Math.min(i + 1, ZOOM_STEPS.length - 1));
+  const zoomOut = () => setZoomIndex((i) => Math.max(i - 1, 0));
+  const zoomReset = () => setZoomIndex(1);
+
+  // ── Fullscreen ────────────────────────────────────────────────────────────
+
+  const toggleFullscreen = useCallback(() => {
+    if (!document.fullscreenElement) {
+      wrapRef.current?.requestFullscreen?.().then(() => setFullscreen(true)).catch(() => {});
+    } else {
+      document.exitFullscreen?.().then(() => setFullscreen(false)).catch(() => {});
     }
-  };
+  }, []);
 
-  // ── Loading ───────────────────────────────────────────────────────────────
-  if (loading) return (
-    <div style={{ minHeight: '100vh', background: '#0f0f1e', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-      <div style={{ textAlign: 'center' }}>
-        <div style={{
-          width: 40, height: 40, borderRadius: '50%',
-          border: '3px solid rgba(201,168,76,0.2)',
-          borderTopColor: '#c9a84c',
-          animation: 'spin 0.8s linear infinite',
-          margin: '0 auto 16px',
-        }} />
-        <p style={{ fontSize: 11, letterSpacing: '0.22em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.28)', margin: 0 }}>
-          Opening yearbook…
-        </p>
-        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
-      </div>
-    </div>
-  );
+  useEffect(() => {
+    const handler = () => setFullscreen(!!document.fullscreenElement);
+    document.addEventListener('fullscreenchange', handler);
+    return () => document.removeEventListener('fullscreenchange', handler);
+  }, []);
 
-  // ── Error ─────────────────────────────────────────────────────────────────
-  if (error) return (
-    <div style={{ minHeight: '100vh', background: '#0f0f1e', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16 }}>
-      <p style={{ fontSize: 13, color: '#e24b4a', margin: 0 }}>{error}</p>
-      <button onClick={() => navigate(-1)} style={{ fontSize: 12, opacity: 0.5, background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline', color: '#fff' }}>
-        Go back
-      </button>
-    </div>
-  );
+  // ── Search jump ───────────────────────────────────────────────────────────
 
-  // ── Empty state ───────────────────────────────────────────────────────────
-  if (students.length === 0) return (
-    <div style={{ minHeight: '100vh', background: '#0f0f1e', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 12 }}>
-      <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.4)', margin: 0, letterSpacing: '0.1em' }}>
-        No students found in the yearbook yet.
-      </p>
-      <button onClick={() => navigate(-1)} style={{ fontSize: 12, opacity: 0.5, background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline', color: '#fff' }}>
-        Go back
-      </button>
-    </div>
-  );
+  const handleSearchJump = useCallback((pageIndex) => {
+    goToPage(pageIndex);
+  }, [goToPage]);
 
-  // ── Flipbook ──────────────────────────────────────────────────────────────
+  // ── Bookmark current page ─────────────────────────────────────────────────
+
+  const handleBookmarkCurrent = useCallback(() => {
+    const page  = pages[currentPage];
+    const label = pageLabel(page, currentPage);
+    onAddBookmark?.(currentPage, label);
+  }, [currentPage, pages, onAddBookmark]);
+
+  const isCurrentBookmarked = bookmarks.some((b) => b.pageIndex === currentPage);
+
+  // ── Sidebar toggle ────────────────────────────────────────────────────────
+
+  const toggleSidebar = (tab) =>
+    setSidebarTab((cur) => (cur === tab ? null : tab));
+
+  // ── Render ────────────────────────────────────────────────────────────────
+
+  if (!pages.length) return null;
+
   return (
-    <main style={{ minHeight: '100vh', background: '#0f0f1e', paddingTop: '1.5rem' }}>
-      <p style={{ textAlign: 'center', fontSize: 11, letterSpacing: '0.22em', textTransform: 'uppercase', color: 'rgba(255,255,255,.28)', marginBottom: '0.5rem' }}>
-        {currentUser?.batch ?? 'Batch 2025'} · Digital Yearbook
-      </p>
+    <div
+      ref={wrapRef}
+      className={`
+        flex flex-col items-center
+        ${fullscreen ? 'fixed inset-0 z-50 bg-[#0a0a14] overflow-auto' : 'relative'}
+      `}
+      style={{ fontFamily: "'Cormorant Garamond', Georgia, serif" }}
+    >
+      {/* Main layout: sidebar + book */}
+      <div className="flex w-full justify-center items-start gap-4 px-4 py-6">
 
-      <p style={{ textAlign: 'center', fontSize: 10, color: 'rgba(255,255,255,0.2)', marginBottom: '1rem', marginTop: 0 }}>
-        {students.length} student{students.length !== 1 ? 's' : ''} · {Math.ceil(students.length / 4)} spread{Math.ceil(students.length / 4) !== 1 ? 's' : ''}
-      </p>
+        {/* Left sidebar (TOC / Search / Bookmarks) */}
+        {sidebarTab && (
+          <aside className="w-64 flex-shrink-0 sticky top-6 max-h-[80vh] overflow-y-auto rounded-xl bg-white/5 border border-white/10 backdrop-blur-sm">
+            {sidebarTab === 'toc' && (
+              <ThumbnailSidebar
+                toc={toc}
+                currentSpread={currentSpread}
+                onNavigate={goToSpread}
+              />
+            )}
+            {sidebarTab === 'search' && (
+              <SearchPanel
+                results={searchResults}
+                onSearch={onSearch}
+                onJump={handleSearchJump}
+              />
+            )}
+            {sidebarTab === 'bookmarks' && (
+              <BookmarkPanel
+                bookmarks={bookmarks}
+                onJump={goToPage}
+                onRemove={onRemoveBookmark}
+              />
+            )}
+          </aside>
+        )}
 
-      <FlipbookViewer
-        students={students}
-        batchYear={currentUser?.graduation_year ?? new Date().getFullYear()}
-        school="National University Lipa"
-        currentUser={currentUser}
-        onDownload={handleDownload}
+        {/* Book stage */}
+        <div
+          className="flex-shrink-0 relative"
+          style={{
+            transform:       `scale(${zoom})`,
+            transformOrigin: 'top center',
+            transition:      'transform 0.3s ease',
+            marginBottom:    zoom > 1 ? `${(zoom - 1) * 420}px` : 0,
+          }}
+        >
+          {/* Page-corner click zones */}
+          <button
+            onClick={flipPrev}
+            disabled={currentPage === 0}
+            aria-label="Previous page"
+            className="absolute left-0 bottom-0 w-14 h-14 z-10 cursor-pointer opacity-0 hover:opacity-100 transition-opacity"
+            style={{
+              clipPath: 'polygon(0 100%, 100% 100%, 0 0)',
+              background: 'linear-gradient(135deg, rgba(201,168,76,.25) 0%, transparent 70%)',
+            }}
+          />
+          <button
+            onClick={flipNext}
+            disabled={currentPage >= pages.length - 1}
+            aria-label="Next page"
+            className="absolute right-0 bottom-0 w-14 h-14 z-10 cursor-pointer opacity-0 hover:opacity-100 transition-opacity"
+            style={{
+              clipPath: 'polygon(100% 100%, 0 100%, 100% 0)',
+              background: 'linear-gradient(225deg, rgba(201,168,76,.25) 0%, transparent 70%)',
+            }}
+          />
+
+          <HTMLFlipBook
+            ref={bookRef}
+            width={340}
+            height={460}
+            size="fixed"
+            minWidth={260}
+            maxWidth={340}
+            minHeight={360}
+            maxHeight={460}
+            showCover={true}
+            flippingTime={700}
+            useMouseEvents={true}
+            swipeDistance={40}
+            showPageCorners={true}
+            clickEventForward={false}
+            usePortrait={false}
+            startZIndex={0}
+            onFlip={handleFlip}
+            onInit={handleInit}
+            onFlipStart={handleFlipStart}
+            onFlipEnd={handleFlipEnd}
+            className="yearbook-flipbook"
+          >
+            {pages.map((page, idx) => (
+              <YearbookPageRenderer
+                key={idx}
+                page={page}
+                pageIndex={idx}
+                onNavigate={goToPage}
+              />
+            ))}
+          </HTMLFlipBook>
+        </div>
+      </div>
+
+      {/* Control bar */}
+      <ControlBar
+        currentPage={currentPage}
+        totalPages={pages.length}
+        currentSpread={currentSpread}
+        totalSpreads={totalSpreads}
+        zoom={zoom}
+        zoomMin={zoomIndex === 0}
+        zoomMax={zoomIndex === ZOOM_STEPS.length - 1}
+        fullscreen={fullscreen}
+        sidebarTab={sidebarTab}
+        isBookmarked={isCurrentBookmarked}
+        onPrev={flipPrev}
+        onNext={flipNext}
+        onZoomIn={zoomIn}
+        onZoomOut={zoomOut}
+        onZoomReset={zoomReset}
+        onToggleFullscreen={toggleFullscreen}
+        onToggleTOC={() => toggleSidebar('toc')}
+        onToggleSearch={() => toggleSidebar('search')}
+        onToggleBookmarks={() => toggleSidebar('bookmarks')}
+        onBookmark={handleBookmarkCurrent}
+        onDownload={() => onDownload?.(currentUser?.id)}
       />
-
-      {downloading && (
-        <p style={{ textAlign: 'center', fontSize: 11, color: 'rgba(255,255,255,.35)', marginTop: '0.75rem' }}>
-          Preparing your PDF…
-        </p>
-      )}
-    </main>
+    </div>
   );
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+function pageLabel(page, idx) {
+  if (!page) return `Page ${idx + 1}`;
+  const labels = {
+    cover:           'Cover',
+    dedication:      'Dedication',
+    toc:             'Table of Contents',
+    'section-header': page.section?.name ?? 'Section',
+    'student-grid':  `${page.section?.name ?? 'Students'} — portraits`,
+    'student-quotes': `${page.section?.name ?? 'Students'} — quotes`,
+    gallery:         page.gallery?.name ?? 'Gallery',
+    faculty:         'Faculty',
+    stats:           'Batch at a Glance',
+    closing:         'Closing',
+  };
+  return labels[page.type] ?? `Page ${idx + 1}`;
 }

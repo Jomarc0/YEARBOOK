@@ -444,6 +444,7 @@ class CloudinaryService implements StorageServiceInterface
 
         return match (true) {
             str_starts_with($mime, 'video/') => 'video',
+            str_starts_with($mime, 'audio/') => 'video',
             str_starts_with($mime, 'image/') => 'image',
             default                          => 'raw',
         };
@@ -477,6 +478,58 @@ class CloudinaryService implements StorageServiceInterface
             'duration'      => isset($data['duration']) ? (float) $data['duration'] : null,
             'created_at'    => $data['created_at']     ?? now()->toIso8601String(),
         ];
+    }
+
+     public function uploadAudio(
+        UploadedFile $file,
+        int          $userId,
+        string       $folder = 'transcripts'
+    ): array {
+        // Groq free tier limit
+        $maxBytes = 25 * 1024 * 1024;   // 25 MB
+        if ($file->getSize() > $maxBytes) {
+            throw new StorageUploadException(
+                'Audio file ' . $this->formatBytes($file->getSize()) .
+                ' exceeds the 25 MB limit (Groq free tier).'
+            );
+        }
+ 
+        $env = app()->environment();
+ 
+        $uploadOptions = [
+            'folder'          => "{$env}/transcripts/users/{$userId}/{$folder}",
+            'resource_type'   => 'video',   // ← Cloudinary uses 'video' for audio
+            'type'            => 'upload',
+            'use_filename'    => false,
+            'unique_filename' => true,
+            'overwrite'       => false,
+            'tags'            => ["user_{$userId}", 'audio', 'transcript'],
+        ];
+ 
+        try {
+            $result = $this->uploadApi->upload($file->getRealPath(), $uploadOptions);
+ 
+            $this->bustStorageCache($userId);
+ 
+            Log::info('CloudinaryService@uploadAudio: success', [
+                'user_id'   => $userId,
+                'public_id' => $result['public_id'] ?? '',
+                'bytes'     => $result['bytes']     ?? 0,
+            ]);
+ 
+            return $this->buildUploadResponse($result);
+ 
+        } catch (Throwable $e) {
+            Log::error('CloudinaryService@uploadAudio: failed', [
+                'user_id' => $userId,
+                'error'   => $e->getMessage(),
+            ]);
+ 
+            throw new StorageUploadException(
+                message:  'Audio upload failed: ' . $e->getMessage(),
+                previous: $e
+            );
+        }
     }
 
     private function formatBytes(int $bytes): string

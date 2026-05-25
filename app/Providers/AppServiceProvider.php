@@ -36,7 +36,6 @@ class AppServiceProvider extends ServiceProvider
                         ?? env('CLOUDINARY_API_SECRET');
 
             if (empty($cloudName) || empty($apiKey) || empty($apiSecret)) {
-                // Return a local-storage fallback so the app works without Cloudinary
                 return new \App\Services\Storage\LocalStorageService();
             }
 
@@ -45,6 +44,20 @@ class AppServiceProvider extends ServiceProvider
 
         // ── PHPMailer ─────────────────────────────────────────────────
         $this->app->singleton(PHPMailerService::class, fn() => new PHPMailerService());
+
+        // ── WatermarkService (yearbook PDF watermarking) ──────────────
+        // Only register if the class exists — keeps app bootable even if
+        // the yearbook feature hasn't been fully set up yet.
+        if (class_exists(\App\Services\Yearbook\WatermarkService::class)) {
+            $this->app->singleton(
+                \App\Services\Yearbook\WatermarkService::class,
+                \App\Services\Yearbook\WatermarkService::class,
+            );
+        }
+
+        // NOTE: YearbookPageBuilderService does NOT exist in this codebase.
+        // All page-building logic lives inside YearbookController::pages().
+        // Do NOT add a binding for it here.
     }
 
     public function boot(): void
