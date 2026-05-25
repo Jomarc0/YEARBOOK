@@ -10,23 +10,30 @@ class CheckProfileVisibility
     public function handle(Request $request, Closure $next)
     {
         $profileId = $request->route('id');
-        if (! $profileId) return $next($request);
+        if (!$profileId) return $next($request);
 
         $profile = User::find($profileId);
-        if (! $profile) return $next($request);
+        if (!$profile) return $next($request);
 
         $viewer = $request->user();
 
-        if ($profile->profile_visibility === 'private') {
-            if (! $viewer || $viewer->id !== $profile->id) {
-                return response()->json(['message' => 'This profile is private.'], 403);
-            }
+        // Owner always has full access
+        if ($viewer && $viewer->id === (int) $profile->id) {
+            return $next($request);
         }
 
-        if ($profile->profile_visibility === 'alumni_only') {
-            if (! $viewer) {
-                return response()->json(['message' => 'Login required to view this profile.'], 401);
-            }
+        if ($profile->profile_visibility === 'private') {
+            return response()->json([
+                'message'    => 'This profile is private.',
+                'visibility' => 'private',    // ← frontend reads this
+            ], 403);
+        }
+
+        if ($profile->profile_visibility === 'alumni_only' && !$viewer) {
+            return response()->json([
+                'message'    => 'Login required to view this profile.',
+                'visibility' => 'alumni_only', // ← frontend reads this
+            ], 401);
         }
 
         return $next($request);

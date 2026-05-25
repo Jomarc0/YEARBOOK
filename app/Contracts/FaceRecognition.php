@@ -15,5 +15,13 @@ interface FaceRecognition
 
     public function analyzePhoto(string $disk, string $path): array;
 
-    public function searchUploadedFace(UploadedFile $file, int $maxMatches = 5): array;
+    /** $threshold added to match AwsRekognitionFaceRecognition signature */
+    public function searchUploadedFace(
+        UploadedFile $file,
+        int $maxMatches = 5,
+        ?float $threshold = null
+    ): array;
+
+    /** Was implemented but missing from contract */
+    public function analyzeUploadedImage(UploadedFile $file): array;
 }

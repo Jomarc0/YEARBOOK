@@ -1,0 +1,419 @@
+<?php
+
+namespace App\Services\AI;
+
+use App\Contracts\FaceRecognition;
+use App\Models\User;
+use Aws\Exception\AwsException;
+use Aws\Rekognition\RekognitionClient;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Storage;
+use InvalidArgumentException;
+use Illuminate\Support\Facades\Log;
+
+class AwsRekognitionFaceRecognition implements FaceRecognition
+{
+    private ?RekognitionClient $clientInstance = null;  // ← cached instance
+
+    public function __construct(
+        private readonly array $config,
+    ) {}
+
+    // ── Contract: isEnabled ───────────────────────────────────────────────
+
+    public function isEnabled(): bool
+    {
+        return class_exists(RekognitionClient::class)
+            && filled($this->config['key']        ?? null)
+            && filled($this->config['secret']     ?? null)
+            && filled($this->config['region']     ?? null)
+            && filled($this->config['collection'] ?? null);
+    }
+
+    // ── Contract: indexStudent ────────────────────────────────────────────
+
+    public function indexStudent(User $user): array
+    {
+        if (! $this->isEnabled()) {
+            return ['indexed' => false, 'reason' => 'Face recognition is not configured.'];
+        }
+
+        if (blank($user->profile_picture)) {
+            return ['indexed' => false, 'reason' => 'No profile picture set.'];
+        }
+
+        // ← resolves from local disk OR Cloudinary URL
+        $bytes = $this->resolveImageBytes($user->profile_picture);
+
+        if ($bytes === null || $bytes === '') {
+            return ['indexed' => false, 'reason' => 'Could not read profile picture bytes.'];
+        }
+
+        $result = $this->client()->indexFaces([
+            'CollectionId'        => $this->collectionId(),
+            'ExternalImageId'     => $this->externalImageId($user),
+            'Image'               => ['Bytes' => $bytes],
+            'DetectionAttributes' => ['DEFAULT'],
+            'MaxFaces'            => 1,
+            'QualityFilter'       => 'AUTO',
+        ]);
+
+        return [
+            'indexed'           => count($result['FaceRecords'] ?? []) > 0,
+            'face_records'      => count($result['FaceRecords'] ?? []),
+            'unindexed_faces'   => count($result['UnindexedFaces'] ?? []),
+            'external_image_id' => $this->externalImageId($user),
+        ];
+    }
+
+    private function resolveImageBytes(string $path): ?string
+    {
+        // 1. Full URL passed directly
+        if (str_starts_with($path, 'http://') || str_starts_with($path, 'https://')) {
+            return $this->fetchUrlBytes($path);
+        }
+
+        // 2. Try local public disk - use fread instead of Storage::get
+        $fullPath = storage_path('app/public/' . $path);
+        
+        if (file_exists($fullPath) && is_readable($fullPath)) {
+            $handle = fopen($fullPath, 'rb');
+            if ($handle) {
+                $contents = fread($handle, filesize($fullPath));
+                fclose($handle);
+                return $contents !== false && $contents !== '' ? $contents : null;
+            }
+        }
+
+        // 3. Fallback - try asset URL
+        $url = asset('storage/' . ltrim($path, '/'));
+        return $this->fetchUrlBytes($url);
+    }
+
+    private function buildUrlFromKnownDisks(string $path): ?string
+    {
+        $disks = ['cloudinary', 's3', 'gcs'];
+        
+        foreach ($disks as $diskName) {
+            $disk = Storage::disk($diskName);
+            
+            if ($disk->exists($path) && method_exists($disk, 'url')) {
+                return $disk->url($path);
+            }
+        }
+        
+        return null;
+    }
+
+    private function fetchUrlBytes(string $url): ?string
+    {
+        $context = stream_context_create([
+            'http' => [
+                'timeout'          => 10,
+                'follow_location'  => true,
+            ],
+            'ssl' => [
+                'verify_peer'      => false,   // needed for some Cloudinary URLs
+                'verify_peer_name' => false,
+            ],
+        ]);
+
+        $bytes = @file_get_contents($url, false, $context);
+        return ($bytes !== false && $bytes !== '') ? $bytes : null;
+    }
+    // ── Contract: syncStudents ────────────────────────────────────────────
+
+    public function syncStudents(iterable $students): array
+    {
+        $this->ensureCollectionExists();
+
+        $summary = ['indexed' => 0, 'skipped' => 0, 'errors' => []];
+
+        foreach ($students as $student) {
+            try {
+                $result = $this->indexStudent($student);
+                $result['indexed'] ?? false
+                    ? $summary['indexed']++
+                    : $summary['skipped']++;
+            } catch (\Throwable $e) {
+                $summary['errors'][] = [
+                    'user_id' => $student->id,
+                    'message' => $e->getMessage(),
+                ];
+            }
+        }
+
+        return $summary;
+    }
+
+    // ── Contract: analyzePhoto ────────────────────────────────────────────
+
+    public function analyzePhoto(string $disk, string $path): array
+    {
+        if (! $this->isEnabled()) {
+            return [
+                'status'      => 'disabled',
+                'face_count'  => 0,
+                'faces'       => [],
+                'matches'     => [],
+                'limitations' => ['Face recognition is not configured.'],
+            ];
+        }
+
+        $bytes       = $this->readDiskBytes($disk, $path);
+        $faceDetails = $this->client()->detectFaces([
+            'Image'      => ['Bytes' => $bytes],
+            'Attributes' => ['DEFAULT'],
+        ]);
+
+        $faces = collect($faceDetails['FaceDetails'] ?? [])
+            ->map(fn (array $face) => [
+                'confidence'   => round((float) ($face['Confidence'] ?? 0), 2),
+                'bounding_box' => [
+                    'width'  => (float) data_get($face, 'BoundingBox.Width',  0),
+                    'height' => (float) data_get($face, 'BoundingBox.Height', 0),
+                    'left'   => (float) data_get($face, 'BoundingBox.Left',   0),
+                    'top'    => (float) data_get($face, 'BoundingBox.Top',    0),
+                ],
+            ])
+            ->values()
+            ->all();
+
+        $matches     = [];
+        $limitations = [];
+
+        if (count($faces) > 0) {
+            $searchResult = $this->searchBytes($bytes, 3);
+            $matches      = $searchResult['matches'];
+
+            if (count($faces) > 1) {
+                $limitations[] = 'Only the largest detected face can be matched automatically.';
+            }
+        }
+
+        return [
+            'status'      => 'analyzed',
+            'provider'    => 'aws-rekognition',
+            'analyzed_at' => now()->toIso8601String(),
+            'face_count'  => count($faces),
+            'faces'       => $faces,
+            'matches'     => $matches,
+            'limitations' => $limitations,
+        ];
+    }
+
+    // ── Contract: searchUploadedFace ──────────────────────────────────────
+
+    public function searchUploadedFace(
+        UploadedFile $file,
+        int $maxMatches = 5,
+        ?float $threshold = null
+    ): array {
+        if (! $this->isEnabled()) {
+            return ['status' => 'disabled', 'matches' => [], 'message' => 'Face recognition is not configured.'];
+        }
+
+        $this->ensureCollectionExists();
+
+        return $this->searchBytes(
+            file_get_contents($file->getRealPath()) ?: '',
+            $maxMatches,
+            $threshold
+        );
+    }
+
+    // ── Contract: analyzeUploadedImage ────────────────────────────────────
+
+    public function analyzeUploadedImage(UploadedFile $file): array
+    {
+        if (! $this->isEnabled()) {
+            return ['status' => 'disabled', 'faces' => [], 'message' => 'Face recognition is not configured.'];
+        }
+
+        $bytes = file_get_contents($file->getRealPath()) ?: '';
+
+        if ($bytes === '') {
+            throw new InvalidArgumentException('The uploaded image could not be read.');
+        }
+
+        try {
+            $result = $this->client()->detectFaces([
+                'Image'      => ['Bytes' => $bytes],
+                'Attributes' => ['ALL'],
+            ]);
+
+            $faces = collect($result['FaceDetails'] ?? [])
+                ->map(fn (array $face, int $i) => [
+                    'face_id'      => $i + 1,
+                    'confidence'   => (float) data_get($face, 'Confidence', 0),
+                    'bounding_box' => [
+                        'left'   => (float) data_get($face, 'BoundingBox.Left',   0),
+                        'top'    => (float) data_get($face, 'BoundingBox.Top',    0),
+                        'width'  => (float) data_get($face, 'BoundingBox.Width',  0),
+                        'height' => (float) data_get($face, 'BoundingBox.Height', 0),
+                    ],
+                    'age_range' => [
+                        'low'  => (int) data_get($face, 'AgeRange.Low',  0),
+                        'high' => (int) data_get($face, 'AgeRange.High', 0),
+                    ],
+                    'gender'   => data_get($face, 'Gender.Value', 'Unknown'),
+                    'emotions' => collect(data_get($face, 'Emotions', []))
+                        ->sortByDesc('Confidence')
+                        ->take(3)
+                        ->map(fn ($e) => [
+                            'type'       => $e['Type'],
+                            'confidence' => (float) $e['Confidence'],
+                        ])
+                        ->values()
+                        ->all(),
+                    'pose' => [
+                        'pitch' => (float) data_get($face, 'Pose.Pitch', 0),
+                        'roll'  => (float) data_get($face, 'Pose.Roll',  0),
+                        'yaw'   => (float) data_get($face, 'Pose.Yaw',   0),
+                    ],
+                    'quality' => [
+                        'brightness' => (float) data_get($face, 'Quality.Brightness', 0),
+                        'sharpness'  => (float) data_get($face, 'Quality.Sharpness',  0),
+                    ],
+                ])
+                ->filter(fn ($face) => $face['confidence'] >= 80)
+                ->values()
+                ->all();
+
+            return [
+                'status'      => 'analyzed',
+                'provider'    => 'aws-rekognition',
+                'analyzed_at' => now()->toIso8601String(),
+                'face_count'  => count($faces),
+                'faces'       => $faces,
+                'message'     => count($faces) > 0 ? null : 'No faces detected in the uploaded image.',
+            ];
+        } catch (AwsException $e) {
+            return [
+                'status'  => 'error',
+                'faces'   => [],
+                'message' => $e->getAwsErrorMessage() ?: $e->getMessage(),
+            ];
+        }
+    }
+
+    // ── Private helpers ───────────────────────────────────────────────────
+
+    private function searchBytes(string $bytes, int $maxMatches, ?float $threshold = null): array
+    {
+        if ($bytes === '') {
+            throw new InvalidArgumentException('The uploaded image could not be read.');
+        }
+
+        $threshold = $threshold ?? (float) ($this->config['threshold'] ?? 90);
+
+        try {
+            $result = $this->client()->searchFacesByImage([
+                'CollectionId'       => $this->collectionId(),
+                'Image'              => ['Bytes' => $bytes],
+                'FaceMatchThreshold' => $threshold,
+                'MaxFaces'           => $maxMatches,
+                'QualityFilter'      => 'AUTO',
+            ]);
+        } catch (AwsException $e) {
+            $message = $e->getAwsErrorMessage() ?: $e->getMessage();
+
+            return [
+                'status'  => str_contains(strtolower($message), 'no face') ? 'no_face' : 'error',
+                'matches' => [],
+                'message' => $message,
+            ];
+        }
+
+        $matches = collect($result['FaceMatches'] ?? [])
+            ->map(function (array $match) {
+                $externalImageId = data_get($match, 'Face.ExternalImageId');
+                $user            = $this->resolveUserFromExternalImageId($externalImageId);
+
+                return [
+                    'user_id'           => $user?->id,
+                    'name'              => $user?->name ?? 'Unknown student',
+                    'student_id'        => $user?->student_id,
+                    'course'            => $user?->course,
+                    'profile_picture'   => $user?->profile_picture,
+                    'similarity'        => round((float) ($match['Similarity'] ?? 0), 2),
+                    'confidence'        => round((float) data_get($match, 'Face.Confidence', 0), 2),
+                    'external_image_id' => $externalImageId,
+                ];
+            })
+            ->filter(fn (array $m) => filled($m['user_id']))
+            ->values()
+            ->all();
+
+        return [
+            'status'  => count($matches) > 0 ? 'matched' : 'no_matches',
+            'matches' => $matches,
+            'message' => count($matches) > 0 ? null : 'No close student matches were found.',
+        ];
+    }
+
+    private function resolveUserFromExternalImageId(?string $externalImageId): ?User
+    {
+        if (! is_string($externalImageId) || ! str_starts_with($externalImageId, 'student:')) {
+            return null;
+        }
+
+        return User::find((int) substr($externalImageId, strlen('student:')));
+    }
+
+    private function readDiskBytes(string $disk, string $path): string
+    {
+        // Try the same resolution logic
+        $bytes = $this->resolveImageBytes($path);
+
+        if ($bytes === null) {
+            throw new InvalidArgumentException("Unable to read image from [{$disk}:{$path}].");
+        }
+
+        return $bytes;
+    }
+
+    /** Returns the cached RekognitionClient (one instance per request). */
+    private function client(): RekognitionClient
+    {
+        return $this->clientInstance ??= new RekognitionClient([
+            'version'     => 'latest',
+            'region'      => $this->config['region'],
+            'credentials' => [
+                'key'    => $this->config['key'],
+                'secret' => $this->config['secret'],
+            ],
+        ]);
+    }
+
+    private function collectionId(): string
+    {
+        return (string) $this->config['collection'];
+    }
+
+    private function ensureCollectionExists(): void
+    {
+        try {
+            $this->client()->describeCollection([
+                'CollectionId' => $this->collectionId(),
+            ]);
+        } catch (AwsException $e) {
+            if ($e->getAwsErrorCode() === 'ResourceNotFoundException') {
+                $this->client()->createCollection([
+                    'CollectionId' => $this->collectionId(),
+                    'Tags'         => [
+                        'Application' => 'Sinag-Bughaw',
+                        'Institution' => 'NU Lipa',
+                    ],
+                ]);
+            } else {
+                throw $e;
+            }
+        }
+    }
+
+    private function externalImageId(User $user): string
+    {
+        return 'student:' . $user->id;
+    }
+}

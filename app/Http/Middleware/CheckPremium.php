@@ -18,11 +18,11 @@ class CheckPremium
 
         $sub = Subscription::where('user_id', $user->id)->latest()->first();
 
-        if (! $sub || ! $sub->isActive()) {
+        if (! $sub || ! $sub->isPremium()) {
             return response()->json([
-                'message'      => 'A premium subscription is required to access this feature.',
-                'upgrade_url'  => '/payment',
-            ], 402);   
+                'message'     => 'A premium subscription is required to access this feature.',
+                'upgrade_url' => '/payment',
+            ], 402);
         }
 
         return $next($request);

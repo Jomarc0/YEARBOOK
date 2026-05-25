@@ -3,29 +3,52 @@
 namespace App\Providers;
 
 use App\Contracts\FaceRecognition;
-use App\Services\AwsRekognitionFaceRecognition;
-use App\Services\PythonFaceRecognitionService;
+use App\Contracts\StorageServiceInterface;
+use App\Models\Photo;
+use App\Observers\PhotoObserver;
+use App\Services\AI\AwsRekognitionFaceRecognition;
+use App\Services\Notification\PHPMailerService;
+use App\Services\Storage\CloudinaryService;
 use Illuminate\Support\ServiceProvider;
 
 class AppServiceProvider extends ServiceProvider
 {
     public function register(): void
     {
+        // ── Face Recognition ──────────────────────────────────────────
         $this->app->singleton(FaceRecognition::class, function () {
-            $driver = config('services.face_recognition.driver', 'python');
+            return new AwsRekognitionFaceRecognition([
+                'key'        => config('services.rekognition.key'),
+                'secret'     => config('services.rekognition.secret'),
+                'region'     => config('services.rekognition.region'),
+                'collection' => config('services.rekognition.collection'),
+                'threshold'  => config('services.rekognition.threshold', 90),
+            ]);
+        });
 
-            if ($driver === 'aws') {
-                return new AwsRekognitionFaceRecognition([
-                    'key'        => config('services.aws.key'),
-                    'secret'     => config('services.aws.secret'),
-                    'region'     => config('services.aws.region'),
-                    'collection' => config('services.aws.rekognition_collection'),
-                ]);
+        // ── Storage / Cloudinary ──────────────────────────────────────
+        $this->app->singleton(StorageServiceInterface::class, function () {
+            $cloudName = config('services.cloudinary.cloud_name')
+                        ?? env('CLOUDINARY_CLOUD_NAME');
+            $apiKey    = config('services.cloudinary.api_key')
+                        ?? env('CLOUDINARY_API_KEY');
+            $apiSecret = config('services.cloudinary.api_secret')
+                        ?? env('CLOUDINARY_API_SECRET');
+
+            if (empty($cloudName) || empty($apiKey) || empty($apiSecret)) {
+                // Return a local-storage fallback so the app works without Cloudinary
+                return new \App\Services\Storage\LocalStorageService();
             }
 
-            return new PythonFaceRecognitionService();
+            return new CloudinaryService();
         });
+
+        // ── PHPMailer ─────────────────────────────────────────────────
+        $this->app->singleton(PHPMailerService::class, fn() => new PHPMailerService());
     }
 
-    public function boot(): void {}
+    public function boot(): void
+    {
+        Photo::observe(PhotoObserver::class);
+    }
 }

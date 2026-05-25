@@ -1,0 +1,5 @@
+start cmd /k "cd /d %~dp0 && php artisan serve"
+start cmd /k "cd /d %~dp0 && php artisan reverb:start"
+start cmd /k "cd /d %~dp0 && php artisan queue:work"
+start cmd /k "cd /d %~dp0 && ngrok http 8000"
+start cmd /k "cd /d %~dp0sinag-bughaw-web && npm run dev"

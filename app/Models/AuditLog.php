@@ -8,13 +8,8 @@ use Illuminate\Http\Request;
 class AuditLog extends Model
 {
     protected $fillable = [
-        'admin_id',
-        'user_name',
-        'action',
-        'details',
-        'ip_address',
-        'status',
-        'logged_at',
+        'admin_id', 'user_name', 'action',
+        'details', 'ip_address', 'status', 'logged_at',
     ];
 
     protected $casts = [
@@ -27,16 +22,18 @@ class AuditLog extends Model
         string $details,
         string $status = 'Success'
     ): self {
+        $user = $request->user();
+
+        $adminId = ($user?->role === 'admin') ? $user->id : null;
+
         return self::create([
-            'admin_id' => $request->session()->get('admin_id'),
-            'user_name' => $request->session()->get('admin_username')
-                ?? optional($request->user())->email
-                ?? 'system',
-            'action' => $action,
-            'details' => $details,
+            'admin_id'   => $adminId,
+            'user_name'  => $user?->email ?? 'system',
+            'action'     => $action,
+            'details'    => $details,
             'ip_address' => $request->ip() ?? '127.0.0.1',
-            'status' => $status,
-            'logged_at' => now(),
+            'status'     => $status,
+            'logged_at'  => now(),
         ]);
     }
 }

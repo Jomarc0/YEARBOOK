@@ -6,21 +6,48 @@ use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
-    /**
-     * Run the migrations.
-     */
     public function up(): void
     {
         Schema::create('users', function (Blueprint $table) {
             $table->id();
-            $table->string('name');
+
+            // ── Identity ──────────────────────────────────────────────
+            $table->string('first_name');
+            $table->string('last_name');
+            $table->string('name');                               // auto-concatenated on register
             $table->string('email')->unique();
-            $table->timestamp('email_verified_at')->nullable();
             $table->string('password');
+            $table->string('role')->default('student');           // student | admin
+            $table->string('student_id')->nullable()->unique();
+
+            // ── Academic ──────────────────────────────────────────────
+            $table->string('course')->nullable();
+            $table->string('batch')->nullable();
+            $table->integer('graduation_year')->nullable();
+            $table->foreignId('section_id')->nullable()->constrained()->nullOnDelete();
+
+            // ── Profile ───────────────────────────────────────────────
+            $table->text('bio')->nullable();
+            $table->string('avatar')->nullable();                 // Google profile photo
+            $table->string('profile_picture')->nullable();        // Uploaded yearbook photo
+            $table->string('motto')->nullable();
+            $table->string('profile_visibility')->default('public'); // public | private
+            $table->unsignedInteger('profile_views')->default(0);
+
+            // ── Auth & Verification ───────────────────────────────────
+            $table->boolean('email_verified')->default(false);
+            $table->timestamp('email_verified_at')->nullable();
+            $table->boolean('consent_accepted')->default(false);
             $table->rememberToken();
+
+            // ── Google SSO ────────────────────────────────────────────
+            $table->string('google_id')->nullable()->unique();
+            $table->string('google_token')->nullable();
+
             $table->timestamps();
         });
 
+        // ── Supporting tables ─────────────────────────────────────────
         Schema::create('password_reset_tokens', function (Blueprint $table) {
             $table->string('email')->primary();
             $table->string('token');
@@ -37,13 +64,10 @@ return new class extends Migration
         });
     }
 
-    /**
-     * Reverse the migrations.
-     */
     public function down(): void
     {
-        Schema::dropIfExists('users');
-        Schema::dropIfExists('password_reset_tokens');
         Schema::dropIfExists('sessions');
+        Schema::dropIfExists('password_reset_tokens');
+        Schema::dropIfExists('users');
     }
 };

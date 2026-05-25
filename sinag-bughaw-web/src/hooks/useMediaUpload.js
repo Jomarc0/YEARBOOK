@@ -1,0 +1,212 @@
+// src/hooks/useMediaUpload.js
+//
+// Fixed from previous version:
+//  - Signature changed from options-object to positional args
+//    to match how GalleryPage.jsx calls it:
+//    useMediaUpload(albumId, tier, onSuccess)
+//  - mediaApi used for all API calls (consistent with gallery.api.js)
+
+import { useState, useCallback, useRef } from 'react';
+import { mediaApi } from '../api/gallery.api';
+
+const TIER_LIMITS = {
+  free: {
+    maxFiles:       5,
+    maxFileSizeMB:  5,
+    maxVideoSizeMB: 50,
+    hdEnabled:      false,
+    label:          'Free',
+    storageGB:      0.5,
+  },
+  premium_standard: {
+    maxFiles:       20,
+    maxFileSizeMB:  20,
+    maxVideoSizeMB: 500,
+    hdEnabled:      true,
+    label:          'Premium Standard',
+    storageGB:      5,
+  },
+  premium: {
+    maxFiles:       50,
+    maxFileSizeMB:  50,
+    maxVideoSizeMB: 2048,
+    hdEnabled:      true,
+    label:          'Premium HD',
+    storageGB:      10,
+  },
+};
+
+const PHOTO_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+const VIDEO_TYPES = ['video/mp4', 'video/quicktime', 'video/x-msvideo', 'video/webm'];
+
+/**
+ * useMediaUpload
+ *
+ * Called as: useMediaUpload(albumId, tierKey, onSuccess)
+ * Matches GalleryPage.jsx usage exactly.
+ *
+ * @param {number|null} albumId    - Target album ID
+ * @param {string}      tierKey   - 'free' | 'premium_standard' | 'premium'
+ * @param {Function}    onSuccess - Called after successful upload
+ */
+export function useMediaUpload(albumId = null, tierKey = 'free', onSuccess = null) {
+  const tier = TIER_LIMITS[tierKey] ?? TIER_LIMITS.free;
+
+  const [files,     setFiles]     = useState([]);
+  const [progress,  setProgress]  = useState(0);
+  const [uploading, setUploading] = useState(false);
+  const [results,   setResults]   = useState(null);
+  const [error,     setError]     = useState(null);
+  const [isDragging,setIsDragging]= useState(false);
+  const [mode,      setMode]      = useState('bulk'); // 'bulk' | 'video'
+
+  const inputRef = useRef(null);
+
+  // ── Validation ─────────────────────────────────────────────────────────────
+
+  const validateFile = useCallback((file) => {
+    const isPhoto = PHOTO_TYPES.includes(file.type);
+    const isVideo = VIDEO_TYPES.includes(file.type);
+    const sizeMB  = file.size / (1024 * 1024);
+
+    if (mode === 'bulk' && !isPhoto) {
+      return `${file.name}: Only JPEG, PNG, WebP, GIF accepted.`;
+    }
+    if (mode === 'video' && !isVideo) {
+      return `${file.name}: Only MP4, MOV, AVI, WebM accepted.`;
+    }
+    if (mode === 'bulk'  && sizeMB > tier.maxFileSizeMB) {
+      return `${file.name}: Exceeds ${tier.maxFileSizeMB} MB limit.`;
+    }
+    if (mode === 'video' && sizeMB > tier.maxVideoSizeMB) {
+      return `${file.name}: Exceeds ${tier.maxVideoSizeMB} MB video limit.`;
+    }
+    return null;
+  }, [mode, tier]);
+
+  // ── Add files ───────────────────────────────────────────────────────────────
+
+  const addFiles = useCallback((newFiles) => {
+    const arr = Array.from(newFiles);
+    setError(null);
+
+    if (mode === 'bulk' && files.length + arr.length > tier.maxFiles) {
+      setError(`Your ${tier.label} plan allows up to ${tier.maxFiles} files per upload.`);
+      return;
+    }
+
+    const mapped = arr.map((file) => ({
+      id:      `${file.name}-${file.size}-${Date.now()}`,
+      file,
+      preview: file.type.startsWith('image/') ? URL.createObjectURL(file) : null,
+      status:  validateFile(file) ? 'error' : 'pending',
+      error:   validateFile(file),
+    }));
+
+    setFiles((prev) => mode === 'video' ? mapped.slice(0, 1) : [...prev, ...mapped]);
+  }, [files.length, mode, tier, validateFile]);
+
+  const removeFile = useCallback((id) => {
+    setFiles((prev) => {
+      const t = prev.find((f) => f.id === id);
+      if (t?.preview) URL.revokeObjectURL(t.preview);
+      return prev.filter((f) => f.id !== id);
+    });
+  }, []);
+
+  const clearFiles = useCallback(() => {
+    files.forEach((f) => { if (f.preview) URL.revokeObjectURL(f.preview); });
+    setFiles([]);
+    setProgress(0);
+    setResults(null);
+    setError(null);
+  }, [files]);
+
+  // ── Submit ──────────────────────────────────────────────────────────────────
+
+  const submit = useCallback(async (caption = '') => {
+    const valid = files.filter((f) => f.status !== 'error');
+    if (!valid.length || !albumId) {
+      setError(!albumId ? 'No album selected.' : 'No valid files to upload.');
+      return;
+    }
+
+    setUploading(true);
+    setProgress(0);
+    setError(null);
+
+    try {
+      let response;
+
+      if (mode === 'video') {
+        response = await mediaApi.uploadVideo(albumId, valid[0].file, caption, setProgress);
+      } else {
+        response = await mediaApi.bulkUpload(albumId, valid.map((f) => f.file), setProgress);
+      }
+
+      const data = response.data?.data ?? response.data;
+      setResults(data);
+      setProgress(100);
+      clearFiles();
+      onSuccess?.(data);
+
+    } catch (err) {
+      setError(err.response?.data?.message ?? 'Upload failed. Please try again.');
+    } finally {
+      setUploading(false);
+    }
+  }, [files, mode, albumId, clearFiles, onSuccess]);
+
+  // ── Delete ──────────────────────────────────────────────────────────────────
+
+  const remove = useCallback(async (photoId) => {
+    try {
+      await mediaApi.deletePhoto(photoId);
+      return true;
+    } catch (err) {
+      setError(err.response?.data?.message ?? 'Delete failed.');
+      return false;
+    }
+  }, []);
+
+  // ── Drag and drop ───────────────────────────────────────────────────────────
+
+  const dragProps = {
+    onDragOver:  (e) => { e.preventDefault(); setIsDragging(true); },
+    onDragLeave: (e) => { e.preventDefault(); setIsDragging(false); },
+    onDrop:      (e) => { e.preventDefault(); setIsDragging(false); addFiles(e.dataTransfer.files); },
+  };
+
+  const openFilePicker = () => inputRef.current?.click();
+
+  const inputProps = {
+    ref:      inputRef,
+    type:     'file',
+    multiple: mode === 'bulk',
+    accept:   mode === 'video' ? VIDEO_TYPES.join(',') : PHOTO_TYPES.join(','),
+    style:    { display: 'none' },
+    onChange: (e) => addFiles(e.target.files),
+  };
+
+  return {
+    // File queue
+    files, addFiles, removeFile, clearFiles,
+    // Upload
+    submit, remove,
+    // State
+    uploading, progress, results, error,
+    // Mode toggle
+    mode, setMode,
+    // Drag-and-drop
+    isDragging, dragProps,
+    // File input
+    inputProps, openFilePicker,
+    // Derived
+    pendingCount:  files.filter((f) => f.status !== 'error').length,
+    hasFiles:      files.length > 0,
+    canSubmit:     files.filter((f) => f.status !== 'error').length > 0 && !uploading && !!albumId,
+    limitReached:  mode === 'bulk' && files.length >= tier.maxFiles,
+    // Tier info for UI
+    tier, tierKey,
+  };
+}
