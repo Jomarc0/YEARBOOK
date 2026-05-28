@@ -31,7 +31,7 @@ class PHPMailerService
         $this->mailer->CharSet = 'UTF-8';
     }
 
-    // ── 1. OTP ────────────────────────────────────────────────────────
+    // ── 1. OTP (login / registration) ─────────────────────────────────
 
     public function sendOtp(string $toEmail, string $toName, string $otp): bool
     {
@@ -49,7 +49,25 @@ class PHPMailerService
         }
     }
 
-    // ── 2. Announcement ───────────────────────────────────────────────
+    // ── 2. Password Reset OTP ─────────────────────────────────────────
+
+    public function sendPasswordReset(string $toEmail, string $toName, string $otp): bool
+    {
+        try {
+            $this->mailer->clearAddresses();
+            $this->mailer->addAddress($toEmail, $toName);
+            $this->mailer->Subject = 'Reset Your Sinag-Bughaw Password';
+            $this->mailer->Body    = $this->passwordResetTemplate($toName, $otp);
+            $this->mailer->AltBody = "Your password reset code is: $otp. It expires in 10 minutes. If you did not request this, ignore this email.";
+            $this->mailer->send();
+            return true;
+        } catch (Exception $e) {
+            Log::error('PHPMailer PasswordReset error: ' . $e->getMessage());
+            return false;
+        }
+    }
+
+    // ── 3. Announcement ───────────────────────────────────────────────
 
     public function sendAnnouncement(
         string $toEmail,
@@ -73,7 +91,7 @@ class PHPMailerService
         }
     }
 
-    // ── 3. Graduation Reminder ────────────────────────────────────────
+    // ── 4. Graduation Reminder ────────────────────────────────────────
 
     public function sendGraduationReminder(
         string $toEmail,
@@ -132,7 +150,7 @@ class PHPMailerService
     {
         return '</div>
         <div class="footer">
-          © 2026 National University Lipa · Sinag-Bughaw Project<br>
+          © ' . date('Y') . ' National University Lipa · Sinag-Bughaw Project<br>
           If you did not request this email, you can safely ignore it.
         </div></div></body></html>';
     }
@@ -148,6 +166,25 @@ class PHPMailerService
           </div>
           <div style="background:#fef9ec;border-left:4px solid #fdb813;border-radius:8px;padding:12px 16px;font-size:12px;color:#92400e">
             🔒 Never share this code. NU Lipa staff will never ask for it.
+          </div>
+        ' . $this->footer();
+    }
+
+    private function passwordResetTemplate(string $toName, string $otp): string
+    {
+        return $this->header() . '
+          <div class="badge" style="background:#fee2e2;color:#dc2626">🔑 Password Reset</div>
+          <h1>Reset Your Password</h1>
+          <p>Hi <strong>' . htmlspecialchars($toName) . '</strong>,</p>
+          <p>We received a request to reset your Sinag-Bughaw password. Use the code below to proceed. It expires in <strong>10 minutes</strong>.</p>
+          <div style="background:#f1f5f9;border-radius:12px;padding:28px;text-align:center;margin:24px 0">
+            <div style="font-size:44px;font-weight:900;color:#1d2b4b;letter-spacing:14px">' . $otp . '</div>
+            <div style="font-size:12px;color:#94a3b8;margin-top:8px">Password reset code</div>
+          </div>
+          <div class="divider"></div>
+          <p style="font-size:13px">If you did not request a password reset, your account is safe — simply ignore this email and your password will remain unchanged.</p>
+          <div style="background:#fef2f2;border-left:4px solid #ef4444;border-radius:8px;padding:12px 16px;font-size:12px;color:#991b1b">
+            🔒 Never share this code with anyone. NU Lipa staff will never ask for it.
           </div>
         ' . $this->footer();
     }

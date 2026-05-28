@@ -1,52 +1,49 @@
 /**
  * FlipbookViewer.jsx
  * src/features/yearbook/components/flipbook/FlipbookViewer.jsx
- *
- * Core flipbook engine. Wraps react-pageflip with:
- *   - Keyboard navigation (←/→, Home/End)
- *   - Swipe support (built into react-pageflip)
- *   - Zoom (CSS scale)
- *   - Fullscreen API
- *   - Thumbnail sidebar toggle
- *   - Bookmark integration
- *   - Search jump
- *   - Page corner click hotspots
- *
- * Install: npm install react-pageflip
  */
 import React, {
-  useRef, useState, useEffect, useCallback, forwardRef,
+  useRef, useState, useEffect, useCallback,
 } from 'react';
-import HTMLFlipBook from 'react-pageflip';
-import YearbookPageRenderer from './YearbookPageRenderer';
-import ControlBar     from '../controls/ControlBar';
-import ThumbnailSidebar from '../sidebar/ThumbnailSidebar';
-import SearchPanel    from '../sidebar/SearchPanel';
-import BookmarkPanel  from '../sidebar/BookmarkPanel';
+import HTMLFlipBook           from 'react-pageflip';
+import { useNavigate }        from 'react-router-dom';
+import YearbookPageRenderer   from './YearbookPageRenderer';
+import ControlBar             from '../controls/ControlBar';
+import ThumbnailSidebar       from '../sidebar/ThumbnailSidebar';
+import SearchPanel            from '../sidebar/SearchPanel';
+import BookmarkPanel          from '../sidebar/BookmarkPanel';
 
+const GOLD       = '#fdb813';
+const NAVY       = '#1d2b4b';
 const ZOOM_STEPS = [0.75, 1, 1.15, 1.3];
 
 export default function FlipbookViewer({
-  pages        = [],
-  meta         = {},
-  toc          = [],
-  bookmarks    = [],
+  pages         = [],
+  meta          = {},
+  toc           = [],
+  bookmarks     = [],
   searchResults = null,
+  batchId,                    // ← NEW: needed for alumni deep-link
   onSearch,
   onAddBookmark,
   onRemoveBookmark,
   onDownload,
   currentUser,
 }) {
-  const bookRef      = useRef(null);
-  const wrapRef      = useRef(null);
+  const navigate = useNavigate();
+  const bookRef  = useRef(null);
+  const wrapRef  = useRef(null);
 
   const [currentPage,  setCurrentPage]  = useState(0);
   const [totalPages,   setTotalPages]   = useState(0);
-  const [zoomIndex,    setZoomIndex]    = useState(1);     // index into ZOOM_STEPS
+  const [zoomIndex,    setZoomIndex]    = useState(1);
   const [fullscreen,   setFullscreen]   = useState(false);
-  const [sidebarTab,   setSidebarTab]   = useState(null);  // null | 'toc' | 'search' | 'bookmarks'
+  const [sidebarTab,   setSidebarTab]   = useState(null);
   const [isAnimating,  setIsAnimating]  = useState(false);
+
+  // ── Alumni deep-link ──────────────────────────────────────────────────────
+  const { alumniData, loading: alumniLoading, lookup, clear } =
+    useFlipbookAlumniLink();
 
   const currentSpread = Math.floor(currentPage / 2);
   const totalSpreads  = Math.ceil(pages.length / 2);
@@ -54,9 +51,13 @@ export default function FlipbookViewer({
 
   // ── Flipbook event handlers ───────────────────────────────────────────────
 
-  const handleFlip      = useCallback((e) => setCurrentPage(e.data), []);
+  const handleFlip = useCallback((e) => {
+    setCurrentPage(e.data);
+    clear(); // dismiss alumni popup on every page turn
+  }, [clear]);
+
   const handleInit      = useCallback((e) => setTotalPages(e.object.getPageCount()), []);
-  const handleFlipStart = useCallback(() => setIsAnimating(true), []);
+  const handleFlipStart = useCallback(() => setIsAnimating(true),  []);
   const handleFlipEnd   = useCallback(() => setIsAnimating(false), []);
 
   // ── Navigation ────────────────────────────────────────────────────────────
@@ -84,31 +85,34 @@ export default function FlipbookViewer({
     const handler = (e) => {
       if (e.target.tagName === 'INPUT') return;
       switch (e.key) {
-        case 'ArrowRight': case 'ArrowDown':  flipNext(); break;
-        case 'ArrowLeft':  case 'ArrowUp':    flipPrev(); break;
-        case 'Home':  goToPage(0);                       break;
-        case 'End':   goToPage(pages.length - 1);        break;
-        case 'f': case 'F': toggleFullscreen();           break;
+        case 'ArrowRight': case 'ArrowDown':  flipNext();             break;
+        case 'ArrowLeft':  case 'ArrowUp':    flipPrev();             break;
+        case 'Home':  goToPage(0);                                    break;
+        case 'End':   goToPage(pages.length - 1);                     break;
+        case 'f': case 'F': toggleFullscreen();                       break;
+        case 'Escape': clear();                                       break;
         default: break;
       }
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [flipNext, flipPrev, goToPage, pages.length]);
+  }, [flipNext, flipPrev, goToPage, pages.length, clear]);
 
   // ── Zoom ──────────────────────────────────────────────────────────────────
 
-  const zoomIn  = () => setZoomIndex((i) => Math.min(i + 1, ZOOM_STEPS.length - 1));
-  const zoomOut = () => setZoomIndex((i) => Math.max(i - 1, 0));
+  const zoomIn    = () => setZoomIndex((i) => Math.min(i + 1, ZOOM_STEPS.length - 1));
+  const zoomOut   = () => setZoomIndex((i) => Math.max(i - 1, 0));
   const zoomReset = () => setZoomIndex(1);
 
   // ── Fullscreen ────────────────────────────────────────────────────────────
 
   const toggleFullscreen = useCallback(() => {
     if (!document.fullscreenElement) {
-      wrapRef.current?.requestFullscreen?.().then(() => setFullscreen(true)).catch(() => {});
+      wrapRef.current?.requestFullscreen?.()
+        .then(() => setFullscreen(true)).catch(() => {});
     } else {
-      document.exitFullscreen?.().then(() => setFullscreen(false)).catch(() => {});
+      document.exitFullscreen?.()
+        .then(() => setFullscreen(false)).catch(() => {});
     }
   }, []);
 
@@ -139,6 +143,19 @@ export default function FlipbookViewer({
   const toggleSidebar = (tab) =>
     setSidebarTab((cur) => (cur === tab ? null : tab));
 
+  // ── Alumni deep-link handlers ─────────────────────────────────────────────
+
+  // Called by YearbookPageRenderer when a student portrait is clicked
+  const handlePortraitClick = useCallback((pageIndex) => {
+    if (!batchId) return;
+    lookup(batchId, pageIndex);
+  }, [batchId, lookup]);
+
+  // Navigate to alumni tracker when popup button is clicked
+  const handleViewInTracker = useCallback(() => {
+    if (alumniData?.tracker_url) navigate(alumniData.tracker_url);
+  }, [alumniData, navigate]);
+
   // ── Render ────────────────────────────────────────────────────────────────
 
   if (!pages.length) return null;
@@ -152,10 +169,18 @@ export default function FlipbookViewer({
       `}
       style={{ fontFamily: "'Cormorant Garamond', Georgia, serif" }}
     >
+      <style>{`
+        @keyframes fadeInUp {
+          from { opacity: 0; transform: translateY(12px); }
+          to   { opacity: 1; transform: translateY(0); }
+        }
+        .alumni-popup { animation: fadeInUp 0.25s ease both; }
+      `}</style>
+
       {/* Main layout: sidebar + book */}
       <div className="flex w-full justify-center items-start gap-4 px-4 py-6">
 
-        {/* Left sidebar (TOC / Search / Bookmarks) */}
+        {/* Left sidebar */}
         {sidebarTab && (
           <aside className="w-64 flex-shrink-0 sticky top-6 max-h-[80vh] overflow-y-auto rounded-xl bg-white/5 border border-white/10 backdrop-blur-sm">
             {sidebarTab === 'toc' && (
@@ -199,7 +224,7 @@ export default function FlipbookViewer({
             aria-label="Previous page"
             className="absolute left-0 bottom-0 w-14 h-14 z-10 cursor-pointer opacity-0 hover:opacity-100 transition-opacity"
             style={{
-              clipPath: 'polygon(0 100%, 100% 100%, 0 0)',
+              clipPath:   'polygon(0 100%, 100% 100%, 0 0)',
               background: 'linear-gradient(135deg, rgba(201,168,76,.25) 0%, transparent 70%)',
             }}
           />
@@ -209,7 +234,7 @@ export default function FlipbookViewer({
             aria-label="Next page"
             className="absolute right-0 bottom-0 w-14 h-14 z-10 cursor-pointer opacity-0 hover:opacity-100 transition-opacity"
             style={{
-              clipPath: 'polygon(100% 100%, 0 100%, 100% 0)',
+              clipPath:   'polygon(100% 100%, 0 100%, 100% 0)',
               background: 'linear-gradient(225deg, rgba(201,168,76,.25) 0%, transparent 70%)',
             }}
           />
@@ -243,6 +268,12 @@ export default function FlipbookViewer({
                 page={page}
                 pageIndex={idx}
                 onNavigate={goToPage}
+                // ↓ Only student pages get the portrait click handler
+                onPortraitClick={
+                  page.type === 'student-grid' || page.type === 'student-quotes'
+                    ? handlePortraitClick
+                    : undefined
+                }
               />
             ))}
           </HTMLFlipBook>
@@ -273,6 +304,206 @@ export default function FlipbookViewer({
         onBookmark={handleBookmarkCurrent}
         onDownload={() => onDownload?.(currentUser?.id)}
       />
+
+      {/* ── Alumni Deep-Link Popup ──────────────────────────────────────────── */}
+      {(alumniLoading || alumniData) && (
+        <div
+          className="alumni-popup"
+          style={{
+            position:     'fixed',
+            bottom:       32,
+            right:        32,
+            zIndex:       9999,
+            width:        290,
+            background:   '#fff',
+            borderRadius: 20,
+            boxShadow:    '0 8px 40px rgba(29,43,75,0.18)',
+            border:       '1px solid #f1f5f9',
+            overflow:     'hidden',
+            fontFamily:   "'Plus Jakarta Sans', sans-serif",
+          }}
+        >
+          {/* Top accent bar */}
+          <div style={{ height: 4, background: `linear-gradient(90deg, ${NAVY}, ${GOLD})` }} />
+
+          <div style={{ padding: '16px 18px' }}>
+
+            {/* Header */}
+            <div style={{
+              display: 'flex', alignItems: 'center',
+              justifyContent: 'space-between', marginBottom: 14,
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <i className="fas fa-users-line" style={{ color: GOLD, fontSize: 12 }} />
+                <span style={{
+                  fontSize: '0.62rem', fontWeight: 800,
+                  textTransform: 'uppercase', letterSpacing: '0.12em',
+                  color: '#94a3b8',
+                }}>
+                  Alumni Profile
+                </span>
+              </div>
+              <button
+                onClick={clear}
+                aria-label="Close"
+                style={{
+                  background: 'none', border: 'none', cursor: 'pointer',
+                  color: '#cbd5e1', fontSize: 14, lineHeight: 1,
+                  padding: '2px 4px', borderRadius: 6,
+                }}
+              >
+                <i className="fas fa-times" />
+              </button>
+            </div>
+
+            {/* Loading */}
+            {alumniLoading && (
+              <div style={{
+                display: 'flex', alignItems: 'center',
+                gap: 10, padding: '10px 0',
+              }}>
+                <i className="fas fa-spinner fa-spin"
+                   style={{ color: NAVY, fontSize: 16, flexShrink: 0 }} />
+                <span style={{ fontSize: '0.78rem', color: '#64748b' }}>
+                  Looking up alumni…
+                </span>
+              </div>
+            )}
+
+            {/* Alumni data */}
+            {!alumniLoading && alumniData && (
+              <>
+                {/* Name */}
+                <p style={{
+                  margin: '0 0 6px',
+                  fontWeight: 800, fontSize: '1rem', color: NAVY,
+                }}>
+                  {alumniData.name}
+                </p>
+
+                {/* Batch badge */}
+                <div style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 4,
+                  background: 'rgba(253,184,19,0.1)',
+                  border: '1px solid rgba(253,184,19,0.25)',
+                  borderRadius: 20, padding: '3px 9px', marginBottom: 12,
+                }}>
+                  <i className="fas fa-graduation-cap"
+                     style={{ color: GOLD, fontSize: 9 }} />
+                  <span style={{
+                    fontSize: '0.62rem', fontWeight: 800, color: '#92590e',
+                  }}>
+                    Batch {alumniData.batch_year}
+                  </span>
+                </div>
+
+                {/* Career */}
+                {alumniData.career?.job_title ? (
+                  <div style={{
+                    background: '#f8fafc', borderRadius: 10,
+                    padding: '10px 12px', marginBottom: 14,
+                    display: 'flex', gap: 10, alignItems: 'flex-start',
+                  }}>
+                    <i className="fas fa-briefcase"
+                       style={{ color: NAVY, fontSize: 11, marginTop: 3, flexShrink: 0 }} />
+                    <div>
+                      <p style={{
+                        margin: 0, fontSize: '0.78rem',
+                        fontWeight: 700, color: NAVY,
+                      }}>
+                        {alumniData.career.job_title}
+                      </p>
+                      {alumniData.career.company && (
+                        <p style={{ margin: '2px 0 0', fontSize: '0.68rem', color: '#64748b' }}>
+                          {alumniData.career.company}
+                        </p>
+                      )}
+                      {alumniData.career.location && (
+                        <p style={{ margin: '3px 0 0', fontSize: '0.65rem', color: '#94a3b8' }}>
+                          <i className="fas fa-location-dot" style={{ marginRight: 4 }} />
+                          {alumniData.career.location}
+                        </p>
+                      )}
+                      {alumniData.career.field && (
+                        <div style={{
+                          display: 'inline-flex', alignItems: 'center', gap: 4,
+                          background: 'rgba(63,81,181,0.08)',
+                          borderRadius: 6, padding: '2px 7px', marginTop: 5,
+                        }}>
+                          <i className="fas fa-tag"
+                             style={{ color: '#3f51b5', fontSize: 8 }} />
+                          <span style={{
+                            fontSize: '0.6rem', fontWeight: 700, color: '#3f51b5',
+                          }}>
+                            {alumniData.career.field}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                  <p style={{
+                    fontSize: '0.72rem', color: '#94a3b8',
+                    marginBottom: 14, fontStyle: 'italic',
+                  }}>
+                    No career info on file yet.
+                  </p>
+                )}
+
+                {/* Actions */}
+                <div style={{ display: 'flex', gap: 8 }}>
+                  {/* View in Alumni Tracker */}
+                  <button
+                    onClick={handleViewInTracker}
+                    style={{
+                      flex: 1, height: 38, borderRadius: 12,
+                      border: 'none', background: NAVY, color: '#fff',
+                      fontSize: '0.72rem', fontWeight: 700, cursor: 'pointer',
+                      display: 'flex', alignItems: 'center',
+                      justifyContent: 'center', gap: 6,
+                      transition: 'background 0.2s',
+                    }}
+                    onMouseEnter={e => e.currentTarget.style.background = '#3f51b5'}
+                    onMouseLeave={e => e.currentTarget.style.background = NAVY}
+                  >
+                    <i className="fas fa-users-line"
+                       style={{ color: GOLD, fontSize: 10 }} />
+                    Alumni Tracker
+                  </button>
+
+                  {/* Dismiss */}
+                  <button
+                    onClick={clear}
+                    style={{
+                      height: 38, padding: '0 14px', borderRadius: 12,
+                      border: '1.5px solid #e2e8f0', background: '#fff',
+                      color: '#94a3b8', fontSize: '0.72rem',
+                      fontWeight: 600, cursor: 'pointer',
+                      transition: 'all 0.15s',
+                    }}
+                    onMouseEnter={e => e.currentTarget.style.borderColor = '#cbd5e1'}
+                    onMouseLeave={e => e.currentTarget.style.borderColor = '#e2e8f0'}
+                  >
+                    Dismiss
+                  </button>
+                </div>
+              </>
+            )}
+
+            {/* No alumni linked to this page */}
+            {!alumniLoading && !alumniData && (
+              <div style={{
+                textAlign: 'center', padding: '8px 0 4px',
+                color: '#94a3b8', fontSize: '0.75rem',
+              }}>
+                <i className="fas fa-user-slash"
+                   style={{ fontSize: 20, display: 'block', marginBottom: 8 }} />
+                No alumni profile linked to this page.
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -282,16 +513,16 @@ export default function FlipbookViewer({
 function pageLabel(page, idx) {
   if (!page) return `Page ${idx + 1}`;
   const labels = {
-    cover:           'Cover',
-    dedication:      'Dedication',
-    toc:             'Table of Contents',
+    cover:            'Cover',
+    dedication:       'Dedication',
+    toc:              'Table of Contents',
     'section-header': page.section?.name ?? 'Section',
-    'student-grid':  `${page.section?.name ?? 'Students'} — portraits`,
+    'student-grid':   `${page.section?.name ?? 'Students'} — portraits`,
     'student-quotes': `${page.section?.name ?? 'Students'} — quotes`,
-    gallery:         page.gallery?.name ?? 'Gallery',
-    faculty:         'Faculty',
-    stats:           'Batch at a Glance',
-    closing:         'Closing',
+    gallery:          page.gallery?.name ?? 'Gallery',
+    faculty:          'Faculty',
+    stats:            'Batch at a Glance',
+    closing:          'Closing',
   };
   return labels[page.type] ?? `Page ${idx + 1}`;
 }

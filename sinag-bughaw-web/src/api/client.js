@@ -2,6 +2,7 @@ import axios from 'axios';
 
 const BASE_URL         = import.meta.env.VITE_API_URL             || 'http://127.0.0.1:8000/api';
 const STORAGE_ROOT     = import.meta.env.VITE_APP_URL             || 'http://127.0.0.1:8000';
+const FRONTEND_URL     = import.meta.env.VITE_FRONTEND_URL        || 'http://localhost:5173';
 const CLOUDINARY_CLOUD = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME;
 
 export function storageUrl(path) {
@@ -40,10 +41,10 @@ api.interceptors.response.use(
     if (err.response?.status === 401) {
       localStorage.removeItem('auth_token');
       localStorage.removeItem('sb_token');
-      window.location.href = '/login';
+      window.location.href = `${FRONTEND_URL}/login`;
     }
     if (err.response?.status === 402) {
-      window.location.href = '/premium';
+      window.location.href = `${FRONTEND_URL}/premium`;
     }
     return Promise.reject(err);
   }

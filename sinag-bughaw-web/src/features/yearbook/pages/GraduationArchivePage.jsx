@@ -17,7 +17,8 @@ function Lightbox({ photos, index, onClose }) {
     };
     window.addEventListener('keydown', handle);
     return () => window.removeEventListener('keydown', handle);
-  }, [current, photos.length]);
+    // FIX Bug 6: Added `onClose` to dependencies to ensure fresh closure
+  }, [current, photos.length, onClose]);
 
   if (!photo) return null;
 
@@ -82,7 +83,8 @@ export default function GraduationArchivePage() {
     if (!id) return;
     setLoading(true);
     graduationApi.show(id)
-      .then(({ data }) => setAlbum(data))
+      // FIX Bug 5: Unwrap the nested data. API returns { success: true, data: album }, so data.data is the album.
+      .then(({ data }) => setAlbum(data.data ?? data))
       .catch(() => setAlbum(null))
       .finally(() => setLoading(false));
   }, [id]);
@@ -123,7 +125,7 @@ export default function GraduationArchivePage() {
         <Link to="/graduation" className="inline-flex items-center gap-2 text-white/50 hover:text-white text-sm no-underline mb-6 transition">
           <i className="fas fa-arrow-left" /> Back to Graduation Hub
         </Link>
-        <div className="flex items-start justify-between flex-wrap gap-4">
+                <div className="flex items-start justify-between flex-wrap gap-4">
           <div>
             <p className="text-xs font-bold uppercase tracking-widest opacity-60 mb-2">
               {album.category === 'archive' ? 'Archive' : 'Graduation Photos'}

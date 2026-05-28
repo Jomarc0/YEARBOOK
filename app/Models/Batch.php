@@ -37,9 +37,21 @@ class Batch extends Model
     /** All students assigned to this batch. */
     public function students(): HasMany
     {
-        return $this->hasMany(User::class);
+        return $this->hasMany(User::class, 'batch_id');
     }
 
+    // ── Accessors ─────────────────────────────────────────────────────────
+
+    /**
+     * `$batch->year` shorthand used by AlumniTrackerController
+     * and YearbookController throughout the app.
+     */
+    public function getYearAttribute(): int
+    {
+        return $this->graduation_year;
+    }
+
+    // ── Scopes ────────────────────────────────────────────────────────────
 
     public function scopeByYear($query, int $year)
     {

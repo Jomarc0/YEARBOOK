@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams, useNavigate } from 'react-router-dom';   // ← added useNavigate
 import { useBatch } from '@/features/batch/hooks/useBatch';
 import { COURSES } from '@/api/batch.api';
 import Navbar from '@/components/layout/Navbar';
@@ -17,13 +17,106 @@ function CourseChip({ label, active, onClick }) {
     <button onClick={onClick}
       className="font-bold text-xs px-4 py-2 rounded-xl transition-all whitespace-nowrap"
       style={{
-        background:   active ? '#1d2b4b' : 'white',
-        color:        active ? 'white'   : '#64748b',
-        border:       '1.5px solid',
-        borderColor:  active ? '#1d2b4b' : '#e2e8f0',
-        cursor:       'pointer',
+        background:  active ? '#1d2b4b' : 'white',
+        color:       active ? 'white'   : '#64748b',
+        border:      '1.5px solid',
+        borderColor: active ? '#1d2b4b' : '#e2e8f0',
+        cursor:      'pointer',
       }}>
       {label}
+    </button>
+  );
+}
+
+// ── NEW: Generate Yearbook Button ─────────────────────────────────────────────
+/**
+ * Shown in the hero when a year (batch) is selected.
+ * Navigates to /yearbook/:batchId — batchId here is the graduation year
+ * which YearbookHomePage passes through to the API (Batch is fetched by ID
+ * on the backend; if your Batch route-model uses the DB id, wire the real
+ * batch.id here once you have it available in useBatch/filterMeta).
+ *
+ * For now we use the graduation year as the identifier, consistent with how
+ * the URL is structured in yearbook.routes.jsx (`:batchId` param).
+ */
+function GenerateYearbookButton({ year, course }) {
+  const navigate  = useNavigate();
+  const [hov, setHov] = useState(false);
+
+  const label = year
+    ? `Generate Yearbook · Batch ${year}`
+    : 'Generate Yearbook';
+
+  return (
+    <button
+      onClick={() => navigate(`/yearbook/${year ?? 'latest'}`)}
+      onMouseEnter={() => setHov(true)}
+      onMouseLeave={() => setHov(false)}
+      style={{
+        display:       'inline-flex',
+        alignItems:    'center',
+        gap:           8,
+        padding:       '11px 26px',
+        borderRadius:  50,
+        border:        `1.5px solid ${hov ? '#fdb813' : 'rgba(253,184,19,0.55)'}`,
+        cursor:        'pointer',
+        fontSize:      '0.78rem',
+        fontWeight:    800,
+        letterSpacing: '0.02em',
+        whiteSpace:    'nowrap',
+        transition:    'all 0.22s ease',
+        background:    hov ? '#fdb813'                    : 'rgba(253,184,19,0.12)',
+        color:         hov ? '#1d2b4b'                    : '#fdb813',
+        boxShadow:     hov ? '0 8px 24px rgba(253,184,19,0.35)' : 'none',
+        transform:     hov ? 'translateY(-2px)'           : 'none',
+      }}>
+      {/* Book icon */}
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+        stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"
+        strokeLinejoin="round" aria-hidden="true">
+        <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>
+        <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
+      </svg>
+      {label}
+    </button>
+  );
+}
+
+// ── NEW: Compact inline yearbook pill for the sticky filter bar ───────────────
+function YearbookFilterPill({ year }) {
+  const navigate  = useNavigate();
+  const [hov, setHov] = useState(false);
+  if (!year) return null;   // only show when a year is actively filtered
+
+  return (
+    <button
+      onClick={() => navigate(`/yearbook/${year}`)}
+      onMouseEnter={() => setHov(true)}
+      onMouseLeave={() => setHov(false)}
+      title={`Open ${year} Yearbook`}
+      style={{
+        display:       'inline-flex',
+        alignItems:    'center',
+        gap:           6,
+        padding:       '9px 16px',
+        borderRadius:  12,
+        border:        'none',
+        cursor:        'pointer',
+        fontSize:      '0.72rem',
+        fontWeight:    800,
+        whiteSpace:    'nowrap',
+        transition:    'all 0.2s ease',
+        background:    hov ? '#fdb813' : '#1d2b4b',
+        color:         hov ? '#1d2b4b' : '#fdb813',
+        boxShadow:     hov ? '0 4px 14px rgba(253,184,19,0.3)' : '0 2px 8px rgba(29,43,75,0.15)',
+      }}>
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none"
+        stroke="currentColor" strokeWidth="2.3" strokeLinecap="round"
+        strokeLinejoin="round" aria-hidden="true">
+        <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>
+        <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
+      </svg>
+      Yearbook {year}
     </button>
   );
 }
@@ -41,14 +134,11 @@ export default function BatchmatesPage() {
     searchParams.get('year') ? Number(searchParams.get('year')) : null
   );
 
-  // Fetch whenever filters change
   useEffect(() => {
     const params = {};
     if (courseFilter) params.course = courseFilter;
     if (yearFilter)   params.year   = yearFilter;
     fetchBatchmates(params);
-
-    // Sync URL params
     const next = {};
     if (courseFilter) next.course = courseFilter;
     if (yearFilter)   next.year   = yearFilter;
@@ -60,6 +150,9 @@ export default function BatchmatesPage() {
     s.name?.toLowerCase().includes(search.toLowerCase()) ||
     s.student_id?.includes(search)
   );
+
+  // Resolve active batch year for the yearbook button
+  const activeYear = yearFilter ?? filterMeta.year ?? user?.graduation_year ?? null;
 
   return (
     <div className="min-h-screen flex flex-col"
@@ -81,9 +174,9 @@ export default function BatchmatesPage() {
       {/* ── Hero ─────────────────────────────────────────────────────────── */}
       <header className="text-white text-center"
         style={{
-          background:    'linear-gradient(135deg, #1d2b4b 0%, #2a3d66 100%)',
-          padding:       '80px 8% 120px',
-          borderRadius:  '0 0 60px 60px',
+          background:   'linear-gradient(135deg, #1d2b4b 0%, #2a3d66 100%)',
+          padding:      '80px 8% 120px',
+          borderRadius: '0 0 60px 60px',
         }}>
         <p className="text-xs font-bold uppercase tracking-widest mb-3 opacity-60">
           National University Lipa
@@ -93,40 +186,47 @@ export default function BatchmatesPage() {
         </h1>
         <p className="font-light mx-auto opacity-80"
           style={{ fontSize: '1rem', maxWidth: '550px' }}>
-          Connect with fellow Pioneers · {filterMeta.course
+          Connect with fellow Pioneers ·{' '}
+          {filterMeta.course
             ? filterMeta.course.split(' ').slice(-2).join(' ')
-            : user?.course?.split(' ').slice(-2).join(' ')} ·&nbsp;
-          Batch {filterMeta.year ?? yearFilter ?? user?.graduation_year ?? CURRENT_YEAR}
+            : user?.course?.split(' ').slice(-2).join(' ')}
+          &nbsp;· Batch {filterMeta.year ?? yearFilter ?? user?.graduation_year ?? CURRENT_YEAR}
         </p>
 
-        {isPremium && (
-          <span className="inline-flex items-center gap-2 mt-5 font-bold text-xs"
-            style={{
-              background:   'rgba(253,184,19,0.15)',
-              border:       '1px solid rgba(253,184,19,0.4)',
-              padding:      '8px 20px',
-              borderRadius: '50px',
-              color:        '#fdb813',
-            }}>
-            <i className="fas fa-crown" /> Premium · Viewing All Profiles
-          </span>
-        )}
+        {/* Badges row */}
+        <div className="flex flex-wrap items-center justify-center gap-3 mt-5">
+          {isPremium && (
+            <span className="inline-flex items-center gap-2 font-bold text-xs"
+              style={{
+                background:   'rgba(253,184,19,0.15)',
+                border:       '1px solid rgba(253,184,19,0.4)',
+                padding:      '8px 20px',
+                borderRadius: '50px',
+                color:        '#fdb813',
+              }}>
+              <i className="fas fa-crown" /> Premium · Viewing All Profiles
+            </span>
+          )}
+
+          {/* ── NEW: Generate Yearbook button in hero ─────────────────────── */}
+          <GenerateYearbookButton year={activeYear} course={courseFilter} />
+        </div>
       </header>
 
       {/* ── Sticky Filters ───────────────────────────────────────────────── */}
       <div style={{
-        background:    'white',
-        padding:       '18px 8%',
-        boxShadow:     '0 4px 20px rgba(0,0,0,0.04)',
-        borderBottom:  '1px solid #e2e8f0',
-        position:      'sticky',
-        top:           0,
-        zIndex:        20,
-        display:       'flex',
-        flexWrap:      'wrap',
-        gap:           '12px',
-        alignItems:    'center',
-        justifyContent:'space-between',
+        background:     'white',
+        padding:        '18px 8%',
+        boxShadow:      '0 4px 20px rgba(0,0,0,0.04)',
+        borderBottom:   '1px solid #e2e8f0',
+        position:       'sticky',
+        top:            0,
+        zIndex:         20,
+        display:        'flex',
+        flexWrap:       'wrap',
+        gap:            '12px',
+        alignItems:     'center',
+        justifyContent: 'space-between',
       }}>
         {/* Search */}
         <div className="relative" style={{ minWidth: '240px', flex: 1, maxWidth: '320px' }}>
@@ -139,25 +239,20 @@ export default function BatchmatesPage() {
             onChange={e => setSearch(e.target.value)}
             className="w-full text-sm font-medium rounded-xl border outline-none"
             style={{
-              padding:     '10px 14px 10px 32px',
-              border:      '1.5px solid #e2e8f0',
-              color:       '#1d2b4b',
-              background:  '#f8fafc',
-            }}
-          />
+              padding:    '10px 14px 10px 32px',
+              border:     '1.5px solid #e2e8f0',
+              color:      '#1d2b4b',
+              background: '#f8fafc',
+            }} />
         </div>
 
         {/* Course pills */}
         <div className="flex flex-wrap gap-2 items-center">
           {COURSES.slice(0, 6).map(c => (
-            <CourseChip
-              key={c.label}
-              label={c.label}
+            <CourseChip key={c.label} label={c.label}
               active={courseFilter === c.value}
-              onClick={() => setCourseFilter(c.value)}
-            />
+              onClick={() => setCourseFilter(c.value)} />
           ))}
-          {/* Remaining courses in a select */}
           <select
             value={courseFilter ?? ''}
             onChange={e => setCourseFilter(e.target.value || null)}
@@ -170,17 +265,22 @@ export default function BatchmatesPage() {
           </select>
         </div>
 
-        {/* Year */}
-        <select
-          value={yearFilter ?? ''}
-          onChange={e => setYearFilter(e.target.value ? Number(e.target.value) : null)}
-          className="font-bold text-xs px-4 py-2 rounded-xl border-none outline-none"
-          style={{ background: '#f1f5f9', color: '#64748b', cursor: 'pointer' }}>
-          <option value="">All Years</option>
-          {YEAR_OPTIONS.map(y => (
-            <option key={y} value={y}>Batch {y}</option>
-          ))}
-        </select>
+        {/* Year + Generate Yearbook pill ───────── */}
+        <div className="flex items-center gap-2">
+          <select
+            value={yearFilter ?? ''}
+            onChange={e => setYearFilter(e.target.value ? Number(e.target.value) : null)}
+            className="font-bold text-xs px-4 py-2 rounded-xl border-none outline-none"
+            style={{ background: '#f1f5f9', color: '#64748b', cursor: 'pointer' }}>
+            <option value="">All Years</option>
+            {YEAR_OPTIONS.map(y => (
+              <option key={y} value={y}>Batch {y}</option>
+            ))}
+          </select>
+
+          {/* ── NEW: compact pill — appears as soon as a year is selected ── */}
+          <YearbookFilterPill year={yearFilter} />
+        </div>
       </div>
 
       {/* ── Count Pill ───────────────────────────────────────────────────── */}
@@ -267,13 +367,11 @@ export default function BatchmatesPage() {
                 to={`/profile/${student.id}`}
                 className="batch-card bg-white no-underline block overflow-hidden transition-all relative"
                 style={{
-                  borderRadius:  '25px',
-                  border:        '1px solid rgba(0,0,0,0.04)',
-                  boxShadow:     '0 8px 24px rgba(0,0,0,0.04)',
-                  animationDelay:`${i * 0.04}s`,
+                  borderRadius:   '25px',
+                  border:         '1px solid rgba(0,0,0,0.04)',
+                  boxShadow:      '0 8px 24px rgba(0,0,0,0.04)',
+                  animationDelay: `${i * 0.04}s`,
                 }}>
-
-                {/* Photo */}
                 <div style={{ height: '220px', overflow: 'hidden', background: '#1d2b4b' }}>
                   {student.profile_picture ? (
                     <img
@@ -289,14 +387,11 @@ export default function BatchmatesPage() {
                     </div>
                   )}
                 </div>
-
-                {/* Info */}
                 <div className="text-center" style={{ padding: '22px 18px 18px' }}>
                   <h4 className="font-extrabold capitalize mb-2"
                     style={{ fontSize: '1.05rem', color: '#1d2b4b', lineHeight: 1.25 }}>
                     {student.name}
                   </h4>
-
                   <span className="inline-block font-extrabold text-xs uppercase tracking-wider mb-3"
                     style={{
                       background:   'rgba(63,81,181,0.07)',
@@ -310,12 +405,9 @@ export default function BatchmatesPage() {
                       .slice(0, 2)
                       .join(' ') || 'Student'}
                   </span>
-
                   {student.student_id && (
                     <p className="text-xs" style={{ color: '#94a3b8' }}>{student.student_id}</p>
                   )}
-
-                  {/* Premium extras */}
                   {isPremium && student.section?.name && (
                     <p className="text-xs font-semibold mt-1" style={{ color: '#3f51b5' }}>
                       Section {student.section.name}
@@ -327,8 +419,6 @@ export default function BatchmatesPage() {
                     </p>
                   )}
                 </div>
-
-                {/* Free tier overlay */}
                 {!isPremium && (
                   <div className="absolute bottom-0 left-0 right-0 flex items-center justify-center gap-2 py-2"
                     style={{

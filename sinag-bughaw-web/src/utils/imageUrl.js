@@ -1,7 +1,3 @@
-/**
- * Resolves a profile picture or photo path to a full URL.
- * Handles both Cloudinary (full https:// URL) and local storage paths.
- */
 const BASE = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000';
 
 export function imageUrl(path) {

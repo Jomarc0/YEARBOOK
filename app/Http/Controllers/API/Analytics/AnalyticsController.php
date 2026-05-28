@@ -1,46 +1,65 @@
 <?php
+
 namespace App\Http\Controllers\API\Analytics;
 
 use App\Http\Controllers\Controller;
-use App\Models\AlumniActivity;
-use App\Models\ProfileView;
-use App\Models\User;
+use App\Services\Analytics\EngagementAnalyticsService;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 class AnalyticsController extends Controller
 {
-    public function topViewed()
-    {
-        $students = User::withCount('profileViews')
-            ->orderByDesc('profile_views')
-            ->limit(10)
-            ->get(['id','name','course','profile_picture','profile_views','student_id']);
+    public function __construct(
+        private readonly EngagementAnalyticsService $analytics
+    ) {}
 
-        return response()->json($students);
+    public function summary(): JsonResponse
+    {
+        return response()->json($this->analytics->summary());
     }
 
-    public function myStats(Request $request)
+    public function topViewed(Request $request): JsonResponse
     {
-        $userId = $request->user()->id;
-
-        return response()->json([
-            'total_views'    => ProfileView::where('viewed_user_id', $userId)->count(),
-            'views_this_week'=> ProfileView::where('viewed_user_id', $userId)
-                ->where('created_at', '>=', now()->subWeek())->count(),
-            'recent_activities' => AlumniActivity::where('user_id', $userId)
-                ->latest()->limit(10)->get(),
-        ]);
+        $limit = max(1, min((int) $request->query('limit', 10), 50));
+        return response()->json(['data' => $this->analytics->topViewed($limit)]);
     }
 
-    public function batchmates(Request $request)
+    public function trending(Request $request): JsonResponse
     {
-        $user = $request->user();
+        $limit = max(1, min((int) $request->query('limit', 10), 50));
+        return response()->json(['data' => $this->analytics->trending($limit)]);
+    }
 
-        $batchmates = User::where('batch', $user->batch)
-            ->where('id', '!=', $user->id)
-            ->whereNotNull('batch')
-            ->get(['id','name','course','profile_picture','student_id','batch']);
+    public function myStats(Request $request): JsonResponse
+    {
+        return response()->json($this->analytics->myStats($request->user()));
+    }
 
-        return response()->json($batchmates);
+    public function myStatsTrend(Request $request): JsonResponse
+    {
+        $days = max(7, min((int) $request->query('days', 30), 90));
+        return response()->json(['data' => $this->analytics->weeklyTrend($request->user()->id, $days)]);
+    }
+
+    public function batchmates(Request $request): JsonResponse
+    {
+        return response()->json($this->analytics->batchmateStats($request->user()));
+    }
+
+    public function platform(): JsonResponse
+    {
+        return response()->json($this->analytics->platformEngagement());
+    }
+
+    // ── Called by StudentProfileView on every genuine visit ──────────────────
+    public function recordView(Request $request, int $userId): JsonResponse
+    {
+        $this->analytics->recordView(
+            viewedUserId: $userId,
+            viewerUserId: $request->user()?->id, // null for guests
+            ipAddress:    $request->ip()
+        );
+
+        return response()->json(['recorded' => true]);
     }
 }

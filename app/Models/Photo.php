@@ -41,6 +41,11 @@ class Photo extends Model
     {
         return $this->hasMany(TaggedPhoto::class);
     }
+    
+    public function media(): HasMany
+    {
+        return $this->hasMany(PostMedia::class)->orderBy('sort_order');
+    }
 
     // FIXED: now that photo_id exists in tagged_photos this works correctly
     public function taggedStudents(): BelongsToMany

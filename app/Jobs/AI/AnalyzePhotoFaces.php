@@ -90,7 +90,7 @@ class AnalyzePhotoFaces implements ShouldQueue
                 ]),
             ]);
 
-            throw $e; 
+            // Don't re-throw — let the upload succeed even if AI analysis fails
         }
     }
 }

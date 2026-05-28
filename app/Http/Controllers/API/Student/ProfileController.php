@@ -10,6 +10,7 @@ use App\Exceptions\StorageUploadException;
 use App\Http\Controllers\Controller;
 use App\Models\Album;
 use App\Models\Photo;
+use App\Models\PostMedia;
 use App\Models\TaggedPhoto;
 use App\Models\User;
 use App\Notifications\PhotoTaggedNotification;
@@ -27,9 +28,18 @@ class ProfileController extends Controller
     // GET /api/students/{id}/posts
     // =========================================================================
 
-    public function getPosts(int $id): JsonResponse
+    public function getPosts(Request $request, int $id): JsonResponse
     {
-        $isOwner = Auth::id() === $id;
+        $isOwner      = Auth::id() === $id;
+        $isSubscribed = $request->attributes->get('viewer_is_subscribed', false);
+
+        if (! $isOwner && ! $isSubscribed) {
+            return response()->json([
+                'success'    => true,
+                'restricted' => true,
+                'data'       => ['data' => []],
+            ]);
+        }
 
         $photos = Photo::where('user_id', $id)
             ->where('is_profile_post', true)
@@ -37,11 +47,18 @@ class ProfileController extends Controller
             ->with([
                 'user:id,name,profile_picture',
                 'taggedStudents:id,name,profile_picture',
+                'media',
             ])
             ->latest()
             ->paginate(12);
 
-        return response()->json(['success' => true, 'data' => $photos]);
+        $photos->getCollection()->transform(fn ($p) => $this->formatPost($p));
+
+        return response()->json([
+            'success'    => true,
+            'restricted' => false,
+            'data'       => $photos,
+        ]);
     }
 
     // =========================================================================
@@ -51,16 +68,32 @@ class ProfileController extends Controller
     public function uploadMedia(Request $request): JsonResponse
     {
         $request->validate([
-            'file'             => ['required', 'file', 'mimes:jpeg,png,webp,heic,gif,mp4,mov', 'max:51200'],
-            'caption'          => ['nullable', 'string', 'max:255'],
-            'visibility'       => ['nullable', 'in:public,friends,private'],
-            'tagged_user_ids'  => ['nullable', 'array'],
-            'tagged_user_ids.*'=> ['integer', 'exists:users,id'],
+            'files'             => ['required', 'array', 'min:1', 'max:20'],
+            'files.*'           => [
+                'required', 'file',
+                function ($attribute, $value, $fail) {
+                    $mime    = $value->getMimeType();
+                    $allowed = [
+                        'image/jpeg', 'image/png', 'image/webp', 'image/gif',
+                        'image/heic', 'image/heif',
+                        'video/mp4',  'video/quicktime', 'video/mpeg',
+                        'video/x-msvideo', 'video/webm',
+                    ];
+                    if (! in_array($mime, $allowed)) {
+                        $fail("File type [{$mime}] is not supported.");
+                    }
+                },
+                'max:102400',
+            ],
+            'caption'           => ['nullable', 'string', 'max:255'],
+            'visibility'        => ['nullable', 'in:public,friends,private'],
+            'tagged_user_ids'   => ['nullable', 'array'],
+            'tagged_user_ids.*' => ['integer', 'exists:users,id'],
         ]);
 
         $user = Auth::user();
 
-        // ── Subscription tier gate ─────────────────────────────────────────
+        // ── Subscription gate ──────────────────────────────────────────────
         $subscription = \App\Models\Subscription::where('user_id', $user->id)
             ->where('status', 'active')
             ->where(fn ($q) => $q->whereNull('expires_at')->orWhere('expires_at', '>', now()))
@@ -75,35 +108,69 @@ class ProfileController extends Controller
             ], 403);
         }
 
-        try {
-            $result = $this->storage->uploadPhoto(
-                file:   $request->file('file'),
-                userId: $user->id,
-                folder: 'profile',
-            );
+        $files      = $request->file('files');
+        $caption    = $request->input('caption', '');
+        $visibility = $request->input('visibility', 'public');
 
+        try {
             $album = Album::firstOrCreate(
                 ['user_id' => $user->id, 'title' => 'My Uploads'],
                 ['type' => 'profile', 'event_date' => now()->toDateString()]
             );
 
+            // ── Create ONE Photo record for all files ──────────────────────
             $photo = Photo::create([
                 'album_id'        => $album->id,
                 'user_id'         => $user->id,
-                'file_path'       => $result['secure_url'],
-                'public_id'       => $result['public_id'],
-                'caption'         => $request->caption,
-                'visibility'      => $request->input('visibility', 'public'),
+                'file_path'       => '',   // filled after first upload
+                'public_id'       => '',
+                'caption'         => $caption,
+                'visibility'      => $visibility,
                 'is_profile_post' => true,
                 'ai_metadata'     => [
-                    'bytes'         => $result['bytes']         ?? 0,
-                    'resource_type' => $result['resource_type'] ?? 'image',
-                    'width'         => $result['width']         ?? null,
-                    'height'        => $result['height']        ?? null,
+                    'resource_type' => 'image',
+                    'multi'         => count($files) > 1,
+                    'media_count'   => count($files),
                 ],
             ]);
 
-            // ── Tag people + send notifications ────────────────────────────
+            foreach ($files as $index => $file) {
+                $result       = $this->storage->uploadPhoto(
+                    file:   $file,
+                    userId: $user->id,
+                    folder: 'profile',
+                );
+                $resourceType = str_starts_with((string) $file->getMimeType(), 'video/') ? 'video' : 'image';
+
+                PostMedia::create([
+                    'photo_id'      => $photo->id,
+                    'file_path'     => $result['secure_url'],
+                    'public_id'     => $result['public_id'],
+                    'resource_type' => $resourceType,
+                    'bytes'         => $result['bytes']  ?? 0,
+                    'width'         => $result['width']  ?? null,
+                    'height'        => $result['height'] ?? null,
+                    'sort_order'    => $index,
+                ]);
+
+                // First file sets the Photo's main fields
+                if ($index === 0) {
+                    $photo->update([
+                        'file_path'   => $result['secure_url'],
+                        'public_id'   => $result['public_id'],
+                        'ai_metadata' => [
+                            'resource_type' => $resourceType,
+                            'bytes'         => $result['bytes']  ?? 0,
+                            'width'         => $result['width']  ?? null,
+                            'height'        => $result['height'] ?? null,
+                            'multi'         => count($files) > 1,
+                            'media_count'   => count($files),
+                        ],
+                    ]);
+                }
+            }
+
+            // ── Tag people ─────────────────────────────────────────────────
             if ($request->filled('tagged_user_ids')) {
                 $this->tagUsersAndNotify(
                     $photo,
@@ -112,17 +179,14 @@ class ProfileController extends Controller
                 );
             }
 
+            $photo->load('media', 'taggedStudents:id,name,profile_picture');
+
             return response()->json([
                 'success' => true,
-                'message' => 'Photo uploaded successfully.',
-                'data'    => [
-                    'id'           => $photo->id,
-                    'file_path'    => $photo->file_path,
-                    'caption'      => $photo->caption,
-                    'visibility'   => $photo->visibility,
-                    'tagged_users' => $photo->taggedStudents()->get(['users.id', 'users.name', 'users.profile_picture']),
-                    'created_at'   => $photo->created_at,
-                ],
+                'message' => count($files) > 1
+                    ? count($files) . ' photos uploaded as one post.'
+                    : 'Photo uploaded successfully.',
+                'data' => $this->formatPost($photo),
             ], 201);
 
         } catch (StorageLimitExceededException $e) {
@@ -133,13 +197,35 @@ class ProfileController extends Controller
                 'code'    => 'STORAGE_LIMIT_EXCEEDED',
             ], 422);
 
-        } catch (StorageUploadException $e) {
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::error('uploadMedia failed', [
+                'message' => $e->getMessage(),
+                'line'    => $e->getLine(),
+                'file'    => $e->getFile(),
+            ]);
             return response()->json([
                 'success' => false,
-                'message' => 'Upload failed. Please try again.',
+                'message' => $e->getMessage(),
                 'code'    => 'UPLOAD_FAILED',
             ], 500);
         }
+    }
+
+    // =========================================================================
+    // GET /api/profile/posts/{photoId}
+    // =========================================================================
+
+    public function getPost(int $photoId): JsonResponse
+    {
+        $photo = Photo::where('id', $photoId)
+            ->where('is_profile_post', true)
+            ->with(['media', 'taggedStudents:id,name,profile_picture'])
+            ->firstOrFail();
+
+        return response()->json([
+            'success' => true,
+            'data'    => $this->formatPost($photo),
+        ]);
     }
 
     // =========================================================================
@@ -154,10 +240,10 @@ class ProfileController extends Controller
             ->firstOrFail();
 
         $validated = $request->validate([
-            'caption'          => ['nullable', 'string', 'max:255'],
-            'visibility'       => ['nullable', 'in:public,friends,private'],
-            'tagged_user_ids'  => ['nullable', 'array'],
-            'tagged_user_ids.*'=> ['integer', 'exists:users,id'],
+            'caption'           => ['nullable', 'string', 'max:255'],
+            'visibility'        => ['nullable', 'in:public,friends,private'],
+            'tagged_user_ids'   => ['nullable', 'array'],
+            'tagged_user_ids.*' => ['integer', 'exists:users,id'],
         ]);
 
         $photo->update([
@@ -165,45 +251,22 @@ class ProfileController extends Controller
             'visibility' => $validated['visibility'] ?? $photo->visibility,
         ]);
 
-        // ── Sync tags + notify newly added users ───────────────────────────
         if (array_key_exists('tagged_user_ids', $validated)) {
-            $newIds = $validated['tagged_user_ids'] ?? [];
-
-            // Find who was NOT previously tagged (to send notifications only to new tags)
+            $newIds      = $validated['tagged_user_ids'] ?? [];
             $existingIds = TaggedPhoto::where('photo_id', $photo->id)
-                ->where('source', 'manual')
-                ->pluck('user_id')
-                ->toArray();
+                ->where('source', 'manual')->pluck('user_id')->toArray();
+            $addedIds    = array_values(array_diff($newIds, $existingIds));
 
-            $addedIds = array_values(array_diff($newIds, $existingIds));
-
-            // Remove old manual tags
-            TaggedPhoto::where('photo_id', $photo->id)
-                ->where('source', 'manual')
-                ->delete();
-
-            // Re-create all manual tags
-            $this->tagUsersAndNotify(
-                $photo,
-                $newIds,
-                Auth::user(),
-                $addedIds  
-            );
+            TaggedPhoto::where('photo_id', $photo->id)->where('source', 'manual')->delete();
+            $this->tagUsersAndNotify($photo, $newIds, Auth::user(), $addedIds);
         }
 
-        $fresh = $photo->fresh()->load('taggedStudents:id,name,profile_picture');
+        $photo->load('media', 'taggedStudents:id,name,profile_picture');
 
         return response()->json([
             'success' => true,
             'message' => 'Post updated.',
-            'data'    => [
-                ...$fresh->toArray(),
-                'tagged_users' => $fresh->taggedStudents->map(fn($u) => [
-                    'id'              => $u->id,
-                    'name'            => $u->name,
-                    'profile_picture' => $u->profile_picture,
-                ])->values(),
-            ],
+            'data'    => $this->formatPost($photo),
         ]);
     }
 
@@ -218,21 +281,16 @@ class ProfileController extends Controller
         $subscription = \App\Models\Subscription::where('user_id', $user->id)
             ->where('status', 'active')
             ->where(fn ($q) => $q->whereNull('expires_at')->orWhere('expires_at', '>', now()))
-            ->latest()
-            ->first();
+            ->latest()->first();
 
         $tierKey    = $subscription?->tier ?? 'free';
         $tierConfig = config("cloudinary.tiers.{$tierKey}");
 
-        if (! is_array($tierConfig)) {
-            $tierConfig = config('cloudinary.tiers.free');
-        }
-        if (! is_array($tierConfig)) {
-            $tierConfig = [
-                'storage_limit_bytes' => 500 * 1024 * 1024,
-                'hd_enabled'          => false,
-            ];
-        }
+        if (! is_array($tierConfig)) $tierConfig = config('cloudinary.tiers.free');
+        if (! is_array($tierConfig)) $tierConfig = [
+            'storage_limit_bytes' => 500 * 1024 * 1024,
+            'hd_enabled'          => false,
+        ];
 
         $usedBytes = $this->storage->getUserStorageUsed($user->id);
 
@@ -257,19 +315,29 @@ class ProfileController extends Controller
         $photo = Photo::where('id', $photoId)
             ->where('user_id', Auth::id())
             ->where('is_profile_post', true)
+            ->with('media')
             ->firstOrFail();
 
-        try {
-            if ($photo->public_id) {
-                $resourceType = $photo->ai_metadata['resource_type'] ?? 'image';
+        // Delete all media from Cloudinary
+        foreach ($photo->media as $media) {
+            try {
+                $this->storage->deletePhoto(
+                    publicId:     $media->public_id,
+                    resourceType: $media->resource_type,
+                );
+            } catch (\Throwable) {}
+        }
+
+        // Also delete the main photo if it has a public_id not covered by media
+        if ($photo->public_id && $photo->media->isEmpty()) {
+            try {
                 $this->storage->deletePhoto(
                     publicId:     $photo->public_id,
-                    resourceType: $resourceType,
+                    resourceType: $photo->ai_metadata['resource_type'] ?? 'image',
                 );
-            }
-        } catch (StorageUploadException) {}
+            } catch (\Throwable) {}
+        }
 
-        // Remove all tags before deleting
         TaggedPhoto::where('photo_id', $photo->id)->delete();
         $photo->delete();
 
@@ -280,25 +348,56 @@ class ProfileController extends Controller
     // PRIVATE HELPERS
     // =========================================================================
 
-    /**
-     * Create TaggedPhoto records and send PhotoTaggedNotification
-     * to each tagged user (excluding the tagger themselves).
-     *
-     * @param  Photo    $photo       The photo being tagged
-     * @param  array    $userIds     All user IDs to tag
-     * @param  User     $tagger      Who is doing the tagging
-     * @param  array    $notifyIds   Subset to notify (null = notify all)
-     */
+    private function formatPost(Photo $photo): array
+    {
+        $media = $photo->relationLoaded('media') ? $photo->media : $photo->media()->get();
+
+        // Backward compat: old posts have no PostMedia rows, use file_path directly
+        if ($media->isEmpty()) {
+            $media = collect([[
+                'file_path'     => $photo->file_path,
+                'public_id'     => $photo->public_id,
+                'resource_type' => $photo->ai_metadata['resource_type'] ?? 'image',
+                'sort_order'    => 0,
+            ]]);
+        }
+
+        $taggedStudents = $photo->relationLoaded('taggedStudents')
+            ? $photo->taggedStudents
+            : collect();
+
+        return [
+            'id'              => $photo->id,
+            'caption'         => $photo->caption,
+            'visibility'      => $photo->visibility,
+            'created_at'      => $photo->created_at,
+            'file_path'       => $photo->file_path,   // backward compat
+            'ai_metadata'     => $photo->ai_metadata,
+            'media_count'     => $media->count(),
+            'media'           => $media->map(fn ($m) => [
+                'file_path'     => is_array($m) ? $m['file_path']     : $m->file_path,
+                'public_id'     => is_array($m) ? $m['public_id']     : $m->public_id,
+                'resource_type' => is_array($m) ? $m['resource_type'] : $m->resource_type,
+                'sort_order'    => is_array($m) ? $m['sort_order']    : $m->sort_order,
+            ])->values(),
+            'tagged_users'    => $taggedStudents->map(fn ($u) => [
+                'id'              => $u->id,
+                'name'            => $u->name,
+                'profile_picture' => $u->profile_picture,
+            ])->values(),
+            'tagged_students' => $taggedStudents->values(),
+        ];
+    }
+
     private function tagUsersAndNotify(
-        Photo $photo,
-        array $userIds,
-        User  $tagger,
+        Photo  $photo,
+        array  $userIds,
+        User   $tagger,
         ?array $notifyIds = null
     ): void {
         $notifyIds = $notifyIds ?? $userIds;
 
         foreach ($userIds as $userId) {
-            // Don't tag yourself
             if ($userId === $tagger->id) continue;
 
             TaggedPhoto::create([
@@ -308,16 +407,13 @@ class ProfileController extends Controller
                 'source'     => 'manual',
                 'similarity' => 100,
                 'confidence' => 100,
-                'status'     => 'approved', 
+                'status'     => 'approved',
             ]);
 
-            // Send notification only to newly tagged users
             if (in_array($userId, $notifyIds)) {
                 $taggedUser = User::find($userId);
                 if ($taggedUser) {
-                    $taggedUser->notify(
-                        new PhotoTaggedNotification($photo, $tagger)
-                    );
+                    $taggedUser->notify(new PhotoTaggedNotification($photo, $tagger));
                 }
             }
         }

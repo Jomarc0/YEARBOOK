@@ -15,10 +15,19 @@ class Section extends Model
         'name',
         'course',
         'batch_year',
-        'batch_id',       
+        'batch_id',
         'adviser_id',
         'description',
     ];
+
+    // ── Casts ─────────────────────────────────────────────────────────────
+
+    protected function casts(): array
+    {
+        return [
+            'batch_year' => 'integer',  // ← was missing
+        ];
+    }
 
     // ── Relationships ──────────────────────────────────────────────────────
 
@@ -28,7 +37,7 @@ class Section extends Model
         return $this->hasMany(User::class, 'section_id');
     }
 
-    /** Alias for withCount('users'). */
+    /** Alias used by withCount('users'). */
     public function users(): HasMany
     {
         return $this->hasMany(User::class, 'section_id');

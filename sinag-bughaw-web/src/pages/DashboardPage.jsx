@@ -6,30 +6,52 @@ import { storageUrl } from '@/api/client';
 import Navbar from '@/components/layout/Navbar';
 import axios from '@/api/client';
 
+// ─── tier helper ──────────────────────────────────────────────────────────────
+const getTier = (user) => {
+  if (!user) return 'free';
+  if (user.tier === 'premium' || user.is_premium) return 'premium';
+  if (user.tier === 'standard') return 'standard';
+  return 'free';
+};
+
+// ─── constants ────────────────────────────────────────────────────────────────
+const CARDS = [
+  { to: '/directory',   icon: 'fas fa-users',              label: 'Students',    desc: 'Browse the student directory.',  iconBg: 'bg-indigo-50',  iconTxt: 'text-indigo-600'  },
+  { to: '/faculty',     icon: 'fas fa-chalkboard-teacher', label: 'Faculty',     desc: 'Meet our educators.',            iconBg: 'bg-violet-50',  iconTxt: 'text-violet-600'  },
+  { to: '/gallery',     icon: 'fas fa-images',             label: 'Gallery',     desc: 'Relive school memories.',        iconBg: 'bg-emerald-50', iconTxt: 'text-emerald-600' },
+  { to: '/sections',    icon: 'fas fa-layer-group',        label: 'Sections',    desc: 'View batch groupings.',          iconBg: 'bg-orange-50',  iconTxt: 'text-orange-500'  },
+  { to: '/messages',    icon: 'fas fa-comment-dots',       label: 'Messages',    desc: 'Chat with classmates.',          iconBg: 'bg-amber-50',   iconTxt: 'text-amber-600'   },
+  { to: '/flipbook',    icon: 'fas fa-book-open',          label: 'Flipbook',    desc: 'Browse the digital yearbook.',   iconBg: 'bg-pink-50',    iconTxt: 'text-pink-600'    },
+  { to: '/voice-notes', icon: 'fas fa-microphone',         label: 'Voice Notes', desc: 'Record audio memories.',         iconBg: 'bg-teal-50',    iconTxt: 'text-teal-600'    },
+  { to: '/analytics',   icon: 'fas fa-chart-bar',          label: 'Analytics',   desc: "See who's trending.",            iconBg: 'bg-sky-50',     iconTxt: 'text-sky-600'     },
+  { to: '/settings',    icon: 'fas fa-cog',                label: 'Settings',    desc: 'Manage your profile.',           iconBg: 'bg-slate-100',  iconTxt: 'text-slate-500'   },
+];
+
+// ─── main page ────────────────────────────────────────────────────────────────
 export default function DashboardPage() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
-  const [query,    setQuery]    = useState('');
-  const [results,  setResults]  = useState(null);
-  const [showDrop, setShowDrop] = useState(false);
-  const [digest,   setDigest]   = useState(null);
+
+  const userTier  = getTier(user);
+  const isPremium = userTier === 'premium' || userTier === 'standard';
+
+  const [query,         setQuery]         = useState('');
+  const [results,       setResults]       = useState(null);
+  const [showDrop,      setShowDrop]      = useState(false);
+  const [digest,        setDigest]        = useState(null);
   const [digestLoading, setDigestLoading] = useState(true);
   const searchRef = useRef();
 
   const handleLogout = async () => { await logout(); navigate('/login'); };
 
-  // ── Fetch memory digest ──────────────────────────────────────────────────
   useEffect(() => {
-    const fetchDigest = async () => {
+    (async () => {
       try {
         const { data } = await axios.get('/memories/digest');
         setDigest(data.data);
-      } catch (_) {
-      } finally {
-        setDigestLoading(false);
-      }
-    };
-    fetchDigest();
+      } catch (_) {}
+      finally { setDigestLoading(false); }
+    })();
   }, []);
 
   const onSearch = async (val) => {
@@ -43,446 +65,399 @@ export default function DashboardPage() {
   };
 
   useEffect(() => {
-    const handler = (e) => {
+    const h = (e) => {
       if (searchRef.current && !searchRef.current.contains(e.target)) setShowDrop(false);
     };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
+    document.addEventListener('mousedown', h);
+    return () => document.removeEventListener('mousedown', h);
   }, []);
 
-  const initials = user?.name?.split(' ').map(n => n[0]).slice(0, 2).join('') ?? 'U';
-
-  const avatarSrc = storageUrl(user?.profile_picture)
-    || `https://ui-avatars.com/api/?name=${encodeURIComponent(user?.name ?? 'U')}&background=1d2b4b&color=fdb813&size=128`;
-
-  const cards = [
-    { to: '/directory',   icon: 'fas fa-users',             label: 'Students',    desc: 'Browse the student directory.',  color: '#eef2ff', iconColor: '#3f51b5' },
-    { to: '/faculty',     icon: 'fas fa-chalkboard-teacher', label: 'Faculty',     desc: 'Meet our educators.',            color: '#f5f3ff', iconColor: '#8b5cf6' },
-    { to: '/gallery',     icon: 'fas fa-images',             label: 'Gallery',     desc: 'Relive school memories.',        color: '#f0fdf4', iconColor: '#22c55e' },
-    { to: '/sections',    icon: 'fas fa-layer-group',        label: 'Sections',    desc: 'View batch groupings.',          color: '#fff7ed', iconColor: '#f97316' },
-    { to: '/messages',    icon: 'fas fa-comment-dots',       label: 'Messages',    desc: 'Chat with classmates.',          color: '#fef3c7', iconColor: '#d97706' },
-    { to: '/flipbook',    icon: 'fas fa-book-open',          label: 'Flipbook',    desc: 'Browse the digital yearbook.',   color: '#fce7f3', iconColor: '#db2777' },
-    { to: '/voice-notes', icon: 'fas fa-microphone',         label: 'Voice Notes', desc: 'Record audio memories.',         color: '#ecfdf5', iconColor: '#059669' },
-    { to: '/settings',    icon: 'fas fa-cog',                label: 'Settings',    desc: 'Manage your profile.',           color: '#f1f5f9', iconColor: '#475569' },
-  ];
+  const firstName = user?.name?.split(' ')[0] ?? 'Pioneer';
+  const avatarSrc =
+    storageUrl(user?.profile_picture) ||
+    `https://ui-avatars.com/api/?name=${encodeURIComponent(user?.name ?? 'U')}&background=1d2b4b&color=fdb813&size=128`;
 
   return (
-    <div style={{ minHeight: '100vh', background: '#f4f7fe' }}>
+    <div className="min-h-screen bg-[#f4f7fe]">
+      {/* watermark */}
+      <div
+        aria-hidden="true"
+        className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 -rotate-[30deg]
+                   text-[clamp(2rem,6vw,5rem)] font-black text-black/[0.022]
+                   pointer-events-none select-none z-[9999] whitespace-nowrap"
+      >
+        {user?.name}
+      </div>
+
       <Navbar />
 
-      {/* Watermark */}
-      <div style={{
-        position: 'fixed', top: '50%', left: '50%', pointerEvents: 'none', userSelect: 'none',
-        transform: 'translate(-50%,-50%) rotate(-30deg)', fontSize: '4rem', fontWeight: 900,
-        color: 'rgba(0,0,0,0.025)', zIndex: 9999, whiteSpace: 'nowrap',
-      }}>{user?.name}</div>
-
-      <main style={{ padding: '40px', maxWidth: 1400, margin: '0 auto' }}>
+      <main className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-10 py-8 lg:py-10">
 
         {/* Welcome */}
-        <div style={{ marginBottom: 32 }}>
-          <p style={{ fontSize: 13, color: '#94a3b8', marginBottom: 4 }}>Mabuhay, NU Lipa Pioneer!</p>
-          <h1 style={{ fontSize: '2.2rem', fontWeight: 800, color: '#1d2b4b', letterSpacing: '-1px', margin: 0 }}>
-            Welcome back, <span style={{ color: '#3f51b5' }}>{user?.name?.split(' ')[0]}</span>
+        <header className="mb-8">
+          <p className="text-[11px] font-bold tracking-[0.18em] uppercase text-slate-400 mb-1">
+            Mabuhay, NU Lipa Pioneer!
+          </p>
+          <h1 className="text-[clamp(1.75rem,4vw,2.5rem)] font-extrabold tracking-tight text-[#1d2b4b] leading-none m-0">
+            Welcome back,{' '}
+            <span className="text-[#3f51b5]">{firstName}</span>
           </h1>
-        </div>
+        </header>
 
         {/* Search */}
-        <div style={{ position: 'relative', maxWidth: 600, marginBottom: 40, zIndex: 1000 }} ref={searchRef}>
-          <i className="fas fa-search" style={{
-            position: 'absolute', left: 18, top: '50%', transform: 'translateY(-50%)',
-            color: '#94a3b8', fontSize: 14,
-          }} />
+        <div className="relative max-w-xl mb-10 z-50" ref={searchRef}>
+          <i className="fas fa-search absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 text-sm pointer-events-none" />
           <input
             type="text"
             value={query}
             onChange={e => onSearch(e.target.value)}
-            placeholder="Search students, faculty, or content..."
-            style={{
-              width: '100%', padding: '13px 18px 13px 46px', fontSize: 14,
-              border: '1px solid #e2e8f0', borderRadius: 12, background: '#fff',
-              outline: 'none', boxSizing: 'border-box', color: '#1d2b4b',
-              transition: 'border-color 0.15s',
-            }}
-            onFocus={e => e.target.style.borderColor = '#3f51b5'}
-            onBlur={e => e.target.style.borderColor = '#e2e8f0'}
+            placeholder="Search students, faculty, or content…"
+            className="w-full pl-11 pr-4 py-3.5 text-sm rounded-xl bg-white border border-slate-200 text-[#1d2b4b]
+                       placeholder-slate-400 outline-none shadow-sm transition
+                       focus:border-[#3f51b5] focus:ring-2 focus:ring-[#3f51b5]/20"
           />
 
           {showDrop && (
-            <div style={{
-              position: 'absolute', width: '100%', background: '#fff', marginTop: 6,
-              borderRadius: 12, boxShadow: '0 10px 40px rgba(0,0,0,0.1)',
-              border: '1px solid #f1f5f9', overflow: 'hidden',
-            }}>
-              {results?.faculty?.length > 0 && (
-                <>
-                  <div style={{ padding: '8px 16px', fontSize: 10, fontWeight: 700, color: '#3f51b5', background: '#f8fafc', letterSpacing: 1, textTransform: 'uppercase' }}>Faculty</div>
-                  {results.faculty.map(f => (
-                    <Link key={f.id} to="/faculty" style={{
-                      display: 'flex', alignItems: 'center', gap: 12,
-                      padding: '10px 16px', textDecoration: 'none', color: 'inherit',
-                      borderBottom: '1px solid #f8fafc',
-                    }}
-                      onMouseEnter={e => e.currentTarget.style.background = '#f8fafc'}
-                      onMouseLeave={e => e.currentTarget.style.background = '#fff'}
-                    >
-                      <img
-                        src={`https://ui-avatars.com/api/?name=${encodeURIComponent(f.name)}&background=1d2b4b&color=fff`}
-                        style={{ width: 36, height: 36, borderRadius: 8, objectFit: 'cover' }}
-                      />
-                      <div>
-                        <div style={{ fontSize: 13, fontWeight: 600, color: '#1d2b4b' }}>{f.name}</div>
-                        <div style={{ fontSize: 11, color: '#94a3b8' }}>{f.title ?? 'Faculty'}</div>
-                      </div>
-                    </Link>
-                  ))}
-                </>
-              )}
-
-              {results?.students?.length > 0 && (
-                <>
-                  <div style={{ padding: '8px 16px', fontSize: 10, fontWeight: 700, color: '#d97706', background: '#f8fafc', letterSpacing: 1, textTransform: 'uppercase' }}>Students</div>
-                  {results.students.map(s => (
-                    <Link key={s.id} to={`/profile/${s.id}`} style={{
-                      display: 'flex', alignItems: 'center', gap: 12,
-                      padding: '10px 16px', textDecoration: 'none', color: 'inherit',
-                      borderBottom: '1px solid #f8fafc',
-                    }}
-                      onMouseEnter={e => e.currentTarget.style.background = '#f8fafc'}
-                      onMouseLeave={e => e.currentTarget.style.background = '#fff'}
-                    >
-                      <img
-                        src={storageUrl(s.profile_picture) || `https://ui-avatars.com/api/?name=${encodeURIComponent(s.name)}&background=3f51b5&color=fff`}
-                        style={{ width: 36, height: 36, borderRadius: 8, objectFit: 'cover' }}
-                      />
-                      <div>
-                        <div style={{ fontSize: 13, fontWeight: 600, color: '#1d2b4b' }}>{s.name}</div>
-                        <div style={{ fontSize: 11, color: '#94a3b8' }}>Pioneer Student</div>
-                      </div>
-                    </Link>
-                  ))}
-                </>
-              )}
-
-              {!results?.students?.length && !results?.faculty?.length && (
-                <div style={{ padding: '16px', textAlign: 'center', fontSize: 13, color: '#94a3b8' }}>
-                  No results found.
-                </div>
+            <div className="absolute w-full mt-2 bg-white rounded-2xl shadow-2xl border border-slate-100 overflow-hidden">
+              <SearchGroup label="Faculty" labelColor="text-[#3f51b5]">
+                {results?.faculty?.map(f => (
+                  <SearchRow
+                    key={f.id} to="/faculty"
+                    src={`https://ui-avatars.com/api/?name=${encodeURIComponent(f.name)}&background=1d2b4b&color=fff`}
+                    name={f.name} sub={f.title ?? 'Faculty'}
+                  />
+                ))}
+              </SearchGroup>
+              <SearchGroup label="Students" labelColor="text-amber-600">
+                {results?.students?.map(s => (
+                  <SearchRow
+                    key={s.id} to={`/profile/${s.id}`}
+                    src={storageUrl(s.profile_picture) || `https://ui-avatars.com/api/?name=${encodeURIComponent(s.name)}&background=3f51b5&color=fff`}
+                    name={s.name} sub="Pioneer Student"
+                  />
+                ))}
+              </SearchGroup>
+              {!results?.faculty?.length && !results?.students?.length && (
+                <p className="py-5 text-center text-sm text-slate-400">No results found.</p>
               )}
             </div>
           )}
         </div>
 
-        {/* Content Grid */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 320px', gap: 24, alignItems: 'start' }}>
+        {/* Content grid */}
+        <div className="grid grid-cols-1 xl:grid-cols-[1fr_296px] gap-6 items-start">
 
-          {/* Left column */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+          {/* LEFT */}
+          <div className="flex flex-col gap-8">
 
-            {/* Quick Access Cards */}
-            <div>
-              <h2 style={{ fontSize: 15, fontWeight: 600, color: '#1d2b4b', marginBottom: 16, marginTop: 0 }}>Quick Access</h2>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 14 }}>
-                {cards.map(c => (
-                  <Link key={c.to} to={c.to} style={{
-                    background: '#fff', borderRadius: 16, padding: '20px 18px',
-                    textDecoration: 'none', color: 'inherit',
-                    border: '1px solid #f1f5f9', transition: 'all 0.2s',
-                  }}
-                    onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-4px)'; e.currentTarget.style.boxShadow = '0 12px 30px rgba(0,0,0,0.08)'; }}
-                    onMouseLeave={e => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = 'none'; }}
+            {/* Quick Access */}
+            <section>
+              <SectionTitle>Quick Access</SectionTitle>
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-3 2xl:grid-cols-4 gap-3">
+                {CARDS.map(c => (
+                  <Link
+                    key={c.to} to={c.to}
+                    className="group bg-white rounded-2xl p-4 border border-slate-100 no-underline
+                               hover:-translate-y-1 hover:shadow-xl hover:shadow-slate-200/70
+                               transition-all duration-200"
                   >
-                    <div style={{
-                      width: 40, height: 40, borderRadius: 10, background: c.color,
-                      display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 12,
-                    }}>
-                      <i className={c.icon} style={{ color: c.iconColor, fontSize: 16 }} />
+                    <div className={`w-10 h-10 rounded-xl ${c.iconBg} flex items-center justify-center mb-3 group-hover:scale-105 transition-transform`}>
+                      <i className={`${c.icon} ${c.iconTxt} text-base`} aria-hidden="true" />
                     </div>
-                    <div style={{ fontSize: 13, fontWeight: 600, color: '#1d2b4b', marginBottom: 3 }}>{c.label}</div>
-                    <div style={{ fontSize: 11, color: '#94a3b8', lineHeight: 1.4 }}>{c.desc}</div>
+                    <p className="text-[13px] font-semibold text-[#1d2b4b] mb-0.5 m-0">{c.label}</p>
+                    <p className="text-[11px] text-slate-400 leading-snug m-0">{c.desc}</p>
                   </Link>
                 ))}
               </div>
-            </div>
+            </section>
 
-            {/* ── Memory Digest ── */}
-            <div>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-                <h2 style={{ fontSize: 15, fontWeight: 600, color: '#1d2b4b', margin: 0 }}>
-                  <i className="fas fa-clock-rotate-left" style={{ marginRight: 8, color: '#3f51b5' }} />
+            {/* Memory Digest */}
+            <section>
+              <div className="flex items-center justify-between mb-4">
+                <SectionTitle as="span" noBottom>
+                  <i className="fas fa-clock-rotate-left text-[#3f51b5] mr-2" aria-hidden="true" />
                   Your Memories
-                </h2>
-                {!user?.is_premium && (
-                  <span style={{
-                    fontSize: 11, fontWeight: 600, color: '#d97706',
-                    background: '#fef3c7', borderRadius: 6, padding: '3px 10px',
-                  }}>
+                </SectionTitle>
+
+                {/* Tier badge next to section title */}
+                {!isPremium ? (
+                  <span className="text-[11px] font-semibold text-amber-700 bg-amber-50 border border-amber-100 px-2.5 py-1 rounded-full">
+                    <i className="fas fa-lock text-[9px] mr-1" />
                     Upgrade for more
+                  </span>
+                ) : userTier === 'premium' ? (
+                  <span className="text-[11px] font-semibold text-amber-700 bg-amber-50 border border-amber-100 px-2.5 py-1 rounded-full">
+                    Premium
+                  </span>
+                ) : (
+                  <span className="text-[11px] font-semibold text-indigo-700 bg-indigo-50 border border-indigo-100 px-2.5 py-1 rounded-full">
+                    Standard
                   </span>
                 )}
               </div>
 
               {digestLoading ? (
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 14 }}>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   {[1, 2].map(i => (
-                    <div key={i} style={{
-                      background: '#fff', borderRadius: 16, padding: 20,
-                      border: '1px solid #f1f5f9', height: 120,
-                      background: 'linear-gradient(90deg, #f1f5f9 25%, #e2e8f0 50%, #f1f5f9 75%)',
-                      backgroundSize: '200% 100%',
-                      animation: 'shimmer 1.5s infinite',
-                    }} />
+                    <div key={i} className="h-32 rounded-2xl bg-gradient-to-r from-slate-100 via-slate-200 to-slate-100 animate-pulse" />
                   ))}
                 </div>
               ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-
-                  {/* On This Day */}
+                <div className="flex flex-col gap-3">
+                  {/* "On This Day" — visible to all tiers */}
                   <MemoryCard
-                    icon="fas fa-calendar-day"
-                    iconColor="#3f51b5"
-                    iconBg="#eef2ff"
-                    label={`On This Day — ${digest?.on_this_day?.date ?? ''}`}
+                    icon="fas fa-calendar-day" iconCls="text-indigo-600" iconBg="bg-indigo-50"
+                    label={`On This Day${digest?.on_this_day?.date ? ` — ${digest.on_this_day.date}` : ''}`}
                     empty={!digest?.on_this_day?.has_memories}
                     emptyText="No memories from this day yet. Start uploading photos!"
                   >
-                    {digest?.on_this_day?.has_memories && (
-                      <PhotoStrip
-                        photos={[
-                          ...(digest.on_this_day.uploaded ?? []),
-                          ...(digest.on_this_day.tagged ?? []),
-                        ]}
-                      />
-                    )}
+                    <PhotoStrip photos={[...(digest?.on_this_day?.uploaded ?? []), ...(digest?.on_this_day?.tagged ?? [])]} />
                   </MemoryCard>
 
-                  {/* Premium cards */}
-                  {user?.is_premium ? (
+                  {/* Premium & Standard get extra cards */}
+                  {isPremium ? (
                     <>
-                      {/* Tagged Photos */}
                       <MemoryCard
-                        icon="fas fa-user-tag"
-                        iconColor="#8b5cf6"
-                        iconBg="#f5f3ff"
+                        icon="fas fa-user-tag" iconCls="text-violet-600" iconBg="bg-violet-50"
                         label="You Appeared In These Photos"
                         empty={!digest?.tagged_photos?.count}
                         emptyText="No face-tagged photos found yet."
                       >
-                        {digest?.tagged_photos?.count > 0 && (
-                          <PhotoStrip photos={digest.tagged_photos.photos ?? []} />
-                        )}
+                        <PhotoStrip photos={digest?.tagged_photos?.photos ?? []} />
                       </MemoryCard>
 
-                      {/* Top Interactions */}
                       <MemoryCard
-                        icon="fas fa-users"
-                        iconColor="#059669"
-                        iconBg="#ecfdf5"
+                        icon="fas fa-users" iconCls="text-emerald-600" iconBg="bg-emerald-50"
                         label="People You Interacted With Most"
                         empty={!digest?.top_interactions?.peers?.length}
                         emptyText="Start messaging classmates to see your top connections."
                       >
-                        {digest?.top_interactions?.peers?.length > 0 && (
-                          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-                            {digest.top_interactions.peers.map((p, i) => (
-                              <Link key={i} to={`/profile/${p.user.id}`} style={{
-                                display: 'flex', alignItems: 'center', gap: 8,
-                                background: '#f8fafc', borderRadius: 10, padding: '8px 12px',
-                                textDecoration: 'none', color: 'inherit',
-                                border: '1px solid #f1f5f9',
-                              }}>
-                                <img
-                                  src={storageUrl(p.user.profile_picture) || `https://ui-avatars.com/api/?name=${encodeURIComponent(p.user.name ?? '')}&background=3f51b5&color=fff`}
-                                  style={{ width: 32, height: 32, borderRadius: 8, objectFit: 'cover' }}
-                                />
-                                <div>
-                                  <div style={{ fontSize: 12, fontWeight: 600, color: '#1d2b4b' }}>{p.user.name}</div>
-                                  <div style={{ fontSize: 10, color: '#94a3b8' }}>{p.messages} messages · {p.shared_photos} photos</div>
-                                </div>
-                              </Link>
-                            ))}
-                          </div>
-                        )}
+                        <div className="flex flex-wrap gap-2">
+                          {digest?.top_interactions?.peers?.map((p, i) => (
+                            <Link
+                              key={i} to={`/profile/${p.user.id}`}
+                              className="flex items-center gap-2 bg-slate-50 hover:bg-slate-100 border border-slate-100 rounded-xl px-3 py-2 no-underline transition-colors"
+                            >
+                              <img
+                                src={storageUrl(p.user.profile_picture) || `https://ui-avatars.com/api/?name=${encodeURIComponent(p.user.name ?? '')}&background=3f51b5&color=fff`}
+                                className="w-8 h-8 rounded-lg object-cover flex-shrink-0"
+                                alt={p.user.name}
+                              />
+                              <div>
+                                <p className="text-[12px] font-semibold text-[#1d2b4b] m-0">{p.user.name}</p>
+                                <p className="text-[10px] text-slate-400 m-0">{p.messages} msgs · {p.shared_photos} photos</p>
+                              </div>
+                            </Link>
+                          ))}
+                        </div>
                       </MemoryCard>
 
-                      {/* Graduation Memories */}
                       <MemoryCard
-                        icon="fas fa-graduation-cap"
-                        iconColor="#db2777"
-                        iconBg="#fce7f3"
+                        icon="fas fa-graduation-cap" iconCls="text-pink-600" iconBg="bg-pink-50"
                         label={`Graduation Memories${digest?.graduation?.graduation_year ? ` — ${digest.graduation.graduation_year}` : ''}`}
                         empty={!digest?.graduation?.has_photos}
                         emptyText="No graduation photos found for your batch yet."
                       >
-                        {digest?.graduation?.has_photos && (
-                          <PhotoStrip photos={digest.graduation.photos ?? []} />
-                        )}
+                        <PhotoStrip photos={digest?.graduation?.photos ?? []} />
                       </MemoryCard>
 
-                      {/* Most Viewed Today */}
                       <MemoryCard
-                        icon="fas fa-fire"
-                        iconColor="#f97316"
-                        iconBg="#fff7ed"
+                        icon="fas fa-fire" iconCls="text-orange-500" iconBg="bg-orange-50"
                         label="Most Viewed Alumni Today"
                         empty={!digest?.most_viewed?.students?.length}
                         emptyText="No view data yet."
                       >
-                        {digest?.most_viewed?.students?.length > 0 && (
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                            {digest.most_viewed.students.map((s, i) => (
-                              <Link key={i} to={`/profile/${s.id}`} style={{
-                                display: 'flex', alignItems: 'center', gap: 10,
-                                textDecoration: 'none', color: 'inherit',
-                                padding: '6px 0',
-                                borderBottom: i < digest.most_viewed.students.length - 1 ? '1px solid #f1f5f9' : 'none',
-                              }}>
-                                <span style={{ fontSize: 12, fontWeight: 700, color: '#94a3b8', minWidth: 20 }}>#{i + 1}</span>
-                                <img
-                                  src={storageUrl(s.profile_picture) || `https://ui-avatars.com/api/?name=${encodeURIComponent(s.name ?? '')}&background=1d2b4b&color=fdb813`}
-                                  style={{ width: 32, height: 32, borderRadius: 8, objectFit: 'cover' }}
-                                />
-                                <div style={{ flex: 1 }}>
-                                  <div style={{ fontSize: 12, fontWeight: 600, color: '#1d2b4b' }}>{s.name}</div>
-                                  <div style={{ fontSize: 10, color: '#94a3b8' }}>{s.course?.split(' ').pop()}</div>
-                                </div>
-                                <span style={{ fontSize: 11, color: '#f97316', fontWeight: 600 }}>{s.views} views</span>
-                              </Link>
-                            ))}
-                          </div>
-                        )}
+                        <div className="flex flex-col divide-y divide-slate-50">
+                          {digest?.most_viewed?.students?.map((s, i) => (
+                            <Link
+                              key={i} to={`/profile/${s.id}`}
+                              className="flex items-center gap-3 py-2.5 first:pt-0 last:pb-0 no-underline hover:opacity-75 transition-opacity"
+                            >
+                              <span className="text-[11px] font-bold text-slate-300 w-5 text-center shrink-0">#{i + 1}</span>
+                              <img
+                                src={storageUrl(s.profile_picture) || `https://ui-avatars.com/api/?name=${encodeURIComponent(s.name ?? '')}&background=1d2b4b&color=fdb813`}
+                                className="w-8 h-8 rounded-lg object-cover flex-shrink-0"
+                                alt={s.name}
+                              />
+                              <div className="flex-1 min-w-0">
+                                <p className="text-[12px] font-semibold text-[#1d2b4b] truncate m-0">{s.name}</p>
+                                <p className="text-[10px] text-slate-400 m-0">{s.course?.split(' ').pop()}</p>
+                              </div>
+                              <span className="text-[11px] text-orange-500 font-semibold whitespace-nowrap">{s.views} views</span>
+                            </Link>
+                          ))}
+                        </div>
                       </MemoryCard>
                     </>
                   ) : (
-                    /* Premium upsell */
-                    <div style={{
-                      background: 'linear-gradient(135deg, #1d2b4b, #3f51b5)',
-                      borderRadius: 16, padding: 24, color: '#fff',
-                      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                      gap: 16,
-                    }}>
+                    /* ── FREE: upgrade prompt ── */
+                    <div className="rounded-2xl bg-gradient-to-br from-[#1d2b4b] to-[#3f51b5] p-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
                       <div>
-                        <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 4 }}>
+                        <p className="text-sm font-bold text-white mb-1 m-0">
+                          <i className="fas fa-lock text-[#fdb813] mr-2" />
                           Unlock 4 more memory cards
-                        </div>
-                        <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.6)' }}>
-                          Tagged photos · Top connections · Graduation memories · Most viewed alumni
-                        </div>
+                        </p>
+                        <p className="text-xs text-white/60 m-0">Tagged photos · Top connections · Graduation memories · Most viewed alumni</p>
+                        <p className="text-[10px] text-white/40 m-0 mt-1">Available on Standard and Premium plans.</p>
                       </div>
-                      <Link to="/payment" style={{
-                        background: '#fdb813', color: '#1d2b4b', borderRadius: 10,
-                        padding: '10px 18px', fontSize: 12, fontWeight: 700,
-                        textDecoration: 'none', whiteSpace: 'nowrap', flexShrink: 0,
-                      }}>
-                        Go Premium
+                      <Link
+                        to="/payment"
+                        className="shrink-0 bg-[#fdb813] text-[#1d2b4b] font-bold text-xs px-5 py-3 rounded-xl no-underline hover:bg-yellow-300 transition-colors whitespace-nowrap"
+                      >
+                        <i className="fas fa-crown mr-1.5" />
+                        Go Premium →
                       </Link>
                     </div>
                   )}
                 </div>
               )}
-            </div>
+            </section>
           </div>
 
-          {/* Profile Card — unchanged */}
-          <div style={{
-            background: '#1d2b4b', borderRadius: 20, padding: 28,
-            color: '#fff', display: 'flex', flexDirection: 'column', gap: 20,
-          }}>
-            <div style={{
-              display: 'inline-flex', alignItems: 'center', gap: 6,
-              background: 'rgba(253,184,19,0.12)', borderRadius: 6,
-              padding: '4px 10px', width: 'fit-content',
-            }}>
-              <span style={{ fontSize: 10, fontWeight: 600, color: '#fdb813', letterSpacing: 1, textTransform: 'uppercase' }}>Pioneer Batch</span>
-            </div>
+          {/* RIGHT — Profile Sidebar */}
+          <aside className="xl:sticky xl:top-6">
+            <div className="bg-[#1d2b4b] rounded-2xl p-6 text-white flex flex-col gap-5">
+              <span className="inline-flex items-center gap-1.5 bg-[#fdb813]/15 text-[#fdb813] text-[10px] font-bold tracking-widest uppercase px-3 py-1.5 rounded-lg w-fit">
+                Pioneer Batch
+              </span>
 
-            <div style={{
-              width: 72, height: 72, borderRadius: 16,
-              overflow: 'hidden', flexShrink: 0,
-              border: '3px solid rgba(253,184,19,0.4)',
-            }}>
-              <img
-                src={avatarSrc}
-                alt={user?.name}
-                style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
-                onError={e => {
-                  e.target.onerror = null;
-                  e.target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(user?.name ?? 'U')}&background=fdb813&color=1d2b4b&size=128`;
-                }}
-              />
-            </div>
+              <div className="w-[72px] h-[72px] rounded-2xl overflow-hidden border-[3px] border-[#fdb813]/40 flex-shrink-0">
+                <img
+                  src={avatarSrc}
+                  alt={user?.name}
+                  className="w-full h-full object-cover block"
+                  onError={e => {
+                    e.currentTarget.onerror = null;
+                    e.currentTarget.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(user?.name ?? 'U')}&background=fdb813&color=1d2b4b&size=128`;
+                  }}
+                />
+              </div>
 
-            <div>
-              <h2 style={{ fontSize: '1.3rem', fontWeight: 700, margin: '0 0 6px', lineHeight: 1.2 }}>{user?.name}</h2>
-              <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)', margin: '0 0 3px' }}>ID: {user?.student_id ?? 'N/A'}</p>
-              <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)', margin: 0 }}>{user?.course ?? 'Student'}</p>
-            </div>
+              <div>
+                <h2 className="text-xl font-bold leading-snug mb-1">{user?.name}</h2>
+                <p className="text-xs text-white/40 mb-0.5 m-0">ID: {user?.student_id ?? 'N/A'}</p>
+                <p className="text-xs text-white/40 m-0">{user?.course ?? 'Student'}</p>
+                {/* Tier label in sidebar */}
+                <div className="mt-2">
+                  {userTier === 'premium' && (
+                    <span className="inline-flex items-center gap-1 bg-amber-400/15 text-amber-300 text-[10px] font-bold px-2 py-1 rounded-lg leading-none">
+                      Premium Plan
+                    </span>
+                  )}
+                  {userTier === 'standard' && (
+                    <span className="inline-flex items-center gap-1 bg-indigo-400/15 text-indigo-300 text-[10px] font-bold px-2 py-1 rounded-lg leading-none">
+                        Standard Plan
+                    </span>
+                  )}
+                  {userTier === 'free' && (
+                    <span className="inline-flex items-center gap-1 bg-white/8 text-white/30 text-[10px] font-semibold px-2 py-1 rounded-lg leading-none">
+                      <i className="fas fa-user text-[8px]" /> Free Plan
+                    </span>
+                  )}
+                </div>
+              </div>
 
-            <Link to={`/profile/${user?.id}`} style={{
-              display: 'block', textAlign: 'center', padding: '12px',
-              background: '#fdb813', color: '#1d2b4b', borderRadius: 10,
-              textDecoration: 'none', fontSize: 13, fontWeight: 700,
-              transition: 'opacity 0.15s',
-            }}
-              onMouseEnter={e => e.currentTarget.style.opacity = '0.9'}
-              onMouseLeave={e => e.currentTarget.style.opacity = '1'}
-            >
-              View My Profile
-            </Link>
-          </div>
+              <Link
+                to={`/profile/${user?.id}`}
+                className="block text-center py-3 bg-[#fdb813] text-[#1d2b4b] font-bold text-sm rounded-xl no-underline hover:bg-yellow-300 transition-colors"
+              >
+                View My Profile
+              </Link>
+
+              <Link
+                to="/analytics"
+                className="flex items-center justify-center gap-2 py-2.5 bg-sky-500/10 text-sky-300 font-semibold text-xs rounded-xl no-underline hover:bg-sky-500/20 transition-colors"
+              >
+                <i className="fas fa-chart-bar text-xs" aria-hidden="true" />
+                See who's trending this week →
+              </Link>
+
+              {/* Upgrade CTA for free users in sidebar */}
+              {!isPremium && (
+                <Link
+                  to="/payment"
+                  className="flex items-center justify-center gap-2 py-2.5 bg-[#fdb813]/10 text-[#fdb813] font-semibold text-xs rounded-xl no-underline hover:bg-[#fdb813]/20 transition-colors border border-[#fdb813]/20"
+                >
+                  <i className="fas fa-crown text-xs" aria-hidden="true" />
+                  Upgrade Your Plan →
+                </Link>
+              )}
+
+              <button
+                onClick={handleLogout}
+                className="flex items-center justify-center gap-2 py-2 text-xs text-white/30 hover:text-white/70 transition-colors cursor-pointer bg-transparent border-none"
+              >
+                <i className="fas fa-sign-out-alt text-xs" aria-hidden="true" />
+                Sign out
+              </button>
+            </div>
+          </aside>
         </div>
       </main>
     </div>
   );
 }
 
-// ── Reusable memory card wrapper ─────────────────────────────────────────────
-function MemoryCard({ icon, iconColor, iconBg, label, empty, emptyText, children }) {
+// ─── primitives ───────────────────────────────────────────────────────────────
+function SectionTitle({ children, as: Tag = 'h2', noBottom }) {
   return (
-    <div style={{
-      background: '#fff', borderRadius: 16, padding: 20,
-      border: '1px solid #f1f5f9',
-    }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
-        <div style={{
-          width: 32, height: 32, borderRadius: 8, background: iconBg,
-          display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-        }}>
-          <i className={icon} style={{ color: iconColor, fontSize: 13 }} />
-        </div>
-        <span style={{ fontSize: 13, fontWeight: 600, color: '#1d2b4b' }}>{label}</span>
+    <Tag className={`text-[13px] font-semibold text-[#1d2b4b] uppercase tracking-widest ${noBottom ? '' : 'mb-4'}`}>
+      {children}
+    </Tag>
+  );
+}
+
+function SearchGroup({ label, labelColor, children }) {
+  const kids = Array.isArray(children) ? children.filter(Boolean) : [children].filter(Boolean);
+  if (!kids.length) return null;
+  return (
+    <>
+      <p className={`px-4 py-2 text-[10px] font-bold tracking-widest uppercase ${labelColor} bg-slate-50 m-0`}>{label}</p>
+      {children}
+    </>
+  );
+}
+
+function SearchRow({ to, src, name, sub }) {
+  return (
+    <Link to={to} className="flex items-center gap-3 px-4 py-2.5 no-underline hover:bg-slate-50 border-b border-slate-50 transition-colors">
+      <img src={src} className="w-9 h-9 rounded-lg object-cover flex-shrink-0" alt={name} />
+      <div>
+        <p className="text-[13px] font-semibold text-[#1d2b4b] m-0">{name}</p>
+        <p className="text-[11px] text-slate-400 m-0">{sub}</p>
       </div>
-      {empty ? (
-        <p style={{ fontSize: 12, color: '#94a3b8', margin: 0 }}>{emptyText}</p>
-      ) : children}
+    </Link>
+  );
+}
+
+function MemoryCard({ icon, iconCls, iconBg, label, empty, emptyText, children }) {
+  return (
+    <div className="bg-white rounded-2xl p-5 border border-slate-100">
+      <div className="flex items-center gap-3 mb-4">
+        <div className={`w-8 h-8 rounded-lg ${iconBg} flex items-center justify-center flex-shrink-0`}>
+          <i className={`${icon} ${iconCls} text-[13px]`} aria-hidden="true" />
+        </div>
+        <span className="text-[13px] font-semibold text-[#1d2b4b]">{label}</span>
+      </div>
+      {empty ? <p className="text-[12px] text-slate-400 m-0">{emptyText}</p> : children}
     </div>
   );
 }
 
-// ── Horizontal photo strip ────────────────────────────────────────────────────
 function PhotoStrip({ photos }) {
   if (!photos?.length) return null;
   return (
-    <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 4 }}>
+    <div className="flex gap-2 overflow-x-auto pb-1 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
       {photos.map((p, i) => (
-        <div key={i} style={{ position: 'relative', flexShrink: 0 }}>
+        <div key={i} className="relative flex-shrink-0">
           <img
             src={p.url}
             alt={p.caption ?? ''}
-            style={{
-              width: 80, height: 80, borderRadius: 10,
-              objectFit: 'cover', display: 'block',
-              border: '1px solid #f1f5f9',
-            }}
-            onError={e => { e.target.onerror = null; e.target.src = 'https://via.placeholder.com/80?text=📷'; }}
+            className="w-20 h-20 rounded-xl object-cover border border-slate-100 block"
+            onError={e => { e.currentTarget.onerror = null; e.currentTarget.src = 'https://via.placeholder.com/80?text=📷'; }}
           />
           {p.years_ago && (
-            <span style={{
-              position: 'absolute', bottom: 4, left: 4, right: 4,
-              background: 'rgba(0,0,0,0.55)', color: '#fff',
-              fontSize: 9, fontWeight: 600, borderRadius: 4,
-              padding: '2px 4px', textAlign: 'center',
-            }}>
+            <span className="absolute bottom-1.5 left-1 right-1 bg-black/55 text-white text-[9px] font-bold rounded px-1 py-0.5 text-center leading-none">
               {p.years_ago}y ago
             </span>
           )}

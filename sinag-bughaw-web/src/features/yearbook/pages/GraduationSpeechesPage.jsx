@@ -1,8 +1,14 @@
 import { useEffect, useRef, useState } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import Navbar from '@/components/layout/Navbar';
 import Footer from '@/components/layout/Footer';
 import { transcriptApi } from '@/api/yearbook.api';
+
+// ─── Safe localStorage getter (Edge/Safari Tracking Prevention) ───────────────
+const safeGetToken = () => {
+  try { return localStorage.getItem('token') ?? ''; }
+  catch { return ''; }
+};
 
 // ─────────────────────────────────────────────────────────────────────────────
 // TRANSCRIPT STATUS BADGE
@@ -24,10 +30,10 @@ function StatusBadge({ status }) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// TRANSCRIPT DETAIL PANEL — shown on right when a speech is selected
+// TRANSCRIPT DETAIL PANEL
 // ─────────────────────────────────────────────────────────────────────────────
 function TranscriptPanel({ transcript, onClose }) {
-  const [tab, setTab] = useState('transcript'); // 'transcript' | 'notes'
+  const [tab, setTab] = useState('transcript');
   const [downloading, setDownloading] = useState(false);
 
   if (!transcript) return null;
@@ -35,8 +41,9 @@ function TranscriptPanel({ transcript, onClose }) {
   const downloadSubtitle = async (format) => {
     setDownloading(true);
     try {
+      // FIX 1: use safeGetToken() instead of direct localStorage access
       const res = await fetch(`/api/transcripts/${transcript.id}/subtitles?format=${format}`, {
-        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
+        headers: { Authorization: `Bearer ${safeGetToken()}` },
       });
       const blob = await res.blob();
       const url  = URL.createObjectURL(blob);
@@ -154,7 +161,7 @@ function TranscriptPanel({ transcript, onClose }) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// SPEECH CARD (left list)
+// SPEECH CARD
 // ─────────────────────────────────────────────────────────────────────────────
 function SpeechCard({ transcript, active, onClick }) {
   return (
@@ -223,7 +230,8 @@ function UploadModal({ onClose, onSuccess }) {
         onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-6">
           <h2 className="font-extrabold text-xl" style={{ color: '#1d2b4b' }}>Upload Speech Audio</h2>
-          <button onClick={onClose} className="w-9 h-9 rounded-full border-none cursor-pointer flex items-center justify-center"
+          <button onClick={onClose}
+            className="w-9 h-9 rounded-full border-none cursor-pointer flex items-center justify-center"
             style={{ background: '#f1f5f9', color: '#64748b' }}>
             <i className="fas fa-times" />
           </button>
@@ -258,7 +266,8 @@ function UploadModal({ onClose, onSuccess }) {
               <span className="text-sm font-semibold" style={{ color: file ? '#3f51b5' : '#94a3b8' }}>
                 {file ? file.name : 'Click or drag to upload'}
               </span>
-              <input type="file" accept="audio/*" className="hidden" onChange={e => setFile(e.target.files?.[0] ?? null)} />
+              <input type="file" accept="audio/*" className="hidden"
+                onChange={e => setFile(e.target.files?.[0] ?? null)} />
             </label>
           </div>
 
@@ -285,17 +294,16 @@ function UploadModal({ onClose, onSuccess }) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// MAIN PAGE  (premium-only — guarded by SubscriberRoute in App.jsx)
+// MAIN PAGE
 // ─────────────────────────────────────────────────────────────────────────────
 export default function GraduationSpeechesPage() {
-  const [searchParams]                  = useSearchParams();
-  const [transcripts,  setTranscripts]  = useState([]);
-  const [loading,      setLoading]      = useState(true);
-  const [selected,     setSelected]     = useState(null);
-  const [search,       setSearch]       = useState('');
-  const [showUpload,   setShowUpload]   = useState(false);
-  const [page,         setPage]         = useState(1);
-  const [meta,         setMeta]         = useState(null);
+  const [transcripts, setTranscripts] = useState([]);
+  const [loading,     setLoading]     = useState(true);
+  const [selected,    setSelected]    = useState(null);
+  const [search,      setSearch]      = useState('');
+  const [showUpload,  setShowUpload]  = useState(false);
+  const [page,        setPage]        = useState(1);
+  const [meta,        setMeta]        = useState(null);
   const debounceRef = useRef(null);
 
   const fetchTranscripts = (q = search, p = page) => {
@@ -309,9 +317,18 @@ export default function GraduationSpeechesPage() {
       .finally(() => setLoading(false));
   };
 
+  // Initial load
   useEffect(() => {
     fetchTranscripts('', 1);
-  }, []);
+    // FIX 2: clean up debounce timer on unmount
+    return () => clearTimeout(debounceRef.current);
+  }, []); // eslint-disable-line
+
+  // FIX 3: drive pagination fetch from useEffect so page state is always fresh
+  // (avoids stale closure when calling fetchTranscripts inline in button onClick)
+  useEffect(() => {
+    fetchTranscripts(search, page);
+  }, [page]); // eslint-disable-line
 
   const handleSearch = (val) => {
     setSearch(val);
@@ -334,7 +351,8 @@ export default function GraduationSpeechesPage() {
       {/* Hero */}
       <header className="text-white"
         style={{ background: 'linear-gradient(135deg, #1d2b4b 0%, #2a3d66 100%)', padding: '70px 8% 110px', borderRadius: '0 0 60px 60px' }}>
-        <Link to="/graduation" className="inline-flex items-center gap-2 text-white/50 hover:text-white text-sm no-underline mb-6 transition">
+        <Link to="/graduation"
+          className="inline-flex items-center gap-2 text-white/50 hover:text-white text-sm no-underline mb-6 transition">
           <i className="fas fa-arrow-left" /> Back to Graduation Hub
         </Link>
         <div className="flex items-end justify-between flex-wrap gap-4">
@@ -413,11 +431,12 @@ export default function GraduationSpeechesPage() {
                 ))}
               </div>
 
-              {/* Pagination */}
+              {/* FIX 3: pagination buttons only update `page`; useEffect handles the fetch */}
               {meta && meta.last_page > 1 && (
                 <div className="flex items-center justify-center gap-3 mt-8">
-                  <button disabled={page === 1}
-                    onClick={() => { setPage(p => p - 1); fetchTranscripts(search, page - 1); }}
+                  <button
+                    disabled={page === 1}
+                    onClick={() => setPage(p => p - 1)}
                     className="w-9 h-9 rounded-xl border-none cursor-pointer flex items-center justify-center font-bold transition-all"
                     style={{ background: page === 1 ? '#f1f5f9' : '#1d2b4b', color: page === 1 ? '#94a3b8' : 'white' }}>
                     <i className="fas fa-chevron-left text-xs" />
@@ -425,8 +444,9 @@ export default function GraduationSpeechesPage() {
                   <span className="text-sm font-bold" style={{ color: '#64748b' }}>
                     {page} / {meta.last_page}
                   </span>
-                  <button disabled={page === meta.last_page}
-                    onClick={() => { setPage(p => p + 1); fetchTranscripts(search, page + 1); }}
+                  <button
+                    disabled={page === meta.last_page}
+                    onClick={() => setPage(p => p + 1)}
                     className="w-9 h-9 rounded-xl border-none cursor-pointer flex items-center justify-center font-bold transition-all"
                     style={{ background: page === meta.last_page ? '#f1f5f9' : '#1d2b4b', color: page === meta.last_page ? '#94a3b8' : 'white' }}>
                     <i className="fas fa-chevron-right text-xs" />

@@ -9,6 +9,7 @@ use App\Jobs\SendPushNotification;
 use App\Models\Message;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 
 class MessageController extends Controller
 {
@@ -112,17 +113,23 @@ class MessageController extends Controller
             'body'        => $request->body,
         ]);
 
-        // Broadcast to recipient's private channel
-        broadcast(new MessageSent($message))->toOthers();
+        try {
+            broadcast(new MessageSent($message))->toOthers();
+        } catch (\Throwable $e) {
+            Log::warning('MessageSent broadcast failed: ' . $e->getMessage());
+        }
 
-        // Push notification (existing job)
-        SendPushNotification::dispatch(
-            $request->receiver_id,
-            $request->user()->name,
-            $request->body,
-            ['type' => 'chat', 'sender_id' => $request->user()->id],
-            'chat'
-        );
+        try {
+            SendPushNotification::dispatch(
+                $request->receiver_id,
+                $request->user()->name,
+                $request->body,
+                ['type' => 'chat', 'sender_id' => $request->user()->id],
+                'chat'
+            );
+        } catch (\Throwable $e) {
+            Log::warning('Push notification failed: ' . $e->getMessage());
+        }
 
         return response()->json($message->load('sender:id,name,profile_picture'), 201);
     }
@@ -150,12 +157,16 @@ class MessageController extends Controller
             'is_typing'   => 'required|boolean',
         ]);
 
-        broadcast(new UserTyping(
-            senderId:   $request->user()->id,
-            receiverId: $request->receiver_id,
-            senderName: $request->user()->name,
-            isTyping:   $request->boolean('is_typing'),
-        ))->toOthers();
+        try {
+            broadcast(new UserTyping(
+                senderId:   $request->user()->id,
+                receiverId: $request->receiver_id,
+                senderName: $request->user()->name,
+                isTyping:   $request->boolean('is_typing'),
+            ))->toOthers();
+        } catch (\Throwable $e) {
+            Log::warning('UserTyping broadcast failed: ' . $e->getMessage());
+        }
 
         return response()->json(['ok' => true]);
     }

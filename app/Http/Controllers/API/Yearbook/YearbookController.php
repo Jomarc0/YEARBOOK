@@ -3,12 +3,13 @@
 namespace App\Http\Controllers\API\Yearbook;
 
 use App\Http\Controllers\Controller;
-use App\Models\Album;          // ← you have Album, not Gallery
+use App\Models\Album;
 use App\Models\Batch;
 use App\Models\Faculty;
 use App\Models\User;
 use App\Models\Yearbook;
 use App\Models\YearbookBookmark;
+use App\Services\Yearbook\PageResolverService;
 use App\Services\Yearbook\WatermarkService;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\JsonResponse;
@@ -18,26 +19,14 @@ use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Storage;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
-/**
- * YearbookController
- * app/Http/Controllers/API/Yearbook/YearbookController.php
- *
- * Fixed:
- *   - Removed YearbookPageBuilderService (does not exist in your codebase).
- *     All page-building logic is inlined here or delegated to the existing
- *     WatermarkService + DOMPDF directly.
- *   - Removed $this->authorize() — replaced with Gate::authorize() which
- *     works without the AuthorizesRequests trait.
- *   - Uses Album model (you have Album.php, not Gallery.php).
- *   - Keeps all three existing methods 100% unchanged.
- */
 class YearbookController extends Controller
 {
     public function __construct(
-        private WatermarkService $watermark,
+        private WatermarkService    $watermark,
+        private PageResolverService $pageResolver,
     ) {}
 
-    // ── Existing methods — DO NOT TOUCH ─────────────────────────────────────
+    // ── Existing methods — DO NOT TOUCH ──────────────────────────────────────
 
     public function exportStudentPdf(Request $request, int $userId)
     {
@@ -79,7 +68,7 @@ class YearbookController extends Controller
         return response()->json($students);
     }
 
-    // ── New endpoints ────────────────────────────────────────────────────────
+    // ── New endpoints ─────────────────────────────────────────────────────────
 
     /**
      * GET /api/yearbooks/{batch}
@@ -87,28 +76,25 @@ class YearbookController extends Controller
      */
     public function show(Batch $batch): JsonResponse
     {
-        // Yearbook model is optional — gracefully fall back to batch data
         $yearbook = Yearbook::where('batch_id', $batch->id)->first();
 
         return response()->json([
-            'title'     => $yearbook?->title ?? 'Senior Yearbook',
-            'school'    => config('app.school_name', 'National University Lipa'),
-            'year'      => $batch->year ?? now()->year,
-            'coverUrl'  => $yearbook?->cover_url,
-            'theme'     => $yearbook?->theme ?? 'classic',
-            'status'    => $yearbook?->status ?? 'published',
-            'pdfReady'  => $yearbook?->pdf_path !== null,
+            'title'    => $yearbook?->title ?? 'Senior Yearbook',
+            'school'   => config('app.school_name', 'National University Lipa'),
+            'year'     => $batch->year ?? now()->year,
+            'coverUrl' => $yearbook?->cover_url,
+            'theme'    => $yearbook?->theme ?? 'classic',
+            'status'   => $yearbook?->status ?? 'published',
+            'pdfReady' => $yearbook?->pdf_path !== null,
         ]);
     }
 
     /**
      * GET /api/yearbooks/{batch}/pages
      * Returns the ordered page manifest consumed by FlipbookViewer.
-     * All page building happens here — no separate service needed.
      */
     public function pages(Batch $batch): JsonResponse
     {
-        // Students grouped by section
         $sections = $batch->sections()
             ->with(['students' => function ($q) {
                 $q->select('id', 'name', 'student_id', 'course', 'bio', 'profile_picture', 'section_id')
@@ -116,12 +102,10 @@ class YearbookController extends Controller
             }])
             ->get();
 
-        // Albums (you have Album, not Gallery)
         $albums = Album::where('batch_id', $batch->id)
             ->with(['photos' => fn ($q) => $q->limit(6)])
             ->get();
 
-        // Faculty
         $faculty = User::where('role', 'faculty')
             ->get(['id', 'name', 'profile_picture']);
 
@@ -137,7 +121,7 @@ class YearbookController extends Controller
         $pages[] = ['type' => 'cover',      'side' => 'left',  'meta' => $meta];
         $pages[] = ['type' => 'dedication', 'side' => 'right', 'meta' => $meta];
 
-        // 2. TOC placeholders (indices filled in after build)
+        // 2. TOC placeholders
         $pages[] = ['type' => 'toc', 'side' => 'left',  'toc' => []];
         $pages[] = ['type' => 'toc', 'side' => 'right', 'toc' => []];
 
@@ -147,7 +131,7 @@ class YearbookController extends Controller
             $pages[] = ['type' => 'section-header', 'side' => 'right', 'section' => $this->mapSection($section)];
 
             $chunks = array_chunk($section->students->toArray(), 4);
-            foreach ($chunks as $idx => $chunk) {
+            foreach ($chunks as $chunk) {
                 $leftPage = count($pages) + 1;
                 $pages[]  = ['type' => 'student-grid',   'side' => 'left',  'students' => $chunk, 'section' => $this->mapSection($section), 'pageNum' => $leftPage];
                 $pages[]  = ['type' => 'student-quotes', 'side' => 'right', 'students' => $chunk, 'section' => $this->mapSection($section), 'pageNum' => $leftPage + 1];
@@ -185,7 +169,7 @@ class YearbookController extends Controller
     }
 
     /**
-     * GET /api/yearbooks/{batch}/download   (premium only — see routes)
+     * GET /api/yearbooks/{batch}/download  (premium only)
      */
     public function download(Batch $batch): StreamedResponse|JsonResponse
     {
@@ -211,12 +195,10 @@ class YearbookController extends Controller
     }
 
     /**
-     * POST /api/yearbooks/{batch}/generate  (admin only — see routes)
-     * Queues PDF generation via the existing GenerateYearbookPdf job.
+     * POST /api/yearbooks/{batch}/generate  (admin only)
      */
     public function generate(Batch $batch): JsonResponse
     {
-        // Use Gate instead of $this->authorize() — works without AuthorizesRequests trait
         Gate::authorize('admin', $batch);
 
         $yearbook = Yearbook::where('batch_id', $batch->id)->firstOrFail();
@@ -234,8 +216,6 @@ class YearbookController extends Controller
     {
         $request->validate(['photo' => 'required|image|max:10240']);
 
-        // Delegate to your existing MediaController or CloudinaryService
-        // This is a stub — wire to your actual upload logic
         return response()->json(['message' => 'Upload endpoint — wire to your CloudinaryService.'], 501);
     }
 
@@ -275,11 +255,9 @@ class YearbookController extends Controller
 
     /**
      * DELETE /api/yearbook/bookmark/{bookmark}
-     * Fixed: uses Gate::authorize instead of $this->authorize()
      */
     public function removeBookmark(YearbookBookmark $bookmark): JsonResponse
     {
-        // Manual ownership check — no policy needed
         if ($bookmark->user_id !== Auth::id()) {
             abort(403, 'Forbidden.');
         }
@@ -291,6 +269,7 @@ class YearbookController extends Controller
 
     /**
      * GET /api/yearbook/search
+     * ── Fixed: pageIndex now resolved via PageResolverService instead of hardcoded 0
      */
     public function search(Request $request): JsonResponse
     {
@@ -305,18 +284,20 @@ class YearbookController extends Controller
                 $query->whereHas('section.batch', fn ($q2) => $q2->where('id', $batchId))
             )
             ->where(fn ($query) =>
-                $query->where('name',   'LIKE', "%{$q}%")
-                      ->orWhere('bio',  'LIKE', "%{$q}%")
-                      ->orWhere('course', 'LIKE', "%{$q}%")
+                $query->where('name',    'LIKE', "%{$q}%")
+                      ->orWhere('bio',   'LIKE', "%{$q}%")
+                      ->orWhere('course','LIKE', "%{$q}%")
             )
             ->limit(20)
-            ->get(['id', 'name', 'bio', 'section_id']);
+            ->get(['id', 'name', 'bio', 'section_id', 'batch_id']);
 
         return response()->json($students->map(fn ($s) => [
             'label'     => $s->name,
             'excerpt'   => $s->bio ? mb_substr($s->bio, 0, 80) . '…' : null,
             'type'      => 'student',
-            'pageIndex' => 0,
+            'pageIndex' => $batchId
+                ? $this->pageResolver->getPageIndex($s->id, (int) $batchId)
+                : 0,
             'studentId' => $s->id,
         ]));
     }

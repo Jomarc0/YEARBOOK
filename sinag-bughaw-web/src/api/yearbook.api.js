@@ -4,8 +4,11 @@ import api from './client';
 // YEARBOOK
 // ─────────────────────────────────────────────────────────────────────────────
 export const yearbookApi = {
+  // ── Legacy / existing endpoints ──────────────────────────────────────────
+
   /** GET /api/yearbook/flipbook → flat student array */
-  flipbookData: () => api.get('/yearbook/flipbook'),
+  flipbookData: () =>
+    api.get('/yearbook/flipbook'),
 
   /** GET /api/yearbook/export/:userId → PDF blob */
   exportStudentPdf: (userId) =>
@@ -15,37 +18,91 @@ export const yearbookApi = {
   exportCertificate: () =>
     api.get('/yearbook/certificate', { responseType: 'blob' }),
 
-  /** GET /api/yearbook/meta/:batchId → { title, school, year, coverUrl, theme } */
-  meta: (batchId) => api.get(`/yearbook/meta/${batchId}`),
-
-  /** GET /api/yearbook/toc/:batchId → [{ pageIndex, label, type, icon }] */
-  tableOfContents: (batchId) => api.get(`/yearbook/toc/${batchId}`),
-
-  /** GET /api/yearbook/sections/:batchId → sections with student arrays */
-  sectionPages: (batchId) => api.get(`/yearbook/sections/${batchId}`),
-
-  /** GET /api/yearbook/galleries/:batchId → gallery spread objects */
-  galleryPages: (batchId) => api.get(`/yearbook/galleries/${batchId}`),
-
-  /** GET /api/yearbook/faculty/:batchId → faculty member array */
-  facultyPage: (batchId) => api.get(`/yearbook/faculty/${batchId}`),
-
   /** GET /api/yearbook/search?batchId=&q= → [{ pageIndex, label, excerpt }] */
   search: (batchId, q) =>
     api.get('/yearbook/search', { params: { batchId, q } }),
 
+  /** GET /api/yearbook/bookmarks/:batchId → user's bookmarked pages */
+  getBookmarks: (batchId) =>
+    api.get(`/yearbook/bookmarks/${batchId}`),
+
   /** POST /api/yearbook/bookmark */
-  addBookmark: (payload) => api.post('/yearbook/bookmark', payload),
+  addBookmark: (payload) =>
+    api.post('/yearbook/bookmark', payload),
 
   /** DELETE /api/yearbook/bookmark/:id */
-  removeBookmark: (id) => api.delete(`/yearbook/bookmark/${id}`),
+  removeBookmark: (id) =>
+    api.delete(`/yearbook/bookmark/${id}`),
 
-  /** GET /api/yearbook/bookmarks/:batchId → user's bookmarked pages */
-  getBookmarks: (batchId) => api.get(`/yearbook/bookmarks/${batchId}`),
+  // ── Batch-scoped endpoints (/api/yearbooks/{batch}/…) ────────────────────
+
+  /**
+   * GET /api/yearbooks/:batchId
+   * Returns: { title, school, year, coverUrl, theme, status, pdfReady }
+   * Maps to: YearbookController@show
+   *
+   * Fixed: was /yearbook/meta/:batchId (route didn't exist)
+   */
+  meta: (batchId) =>
+    api.get(`/yearbooks/${batchId}`),
+
+  /**
+   * GET /api/yearbooks/:batchId/pages
+   * Returns full ordered page manifest (meta + pages[]).
+   * Maps to: YearbookController@pages
+   *
+   * Replaces (all broken):
+   *   tableOfContents → /yearbook/toc/:batchId
+   *   sectionPages    → /yearbook/sections/:batchId
+   *   facultyPage     → /yearbook/faculty/:batchId
+   */
+  pages: (batchId) =>
+    api.get(`/yearbooks/${batchId}/pages`),
+
+  /**
+   * GET /api/yearbooks/:batchId/download → watermarked PDF blob (premium)
+   * Maps to: YearbookController@download
+   */
+  download: (batchId) =>
+    api.get(`/yearbooks/${batchId}/download`, { responseType: 'blob' }),
+
+  /**
+   * POST /api/yearbooks/:batchId/generate → queue PDF generation (admin)
+   * Maps to: YearbookController@generate
+   */
+  generate: (batchId) =>
+    api.post(`/yearbooks/${batchId}/generate`),
+
+  /**
+   * POST /api/yearbooks/:batchId/photos → upload a photo
+   * Maps to: YearbookController@uploadPhoto
+   */
+  uploadPhoto: (batchId, formData) =>
+    api.post(`/yearbooks/${batchId}/photos`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }),
+
+  // ── Gallery endpoints scoped to a batch ──────────────────────────────────
+
+  /**
+   * GET /api/yearbooks/:batchId/galleries
+   * Maps to: GalleryController@index (batch-scoped)
+   *
+   * Fixed: was /yearbook/galleries/:batchId (route didn't exist)
+   */
+  galleryPages: (batchId) =>
+    api.get(`/yearbooks/${batchId}/galleries`),
+
+  /**
+   * GET /api/yearbooks/:batchId/galleries/:galleryId
+   * Maps to: GalleryController@show (batch-scoped)
+   */
+  galleryShow: (batchId, galleryId) =>
+    api.get(`/yearbooks/${batchId}/galleries/${galleryId}`),
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// GALLERY  (Visual Archive — All Photos + Face Search)
+// GALLERY  (standalone — Visual Archive, All Photos + Face Search)
 // ─────────────────────────────────────────────────────────────────────────────
 export const galleryApi = {
   /** GET /api/gallery?type=&category= */
@@ -63,7 +120,7 @@ export const galleryApi = {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// GRADUATION  (single source of truth for all graduation content)
+// GRADUATION
 // ─────────────────────────────────────────────────────────────────────────────
 export const graduationApi = {
   /** GET /api/graduation?category= */
@@ -77,39 +134,27 @@ export const graduationApi = {
 
   /** POST /api/graduation/upload-photo */
   uploadPhoto: (fd) =>
-    api.post('/graduation/upload-photo', fd, {
-      headers: { 'Content-Type': 'multipart/form-data' },
-    }),
+    api.post('/graduation/upload-photo', fd, { headers: { 'Content-Type': 'multipart/form-data' } }),
 
   /** POST /api/graduation/upload-video */
   uploadVideo: (fd) =>
-    api.post('/graduation/upload-video', fd, {
-      headers: { 'Content-Type': 'multipart/form-data' },
-    }),
+    api.post('/graduation/upload-video', fd, { headers: { 'Content-Type': 'multipart/form-data' } }),
 
   /** POST /api/graduation/upload-program */
   uploadProgram: (fd) =>
-    api.post('/graduation/upload-program', fd, {
-      headers: { 'Content-Type': 'multipart/form-data' },
-    }),
+    api.post('/graduation/upload-program', fd, { headers: { 'Content-Type': 'multipart/form-data' } }),
 
   /** POST /api/graduation/upload-invitation */
   uploadInvitation: (fd) =>
-    api.post('/graduation/upload-invitation', fd, {
-      headers: { 'Content-Type': 'multipart/form-data' },
-    }),
+    api.post('/graduation/upload-invitation', fd, { headers: { 'Content-Type': 'multipart/form-data' } }),
 
   /** POST /api/graduation/upload-song */
   uploadSong: (fd) =>
-    api.post('/graduation/upload-song', fd, {
-      headers: { 'Content-Type': 'multipart/form-data' },
-    }),
+    api.post('/graduation/upload-song', fd, { headers: { 'Content-Type': 'multipart/form-data' } }),
 
   /** POST /api/graduation/upload-mass */
   uploadMass: (fd) =>
-    api.post('/graduation/upload-mass', fd, {
-      headers: { 'Content-Type': 'multipart/form-data' },
-    }),
+    api.post('/graduation/upload-mass', fd, { headers: { 'Content-Type': 'multipart/form-data' } }),
 
   /** DELETE /api/graduation/:id */
   delete: (id) => api.delete(`/graduation/${id}`),
@@ -127,29 +172,24 @@ export const transcriptApi = {
 
   /** POST /api/transcripts — upload audio, queue Whisper job */
   store: (fd) =>
-    api.post('/transcripts', fd, {
-      headers: { 'Content-Type': 'multipart/form-data' },
-    }),
+    api.post('/transcripts', fd, { headers: { 'Content-Type': 'multipart/form-data' } }),
 
   /** DELETE /api/transcripts/:id */
   delete: (id) => api.delete(`/transcripts/${id}`),
 
   /** GET /api/transcripts/:id/subtitles?format=srt|vtt → blob */
   subtitles: (id, format = 'srt') =>
-    api.get(`/transcripts/${id}/subtitles`, {
-      params:       { format },
-      responseType: 'blob',
-    }),
+    api.get(`/transcripts/${id}/subtitles`, { params: { format }, responseType: 'blob' }),
 
   /** POST /api/transcripts/:id/notes — regenerate AI notes via Groq LLaMA */
   regenerateNotes: (id) => api.post(`/transcripts/${id}/notes`),
 };
 
-// Keep legacy alias so any file importing `transcriptsApi` (plural) still works
+// Legacy alias so any file importing `transcriptsApi` (plural) still works
 export const transcriptsApi = transcriptApi;
 
 // ─────────────────────────────────────────────────────────────────────────────
-// MEDIA  (merged — bulk upload, video, delete, storage, bandwidth)
+// MEDIA  (bulk upload, video, delete, storage, bandwidth)
 // ─────────────────────────────────────────────────────────────────────────────
 export const mediaApi = {
   /** GET /api/profile/storage-usage */
@@ -216,9 +256,7 @@ export const faceApi = {
 
   /** POST /api/face/search */
   search: (formData) =>
-    api.post('/face/search', formData, {
-      headers: { 'Content-Type': 'multipart/form-data' },
-    }),
+    api.post('/face/search', formData, { headers: { 'Content-Type': 'multipart/form-data' } }),
 
   /** POST /api/face/photos/:photoId/analyze */
   analyzePhoto: (photoId) => api.post(`/face/photos/${photoId}/analyze`),
@@ -247,8 +285,7 @@ export const profileApi = {
     }),
 
   /** PATCH /api/profile/posts/:photoId */
-  updatePost: (photoId, payload) =>
-    api.patch(`/profile/posts/${photoId}`, payload),
+  updatePost: (photoId, payload) => api.patch(`/profile/posts/${photoId}`, payload),
 
   /** DELETE /api/profile/posts/:photoId */
   deletePost: (photoId) => api.delete(`/profile/posts/${photoId}`),

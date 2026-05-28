@@ -3,29 +3,22 @@
  * src/features/yearbook/hooks/useYearbook.js
  *
  * Central data hook for the entire yearbook feature.
- * Fetches all required data in parallel and assembles an ordered
- * page manifest that FlipbookViewer renders leaf-by-leaf.
- *
- * Reuses existing student/section/gallery data — no duplication.
+ * Fetches meta + pages from the backend (which builds the full ordered
+ * page manifest server-side via YearbookController@pages), then layers
+ * in bookmarks. No client-side page building needed.
  */
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { yearbookApi } from '../../../api/yearbook.api';
 
-/**
- * Page types — each maps to a leaf component in /components/pages/
- * cover | dedication | toc | section-header | student-grid |
- * student-quotes | gallery | faculty | stats | closing
- */
-
 export function useYearbook(batchId) {
   const [state, setState] = useState({
-    loading:     true,
-    error:       null,
-    meta:        null,      // { title, school, year, coverUrl, theme }
-    pages:       [],        // ordered array of page descriptor objects
-    toc:         [],        // table of contents entries
-    bookmarks:   [],        // user's bookmarked page indices
-    searchResults: null,    // null = idle, [] = no results, [...] = hits
+    loading:       true,
+    error:         null,
+    meta:          null,   // { title, school, year, coverUrl, theme, status, pdfReady }
+    pages:         [],     // ordered page descriptor array — built by backend
+    toc:           [],     // table of contents entries derived from pages
+    bookmarks:     [],     // user's saved page indices
+    searchResults: null,   // null = idle | [] = no results | [...] = hits
   });
 
   const abortRef = useRef(null);
@@ -39,94 +32,38 @@ export function useYearbook(batchId) {
     setState((s) => ({ ...s, loading: true, error: null }));
 
     try {
-      // All requests in parallel — they are independent
-      const [metaRes, studentsRes, sectionsRes, galleriesRes, facultyRes, bookmarksRes] =
-        await Promise.all([
-          yearbookApi.meta(batchId),
-          yearbookApi.flipbookData(),          // existing endpoint
-          yearbookApi.sectionPages(batchId),
-          yearbookApi.galleryPages(batchId),
-          yearbookApi.facultyPage(batchId),
-          yearbookApi.getBookmarks(batchId),
-        ]);
+      // Fetch pages manifest + bookmarks in parallel.
+      // yearbookApi.pages() returns { meta, pages[] } — fully built by the backend.
+      // yearbookApi.meta()  returns cover meta separately (pdfReady, theme, etc.)
+      const [metaRes, pagesRes, bookmarksRes] = await Promise.all([
+        yearbookApi.meta(batchId),
+        yearbookApi.pages(batchId),
+        yearbookApi.getBookmarks(batchId),
+      ]);
 
-      const meta      = metaRes.data;
-      const students  = studentsRes.data;      // flat array
-      const sections  = sectionsRes.data;      // [{ id, name, students[] }]
-      const galleries = galleriesRes.data;     // [{ id, name, photos[] }]
-      const faculty   = facultyRes.data;       // [{ id, name, role, photo }]
-      const bookmarks = bookmarksRes.data;     // [{ id, pageIndex, label }]
+      // Backend response shape: { meta: {...}, pages: [...] }
+      const serverMeta  = pagesRes.data?.meta  ?? {};
+      const pages       = pagesRes.data?.pages ?? [];
 
-      // ── Build ordered page manifest ─────────────────────────────────────
-      const pages = [];
+      // Merge with the richer meta from /api/yearbooks/:batchId
+      // (adds pdfReady, coverUrl, theme, status which pages endpoint omits)
+      const meta = {
+        ...serverMeta,
+        ...(metaRes.data ?? {}),
+      };
 
-      // 1. Cover (left) + Dedication (right)
-      pages.push({ type: 'cover',       side: 'left',  meta });
-      pages.push({ type: 'dedication',  side: 'right', meta });
+      const bookmarks = bookmarksRes.data ?? [];
 
-      // 2. Table of contents (two pages = one spread)
-      pages.push({ type: 'toc', side: 'left',  toc: [] }); // filled below
-      pages.push({ type: 'toc', side: 'right', toc: [] });
-
-      // 3. Section spreads — each section gets a header + portrait grid pages
-      sections.forEach((section) => {
-        pages.push({ type: 'section-header', side: 'left',  section });
-        pages.push({ type: 'section-header', side: 'right', section });
-
-        // Chunk students 4 per page (portrait grid)
-        const chunks = chunkArray(section.students, 4);
-        chunks.forEach((chunk, idx) => {
-          pages.push({
-            type:    'student-grid',
-            side:    idx % 2 === 0 ? 'left' : 'right',
-            students: chunk,
-            section,
-            pageNum:  pages.length + 1,
-          });
-          pages.push({
-            type:    'student-quotes',
-            side:    idx % 2 === 0 ? 'right' : 'left',
-            students: chunk,
-            section,
-            pageNum:  pages.length + 1,
-          });
-        });
-      });
-
-      // 4. Gallery spreads
-      galleries.forEach((gallery) => {
-        pages.push({ type: 'gallery', side: 'left',  gallery });
-        pages.push({ type: 'gallery', side: 'right', gallery });
-      });
-
-      // 5. Faculty page
-      if (faculty.length > 0) {
-        pages.push({ type: 'faculty', side: 'left',  faculty });
-        pages.push({ type: 'faculty', side: 'right', faculty });
-      }
-
-      // 6. Batch stats
-      pages.push({ type: 'stats', side: 'left',  meta, students, sections });
-      pages.push({ type: 'stats', side: 'right', meta, students, sections });
-
-      // 7. Closing / back cover
-      pages.push({ type: 'closing', side: 'left',  meta });
-      pages.push({ type: 'closing', side: 'right', meta });
-
-      // Pad to even count (react-pageflip requirement)
-      if (pages.length % 2 !== 0) {
-        pages.push({ type: 'blank', side: 'right' });
-      }
-
-      // Build TOC from assembled pages
+      // Build TOC from the page manifest returned by the server
       const toc = buildTOC(pages);
-      // Patch TOC pages with real data
-      pages[2].toc = toc;
-      pages[3].toc = toc;
+
+      // Patch TOC pages (index 2 & 3) with the real toc data
+      if (pages[2]?.type === 'toc') pages[2].toc = toc;
+      if (pages[3]?.type === 'toc') pages[3].toc = toc;
 
       setState({
-        loading:      false,
-        error:        null,
+        loading:       false,
+        error:         null,
         meta,
         pages,
         toc,
@@ -148,10 +85,10 @@ export function useYearbook(batchId) {
     return () => abortRef.current?.abort();
   }, [load]);
 
-  // ── Actions ──────────────────────────────────────────────────────────────
+  // ── Actions ────────────────────────────────────────────────────────────────
 
   const search = useCallback(async (q) => {
-    if (!q.trim()) {
+    if (!q?.trim()) {
       setState((s) => ({ ...s, searchResults: null }));
       return;
     }
@@ -166,7 +103,14 @@ export function useYearbook(batchId) {
   const addBookmark = useCallback(async (pageIndex, label) => {
     try {
       const { data } = await yearbookApi.addBookmark({ batchId, pageIndex, label });
-      setState((s) => ({ ...s, bookmarks: [...s.bookmarks, data] }));
+      setState((s) => ({
+        ...s,
+        // Replace if already bookmarked on the same page, otherwise append
+        bookmarks: [
+          ...s.bookmarks.filter((b) => b.pageIndex !== pageIndex),
+          data,
+        ],
+      }));
     } catch (err) {
       console.error('Bookmark failed:', err);
     }
@@ -184,6 +128,11 @@ export function useYearbook(batchId) {
     }
   }, []);
 
+  /**
+   * downloadPdf — delegates to DownloadYearbookButton for the main
+   * batch yearbook, but keeps the per-student & certificate flows here
+   * for backward compatibility with onDownload prop in FlipbookViewer.
+   */
   const downloadPdf = useCallback(async (userId) => {
     try {
       const { data } = userId
@@ -194,7 +143,9 @@ export function useYearbook(batchId) {
       const url    = URL.createObjectURL(blob);
       const anchor = document.createElement('a');
       anchor.href     = url;
-      anchor.download = userId ? `profile-${userId}.pdf` : 'graduation-certificate.pdf';
+      anchor.download = userId
+        ? `profile-${userId}.pdf`
+        : 'graduation-certificate.pdf';
       document.body.appendChild(anchor);
       anchor.click();
       anchor.remove();
@@ -216,36 +167,42 @@ export function useYearbook(batchId) {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function chunkArray(arr, size) {
-  const out = [];
-  for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
-  return out;
-}
-
+/**
+ * Build a flat TOC array from the server-returned page manifest.
+ * One entry per spread (left pages only), skipping types that
+ * don't warrant their own TOC entry.
+ */
 function buildTOC(pages) {
   const toc = [];
+
   pages.forEach((page, idx) => {
-    if (page.side !== 'left') return; // one TOC entry per spread
+    // One TOC entry per spread — use the left page only
+    if (page.side !== 'left') return;
+
     const entry = tocEntry(page, idx);
     if (entry) toc.push(entry);
   });
+
   return toc;
 }
 
 function tocEntry(page, idx) {
   const map = {
-    'cover':          { label: 'Cover',           icon: 'book' },
+    'cover':          { label: 'Cover',                          icon: 'book'      },
     'dedication':     null,
-    'toc':            { label: 'Contents',         icon: 'list' },
-    'section-header': { label: page.section?.name, icon: 'users' },
+    'toc':            { label: 'Contents',                       icon: 'list'      },
+    'section-header': { label: page.section?.name ?? 'Section',  icon: 'users'     },
     'student-grid':   null,
     'student-quotes': null,
-    'gallery':        { label: page.gallery?.name, icon: 'photo' },
-    'faculty':        { label: 'Faculty',          icon: 'school' },
-    'stats':          { label: 'At a Glance',      icon: 'chart-bar' },
-    'closing':        { label: 'Closing',          icon: 'heart' },
+    'gallery':        { label: page.gallery?.name ?? 'Gallery',  icon: 'photo'     },
+    'faculty':        { label: 'Faculty',                        icon: 'school'    },
+    'stats':          { label: 'At a Glance',                    icon: 'chart-bar' },
+    'closing':        { label: 'Closing',                        icon: 'heart'     },
+    'blank':          null,
   };
+
   const entry = map[page.type];
   if (!entry) return null;
+
   return { pageIndex: idx, ...entry };
 }

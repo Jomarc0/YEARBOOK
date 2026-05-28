@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { studentsApi } from '@/api/student.api';
 import { profileApi } from '@/api/gallery.api';
-import { yearbookApi } from '@/api/yearbook.api';
+import { voiceNotesApi } from '@/api/messaging.api';
 import { storageUrl } from '@/api/client';
 import { useAuth } from '@/features/auth/hooks/useAuth';
 import Navbar from '@/components/layout/Navbar';
@@ -12,38 +12,62 @@ import StudentPhotosSection from '../components/StudentPhotosSection';
 import ProfileUploadModal from '../components/ProfileUploadModal';
 import PostContextMenu from '../components/PostContextMenu';
 import ShareModal from '../components/ShareModal';
-import MessageModal from '@/components/feedback/MessageModal'; // ← ADDED
+import PostCard from '../components/PostCard';
+import PostLightbox from '../components/PostLightbox';
+import MessageModal from '@/components/feedback/MessageModal';
 
 const TABS = [
   { key: 'posts',        icon: 'fas fa-th',            label: 'POSTS'        },
   { key: 'tagged',       icon: 'fas fa-tag',            label: 'TAGGED'       },
   { key: 'academic',     icon: 'fas fa-graduation-cap', label: 'ACADEMIC'     },
   { key: 'achievements', icon: 'fas fa-award',          label: 'ACHIEVEMENTS' },
+  { key: 'voicenotes',   icon: 'fas fa-microphone',     label: 'VOICE NOTES'  },
 ];
+
+// Tier helpers 
+const getTier = (authUser) => {
+  if (!authUser) return 'free';
+  if (authUser.tier === 'premium' || authUser.is_premium) return 'premium';
+  if (authUser.tier === 'standard') return 'standard';
+  return 'free';
+};
+
+const TIER_STYLE = {
+  premium:  { color: '#92400e', background: '#fef3c7', border: '1px solid #fde68a', icon: 'fa-crown'  },
+  standard: { color: '#1e40af', background: '#dbeafe', border: '1px solid #bfdbfe', icon: 'fa-star'   },
+  free:     { color: '#6b7280', background: '#f3f4f6', border: '1px solid #e5e7eb', icon: 'fa-user'   },
+};
 
 export default function ProfilePage() {
   const { id }             = useParams();
   const { user: authUser } = useAuth();
   const navigate           = useNavigate();
 
-  const [student,      setStudent]      = useState(null);
-  const [loading,      setLoading]      = useState(true);
-  const [bio,          setBio]          = useState('');
-  const [editing,      setEditing]      = useState(false);
-  const [toast,        setToast]        = useState(null);
-  const [activeTab,    setActiveTab]    = useState('posts');
-  const [showUpload,   setShowUpload]   = useState(false);
-  const [showShare,    setShowShare]    = useState(false);
-  const [showMsg,      setShowMsg]      = useState(false); // ← ADDED
-  const [posts,        setPosts]        = useState([]);
-  const [postsLoading, setPostsLoading] = useState(false);
-  const [contextMenu,  setContextMenu]  = useState(null);
-  const [lightbox,     setLightbox]     = useState(null);
+  const [student,           setStudent]           = useState(null);
+  const [loading,           setLoading]           = useState(true);
+  const [bio,               setBio]               = useState('');
+  const [editing,           setEditing]           = useState(false);
+  const [toast,             setToast]             = useState(null);
+  const [activeTab,         setActiveTab]         = useState('posts');
+  const [showUpload,        setShowUpload]        = useState(false);
+  const [showShare,         setShowShare]         = useState(false);
+  const [showMsg,           setShowMsg]           = useState(false);
+  const [posts,             setPosts]             = useState([]);
+  const [postsLoading,      setPostsLoading]      = useState(false);
+  const [contextMenu,       setContextMenu]       = useState(null);
+  const [lightbox,          setLightbox]          = useState(null); // { post, idx }
+  const [voiceNotes,        setVoiceNotes]        = useState([]);
+  const [voiceNotesLoading, setVoiceNotesLoading] = useState(false);
 
-  const fileRef   = useRef();
-  const isOwn     = authUser?.id === parseInt(id);
-  const isPremium = authUser?.is_premium || authUser?.tier === 'premium' || authUser?.tier === 'standard';
+  const fileRef = useRef();
+  const isOwn   = authUser?.id === parseInt(id);
 
+  //Tier detection 
+  const userTier = getTier(authUser);
+  const isPremium = userTier === 'premium' || userTier === 'standard';
+  const isFree    = isOwn && !isPremium;
+
+  //Load student
   useEffect(() => {
     setLoading(true);
     studentsApi.show(id)
@@ -51,8 +75,14 @@ export default function ProfilePage() {
       .finally(() => setLoading(false));
   }, [id]);
 
+  // Load posts when tab active
   useEffect(() => {
     if (activeTab === 'posts') loadPosts();
+  }, [activeTab, id]);
+
+  // Load voice notes when tab active 
+  useEffect(() => {
+    if (activeTab === 'voicenotes') loadVoiceNotes();
   }, [activeTab, id]);
 
   const loadPosts = () => {
@@ -61,6 +91,25 @@ export default function ProfilePage() {
       .then(({ data }) => setPosts(data.data?.data ?? data.data ?? []))
       .catch(() => {})
       .finally(() => setPostsLoading(false));
+  };
+
+  const loadVoiceNotes = () => {
+    setVoiceNotesLoading(true);
+    const request = isOwn
+      ? voiceNotesApi.inbox()
+      : voiceNotesApi.forProfile(id);
+
+    request
+      .then(({ data }) => setVoiceNotes(Array.isArray(data) ? data : []))
+      .catch(() => setVoiceNotes([]))
+      .finally(() => setVoiceNotesLoading(false));
+  };
+
+  const formatDuration = (seconds) => {
+    if (!seconds) return null;
+    const m = Math.floor(seconds / 60);
+    const s = String(seconds % 60).padStart(2, '0');
+    return `${m}:${s}`;
   };
 
   const showToast = (msg, color = '#10b981') => {
@@ -85,13 +134,6 @@ export default function ProfilePage() {
     showToast('Profile photo updated!');
   };
 
-  const downloadPdf = async () => {
-    const { data } = await yearbookApi.exportStudentPdf(id);
-    const url = URL.createObjectURL(new Blob([data]));
-    const a = document.createElement('a');
-    a.href = url; a.download = `profile-${student?.student_id}.pdf`; a.click();
-  };
-
   const handlePostDeleted = (photoId) => {
     setPosts(prev => prev.filter(p => p.id !== photoId));
     showToast('Post deleted.', '#ef4444');
@@ -104,6 +146,16 @@ export default function ProfilePage() {
     setContextMenu(null);
   };
 
+  // Guard: open upload only if allowed 
+  const handleOpenUpload = () => {
+    if (isFree) {
+      navigate('/premium');
+    } else {
+      setShowUpload(true);
+    }
+  };
+
+  // Loading / not found 
   if (loading) return (
     <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f4f7fe' }}>
       <style>{`@keyframes spin { to { transform:rotate(360deg); } }`}</style>
@@ -121,6 +173,7 @@ export default function ProfilePage() {
     || `https://ui-avatars.com/api/?name=${encodeURIComponent(student.name)}&background=1d2b4b&color=fdb813&bold=true&size=400`;
 
   const courseShort = student.course?.match(/\b[A-Z]/g)?.join('') ?? 'Student';
+  const tierStyle   = TIER_STYLE[userTier];
 
   return (
     <div style={{ minHeight: '100vh', background: '#f4f7fe', display: 'flex', flexDirection: 'column', fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif' }}>
@@ -137,21 +190,23 @@ export default function ProfilePage() {
         .nu-tab:hover { color: #1d2b4b !important; }
         .nu-btn { transition: all 0.15s; }
         .nu-btn:hover { opacity: 0.88; transform: translateY(-1px); }
+        audio::-webkit-media-controls-panel { background: #f1f5f9; }
       `}</style>
 
       <Navbar />
 
-      {/* ── Modals ── */}
-      {showUpload && <ProfileUploadModal onClose={() => setShowUpload(false)} onSuccess={loadPosts} />}
+      {/*Modals */}
+      {showUpload && (
+        <ProfileUploadModal
+          onClose={() => setShowUpload(false)}
+          onSuccess={() => {
+            setShowUpload(false);
+            loadPosts();
+          }}
+        />
+      )}
       <ShareModal isOpen={showShare} onClose={() => setShowShare(false)} student={student} />
-
-      {/* ✅ ADDED: MessageModal — opens instead of navigating to /messages/:id */}
-      <MessageModal
-        isOpen={showMsg}
-        onClose={() => setShowMsg(false)}
-        student={student}
-        authUser={authUser}
-      />
+      <MessageModal isOpen={showMsg} onClose={() => setShowMsg(false)} student={student} authUser={authUser} />
 
       {contextMenu && (
         <PostContextMenu
@@ -165,17 +220,11 @@ export default function ProfilePage() {
 
       {/* Lightbox */}
       {lightbox && (
-        <div onClick={() => setLightbox(null)} style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(0,0,0,0.94)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <button onClick={() => setLightbox(null)} style={{ position: 'absolute', top: 20, right: 24, background: 'none', border: 'none', color: '#fff', fontSize: 26, cursor: 'pointer' }}>
-            <i className="fas fa-times" />
-          </button>
-          <img src={lightbox.file_path} alt={lightbox.caption} style={{ maxWidth: '88vw', maxHeight: '88vh', objectFit: 'contain', borderRadius: 8 }} onClick={e => e.stopPropagation()} />
-          {lightbox.caption && (
-            <div style={{ position: 'absolute', bottom: 28, left: '50%', transform: 'translateX(-50%)', color: '#fff', fontSize: 13, fontWeight: 500, background: 'rgba(0,0,0,0.55)', padding: '6px 18px', borderRadius: 20, whiteSpace: 'nowrap' }}>
-              {lightbox.caption}
-            </div>
-          )}
-        </div>
+        <PostLightbox
+          post={lightbox.post}
+          initialIdx={lightbox.idx}
+          onClose={() => setLightbox(null)}
+        />
       )}
 
       {/* Toast */}
@@ -187,7 +236,7 @@ export default function ProfilePage() {
 
       <main style={{ flex: 1, maxWidth: 935, margin: '0 auto', padding: '32px 20px 64px', width: '100%', animation: 'fadeIn 0.35s ease' }}>
 
-        {/* ══ PROFILE CARD ══ */}
+        {/*PROFILE CARD */}
         <div style={{ background: '#fff', borderRadius: 20, overflow: 'hidden', marginBottom: 12, boxShadow: '0 2px 16px rgba(29,43,75,0.08)', border: '1px solid #e8edf5' }}>
 
           {/* Cover banner */}
@@ -201,7 +250,7 @@ export default function ProfilePage() {
           <div style={{ padding: '0 32px 28px' }}>
             <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', marginBottom: 18 }}>
 
-              {/* Avatar with NU gold ring */}
+              {/* Avatar */}
               <div style={{ position: 'relative', marginTop: -52, flexShrink: 0 }}>
                 <div style={{ padding: 3, borderRadius: '50%', background: 'linear-gradient(135deg, #fdb813, #f59e0b)', display: 'inline-block' }}>
                   <div style={{ padding: 3, borderRadius: '50%', background: '#fff', display: 'inline-block' }}>
@@ -214,7 +263,6 @@ export default function ProfilePage() {
                     </div>
                   </div>
                 </div>
-                {/* Online dot */}
                 <div style={{ position: 'absolute', bottom: 8, right: 8, width: 14, height: 14, borderRadius: '50%', background: '#22c55e', border: '2.5px solid #fff' }} />
                 {isOwn && (
                   <>
@@ -230,78 +278,43 @@ export default function ProfilePage() {
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, paddingTop: 10, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
                 {isOwn ? (
                   <>
-                    {isPremium ? (
-                      <Link to="/premium" className="nu-btn" style={{
-                        display: 'inline-flex', alignItems: 'center', gap: 6,
-                        background: 'linear-gradient(135deg, #fdb813, #f59e0b)',
-                        color: '#1d2b4b', textDecoration: 'none',
-                        padding: '8px 16px', borderRadius: 10,
-                        fontSize: 12, fontWeight: 700,
-                        boxShadow: '0 4px 12px rgba(253,184,19,0.35)',
-                      }}>
+                    {/* Premium / Standard / Free plan button */}
+                    {userTier === 'premium' ? (
+                      <Link to="/premium" className="nu-btn" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: 'linear-gradient(135deg, #fdb813, #f59e0b)', color: '#1d2b4b', textDecoration: 'none', padding: '8px 16px', borderRadius: 10, fontSize: 12, fontWeight: 700, boxShadow: '0 4px 12px rgba(253,184,19,0.35)' }}>
                         <i className="fas fa-crown" style={{ fontSize: 10 }} /> Premium Active
                       </Link>
+                    ) : userTier === 'standard' ? (
+                      <Link to="/premium" className="nu-btn" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: 'linear-gradient(135deg, #60a5fa, #3b82f6)', color: '#fff', textDecoration: 'none', padding: '8px 16px', borderRadius: 10, fontSize: 12, fontWeight: 700, boxShadow: '0 4px 12px rgba(59,130,246,0.3)' }}>
+                        <i className="fas fa-star" style={{ fontSize: 10 }} /> Standard Active
+                      </Link>
                     ) : (
-                      <Link to="/premium" className="nu-btn" style={{
-                        display: 'inline-flex', alignItems: 'center', gap: 6,
-                        background: 'linear-gradient(135deg, #fdb813, #f59e0b)',
-                        color: '#1d2b4b', textDecoration: 'none',
-                        padding: '8px 16px', borderRadius: 10,
-                        fontSize: 12, fontWeight: 700,
-                        boxShadow: '0 4px 12px rgba(253,184,19,0.3)',
-                      }}>
+                      <Link to="/premium" className="nu-btn" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: 'linear-gradient(135deg, #fdb813, #f59e0b)', color: '#1d2b4b', textDecoration: 'none', padding: '8px 16px', borderRadius: 10, fontSize: 12, fontWeight: 700, boxShadow: '0 4px 12px rgba(253,184,19,0.3)' }}>
                         <i className="fas fa-crown" style={{ fontSize: 10 }} /> Go Premium
                       </Link>
                     )}
 
-                    <Link to="/settings" className="nu-btn" style={{
-                      display: 'inline-flex', alignItems: 'center', gap: 6,
-                      background: '#f1f5f9', color: '#1d2b4b', textDecoration: 'none',
-                      padding: '8px 16px', borderRadius: 10, fontSize: 12, fontWeight: 600,
-                      border: '1px solid #e2e8f0',
-                    }}>
+                    <Link to="/settings" className="nu-btn" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: '#f1f5f9', color: '#1d2b4b', textDecoration: 'none', padding: '8px 16px', borderRadius: 10, fontSize: 12, fontWeight: 600, border: '1px solid #e2e8f0' }}>
                       <i className="fas fa-edit" style={{ fontSize: 10 }} /> Edit Profile
                     </Link>
 
-                    <button onClick={() => setShowUpload(true)} className="nu-btn" style={{
-                      display: 'inline-flex', alignItems: 'center', gap: 6,
-                      background: '#1d2b4b', color: '#fff', border: 'none',
-                      padding: '8px 16px', borderRadius: 10, fontSize: 12, fontWeight: 600, cursor: 'pointer',
-                    }}>
-                      <i className="fas fa-plus" style={{ color: '#fdb813', fontSize: 10 }} /> Add Post
+                    {/* Add Post — locked for free tier */}
+                    <button
+                      onClick={handleOpenUpload}
+                      className="nu-btn"
+                      title={isFree ? 'Upgrade to upload posts' : 'Add a new post'}
+                      style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: isFree ? '#94a3b8' : '#1d2b4b', color: '#fff', border: 'none', padding: '8px 16px', borderRadius: 10, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}
+                    >
+                      <i className={`fas ${isFree ? 'fa-lock' : 'fa-plus'}`} style={{ color: '#fdb813', fontSize: 10 }} />
+                      {isFree ? 'Locked' : 'Add Post'}
                     </button>
                   </>
                 ) : (
-                  <>
-                    {/* ✅ FIXED: opens MessageModal instead of navigating to /messages/:id */}
-                    <button
-                      className="nu-btn"
-                      onClick={() => setShowMsg(true)}
-                      style={{
-                        display:      'inline-flex',
-                        alignItems:   'center',
-                        gap:          6,
-                        padding:      '8px 22px',
-                        borderRadius: 10,
-                        border:       'none',
-                        background:   '#1d2b4b',
-                        color:        '#fff',
-                        fontSize:     13,
-                        fontWeight:   600,
-                        cursor:       'pointer',
-                      }}
-                    >
-                      <i className="fas fa-paper-plane" style={{ marginRight: 6, fontSize: 11 }} />
-                      Message
-                    </button>
-                  </>
+                  <button className="nu-btn" onClick={() => setShowMsg(true)} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 22px', borderRadius: 10, border: 'none', background: '#1d2b4b', color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
+                    <i className="fas fa-paper-plane" style={{ marginRight: 6, fontSize: 11 }} /> Message
+                  </button>
                 )}
-
                 <button onClick={() => setShowShare(true)} className="nu-btn" style={{ width: 36, height: 36, borderRadius: 10, border: '1px solid #e2e8f0', background: '#fff', color: '#64748b', cursor: 'pointer', fontSize: 13, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                   <i className="fas fa-share-alt" />
-                </button>
-                <button onClick={downloadPdf} className="nu-btn" style={{ width: 36, height: 36, borderRadius: 10, border: '1px solid #e2e8f0', background: '#fff', color: '#64748b', cursor: 'pointer', fontSize: 13, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <i className="fas fa-download" />
                 </button>
               </div>
             </div>
@@ -313,6 +326,13 @@ export default function ProfilePage() {
               <span style={{ fontSize: 10, fontWeight: 700, color: '#3f51b5', background: '#eef2ff', border: '1px solid #c7d2fe', padding: '2px 8px', borderRadius: 20, letterSpacing: '0.04em' }}>
                 PIONEER 2026
               </span>
+              {/*Tier badge*/}
+              {isOwn && (
+                <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.04em', padding: '2px 8px', borderRadius: 20, ...tierStyle }}>
+                  <i className={`fas ${tierStyle.icon}`} style={{ marginRight: 4, fontSize: 9 }} />
+                  {userTier.toUpperCase()}
+                </span>
+              )}
             </div>
 
             {/* Course */}
@@ -375,7 +395,6 @@ export default function ProfilePage() {
           </div>
         </div>
 
-        {/* ══ TABS ══ */}
         <div style={{ background: '#fff', borderRadius: 14, marginBottom: 4, boxShadow: '0 1px 4px rgba(29,43,75,0.06)', border: '1px solid #e8edf5', display: 'flex', overflow: 'hidden' }}>
           {TABS.map((tab, i) => (
             <button key={tab.key} className="nu-tab"
@@ -395,24 +414,54 @@ export default function ProfilePage() {
           ))}
         </div>
 
-        {/* ══ POSTS TAB ══ */}
+        {/* POSTS TAB */}
         {activeTab === 'posts' && (
           <div>
             {isOwn && (
-              <div onClick={() => setShowUpload(true)}
-                style={{ background: '#fff', borderRadius: 14, padding: '10px 14px', marginBottom: 4, boxShadow: '0 1px 4px rgba(29,43,75,0.06)', border: '1px solid #e8edf5', display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', transition: 'box-shadow 0.15s' }}
-                onMouseEnter={e => e.currentTarget.style.boxShadow = '0 4px 16px rgba(29,43,75,0.1)'}
-                onMouseLeave={e => e.currentTarget.style.boxShadow = '0 1px 4px rgba(29,43,75,0.06)'}
+              <div
+                onClick={() => !isFree && setShowUpload(true)}
+                style={{
+                  background: '#fff', borderRadius: 14, padding: '10px 14px', marginBottom: 4,
+                  boxShadow: '0 1px 4px rgba(29,43,75,0.06)',
+                  border: isFree ? '1px solid #fde68a' : '1px solid #e8edf5',
+                  display: 'flex', alignItems: 'center', gap: 10,
+                  cursor: isFree ? 'default' : 'pointer',
+                  transition: 'box-shadow 0.15s',
+                }}
+                onMouseEnter={e => !isFree && (e.currentTarget.style.boxShadow = '0 4px 16px rgba(29,43,75,0.1)')}
+                onMouseLeave={e => (e.currentTarget.style.boxShadow = '0 1px 4px rgba(29,43,75,0.06)')}
               >
                 <div style={{ width: 38, height: 38, borderRadius: '50%', overflow: 'hidden', flexShrink: 0, background: '#1d2b4b', border: '2px solid #e2e8f0' }}>
-                  <img src={avatar} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={e => { e.target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(student.name)}&background=1d2b4b&color=fdb813&bold=true`; }} />
+                  <img src={avatar} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                    onError={e => { e.target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(student.name)}&background=1d2b4b&color=fdb813&bold=true`; }} />
                 </div>
-                <div style={{ flex: 1, fontSize: 13, color: '#94a3b8', background: '#f8fafc', borderRadius: 20, padding: '9px 16px', border: '1px solid #e2e8f0' }}>
-                  Share a memory, {student.name?.split(' ')[0]}...
-                </div>
-                <button style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#1d2b4b', color: '#fff', border: 'none', borderRadius: 10, padding: '9px 16px', fontSize: 12, fontWeight: 700, cursor: 'pointer', flexShrink: 0 }}>
-                  <i className="fas fa-cloud-arrow-up" style={{ color: '#fdb813' }} /> Upload
-                </button>
+
+                {isFree ? (
+                  /* ── FREE TIER: locked upload bar ── */
+                  <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
+                    <span style={{ fontSize: 13, color: '#92400e', fontWeight: 600 }}>
+                      <i className="fas fa-lock" style={{ marginRight: 6, color: '#fdb813' }} />
+                      Uploading posts requires a Premium or Standard plan.
+                    </span>
+                    <Link
+                      to="/premium"
+                      onClick={e => e.stopPropagation()}
+                      style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: 'linear-gradient(135deg, #fdb813, #f59e0b)', color: '#1d2b4b', textDecoration: 'none', padding: '7px 14px', borderRadius: 10, fontSize: 11, fontWeight: 800, flexShrink: 0 }}
+                    >
+                      <i className="fas fa-crown" style={{ fontSize: 10 }} /> Upgrade Now
+                    </Link>
+                  </div>
+                ) : (
+                  /*PAID TIER: normal upload bar */
+                  <>
+                    <div style={{ flex: 1, fontSize: 13, color: '#94a3b8', background: '#f8fafc', borderRadius: 20, padding: '9px 16px', border: '1px solid #e2e8f0' }}>
+                      Share a memory, {student.name?.split(' ')[0]}...
+                    </div>
+                    <button style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#1d2b4b', color: '#fff', border: 'none', borderRadius: 10, padding: '9px 16px', fontSize: 12, fontWeight: 700, cursor: 'pointer', flexShrink: 0 }}>
+                      <i className="fas fa-cloud-arrow-up" style={{ color: '#fdb813' }} /> Upload
+                    </button>
+                  </>
+                )}
               </div>
             )}
 
@@ -428,60 +477,37 @@ export default function ProfilePage() {
                 <h2 style={{ fontSize: 22, fontWeight: 700, color: '#1d2b4b', margin: '0 0 8px' }}>No Posts Yet</h2>
                 <p style={{ fontSize: 13, color: '#94a3b8', margin: '0 0 20px' }}>Share your pioneer memories with your batchmates.</p>
                 {isOwn && (
-                  <button onClick={() => setShowUpload(true)} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: '#1d2b4b', color: '#fff', border: 'none', padding: '10px 22px', borderRadius: 10, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
-                    <i className="fas fa-plus" style={{ color: '#fdb813' }} /> Share First Post
-                  </button>
+                  isFree ? (
+                    <Link to="/premium" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: 'linear-gradient(135deg, #fdb813, #f59e0b)', color: '#1d2b4b', textDecoration: 'none', padding: '10px 22px', borderRadius: 10, fontSize: 13, fontWeight: 700 }}>
+                      <i className="fas fa-crown" /> Upgrade to Post
+                    </Link>
+                  ) : (
+                    <button onClick={() => setShowUpload(true)} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: '#1d2b4b', color: '#fff', border: 'none', padding: '10px 22px', borderRadius: 10, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
+                      <i className="fas fa-plus" style={{ color: '#fdb813' }} /> Share First Post
+                    </button>
+                  )
                 )}
               </div>
             ) : (
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 4, borderRadius: 14, overflow: 'hidden', boxShadow: '0 1px 4px rgba(29,43,75,0.06)' }}>
                 {posts.map(post => (
-                  <div key={post.id} className="ig-post"
-                    style={{ position: 'relative', aspectRatio: '1/1', overflow: 'hidden', background: '#1d2b4b' }}
-                    onClick={() => !contextMenu && setLightbox(post)}
-                  >
-                    {post.ai_metadata?.resource_type === 'video' ? (
-                      <video src={post.file_path} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} muted />
-                    ) : (
-                      <img src={post.file_path} alt={post.caption ?? ''} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
-                    )}
-
-                    <div className="ig-overlay" style={{ position: 'absolute', inset: 0, background: 'rgba(29,43,75,0.55)', opacity: 0, transition: 'opacity 0.2s', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 20 }}>
-                      <span style={{ color: '#fff', fontSize: 14, fontWeight: 700 }}><i className="fas fa-heart" style={{ marginRight: 5, color: '#fdb813' }} />0</span>
-                      <span style={{ color: '#fff', fontSize: 14, fontWeight: 700 }}><i className="fas fa-comment" style={{ marginRight: 5, color: '#fdb813' }} />0</span>
-                    </div>
-
-                    {post.ai_metadata?.resource_type === 'video' && (
-                      <i className="fas fa-play-circle" style={{ position: 'absolute', top: 8, right: 8, color: '#fff', fontSize: 16, filter: 'drop-shadow(0 1px 4px rgba(0,0,0,0.6))' }} />
-                    )}
-                    {post.tagged_students?.length > 0 && (
-                      <div style={{ position: 'absolute', top: 8, left: 8, background: 'rgba(29,43,75,0.75)', backdropFilter: 'blur(4px)', borderRadius: 6, padding: '3px 7px', display: 'flex', alignItems: 'center', gap: 4 }}>
-                        <i className="fas fa-user-tag" style={{ color: '#fdb813', fontSize: 9 }} />
-                        <span style={{ color: '#fff', fontSize: 10, fontWeight: 700 }}>{post.tagged_students.length}</span>
-                      </div>
-                    )}
-
-                    {isOwn && (
-                      <button className="ig-menu-btn"
-                        onClick={e => { e.stopPropagation(); const rect = e.currentTarget.getBoundingClientRect(); setContextMenu({ post, x: rect.left, y: rect.bottom + 6 }); }}
-                        style={{ position: 'absolute', bottom: 8, right: 8, width: 28, height: 28, borderRadius: 7, background: 'rgba(29,43,75,0.75)', backdropFilter: 'blur(4px)', border: '1px solid rgba(255,255,255,0.12)', color: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, opacity: 0, transition: 'opacity 0.18s', zIndex: 2 }}>
-                        <i className="fas fa-ellipsis-v" />
-                      </button>
-                    )}
-
-                    {post.caption && (
-                      <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, background: 'linear-gradient(transparent, rgba(29,43,75,0.85))', padding: '24px 10px 10px', fontSize: 11, color: '#fff', fontWeight: 500, lineHeight: 1.3 }}>
-                        {post.caption.length > 38 ? post.caption.slice(0, 38) + '…' : post.caption}
-                      </div>
-                    )}
-                  </div>
+                  <PostCard
+                    key={post.id}
+                    post={post}
+                    isOwn={isOwn}
+                    onClick={(p, idx) => setLightbox({ post: p, idx })}
+                    onMenuClick={(e, p) => {
+                      const rect = e.currentTarget.getBoundingClientRect();
+                      setContextMenu({ post: p, x: rect.left, y: rect.bottom + 6 });
+                    }}
+                  />
                 ))}
               </div>
             )}
           </div>
         )}
 
-        {/* ══ TAGGED TAB ══ */}
+        {/*TAGGED TAB*/}
         {activeTab === 'tagged' && (
           <div style={{ background: '#fff', borderRadius: 14, padding: 24, boxShadow: '0 1px 4px rgba(29,43,75,0.06)', border: '1px solid #e8edf5' }}>
             <h4 style={{ fontSize: 12, fontWeight: 800, color: '#1d2b4b', marginBottom: 16, marginTop: 0, letterSpacing: '0.06em', textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -491,7 +517,7 @@ export default function ProfilePage() {
           </div>
         )}
 
-        {/* ══ ACADEMIC TAB ══ */}
+        {/* ACADEMIC TAB */}
         {activeTab === 'academic' && (
           <div style={{ background: '#fff', borderRadius: 14, padding: 24, boxShadow: '0 1px 4px rgba(29,43,75,0.06)', border: '1px solid #e8edf5' }}>
             <h4 style={{ fontSize: 12, fontWeight: 800, color: '#1d2b4b', marginBottom: 20, marginTop: 0, letterSpacing: '0.06em', textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -512,20 +538,32 @@ export default function ProfilePage() {
                 </div>
               ))}
             </div>
+
+            {/* Membership row */}
             <div style={{ marginTop: 10, padding: '14px 16px', borderRadius: 12, background: '#f8fafc', border: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div>
                 <div style={{ fontSize: 10, color: '#94a3b8', fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: 4 }}>Membership</div>
-                <div style={{ fontSize: 14, fontWeight: 700, color: '#1d2b4b' }}>{student.is_premium ? 'Premium' : 'Free Plan'}</div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ fontSize: 14, fontWeight: 700, color: '#1d2b4b' }}>
+                    {userTier === 'premium' ? 'Premium Plan' : userTier === 'standard' ? 'Standard Plan' : 'Free Plan'}
+                  </span>
+                  <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 20, ...tierStyle }}>
+                    <i className={`fas ${tierStyle.icon}`} style={{ marginRight: 4, fontSize: 9 }} />
+                    {userTier.toUpperCase()}
+                  </span>
+                </div>
               </div>
-              {student.is_premium
+              {userTier === 'premium'
                 ? <PremiumBadge size="sm" />
+                : userTier === 'standard'
+                ? <Link to="/premium" style={{ fontSize: 11, fontWeight: 700, color: '#1e40af', textDecoration: 'none', background: '#dbeafe', padding: '5px 12px', borderRadius: 8, border: '1px solid #bfdbfe' }}>Upgrade to Premium →</Link>
                 : <Link to="/premium" style={{ fontSize: 11, fontWeight: 700, color: '#fdb813', textDecoration: 'none', background: '#1d2b4b', padding: '5px 12px', borderRadius: 8 }}>Upgrade →</Link>
               }
             </div>
           </div>
         )}
 
-        {/* ══ ACHIEVEMENTS TAB ══ */}
+        {/* ACHIEVEMENTS TAB*/}
         {activeTab === 'achievements' && (
           <div style={{ background: '#fff', borderRadius: 14, padding: 24, boxShadow: '0 1px 4px rgba(29,43,75,0.06)', border: '1px solid #e8edf5' }}>
             <h4 style={{ fontSize: 12, fontWeight: 800, color: '#1d2b4b', marginBottom: 20, marginTop: 0, letterSpacing: '0.06em', textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -550,6 +588,104 @@ export default function ProfilePage() {
           </div>
         )}
 
+        {/*VOICE NOTES TAB*/}
+        {activeTab === 'voicenotes' && (
+          <div style={{ background: '#fff', borderRadius: 14, padding: 24, boxShadow: '0 1px 4px rgba(29,43,75,0.06)', border: '1px solid #e8edf5' }}>
+
+            {/* Header */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
+              <h4 style={{ fontSize: 12, fontWeight: 800, color: '#1d2b4b', margin: 0, letterSpacing: '0.06em', textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: 8 }}>
+                <i className="fas fa-microphone" style={{ color: '#fdb813' }} />
+                {isOwn
+                  ? `Voice Notes Received (${voiceNotes.length})`
+                  : `Voice Notes for ${student.name?.split(' ')[0]}`
+                }
+              </h4>
+              <button
+                onClick={loadVoiceNotes}
+                disabled={voiceNotesLoading}
+                style={{ background: 'none', border: '1px solid #e2e8f0', borderRadius: 8, padding: '5px 10px', cursor: 'pointer', color: '#64748b', fontSize: 11, display: 'flex', alignItems: 'center', gap: 5 }}
+              >
+                <i className={`fas fa-rotate-right ${voiceNotesLoading ? 'fa-spin' : ''}`} style={{ fontSize: 10 }} />
+                Refresh
+              </button>
+            </div>
+
+            {voiceNotesLoading ? (
+              <div style={{ textAlign: 'center', padding: '52px 0' }}>
+                <div style={{ width: 28, height: 28, borderRadius: '50%', border: '2px solid rgba(29,43,75,0.1)', borderTopColor: '#1d2b4b', animation: 'spin 0.7s linear infinite', margin: '0 auto 12px' }} />
+                <p style={{ fontSize: 12, color: '#94a3b8', margin: 0 }}>Loading voice notes...</p>
+              </div>
+
+            ) : voiceNotes.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '52px 20px' }}>
+                <div style={{ width: 64, height: 64, borderRadius: '50%', background: '#f1f5f9', border: '2px solid #e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
+                  <i className="fas fa-microphone-slash" style={{ fontSize: 24, color: '#cbd5e1' }} />
+                </div>
+                <p style={{ fontSize: 14, fontWeight: 700, color: '#1d2b4b', margin: '0 0 6px' }}>No Voice Notes Yet</p>
+                <p style={{ fontSize: 12, color: '#94a3b8', margin: 0 }}>
+                  {isOwn
+                    ? 'Ask your batchmates to send you a voice memory!'
+                    : 'No approved voice notes on this profile yet.'
+                  }
+                </p>
+              </div>
+
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                {voiceNotes.map(note => (
+                  <div key={note.id} style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '14px 16px', borderRadius: 12, background: '#f8fafc', border: '1px solid #f1f5f9', transition: 'box-shadow 0.15s' }}
+                    onMouseEnter={e => e.currentTarget.style.boxShadow = '0 4px 12px rgba(29,43,75,0.08)'}
+                    onMouseLeave={e => e.currentTarget.style.boxShadow = 'none'}
+                  >
+                    <img
+                      src={
+                        note.sender?.profile_picture ||
+                        `https://ui-avatars.com/api/?name=${encodeURIComponent(note.sender?.name ?? 'S')}&background=1d2b4b&color=fdb813&bold=true&size=80`
+                      }
+                      alt={note.sender?.name ?? 'Sender'}
+                      style={{ width: 46, height: 46, borderRadius: '50%', objectFit: 'cover', flexShrink: 0, border: '2px solid #e2e8f0' }}
+                      onError={e => {
+                        e.target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(note.sender?.name ?? 'S')}&background=1d2b4b&color=fdb813&bold=true`;
+                      }}
+                    />
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 2, flexWrap: 'wrap' }}>
+                        <span style={{ fontSize: 13, fontWeight: 700, color: '#1d2b4b' }}>
+                          {note.title ?? 'Voice Memory'}
+                        </span>
+                        {note.duration_seconds && (
+                          <span style={{ fontSize: 10, color: '#94a3b8', background: '#e2e8f0', borderRadius: 20, padding: '1px 7px', fontWeight: 600 }}>
+                            {formatDuration(note.duration_seconds)}
+                          </span>
+                        )}
+                      </div>
+                      <div style={{ fontSize: 11, color: '#64748b', marginBottom: 10 }}>
+                        From&nbsp;
+                        <strong style={{ color: '#1d2b4b' }}>
+                          {note.sender?.name ?? 'Anonymous'}
+                        </strong>
+                        &nbsp;·&nbsp;
+                        {new Date(note.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                      </div>
+                      <audio controls src={note.audio_url} style={{ width: '100%', height: 34 }} />
+                    </div>
+                    {isOwn && (
+                      <span style={{
+                        fontSize: 10, fontWeight: 700, padding: '4px 10px',
+                        borderRadius: 20, flexShrink: 0, letterSpacing: '0.04em',
+                        background: note.status === 'approved' ? '#dcfce7' : note.status === 'rejected' ? '#fee2e2' : '#fef9c3',
+                        color:      note.status === 'approved' ? '#16a34a' : note.status === 'rejected' ? '#dc2626' : '#92400e',
+                      }}>
+                        {note.status?.toUpperCase()}
+                      </span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </main>
       <Footer />
     </div>

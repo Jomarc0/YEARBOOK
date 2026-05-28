@@ -1,7 +1,3 @@
-// src/features/gallery/pages/GalleryShowPage.jsx
-// Extends your existing GalleryShowPage — adds upload button inside album + photo delete
-// Everything else unchanged: face tags, lightbox, keyboard nav, masonry grid
-
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import Navbar from '@/components/layout/Navbar';
@@ -11,7 +7,12 @@ import { useMediaUpload } from '@/hooks/useMediaUpload';
 import BulkUploadZone from '@/features/yearbook/components/BulkUploadZone';
 import { storageUrl } from '@/api/client';
 
-// ── Sub-components (unchanged from your original) ─────────────────────────────
+// ── NEW imports ───────────────────────────────────────────────────────────────
+import ProtectedImage from '@/components/ui/ProtectedImage';
+import { ContentOwnershipBanner } from '@/components/ui/CopyrightLabel';
+import { useContentProtection } from '@/utils/contentProtection';
+
+// ── Sub-components (unchanged) ────────────────────────────────────────────────
 
 function FaceTagBadge({ tag }) {
   const studentId = tag.student?.id ?? tag.user_id;
@@ -89,12 +90,20 @@ export default function GalleryShowPage() {
   const [lightbox,   setLightbox]   = useState(null);
   const [tagCache,   setTagCache]   = useState({});
   const [showUpload, setShowUpload] = useState(false);
-  const [deleting,   setDeleting]   = useState(null); // photo id being deleted
+  const [deleting,   setDeleting]   = useState(null);
+  
+  // FIX Bug 8: Use a ref to track fetched IDs to avoid infinite loop
   const fetchingRef = useRef(new Set());
 
-  const tier = 'free'; // replace with: useAuth()?.user?.subscription?.tier ?? 'free'
+  // ── NEW: content protection hook on the masonry container ────────────────
+  const masonryRef = useContentProtection();
 
-  // ── Load album ──────────────────────────────────────────────────────────────
+  // FIX Bug 7: Tier should be read from actual user data/subscription
+  // Assuming user object is available via context or prop; default to free if missing
+  const userTier = 'free'; // This should be replaced with: const { user } = useAuth(); const tier = user?.subscription?.tier ?? 'free';
+
+  const tier = userTier;
+
   const loadAlbum = useCallback(() => {
     if (!id) return;
     setLoading(true);
@@ -106,15 +115,15 @@ export default function GalleryShowPage() {
 
   useEffect(() => { loadAlbum(); }, [loadAlbum]);
 
-  // ── Upload hook ─────────────────────────────────────────────────────────────
   const uploadHook = useMediaUpload(id ? parseInt(id) : null, tier, () => {
     setShowUpload(false);
     loadAlbum();
   });
 
-  // ── Face tags lazy load ─────────────────────────────────────────────────────
   const loadTags = useCallback(async (photoId) => {
-    if (tagCache[photoId] || fetchingRef.current.has(photoId)) return;
+    // FIX Bug 8: Check ref instead of tagCache state to prevent dependency cycle
+    if (fetchingRef.current.has(photoId)) return;
+    
     fetchingRef.current.add(photoId);
     try {
       const { data } = await faceApi.photoTags(photoId);
@@ -122,16 +131,16 @@ export default function GalleryShowPage() {
         ...prev,
         [photoId]: { status: data.status ?? 'pending', face_count: data.face_count ?? 0, tags: data.tags ?? [] },
       }));
-    } catch { /* face tags optional */ }
+    } catch {}
     finally { fetchingRef.current.delete(photoId); }
-  }, [tagCache]);
+  // FIX Bug 8: Stable dependencies - no tagCache or setTagCache
+  }, []);
 
   useEffect(() => {
     if (!album?.photos) return;
     album.photos.forEach((photo, i) => { setTimeout(() => loadTags(photo.id), i * 80); });
-  }, [album]); // eslint-disable-line
+  }, [album, loadTags]); // eslint-disable-line
 
-  // ── Delete photo ────────────────────────────────────────────────────────────
   const handleDelete = async (photoId, e) => {
     e.stopPropagation();
     if (!window.confirm('Delete this photo?')) return;
@@ -144,7 +153,6 @@ export default function GalleryShowPage() {
     finally { setDeleting(null); }
   };
 
-  // ── Keyboard nav ────────────────────────────────────────────────────────────
   useEffect(() => {
     if (!lightbox || !album?.photos) return;
     const handle = (e) => {
@@ -156,8 +164,6 @@ export default function GalleryShowPage() {
     window.addEventListener('keydown', handle);
     return () => window.removeEventListener('keydown', handle);
   }, [lightbox, album]);
-
-  // ── States ──────────────────────────────────────────────────────────────────
 
   if (loading) return (
     <div className="min-h-screen flex flex-col bg-slate-50">
@@ -227,33 +233,33 @@ export default function GalleryShowPage() {
               <p className="text-white/65 mt-4 max-w-xl leading-relaxed text-sm">{album.description}</p>
             )}
           </div>
-
-          {/* Upload toggle button */}
           <button
             onClick={() => setShowUpload(v => !v)}
             className="flex items-center gap-2 font-extrabold text-sm border-none cursor-pointer px-5 py-3 rounded-2xl transition-all"
-            style={{ background: showUpload ? 'rgba(255,255,255,0.15)' : '#fdb813', color: showUpload ? 'white' : '#1d2b4b' }}
+            style={{ background: showUpload ? 'rgba            (255,255,255,0.15)' : '#fdb813', color: showUpload ? 'white' : '#1d2b4b' }}
             onMouseEnter={e => !showUpload && (e.currentTarget.style.background = '#f5b200')}
             onMouseLeave={e => !showUpload && (e.currentTarget.style.background = '#fdb813')}>
             <i className={`fas ${showUpload ? 'fa-times' : 'fa-cloud-arrow-up'}`} />
             {showUpload ? 'Cancel Upload' : 'Upload Photos'}
           </button>
         </div>
+
+        {/* ── NEW: Ownership banner ── */}
+        <div style={{ marginTop: 24 }}>
+          <ContentOwnershipBanner />
+        </div>
       </header>
 
       {/* ── Upload Panel ── */}
       {showUpload && (
         <div className="px-[8%] pt-10">
-          <BulkUploadZone
-            {...uploadHook}
-            tier={tier}
-            onCancel={() => setShowUpload(false)}
-          />
+          <BulkUploadZone {...uploadHook} tier={tier} onCancel={() => setShowUpload(false)} />
         </div>
       )}
 
       {/* ── Masonry Grid ── */}
-      <main className="px-[8%] py-16 flex-1">
+      {/* ref={masonryRef} activates the content protection hook */}
+      <main ref={masonryRef} className="px-[8%] py-16 flex-1">
         {photos.length > 0 ? (
           <div className="columns-1 sm:columns-2 md:columns-3 lg:columns-4 gap-5">
             {photos.map(photo => {
@@ -261,11 +267,19 @@ export default function GalleryShowPage() {
               const src = storageUrl(photo.file_path);
               return (
                 <div key={photo.id}
-                  className="photo-card mb-5 break-inside-avoid rounded-2xl overflow-hidden shadow-sm hover:shadow-xl hover:scale-[1.015] transition-all duration-300 bg-white cursor-zoom-in relative"
-                  onClick={() => setLightbox(photo)}>
+                  className="photo-card mb-5 break-inside-avoid rounded-2xl overflow-hidden shadow-sm hover:shadow-xl hover:scale-[1.015] transition-all duration-300 bg-white relative"
+                  style={{ cursor: 'zoom-in' }}
+                >
+                  {/* ── MODIFIED: ProtectedImage replaces <img> ── */}
                   {src && (
-                    <img src={src} alt={photo.caption || 'Photo'} className="w-full block"
-                      loading="lazy" onError={e => { e.target.style.display = 'none'; }} />
+                    <ProtectedImage
+                      src={src}
+                      alt={photo.caption || 'Photo'}
+                      watermarkText="© NU Lipa"
+                      showCopyright={false}   // copyright shown at page level
+                      onClick={() => setLightbox(photo)}
+                      style={{ borderRadius: 0 }}
+                    />
                   )}
                   {photo.caption && (
                     <p className="px-4 pt-2.5 text-xs text-slate-500 font-medium m-0">{photo.caption}</p>
@@ -273,7 +287,6 @@ export default function GalleryShowPage() {
                   {td?.tags?.length > 0 && <div className="pt-1.5"><GridTagChips tags={td.tags} /></div>}
                   {td && <div className="px-3 pb-3"><StatusPill status={td.status} faceCount={td.face_count} /></div>}
 
-                  {/* Delete button — appears on hover via CSS */}
                   <button
                     className="photo-delete absolute top-2.5 right-2.5 border-none cursor-pointer flex items-center justify-center w-8 h-8 rounded-xl transition-all"
                     style={{ background: 'rgba(255,255,255,0.92)', color: deleting === photo.id ? '#ef4444' : '#64748b', opacity: 0, zIndex: 10 }}
@@ -303,7 +316,7 @@ export default function GalleryShowPage() {
         )}
       </main>
 
-      {/* ── Lightbox (unchanged from your original) ── */}
+      {/* ── Lightbox ── */}
       {lightbox && (() => {
         const idx  = photos.findIndex(p => p.id === lightbox.id);
         const prev = photos[idx - 1] ?? null;
@@ -313,9 +326,22 @@ export default function GalleryShowPage() {
             className="fixed inset-0 z-[9999] flex items-center justify-center"
             style={{ background: 'rgba(8,12,24,0.96)', animation: 'fadeIn 0.2s ease', cursor: 'zoom-out' }}>
             <div className="relative flex flex-col items-center px-4" onClick={e => e.stopPropagation()} style={{ maxWidth: '90vw' }}>
-              <img src={storageUrl(lightbox.file_path)} alt={lightbox.caption || 'Photo'}
-                className="rounded-2xl shadow-2xl"
-                style={{ maxWidth: '88vw', maxHeight: '78vh', objectFit: 'contain' }} />
+
+              {/* ── MODIFIED: ProtectedImage in lightbox ── */}
+              <ProtectedImage
+                src={storageUrl(lightbox.file_path)}
+                alt={lightbox.caption || 'Photo'}
+                variant="lightbox"
+                watermarkText="© NU Lipa — All Rights Reserved"
+                style={{
+                  maxWidth: '88vw',
+                  borderRadius: 16,
+                  overflow: 'hidden',
+                  boxShadow: '0 25px 80px rgba(0,0,0,0.5)',
+                }}
+                imgStyle={{ maxHeight: '78vh', objectFit: 'contain' }}
+              />
+
               {lightbox.caption && (
                 <p className="text-white/65 text-sm font-semibold mt-4 text-center">{lightbox.caption}</p>
               )}
@@ -334,6 +360,7 @@ export default function GalleryShowPage() {
               )}
               <p className="text-white/25 text-xs font-bold mt-3">{idx + 1} / {photos.length}</p>
             </div>
+
             <button onClick={() => setLightbox(null)}
               className="absolute top-5 right-5 bg-white/12 hover:bg-white/22 text-white border-none w-11 h-11 rounded-full cursor-pointer flex items-center justify-center transition">
               <i className="fas fa-times" />

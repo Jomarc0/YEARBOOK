@@ -1,12 +1,9 @@
 /**
  * ControlBar.jsx
  * src/features/yearbook/components/controls/ControlBar.jsx
- *
- * Bottom control strip: navigation, zoom, fullscreen,
- * sidebar toggles (TOC / search / bookmarks), download.
- * Uses Tailwind classes consistent with your existing design system.
  */
 import React from 'react';
+import DownloadYearbookButton from './DownloadYearbookButton';
 
 const GOLD = '#c9a84c';
 
@@ -19,7 +16,11 @@ export default function ControlBar({
   onZoomIn, onZoomOut, onZoomReset,
   onToggleFullscreen,
   onToggleTOC, onToggleSearch, onToggleBookmarks,
-  onBookmark, onDownload,
+  onBookmark,
+  // ── New props for download ──────────────────────────────────
+  batchId,
+  pdfReady,
+  isPremium,
 }) {
   const atStart = currentPage === 0;
   const atEnd   = currentPage >= totalPages - 1;
@@ -125,22 +126,12 @@ export default function ControlBar({
         </CtrlBtn>
       </div>
 
-      {/* Download */}
-      <button
-        onClick={onDownload}
-        className="flex items-center gap-2 px-4 py-2 rounded-full text-xs font-medium transition-all hover:opacity-90 active:scale-95"
-        style={{
-          border:     `0.5px solid ${GOLD}`,
-          color:      GOLD,
-          background: 'rgba(201,168,76,.08)',
-        }}
-        onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(201,168,76,.18)')}
-        onMouseLeave={(e) => (e.currentTarget.style.background = 'rgba(201,168,76,.08)')}
-        title="Download PDF"
-      >
-        <DownloadIcon />
-        Download PDF
-      </button>
+      {/* Download — replaced with smart DownloadYearbookButton */}
+      <DownloadYearbookButton
+        batchId={batchId}
+        pdfReady={pdfReady}
+        isPremium={isPremium}
+      />
     </div>
   );
 }
@@ -170,10 +161,9 @@ function Divider() {
   return <div className="w-px h-6 bg-white/10 mx-1" aria-hidden="true" />;
 }
 
-// ── Minimal inline SVG icons (no external dep) ────────────────────────────────
-
-const icon = (d, vb = '0 0 24 24') => (
-  <svg width="16" height="16" viewBox={vb} fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+const icon = (d) => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+    strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
     {typeof d === 'string' ? <path d={d} /> : d}
   </svg>
 );
@@ -185,13 +175,16 @@ const ZoomOut      = () => icon(<><circle cx="11" cy="11" r="8"/><line x1="21" y
 const ListIcon     = () => icon(<><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></>);
 const SearchIcon   = () => icon(<><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></>);
 const BookmarkIcon = () => icon('M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z');
-const DownloadIcon = () => icon(<><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></>);
 const Maximize     = () => icon(<><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></>);
 const Minimize     = () => icon(<><path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3"/></>);
 
 function HeartIcon({ filled }) {
   return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill={filled ? GOLD : 'none'} stroke={filled ? GOLD : 'currentColor'} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <svg width="16" height="16" viewBox="0 0 24 24"
+      fill={filled ? GOLD : 'none'}
+      stroke={filled ? GOLD : 'currentColor'}
+      strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"
+      aria-hidden="true">
       <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
     </svg>
   );

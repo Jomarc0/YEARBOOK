@@ -9,7 +9,7 @@ use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Sanctum\HasApiTokens;
 use Laravel\Scout\Searchable;
-
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class User extends Authenticatable
 {
@@ -103,6 +103,11 @@ class User extends Authenticatable
     public function isSsoUser(): bool
     {
         return ! is_null($this->google_id);
+    }
+    
+    public function careerProfile(): HasOne
+    {
+        return $this->hasOne(CareerProfile::class);
     }
 
     // ── Meilisearch ────────────────────────────────────────────────────────

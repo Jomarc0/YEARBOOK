@@ -46,9 +46,31 @@ return [
             'bulk_upload_limit'    => 5,
             'folder_prefix'        => 'free',
             'allowed_mime_types'   => [
+                // Images
                 'image/jpeg',
                 'image/png',
                 'image/webp',
+                'image/heic',
+                'image/gif',
+                // Videos
+                'video/mp4',
+                'video/quicktime',
+                'video/x-msvideo',
+                'video/webm',
+                'video/avi',
+                // Audio
+                'audio/mpeg',
+                'audio/mp3',
+                'audio/wav',
+                'audio/x-wav',
+                'audio/x-m4a',
+                'audio/mp4',
+                'audio/ogg',
+                'audio/flac',
+                'audio/webm',
+                'audio/x-flac',
+                // Documents
+                'application/pdf',
             ],
             // Applied Cloudinary transformations for free uploads (compressed)
             'transformations' => [
@@ -72,13 +94,32 @@ return [
             'bulk_upload_limit'    => 20,
             'folder_prefix'        => 'premium_standard',
             'allowed_mime_types'   => [
+                // Images
                 'image/jpeg',
                 'image/png',
                 'image/webp',
+                'image/heic',
                 'image/gif',
+                'image/tiff',
+                // Videos
                 'video/mp4',
                 'video/quicktime',
+                'video/x-msvideo',
                 'video/webm',
+                'video/avi',
+                // Audio
+                'audio/mpeg',
+                'audio/mp3',
+                'audio/wav',
+                'audio/x-wav',
+                'audio/x-m4a',
+                'audio/mp4',
+                'audio/ogg',
+                'audio/flac',
+                'audio/webm',
+                'audio/x-flac',
+                // Documents
+                'application/pdf',
             ],
             'transformations' => [
                 [
@@ -101,15 +142,32 @@ return [
             'bulk_upload_limit'    => 50,
             'folder_prefix'        => 'premium',
             'allowed_mime_types'   => [
+                // Images
                 'image/jpeg',
                 'image/png',
                 'image/webp',
+                'image/heic',
                 'image/gif',
                 'image/tiff',
+                // Videos
                 'video/mp4',
                 'video/quicktime',
                 'video/x-msvideo',
                 'video/webm',
+                'video/avi',
+                // Audio
+                'audio/mpeg',
+                'audio/mp3',
+                'audio/wav',
+                'audio/x-wav',
+                'audio/x-m4a',
+                'audio/mp4',
+                'audio/ogg',
+                'audio/flac',
+                'audio/webm',
+                'audio/x-flac',
+                // Documents
+                'application/pdf',
             ],
             // HD uploads: no forced resize, best quality
             'transformations' => [

@@ -7,6 +7,7 @@ use App\Http\Controllers\Controller;
 use App\Models\UserPresence;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 
 class PresenceController extends Controller
 {
@@ -27,15 +28,18 @@ class PresenceController extends Controller
             ]
         );
 
-        broadcast(new UserPresenceUpdated(
-            userId:     $request->user()->id,
-            isOnline:   $presence->is_online,
-            lastSeenAt: $presence->last_seen_at->toISOString(),
-        ));
+        try {
+            broadcast(new UserPresenceUpdated(
+                userId:     $request->user()->id,
+                isOnline:   $presence->is_online,
+                lastSeenAt: $presence->last_seen_at->toISOString(),
+            ));
+        } catch (\Throwable $e) {
+            Log::warning('UserPresenceUpdated broadcast failed: ' . $e->getMessage());
+        }
 
         return response()->json(['ok' => true]);
     }
-
     /**
      * Bulk-fetch presence for a list of user IDs (used when loading conversations).
      */

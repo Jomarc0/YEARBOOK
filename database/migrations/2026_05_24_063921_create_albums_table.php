@@ -9,7 +9,7 @@ return new class extends Migration
 public function up(): void
 {
     if (Schema::hasTable('albums')) {
-        return; // ✅ skip if already exists
+        return; 
     }
 
     Schema::create('albums', function (Blueprint $table) {

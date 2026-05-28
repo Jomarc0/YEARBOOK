@@ -1,33 +1,40 @@
-import { Link, useLocation }           from 'react-router-dom';
-import { useAuth }                      from '../../features/auth/hooks/useAuth';
-import { storageUrl }                   from '@/api/client';
-import NotificationBell                 from '@/components/feedback/NotificationBell';
-import { useState, useRef, useEffect }  from 'react';
-import { messagesApi }                  from '@/api/messaging.api';
+import { Link, useLocation }          from 'react-router-dom';
+import { useAuth }                     from '../../features/auth/hooks/useAuth';
+import { storageUrl }                  from '@/api/client';
+import NotificationBell                from '@/components/feedback/NotificationBell';
+import { useState, useRef, useEffect } from 'react';
+import { messagesApi }                 from '@/api/messaging.api';
 
+// ─── tier helper (shared logic) ───────────────────────────────────────────────
+const getTier = (user) => {
+  if (!user) return 'free';
+  if (user.tier === 'premium' || user.is_premium) return 'premium';
+  if (user.tier === 'standard') return 'standard';
+  return 'free';
+};
+
+// ─── hook: live unread message count ─────────────────────────────────────────
 function useUnreadMessages() {
   const [count, setCount] = useState(0);
+  const location = useLocation();
 
   const refresh = async () => {
     try {
       const { data } = await messagesApi.unreadCount();
       setCount(data.unread_count ?? 0);
-    } catch {
-      // silently ignore
-    }
+    } catch { /* silently ignore */ }
   };
 
   useEffect(() => {
     refresh();
-    const interval = setInterval(refresh, 30_000);
+    const id = setInterval(refresh, 30_000);
     window.addEventListener('messaging:unread-updated', refresh);
     return () => {
-      clearInterval(interval);
+      clearInterval(id);
       window.removeEventListener('messaging:unread-updated', refresh);
     };
   }, []);
 
-  const location = useLocation();
   useEffect(() => {
     if (location.pathname.startsWith('/messages')) setCount(0);
   }, [location.pathname]);
@@ -35,251 +42,300 @@ function useUnreadMessages() {
   return count;
 }
 
+// ─── tiny badge ───────────────────────────────────────────────────────────────
 function UnreadBadge({ count }) {
   if (!count || count < 1) return null;
   return (
-    <span style={{
-      position:     'absolute',
-      top:          '-5px',
-      right:        '-6px',
-      background:   '#ef4444',
-      color:        'white',
-      borderRadius: '50px',
-      fontSize:     '10px',
-      fontWeight:   800,
-      padding:      '1px 5px',
-      lineHeight:   '15px',
-      minWidth:     '15px',
-      textAlign:    'center',
-      pointerEvents:'none',
-      border:       '1.5px solid #1d2b4b',
-    }}>
+    <span className="absolute -top-1.5 -right-1.5 bg-red-500 text-white text-[9px] font-black
+                     min-w-[16px] h-4 px-1 rounded-full flex items-center justify-center
+                     border-[1.5px] border-[#1d2b4b] pointer-events-none leading-none">
       {count > 99 ? '99+' : count}
     </span>
   );
 }
 
+// ─── tier badge ───────────────────────────────────────────────────────────────
+function TierBadge({ tier }) {
+  if (tier === 'premium') return (
+    <span className="inline-flex items-center gap-1 bg-gradient-to-r from-[#fdb813] to-[#e5a70e] text-[#1d2b4b] text-[9px] font-black px-1.5 py-0.5 rounded leading-none">
+      <i className="fas fa-crown text-[7px]" aria-hidden="true" /> Premium
+    </span>
+  );
+  if (tier === 'standard') return (
+    <span className="inline-flex items-center gap-1 bg-indigo-500/25 text-indigo-300 text-[9px] font-bold px-1.5 py-0.5 rounded leading-none">
+      <i className="fas fa-star text-[7px]" aria-hidden="true" /> Standard
+    </span>
+  );
+  return (
+    <span className="inline-flex items-center gap-1 bg-white/10 text-white/40 text-[9px] font-semibold px-1.5 py-0.5 rounded leading-none">
+      <i className="fas fa-user text-[7px]" aria-hidden="true" /> Free
+    </span>
+  );
+}
+
+// ─── nav links config ─────────────────────────────────────────────────────────
+const NAV_LINKS = [
+  { to: '/dashboard', label: 'Home'      },
+  { to: '/directory', label: 'Directory' },
+  { to: '/faculty',   label: 'Faculty'   },
+  { to: '/gallery',   label: 'Gallery'   },
+  { to: '/sections',  label: 'Sections'  },
+  { to: '/discover',  label: 'Discovery' },
+  { to: '/analytics', label: 'Analytics' },
+];
+
+const BASE_DROP_ITEMS = [
+  { icon: 'fa-user',      color: 'text-indigo-400', label: 'View Profile', toFn: (u) => `/profile/${u?.id}` },
+  { icon: 'fa-chart-bar', color: 'text-sky-400',    label: 'Analytics',   toFn: ()   => '/analytics'       },
+  { icon: 'fa-cog',       color: 'text-slate-400',  label: 'Settings',    toFn: ()   => '/settings'        },
+];
+
+// Premium dropdown item varies by tier
+const getPremiumDropItem = (tier) => {
+  if (tier === 'premium') return {
+    icon: 'fa-crown', color: 'text-amber-400', label: 'Premium Active', toFn: () => '/premium',
+  };
+  if (tier === 'standard') return {
+    icon: 'fa-star', color: 'text-indigo-400', label: 'Upgrade to Premium', toFn: () => '/premium',
+  };
+  return {
+    icon: 'fa-crown', color: 'text-amber-400', label: 'Go Premium', toFn: () => '/premium',
+  };
+};
+
+// ─── component ────────────────────────────────────────────────────────────────
 export default function Navbar() {
   const { user, logout } = useAuth();
   const location         = useLocation();
-  const [dropOpen, setDropOpen] = useState(false);
+  const [dropOpen, setDropOpen]     = useState(false);
+  const [mobileOpen, setMobileOpen] = useState(false);
   const dropRef        = useRef(null);
   const unreadMessages = useUnreadMessages();
 
-  const avatarSrc = storageUrl(user?.profile_picture)
-    || `https://ui-avatars.com/api/?name=${encodeURIComponent(user?.name ?? 'U')}&background=fdb813&color=1d2b4b&size=64`;
+  const userTier = getTier(user);
 
-  const links = [
-    { to: '/dashboard', label: 'Home'      },
-    { to: '/directory', label: 'Directory' },
-    { to: '/faculty',   label: 'Faculty'   },
-    { to: '/gallery',   label: 'Gallery'   },
-    { to: '/yearbook',  label: 'Yearbook'  }, // ← was /flipbook
-    { to: '/sections',  label: 'Sections'  },
-    { to: '/discover',  label: 'Discovery' },
-  ];
+  const dropItems = [...BASE_DROP_ITEMS, getPremiumDropItem(userTier)];
 
-  const initials = user?.name?.split(' ').map(n => n[0]).slice(0, 2).join('') ?? 'U';
+  const avatarSrc =
+    storageUrl(user?.profile_picture) ||
+    `https://ui-avatars.com/api/?name=${encodeURIComponent(user?.name ?? 'U')}&background=fdb813&color=1d2b4b&size=64`;
 
+  const initials  = user?.name?.split(' ').map(n => n[0]).slice(0, 2).join('') ?? 'U';
+  const firstName = user?.name?.split(' ')[0] ?? '';
+
+  // close dropdown on outside click
   useEffect(() => {
-    const handler = (e) => {
+    const h = (e) => {
       if (dropRef.current && !dropRef.current.contains(e.target)) setDropOpen(false);
     };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
+    document.addEventListener('mousedown', h);
+    return () => document.removeEventListener('mousedown', h);
   }, []);
 
-  const handleLogout = async () => {
-    setDropOpen(false);
-    await logout();
-  };
+  const handleLogout = async () => { setDropOpen(false); await logout(); };
+
+  const isActive = (to) =>
+    location.pathname === to || location.pathname.startsWith(to + '/');
 
   return (
-    <nav style={{
-      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-      padding: '0 40px', height: 64, background: '#1d2b4b',
-      position: 'sticky', top: 0, zIndex: 1000,
-      boxShadow: '0 2px 20px rgba(0,0,0,0.15)',
-    }}>
+    <>
+      <nav className="sticky top-0 z-[1000] h-16 bg-[#1d2b4b] shadow-[0_2px_24px_rgba(0,0,0,0.2)]
+                      flex items-center justify-between px-4 sm:px-6 lg:px-10">
 
-      {/* Logo */}
-      <Link to="/dashboard" style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 10 }}>
-        <img src="/images/NU_logo.png" alt="NU Lipa" style={{ width: 36, height: 36, objectFit: 'contain' }} />
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-          <span style={{ fontSize: 13, fontWeight: 700, color: '#fff', letterSpacing: 1, textTransform: 'uppercase', lineHeight: 1 }}>Sinag-Bughaw</span>
-          <span style={{ fontSize: 9, color: '#fdb813', letterSpacing: 2, textTransform: 'uppercase', lineHeight: 1 }}>National University Lipa</span>
-        </div>
-      </Link>
-
-      {/* Nav links */}
-      <div style={{ display: 'flex', gap: 2 }}>
-        {links.map(link => {
-          const isActive = location.pathname === link.to || location.pathname.startsWith(link.to + '/');
-          return (
-            <Link key={link.to} to={link.to}
-              style={{
-                textDecoration: 'none', fontSize: 13,
-                color:      isActive ? '#fdb813' : 'rgba(255,255,255,0.6)',
-                padding:    '7px 16px', borderRadius: 7,
-                background: isActive ? 'rgba(253,184,19,0.12)' : 'transparent',
-                transition: 'all 0.15s', fontWeight: isActive ? 600 : 400,
-              }}
-              onMouseEnter={e => { if (!isActive) { e.currentTarget.style.color = '#fff'; e.currentTarget.style.background = 'rgba(255,255,255,0.07)'; }}}
-              onMouseLeave={e => { if (!isActive) { e.currentTarget.style.color = 'rgba(255,255,255,0.6)'; e.currentTarget.style.background = 'transparent'; }}}
-            >
-              {link.label}
-            </Link>
-          );
-        })}
-      </div>
-
-      {/* Right side */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-
-        <NotificationBell />
-
-        {/* Messages icon */}
-        <Link
-          to="/messages"
-          style={{
-            position:       'relative',
-            width:          34, height: 34,
-            borderRadius:   8,
-            display:        'flex', alignItems: 'center', justifyContent: 'center',
-            color:          location.pathname.startsWith('/messages') ? '#fdb813' : 'rgba(255,255,255,0.6)',
-            textDecoration: 'none',
-            transition:     'all 0.15s',
-            background:     location.pathname.startsWith('/messages') ? 'rgba(253,184,19,0.12)' : 'transparent',
-          }}
-          onMouseEnter={e => {
-            if (!location.pathname.startsWith('/messages')) {
-              e.currentTarget.style.background = 'rgba(255,255,255,0.07)';
-              e.currentTarget.style.color      = '#fff';
-            }
-          }}
-          onMouseLeave={e => {
-            if (!location.pathname.startsWith('/messages')) {
-              e.currentTarget.style.background = 'transparent';
-              e.currentTarget.style.color      = 'rgba(255,255,255,0.6)';
-            }
-          }}
-        >
-          <i className="fas fa-comment-dots" style={{ fontSize: 16 }} />
-          <UnreadBadge count={unreadMessages} />
+        {/* ── Logo ── */}
+        <Link to="/dashboard" className="no-underline flex items-center gap-2.5 shrink-0">
+          <img src="/images/NU_logo.png" alt="NU Lipa" className="w-9 h-9 object-contain" />
+          <div className="hidden sm:flex flex-col gap-0.5 leading-none">
+            <span className="text-white font-black text-[13px] uppercase tracking-widest">Sinag-Bughaw</span>
+            <span className="text-[#fdb813] text-[9px] font-semibold uppercase tracking-[0.18em]">
+              National University Lipa
+            </span>
+          </div>
         </Link>
 
-        <div style={{ width: 1, height: 20, background: 'rgba(255,255,255,0.12)', margin: '0 4px' }} />
+        {/* ── Desktop nav links ── */}
+        <div className="hidden lg:flex items-center gap-0.5">
+          {NAV_LINKS.map(({ to, label }) => (
+            <Link
+              key={to} to={to}
+              className={`no-underline text-[13px] px-4 py-1.5 rounded-lg transition-all duration-150 font-medium
+                ${isActive(to)
+                  ? 'text-[#fdb813] bg-[#fdb813]/12 font-semibold'
+                  : 'text-white/60 hover:text-white hover:bg-white/8'
+                }`}
+            >
+              {label}
+            </Link>
+          ))}
+        </div>
 
-        {/* Avatar dropdown */}
-        <div ref={dropRef} style={{ position: 'relative' }}>
-          <button
-            onClick={() => setDropOpen(v => !v)}
-            style={{
-              display: 'flex', alignItems: 'center', gap: 9,
-              padding: '5px 10px 5px 6px', borderRadius: 10,
-              background: dropOpen ? 'rgba(255,255,255,0.1)' : 'transparent',
-              border: 'none', cursor: 'pointer', transition: 'background 0.15s',
-            }}
-            onMouseEnter={e => { if (!dropOpen) e.currentTarget.style.background = 'rgba(255,255,255,0.07)'; }}
-            onMouseLeave={e => { if (!dropOpen) e.currentTarget.style.background = 'transparent'; }}
+        {/* ── Right side ── */}
+        <div className="flex items-center gap-1.5">
+
+          {/* Notification bell */}
+          <NotificationBell />
+
+          {/* Messages */}
+          <Link
+            to="/messages"
+            className={`relative w-9 h-9 rounded-lg flex items-center justify-center no-underline transition-all duration-150
+              ${isActive('/messages')
+                ? 'text-[#fdb813] bg-[#fdb813]/12'
+                : 'text-white/60 hover:text-white hover:bg-white/8'
+              }`}
+            aria-label="Messages"
           >
-            <div style={{ width: 32, height: 32, borderRadius: 8, overflow: 'hidden', background: '#fdb813', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              {user?.profile_picture ? (
-                <img src={avatarSrc} alt={user?.name} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
-                  onError={e => { e.target.style.display = 'none'; e.target.parentNode.innerHTML = `<span style="font-size:12px;font-weight:700;color:#1d2b4b">${initials}</span>`; }}
-                />
-              ) : (
-                <span style={{ fontSize: 12, fontWeight: 700, color: '#1d2b4b' }}>{initials}</span>
-              )}
-            </div>
+            <i className="fas fa-comment-dots text-base" aria-hidden="true" />
+            <UnreadBadge count={unreadMessages} />
+          </Link>
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 3, textAlign: 'left' }}>
-              <span style={{ fontSize: 13, fontWeight: 600, color: '#fff', lineHeight: 1 }}>
-                {user?.name?.split(' ')[0]}
-              </span>
-              {user?.tier === 'premium' ? (
-                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, background: 'linear-gradient(135deg, #fdb813, #e5a70e)', color: '#1d2b4b', fontSize: 9, fontWeight: 800, padding: '2px 6px', borderRadius: 4, lineHeight: 1 }}>
-                  <i className="fas fa-crown" style={{ fontSize: 8 }} /> Premium
-                </span>
-              ) : user?.tier === 'standard' ? (
-                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, background: 'rgba(63,81,181,0.3)', color: '#a5b4fc', fontSize: 9, fontWeight: 700, padding: '2px 6px', borderRadius: 4, lineHeight: 1 }}>
-                  <i className="fas fa-bolt" style={{ fontSize: 8 }} /> Standard
-                </span>
-              ) : (
-                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, background: 'rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.45)', fontSize: 9, fontWeight: 600, padding: '2px 6px', borderRadius: 4, lineHeight: 1 }}>
-                  Free Tier
-                </span>
-              )}
-            </div>
+          {/* Divider */}
+          <div className="w-px h-5 bg-white/10 mx-1" aria-hidden="true" />
 
-            <i className="fas fa-chevron-down" style={{ fontSize: 9, color: 'rgba(255,255,255,0.4)', marginLeft: 2, transition: 'transform 0.15s', transform: dropOpen ? 'rotate(180deg)' : 'none' }} />
-          </button>
-
-          {dropOpen && (
-            <div style={{
-              position: 'absolute', top: 'calc(100% + 8px)', right: 0,
-              background: '#fff', borderRadius: 14,
-              boxShadow: '0 12px 40px rgba(29,43,75,0.18)',
-              border: '1px solid #e8edf5',
-              minWidth: 200, overflow: 'hidden',
-              animation: 'dropIn 0.18s cubic-bezier(0.34,1.2,0.64,1)',
-              zIndex: 9999,
-            }}>
-              <style>{`@keyframes dropIn { from{opacity:0;transform:translateY(-8px) scale(0.97)} to{opacity:1;transform:translateY(0) scale(1)} }`}</style>
-
-              <div style={{ padding: '14px 16px', borderBottom: '1px solid #f1f5f9', background: '#f8fafc' }}>
-                <div style={{ fontSize: 13, fontWeight: 700, color: '#1d2b4b' }}>{user?.name}</div>
-                <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 2 }}>{user?.email}</div>
+          {/* Avatar + dropdown */}
+          <div ref={dropRef} className="relative">
+            <button
+              onClick={() => setDropOpen(v => !v)}
+              className={`flex items-center gap-2 px-2 py-1.5 rounded-xl border-none cursor-pointer transition-all duration-150
+                ${dropOpen ? 'bg-white/12' : 'bg-transparent hover:bg-white/8'}`}
+            >
+              {/* Avatar */}
+              <div className="w-8 h-8 rounded-lg overflow-hidden bg-[#fdb813] flex items-center justify-center shrink-0 border border-[#fdb813]/40">
+                {user?.profile_picture ? (
+                  <img
+                    src={avatarSrc} alt={user?.name}
+                    className="w-full h-full object-cover block"
+                    onError={e => {
+                      e.currentTarget.style.display = 'none';
+                      e.currentTarget.parentNode.innerHTML = `<span class="text-[12px] font-bold text-[#1d2b4b]">${initials}</span>`;
+                    }}
+                  />
+                ) : (
+                  <span className="text-[12px] font-black text-[#1d2b4b]">{initials}</span>
+                )}
               </div>
 
-              {[
-                { icon: 'fa-user',  color: '#3f51b5', label: 'View Profile', to: `/profile/${user?.id}` },
-                { icon: 'fa-cog',   color: '#64748b', label: 'Settings',     to: '/settings'            },
-                { icon: 'fa-crown', color: '#fdb813', label: 'Go Premium',   to: '/premium'             },
-              ].map(item => (
-                <Link key={item.label} to={item.to}
-                  onClick={() => setDropOpen(false)}
-                  style={{
-                    display: 'flex', alignItems: 'center', gap: 12,
-                    padding: '11px 16px', textDecoration: 'none',
-                    color: '#1d2b4b', fontSize: 13, fontWeight: 500,
-                    transition: 'background 0.1s', borderBottom: '1px solid #f8fafc',
-                  }}
-                  onMouseEnter={e => e.currentTarget.style.background = '#f4f7fe'}
-                  onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+              {/* Name + tier — hidden on small screens */}
+              <div className="hidden sm:flex flex-col gap-0.5 text-left">
+                <span className="text-white text-[13px] font-semibold leading-none">{firstName}</span>
+                <TierBadge tier={userTier} />
+              </div>
+
+              <i
+                className={`fas fa-chevron-down text-[9px] text-white/40 ml-0.5 transition-transform duration-150
+                  ${dropOpen ? 'rotate-180' : ''}`}
+                aria-hidden="true"
+              />
+            </button>
+
+            {/* Dropdown */}
+            {dropOpen && (
+              <div className="absolute top-[calc(100%+8px)] right-0 w-52 bg-white rounded-2xl
+                              shadow-[0_12px_40px_rgba(29,43,75,0.18)] border border-slate-100
+                              overflow-hidden z-[9999] animate-[dropIn_0.18s_cubic-bezier(0.34,1.2,0.64,1)]">
+                <style>{`@keyframes dropIn{from{opacity:0;transform:translateY(-8px) scale(0.97)}to{opacity:1;transform:translateY(0) scale(1)}}`}</style>
+
+                {/* User info header with tier badge */}
+                <div className="px-4 py-3.5 border-b border-slate-100 bg-slate-50">
+                  <div className="flex items-center justify-between gap-2 mb-0.5">
+                    <p className="text-[13px] font-bold text-[#1d2b4b] m-0 truncate">{user?.name}</p>
+                    {/* Tier chip in dropdown header */}
+                    {userTier === 'premium' && (
+                      <span className="inline-flex items-center gap-1 bg-amber-50 text-amber-700 border border-amber-100 text-[9px] font-black px-1.5 py-0.5 rounded leading-none shrink-0">
+                        <i className="fas fa-crown text-[7px]" /> PREMIUM
+                      </span>
+                    )}
+                    {userTier === 'standard' && (
+                      <span className="inline-flex items-center gap-1 bg-indigo-50 text-indigo-600 border border-indigo-100 text-[9px] font-bold px-1.5 py-0.5 rounded leading-none shrink-0">
+                        <i className="fas fa-star text-[7px]" /> STANDARD
+                      </span>
+                    )}
+                    {userTier === 'free' && (
+                      <span className="inline-flex items-center gap-1 bg-slate-100 text-slate-400 text-[9px] font-semibold px-1.5 py-0.5 rounded leading-none shrink-0">
+                        FREE
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-[11px] text-slate-400 m-0">{user?.email}</p>
+                </div>
+
+                {/* Menu items */}
+                {dropItems.map(({ icon, color, label, toFn }) => (
+                  <Link
+                    key={label}
+                    to={toFn(user)}
+                    onClick={() => setDropOpen(false)}
+                    className="flex items-center gap-3 px-4 py-2.5 no-underline text-[#1d2b4b] text-[13px] font-medium
+                               border-b border-slate-50 hover:bg-[#f4f7fe] transition-colors"
+                  >
+                    <i className={`fas ${icon} ${color} text-[13px] w-4 text-center`} aria-hidden="true" />
+                    {label}
+                  </Link>
+                ))}
+
+                {/* Log out */}
+                <button
+                  onClick={handleLogout}
+                  className="w-full flex items-center gap-3 px-4 py-2.5 border-none bg-white text-red-500
+                             text-[13px] font-semibold cursor-pointer border-t border-slate-100
+                             hover:bg-red-50 transition-colors text-left"
                 >
-                  <i className={`fas ${item.icon}`} style={{ color: item.color, fontSize: 13, width: 16, textAlign: 'center' }} />
-                  {item.label}
-                </Link>
-              ))}
+                  <i className="fas fa-sign-out-alt text-[13px] w-4 text-center" aria-hidden="true" />
+                  Log Out
+                </button>
+              </div>
+            )}
+          </div>
 
-              <button
-                onClick={handleLogout}
-                style={{
-                  width: '100%', display: 'flex', alignItems: 'center', gap: 12,
-                  padding: '11px 16px', border: 'none', background: '#fff',
-                  color: '#ef4444', fontSize: 13, fontWeight: 600,
-                  cursor: 'pointer', transition: 'background 0.1s',
-                  borderTop: '1px solid #f1f5f9',
-                }}
-                onMouseEnter={e => e.currentTarget.style.background = '#fef2f2'}
-                onMouseLeave={e => e.currentTarget.style.background = '#fff'}
-              >
-                <i className="fas fa-sign-out-alt" style={{ fontSize: 13, width: 16, textAlign: 'center' }} />
-                Log Out
-              </button>
-            </div>
-          )}
+          {/* Settings icon link */}
+          <Link
+            to="/settings"
+            className={`w-9 h-9 rounded-lg flex items-center justify-center no-underline transition-all duration-150
+              ${isActive('/settings') ? 'text-[#fdb813] bg-[#fdb813]/12' : 'text-white/40 hover:text-white hover:bg-white/8'}`}
+            aria-label="Settings"
+          >
+            <i className="fas fa-cog text-[15px]" aria-hidden="true" />
+          </Link>
+
+          {/* Hamburger (mobile) */}
+          <button
+            className="lg:hidden w-9 h-9 rounded-lg flex items-center justify-center text-white/60 hover:text-white
+                       hover:bg-white/8 transition-all border-none cursor-pointer ml-1"
+            onClick={() => setMobileOpen(v => !v)}
+            aria-label="Toggle menu"
+          >
+            <i className={`fas ${mobileOpen ? 'fa-times' : 'fa-bars'} text-base`} aria-hidden="true" />
+          </button>
         </div>
+      </nav>
 
-        <Link to="/settings"
-          style={{ width: 34, height: 34, borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'rgba(255,255,255,0.4)', textDecoration: 'none', transition: 'all 0.15s' }}
-          onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.07)'; e.currentTarget.style.color = '#fff'; }}
-          onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'rgba(255,255,255,0.4)'; }}
-        >
-          <i className="fas fa-cog" style={{ fontSize: 15 }} />
-        </Link>
-      </div>
-    </nav>
+      {/* ── Mobile drawer ── */}
+      {mobileOpen && (
+        <div className="lg:hidden fixed top-16 left-0 right-0 z-[999] bg-[#1d2b4b]/98 backdrop-blur-lg
+                        border-b border-white/10 px-4 py-3 shadow-xl">
+          <div className="flex flex-col gap-0.5">
+            {NAV_LINKS.map(({ to, label }) => (
+              <Link
+                key={to} to={to}
+                onClick={() => setMobileOpen(false)}
+                className={`no-underline text-sm font-medium px-3 py-2.5 rounded-xl transition-colors
+                  ${isActive(to)
+                    ? 'text-[#fdb813] bg-[#fdb813]/12 font-semibold'
+                    : 'text-white/70 hover:text-white hover:bg-white/8'
+                  }`}
+              >
+                {label}
+              </Link>
+            ))}
+
+            {/* Mobile tier indicator */}
+            <div className="mt-2 pt-2 border-t border-white/10 flex items-center justify-between px-3 py-2">
+              <span className="text-[11px] text-white/40 font-medium">Your Plan</span>
+              <TierBadge tier={userTier} />
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   );
 }

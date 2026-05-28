@@ -4,7 +4,7 @@ namespace App\Http\Controllers\API\Payment;
 
 use App\Http\Controllers\Controller;
 use App\Models\Subscription;
-use App\Services\PayMongoService;
+use App\Services\Payment\PayMongoService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 

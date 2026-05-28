@@ -1,43 +1,48 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Services\Storage;
 
 use App\Contracts\StorageServiceInterface;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 
+/**
+ * LocalStorageService
+ *
+ * Fallback driver used when Cloudinary credentials are absent (local dev, CI).
+ * Stores files under storage/app/public and returns local URLs.
+ * Not recommended for production — configure Cloudinary for that.
+ */
 class LocalStorageService implements StorageServiceInterface
 {
-    /**
-     * Convert a storage path to a public URL.
-     * Works on all Laravel versions.
-     */
-    private function toUrl(string $path): string
-    {
-        return asset('storage/' . ltrim($path, '/'));
-    }
-
     public function uploadPhoto(
         UploadedFile $file,
         int $userId,
         string $folder = 'general',
         array $options = []
     ): array {
-        $path = $file->store("{$folder}/{$userId}", 'public');
-        $url  = $this->toUrl($path);
+        $path      = $file->store("public/{$folder}/users/{$userId}", 'local');
+        $publicId  = Str::after($path, 'public/');
+        $url       = Storage::url($path);
+
+        Log::info('[LocalStorage] uploadPhoto', ['path' => $path, 'url' => $url]);
 
         return [
             'success'       => true,
-            'public_id'     => $path,
+            'public_id'     => $publicId,
             'url'           => $url,
             'secure_url'    => $url,
-            'resource_type' => 'image',
+            'resource_type' => $options['resource_type'] ?? 'image',
             'format'        => $file->getClientOriginalExtension(),
             'bytes'         => $file->getSize(),
             'width'         => null,
             'height'        => null,
             'duration'      => null,
-            'created_at'    => now()->toISOString(),
+            'created_at'    => now()->toIso8601String(),
         ];
     }
 
@@ -47,21 +52,17 @@ class LocalStorageService implements StorageServiceInterface
         string $folder = 'general',
         array $options = []
     ): array {
-        return array_map(
-            fn($file) => $this->uploadPhoto($file, $userId, $folder, $options),
-            $files
-        );
+        $results = [];
+        foreach ($files as $file) {
+            $results[] = $this->uploadPhoto($file, $userId, $folder, $options);
+        }
+        return $results;
     }
 
     public function deletePhoto(string $publicId, string $resourceType = 'image'): array
     {
-        $deleted = Storage::disk('public')->delete($publicId);
-
-        return [
-            'success'   => $deleted,
-            'public_id' => $publicId,
-            'result'    => $deleted ? 'ok' : 'not_found',
-        ];
+        $deleted = Storage::disk('local')->delete('public/' . $publicId);
+        return ['success' => $deleted, 'public_id' => $publicId, 'result' => $deleted ? 'ok' : 'not_found'];
     }
 
     public function generateSignedUrl(
@@ -69,22 +70,23 @@ class LocalStorageService implements StorageServiceInterface
         int $ttl = 3600,
         array $transformations = []
     ): array {
+        $url = Storage::url('public/' . $publicId);
         return [
             'success'    => true,
-            'signed_url' => $this->toUrl($publicId),
-            'expires_at' => now()->addSeconds($ttl)->toISOString(),
+            'signed_url' => $url,
+            'expires_at' => now()->addSeconds($ttl)->toIso8601String(),
         ];
     }
 
     public function getBandwidthUsage(): array
     {
         return [
-            'success'              => true,
-            'bandwidth_used_bytes' => 0,
-            'bandwidth_used_human' => '0 B',
-            'storage_used_bytes'   => 0,
-            'storage_used_human'   => '0 B',
-            'last_updated'         => now()->toISOString(),
+            'success'                => true,
+            'bandwidth_used_bytes'   => 0,
+            'bandwidth_used_human'   => '0 B',
+            'storage_used_bytes'     => 0,
+            'storage_used_human'     => '0 B',
+            'last_updated'           => now()->toIso8601String(),
         ];
     }
 

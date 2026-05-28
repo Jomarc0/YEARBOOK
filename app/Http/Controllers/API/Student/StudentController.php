@@ -52,9 +52,36 @@ class StudentController extends Controller
     }
 
     // ── Show ──────────────────────────────────────────────────────────────────
-    public function show(int $id): JsonResponse
+    public function show(Request $request, int $id): JsonResponse
     {
-        return response()->json(User::with('section')->findOrFail($id));
+        $student      = User::with('section')->findOrFail($id);
+        $isSubscribed = $request->attributes->get('viewer_is_subscribed', false);
+        $isOwner      = $request->user()?->id === $id;
+
+        // Owner always gets full data
+        if ($isOwner) {
+            return response()->json(array_merge(
+                $student->toArray(),
+                ['is_subscribed_viewer' => true]
+            ));
+        }
+
+        // Free-tier viewers: return only name + profile picture
+        if (! $isSubscribed) {
+            return response()->json([
+                'id'                   => $student->id,
+                'name'                 => $student->name,
+                'profile_picture'      => $student->profile_picture,
+                'is_premium'           => $student->is_premium,
+                'is_subscribed_viewer' => false,
+            ]);
+        }
+
+        // Subscribed viewer: full profile
+        return response()->json(array_merge(
+            $student->toArray(),
+            ['is_subscribed_viewer' => true]
+        ));
     }
 
     // ── Update photo ──────────────────────────────────────────────────────────
@@ -134,8 +161,15 @@ class StudentController extends Controller
     }
 
     // ── Achievements ──────────────────────────────────────────────────────────
-    public function achievements(int $id): JsonResponse
+    public function achievements(Request $request, int $id): JsonResponse
     {
+
+        $isSubscribed = $request->attributes->get('viewer_is_subscribed', false);
+        $isOwner      = $request->user()?->id === $id;
+
+        if (! $isOwner && ! $isSubscribed) {
+            return response()->json(['success' => false, 'restricted' => true, 'data' => []], 200);
+        }
         $user = User::findOrFail($id);
 
         $achievements = $user->achievements()
@@ -157,8 +191,14 @@ class StudentController extends Controller
     }
 
     // ── Tagged photos (list) ──────────────────────────────────────────────────
-    public function taggedPhotos(int $id): JsonResponse
+    public function taggedPhotos(Request $request, int $id): JsonResponse
     {
+        $isSubscribed = $request->attributes->get('viewer_is_subscribed', false);
+        $isOwner      = $request->user()?->id === $id;
+
+        if (! $isOwner && ! $isSubscribed) {
+            return response()->json(['success' => false, 'restricted' => true, 'data' => []], 200);
+        }
         $user = User::findOrFail($id);
 
         $photos = $user->taggedPhotos()

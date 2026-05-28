@@ -17,7 +17,7 @@ class VoiceNoteController extends Controller
     // Approved notes sent TO the authenticated user
     public function inbox(Request $request): JsonResponse
     {
-        $notes = VoiceNote::with(['sender:id,name,avatar_url'])
+        $notes = VoiceNote::with(['sender:id,name,profile_picture'])
             ->forRecipient($request->user()->id)
             ->approved()
             ->latest()
@@ -30,7 +30,7 @@ class VoiceNoteController extends Controller
     // All notes the authenticated user has SENT (any status)
     public function outbox(Request $request): JsonResponse
     {
-        $notes = VoiceNote::with(['recipient:id,name,avatar_url'])
+        $notes = VoiceNote::with(['recipient:id,name,profile_picture'])
             ->fromSender($request->user()->id)
             ->latest()
             ->get();
@@ -42,7 +42,7 @@ class VoiceNoteController extends Controller
     // Approved notes on a student's public profile
     public function forProfile(Request $request, int $userId): JsonResponse
     {
-        $notes = VoiceNote::with(['sender:id,name,avatar_url'])
+        $notes = VoiceNote::with(['sender:id,name,profile_picture'])
             ->forRecipient($userId)
             ->approved()
             ->latest()
@@ -57,14 +57,15 @@ class VoiceNoteController extends Controller
     {
         $recipient = User::findOrFail($request->recipient_id);
 
-        // Prevent sending to yourself
         if ($recipient->id === $request->user()->id) {
-            return response()->json(['message' => 'You cannot send a voice note to yourself.'], 422);
+            return response()->json([
+                'message' => 'You cannot send a voice note to yourself.',
+            ], 422);
         }
 
         $cloudinary = app(CloudinaryService::class);
         $result     = $cloudinary->uploadAudio(
-            $request->file('audio')->getRealPath(),
+            $request->file('audio'),
             $request->user()->id
         );
 
@@ -78,9 +79,14 @@ class VoiceNoteController extends Controller
             'status'               => 'pending',
         ]);
 
+        // Load sender so the notification can access sender->name
+        $note->load('sender:id,name,profile_picture');
+
+        $recipient->notify(new VoiceNoteReceivedNotification($note));
+
         return response()->json([
             'message' => 'Voice note sent! It will be visible after admin review.',
-            'data'    => $note->load('recipient:id,name,avatar_url'),
+            'data'    => $note->load('recipient:id,name,profile_picture'),
         ], 201);
     }
 

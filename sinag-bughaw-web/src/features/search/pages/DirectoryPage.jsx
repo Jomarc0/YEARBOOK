@@ -27,6 +27,7 @@ function getInitials(name = '') {
   return name.trim().split(/\s+/).map(w => w[0]?.toUpperCase() || '').slice(0, 2).join('');
 }
 
+// ─── Autocomplete Dropdown ────────────────────────────────────────────────────
 function AutocompleteDropdown({ suggestions, onSelect, visible }) {
   if (!visible || !suggestions.length) return null;
   return (
@@ -41,7 +42,12 @@ function AutocompleteDropdown({ suggestions, onSelect, visible }) {
           <div className="flex-shrink-0 flex items-center justify-center font-black text-sm overflow-hidden"
             style={{ width:38, height:38, borderRadius:10, background:'#1d2b4b', color:'#fdb813' }}>
             {s.profile_picture
-              ? <img src={imageUrl(s.profile_picture)} alt={s.name} className="w-full h-full object-cover" />
+              ? <img
+                  src={imageUrl(s.profile_picture)}
+                  alt={s.name}
+                  className="w-full h-full object-cover"
+                  onError={e => { e.target.src = avatarUrl(s.name); }}
+                />
               : getInitials(s.name)}
           </div>
           <div className="flex-1 min-w-0">
@@ -55,6 +61,7 @@ function AutocompleteDropdown({ suggestions, onSelect, visible }) {
   );
 }
 
+// ─── Face Match Banner ────────────────────────────────────────────────────────
 function FaceMatchBanner({ matches, onClear }) {
   if (!matches.length) return null;
   return (
@@ -65,13 +72,18 @@ function FaceMatchBanner({ matches, onClear }) {
             <img key={m.user_id}
               src={imageUrl(m.profile_picture) || avatarUrl(m.name)}
               alt={m.name}
+              onError={e => { e.target.src = avatarUrl(m.name); }}
               style={{ width:'26px', height:'26px', borderRadius:'7px', border:'2px solid #fdb813', objectFit:'cover', marginLeft: i>0 ? '-7px' : 0 }} />
           ))}
         </div>
         <span style={{ fontSize:'0.78rem', fontWeight:700, color:'#fdb813' }}>
           <i className="fas fa-brain mr-1" />
           {matches.length} face match{matches.length>1?'es':''} found
-          {matches[0] && <span style={{ fontWeight:400, color:'rgba(255,255,255,0.7)', marginLeft:'6px' }}>· Best: {matches[0].name} ({matches[0].similarity}%)</span>}
+          {matches[0] && (
+            <span style={{ fontWeight:400, color:'rgba(255,255,255,0.7)', marginLeft:'6px' }}>
+              · Best: {matches[0].name} ({matches[0].similarity}%)
+            </span>
+          )}
         </span>
       </div>
       <button onClick={onClear} style={{ background:'none', border:'1px solid rgba(253,184,19,0.4)', borderRadius:'7px', color:'#fdb813', cursor:'pointer', fontSize:'0.72rem', fontWeight:700, padding:'3px 9px', flexShrink:0 }}>
@@ -81,6 +93,70 @@ function FaceMatchBanner({ matches, onClear }) {
   );
 }
 
+// ─── Student Card ─────────────────────────────────────────────────────────────
+function StudentCard({ student, index, isMatched, matchData }) {
+  const [imgError, setImgError] = useState(false);
+  const batchYear   = student.batch_year || new Date().getFullYear();
+  const hasPhoto    = !!student.profile_picture && !imgError;
+  const courseShort = SHORT_MAP[student.course] || student.course_short || 'Student';
+
+  return (
+    <Link
+      to={`/profile/${student.id}`}
+      className={`student-card ${isMatched ? 'face-matched-card' : ''} bg-white rounded-3xl overflow-hidden shadow-sm hover:-translate-y-3 hover:shadow-xl transition-all duration-500 no-underline block`}
+      style={{
+        animationDelay: `${index * 0.04}s`,
+        border:     isMatched ? '2px solid #fdb813' : '2px solid transparent',
+        boxShadow:  isMatched ? '0 8px 30px rgba(253,184,19,0.2)' : undefined,
+      }}
+    >
+      <div className="h-64 relative overflow-hidden bg-[#1d2b4b]">
+
+        {/* Profile picture or initials fallback */}
+        {hasPhoto ? (
+          <img
+            className="card-img w-full h-full object-cover transition-transform duration-700"
+            src={imageUrl(student.profile_picture)}
+            alt={student.name}
+            onError={() => setImgError(true)}
+          />
+        ) : (
+          <div className="initials-box">{getInitials(student.name)}</div>
+        )}
+
+        {/* Batch year badge */}
+        <div className="absolute top-3 right-3 bg-[#1d2b4b]/80 backdrop-blur-sm text-white text-[10px] font-black px-3 py-1.5 rounded-xl flex items-center gap-1.5 z-10 shadow">
+          <i className="fas fa-graduation-cap text-[#fdb813]" /> {batchYear}
+        </div>
+
+        {/* Face match badge */}
+        {isMatched && (
+          <div className="absolute top-3 left-3 z-10 flex items-center gap-1.5 font-black text-[10px] px-3 py-1.5 rounded-xl"
+            style={{ background: '#fdb813', color: '#1d2b4b' }}>
+            <i className="fas fa-brain" />
+            {matchData?.similarity?.toFixed(0) ?? '—'}% match
+          </div>
+        )}
+
+        {/* Hover overlay */}
+        <div className="card-overlay absolute inset-0 bg-[#1d2b4b]/70 backdrop-blur-sm flex items-center justify-center opacity-0 transition-opacity duration-300 z-20">
+          <span className="bg-white text-[#1d2b4b] font-black text-sm px-6 py-3 rounded-xl flex items-center gap-2">
+            <i className="fas fa-eye" /> View Profile
+          </span>
+        </div>
+      </div>
+
+      <div className="p-5 text-center">
+        <h4 className="text-base font-black text-[#1d2b4b] mb-2 leading-tight capitalize">{student.name}</h4>
+        <span className="inline-block bg-indigo-50 text-[#3f51b5] text-[10px] font-black uppercase tracking-wider px-3 py-1 rounded-xl">
+          {courseShort}
+        </span>
+      </div>
+    </Link>
+  );
+}
+
+// ─── Main Page ────────────────────────────────────────────────────────────────
 export default function DirectoryPage() {
   const [searchParams]           = useSearchParams();
   const [students,  setStudents] = useState([]);
@@ -102,33 +178,45 @@ export default function DirectoryPage() {
   const searchTimer  = useRef(null);
   const suggestTimer = useRef(null);
 
-  const fetchStudents = useCallback(async (q=query, c=course, p=1) => {
+  // ── Fetch students ──────────────────────────────────────────────────────────
+  const fetchStudents = useCallback(async (q = query, c = course, p = 1) => {
     setLoading(true);
     try {
-      const params = { per_page:20, page:p };
+      const params = { per_page: 20, page: p };
       if (q) params.q = q;
       if (c !== 'All Programs') params.course = c;
       const { data } = await studentsApi.search(params);
       setStudents(data.data ?? []);
-      setTotal(data.meta?.total ?? (data.data??[]).length);
+      setTotal(data.meta?.total ?? (data.data ?? []).length);
       setLastPage(data.meta?.last_page ?? 1);
       setPage(p);
-    } catch { setStudents([]); }
-    finally { setLoading(false); }
+    } catch {
+      setStudents([]);
+    } finally {
+      setLoading(false);
+    }
   }, []); // eslint-disable-line
 
+  // ── Fetch autocomplete suggestions ─────────────────────────────────────────
   const fetchSuggestions = useCallback(async (q) => {
     if (q.length < 2) { setSuggestions([]); return; }
     setSuggestLoading(true);
-    try { const { data } = await studentsApi.suggest({ q }); setSuggestions(data.suggestions ?? []); }
-    catch { setSuggestions([]); }
-    finally { setSuggestLoading(false); }
+    try {
+      const { data } = await studentsApi.suggest({ q });
+      setSuggestions(data.suggestions ?? []);
+    } catch {
+      setSuggestions([]);
+    } finally {
+      setSuggestLoading(false);
+    }
   }, []);
 
   useEffect(() => { fetchStudents(); }, []); // eslint-disable-line
 
+  // ── Handlers ────────────────────────────────────────────────────────────────
   const handleSearch = (val) => {
-    setQuery(val); clearFaceResults();
+    setQuery(val);
+    clearFaceResults();
     clearTimeout(suggestTimer.current);
     suggestTimer.current = setTimeout(() => fetchSuggestions(val), 150);
     clearTimeout(searchTimer.current);
@@ -136,36 +224,54 @@ export default function DirectoryPage() {
   };
 
   const handleSuggestSelect = (s) => {
-    setQuery(s.name); setShowSuggest(false); setSuggestions([]);
+    setQuery(s.name);
+    setShowSuggest(false);
+    setSuggestions([]);
     fetchStudents(s.name, course, 1);
   };
 
-  const handleFilter = (value) => { setCourse(value); clearFaceResults(); fetchStudents(query, value, 1); };
+  const handleFilter = (value) => {
+    setCourse(value);
+    clearFaceResults();
+    fetchStudents(query, value, 1);
+  };
 
   const reset = () => {
-    setQuery(''); setCourse('All Programs'); setSuggestions([]);
-    clearFaceResults(); fetchStudents('', 'All Programs', 1);
+    setQuery('');
+    setCourse('All Programs');
+    setSuggestions([]);
+    clearFaceResults();
+    fetchStudents('', 'All Programs', 1);
   };
 
   const handleFaceFile = async (file) => {
-    setFaceSearching(true); clearFaceResults(); setQuery('');
+    setFaceSearching(true);
+    clearFaceResults();
+    setQuery('');
     try {
       const formData = new FormData();
       formData.append('face_image', file);
       const { data } = await faceApi.search(formData);
       const matches  = data.matches ?? [];
-      if (!matches.length) { alert('No matching student found. Ensure the photo shows a clear face.'); return; }
+      if (!matches.length) {
+        alert('No matching student found. Ensure the photo shows a clear face.');
+        return;
+      }
       setFaceMatches(matches);
       setMatchedIds(new Set(matches.map(m => m.user_id)));
       const topName = matches[0]?.name ?? '';
       if (topName) { fetchStudents(topName, 'All Programs', 1); setQuery(topName); }
-    } catch { alert('Face search failed. Please try again.'); }
-    finally { setFaceSearching(false); }
+    } catch {
+      alert('Face search failed. Please try again.');
+    } finally {
+      setFaceSearching(false);
+    }
   };
 
   const clearFaceResults = () => { setFaceMatches([]); setMatchedIds(new Set()); };
   const isFaceMode = faceMatches.length > 0;
 
+  // ── Render ──────────────────────────────────────────────────────────────────
   return (
     <div className="min-h-screen flex flex-col bg-slate-50">
       <style>{`
@@ -177,8 +283,10 @@ export default function DirectoryPage() {
         .face-matched-card{animation:pulseRing 1.5s ease 0.3s 2}
         .initials-box{width:100%;height:100%;display:flex;align-items:center;justify-content:center;background:#1d2b4b;font-size:4rem;font-weight:900;color:#fdb813;letter-spacing:-2px}
       `}</style>
+
       <Navbar />
 
+      {/* ── Hero / Search Header ── */}
       <header className="px-[8%] py-24 text-center text-white rounded-b-[60px] shadow-lg overflow-hidden"
         style={{ background:"linear-gradient(135deg,rgba(29,43,75,0.95),rgba(63,81,181,0.88)), url('/images/NU-building.jpg') center/cover no-repeat" }}>
         <h1 className="text-5xl font-black tracking-tight mb-3">
@@ -237,93 +345,96 @@ export default function DirectoryPage() {
         </div>
       </header>
 
+      {/* ── Course Filters ── */}
       <div className="flex flex-wrap justify-center gap-3 px-[8%] pt-10 pb-2 -mt-6 relative z-10">
         {COURSE_FILTERS.map(({ label, value }) => (
           <button key={value} onClick={() => handleFilter(value)}
-            className={`px-5 py-2.5 rounded-2xl text-sm font-bold border-none cursor-pointer transition-all duration-300 shadow-md ${course===value?'bg-[#3f51b5] text-white scale-105':'bg-white text-[#1d2b4b] hover:-translate-y-1 hover:shadow-lg'}`}>
+            className={`px-5 py-2.5 rounded-2xl text-sm font-bold border-none cursor-pointer transition-all duration-300 shadow-md ${
+              course === value
+                ? 'bg-[#3f51b5] text-white scale-105'
+                : 'bg-white text-[#1d2b4b] hover:-translate-y-1 hover:shadow-lg'
+            }`}>
             {label}
           </button>
         ))}
       </div>
 
+      {/* ── Result count ── */}
       {!loading && (
         <p className="text-center text-xs text-slate-400 mt-4 mb-0">
           {isFaceMode ? (
-            <><i className="fas fa-brain mr-1" style={{ color:'#3f51b5' }} />Showing <span className="font-bold text-[#1d2b4b]">{faceMatches.length}</span> face match{faceMatches.length!==1?'es':''}</>
+            <>
+              <i className="fas fa-brain mr-1" style={{ color:'#3f51b5' }} />
+              Showing <span className="font-bold text-[#1d2b4b]">{faceMatches.length}</span> face match{faceMatches.length !== 1 ? 'es' : ''}
+            </>
           ) : query ? (
-            <>Found <span className="font-bold text-[#1d2b4b]">{total}</span> result{total!==1?'s':''} for "<span className="font-bold text-[#3f51b5]">{query}</span>"</>
+            <>
+              Found <span className="font-bold text-[#1d2b4b]">{total}</span> result{total !== 1 ? 's' : ''} for "
+              <span className="font-bold text-[#3f51b5]">{query}</span>"
+            </>
           ) : (
-            <>Showing <span className="font-bold text-[#1d2b4b]">{total}</span> student{total!==1?'s':''}
-              {course!=='All Programs' && <> in <span className="font-bold text-[#3f51b5]">{COURSE_FILTERS.find(f=>f.value===course)?.label}</span></>}
+            <>
+              Showing <span className="font-bold text-[#1d2b4b]">{total}</span> student{total !== 1 ? 's' : ''}
+              {course !== 'All Programs' && (
+                <> in <span className="font-bold text-[#3f51b5]">{COURSE_FILTERS.find(f => f.value === course)?.label}</span></>
+              )}
             </>
           )}
         </p>
       )}
 
+      {/* ── Main Content ── */}
       <main className="px-[8%] py-10 flex-1">
         {loading ? (
           <div className="flex flex-col items-center justify-center py-32 text-slate-400">
             <i className="fas fa-spinner fa-spin text-4xl mb-4" />
-            <p className="text-sm font-medium">{faceSearching?'Scanning faces…':'Searching…'}</p>
+            <p className="text-sm font-medium">{faceSearching ? 'Scanning faces…' : 'Searching…'}</p>
           </div>
+
         ) : students.length === 0 ? (
           <div className="text-center py-24 bg-white rounded-3xl shadow-sm">
             <i className="fas fa-user-slash text-8xl text-slate-100 mb-6 block" />
             <h3 className="text-2xl font-black text-[#1d2b4b] mb-2">No Students Found</h3>
-            <p className="text-slate-400 mb-8 text-sm">{isFaceMode?'No student profiles matched the uploaded face.':'Try adjusting your search or filters.'}</p>
+            <p className="text-slate-400 mb-8 text-sm">
+              {isFaceMode ? 'No student profiles matched the uploaded face.' : 'Try adjusting your search or filters.'}
+            </p>
             <button onClick={reset} className="bg-[#1d2b4b] text-white font-bold px-8 py-3 rounded-xl border-none cursor-pointer inline-flex items-center gap-2 hover:bg-[#162038] transition">
               <i className="fas fa-redo" /> Reset
             </button>
           </div>
+
         ) : (
           <>
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-7">
-              {students.map((student, i) => {
-                const batchYear   = student.batch_year || new Date().getFullYear();
-                const hasPhoto    = !!student.profile_picture;
-                const courseShort = SHORT_MAP[student.course] || student.course_short || 'Student';
-                const isMatched   = matchedIds.has(student.id);
-                const matchData   = faceMatches.find(m => m.user_id === student.id);
-                return (
-                  <Link key={student.id} to={`/profile/${student.id}`}
-                    className={`student-card ${isMatched?'face-matched-card':''} bg-white rounded-3xl overflow-hidden shadow-sm hover:-translate-y-3 hover:shadow-xl transition-all duration-500 no-underline block`}
-                    style={{ animationDelay:`${i*0.04}s`, border:isMatched?'2px solid #fdb813':'2px solid transparent', boxShadow:isMatched?'0 8px 30px rgba(253,184,19,0.2)':undefined }}>
-                    <div className="h-64 relative overflow-hidden bg-[#1d2b4b]">
-                      {hasPhoto
-                        ? <img className="card-img w-full h-full object-cover transition-transform duration-700"
-                            src={imageUrl(student.profile_picture)}
-                            alt={student.name}
-                            onError={e=>{e.target.style.display='none';}} />
-                        : <div className="initials-box">{getInitials(student.name)}</div>}
-                      <div className="absolute top-3 right-3 bg-[#1d2b4b]/80 backdrop-blur-sm text-white text-[10px] font-black px-3 py-1.5 rounded-xl flex items-center gap-1.5 z-10 shadow">
-                        <i className="fas fa-graduation-cap text-[#fdb813]" /> {batchYear}
-                      </div>
-                      {isMatched && (
-                        <div className="absolute top-3 left-3 z-10 flex items-center gap-1.5 font-black text-[10px] px-3 py-1.5 rounded-xl"
-                          style={{ background: '#fdb813', color: '#1d2b4b' }}>
-                          <i className="fas fa-brain" />
-                          {matchData?.similarity?.toFixed(0) ?? '—'}% match
-                        </div>
-                      )}
-                      <div className="card-overlay absolute inset-0 bg-[#1d2b4b]/70 backdrop-blur-sm flex items-center justify-center opacity-0 transition-opacity duration-300 z-20">
-                        <span className="bg-white text-[#1d2b4b] font-black text-sm px-6 py-3 rounded-xl flex items-center gap-2"><i className="fas fa-eye" /> View Profile</span>
-                      </div>
-                    </div>
-                    <div className="p-5 text-center">
-                      <h4 className="text-base font-black text-[#1d2b4b] mb-2 leading-tight capitalize">{student.name}</h4>
-                      <span className="inline-block bg-indigo-50 text-[#3f51b5] text-[10px] font-black uppercase tracking-wider px-3 py-1 rounded-xl">{courseShort}</span>
-                    </div>
-                  </Link>
-                );
-              })}
+              {students.map((student, i) => (
+                <StudentCard
+                  key={student.id}
+                  student={student}
+                  index={i}
+                  isMatched={matchedIds.has(student.id)}
+                  matchData={faceMatches.find(m => m.user_id === student.id)}
+                />
+              ))}
             </div>
+
+            {/* ── Pagination ── */}
             {lastPage > 1 && (
               <div className="flex justify-center gap-3 mt-12">
-                <button onClick={() => fetchStudents(query, course, page-1)} disabled={page<=1||loading} className="px-5 py-2.5 rounded-xl font-bold text-sm border-none cursor-pointer transition disabled:opacity-30" style={{ background:'#1d2b4b', color:'white' }}>
+                <button
+                  onClick={() => fetchStudents(query, course, page - 1)}
+                  disabled={page <= 1 || loading}
+                  className="px-5 py-2.5 rounded-xl font-bold text-sm border-none cursor-pointer transition disabled:opacity-30"
+                  style={{ background:'#1d2b4b', color:'white' }}>
                   <i className="fas fa-chevron-left mr-1" /> Prev
                 </button>
-                <span className="px-5 py-2.5 rounded-xl text-sm font-bold bg-white text-[#1d2b4b] shadow-sm">{page} / {lastPage}</span>
-                <button onClick={() => fetchStudents(query, course, page+1)} disabled={page>=lastPage||loading} className="px-5 py-2.5 rounded-xl font-bold text-sm border-none cursor-pointer transition disabled:opacity-30" style={{ background:'#1d2b4b', color:'white' }}>
+                <span className="px-5 py-2.5 rounded-xl text-sm font-bold bg-white text-[#1d2b4b] shadow-sm">
+                  {page} / {lastPage}
+                </span>
+                <button
+                  onClick={() => fetchStudents(query, course, page + 1)}
+                  disabled={page >= lastPage || loading}
+                  className="px-5 py-2.5 rounded-xl font-bold text-sm border-none cursor-pointer transition disabled:opacity-30"
+                  style={{ background:'#1d2b4b', color:'white' }}>
                   Next <i className="fas fa-chevron-right ml-1" />
                 </button>
               </div>
@@ -331,6 +442,7 @@ export default function DirectoryPage() {
           </>
         )}
       </main>
+
       <Footer />
     </div>
   );

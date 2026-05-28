@@ -63,6 +63,15 @@ class CloudinaryService implements StorageServiceInterface
     // uploadPhoto()
     // -------------------------------------------------------------------------
 
+    /**
+     * Upload any file (image, video, audio, PDF) to Cloudinary.
+     *
+     * Supported $options keys:
+     *   skip_mime_check (bool)  — bypass tier mime-type restriction
+     *   skip_size_check (bool)  — bypass tier file-size restriction
+     *   skip_quota_check (bool) — bypass per-user storage quota check
+     *   type (string)           — Cloudinary delivery type, default 'upload'
+     */
     public function uploadPhoto(
         UploadedFile $file,
         int          $userId,
@@ -72,25 +81,46 @@ class CloudinaryService implements StorageServiceInterface
         $tier       = $this->resolveUserTier($userId);
         $tierConfig = $this->getTierConfig($tier);
 
-        $this->assertMimeTypeAllowed($file, $tierConfig);
-        $this->assertFileSizeAllowed($file, $tierConfig);
-        $this->assertStorageQuota($userId, $file->getSize(), $tierConfig);
+        if (empty($options['skip_mime_check'])) {
+            $this->assertMimeTypeAllowed($file, $tierConfig);
+        }
 
-        $uploadOptions = array_merge([
+        if (empty($options['skip_size_check'])) {
+            $this->assertFileSizeAllowed($file, $tierConfig);
+        }
+
+        if (empty($options['skip_quota_check'])) {
+            $this->assertStorageQuota($userId, $file->getSize(), $tierConfig);
+        }
+
+        // Strip internal-only flags before passing to Cloudinary
+        $cloudinaryOptions = array_diff_key($options, array_flip([
+            'skip_mime_check',
+            'skip_size_check',
+            'skip_quota_check',
+        ]));
+
+        // ── FIX: only include 'transformation' when it's actually an array ──
+        $transformation = $this->resolveTransformations($file, $tierConfig);
+
+        $baseOptions = [
             'folder'          => $this->buildFolder($userId, $folder, $tierConfig),
             'resource_type'   => $this->resolveResourceType($file),
             'use_filename'    => false,
             'unique_filename' => true,
             'overwrite'       => false,
-            // ✅ FIX: was 'authenticated' — that generates signed/private URLs
-            // which cannot be loaded directly in <img> tags without a backend proxy.
-            // Profile posts and yearbook content are not sensitive — use 'upload'
-            // so Cloudinary returns a plain public HTTPS URL that always works.
             'type'            => 'upload',
-            'transformation'  => $tierConfig['transformations'],
             'image_metadata'  => false,
             'tags'            => [$tier, "user_{$userId}"],
-        ], $options);
+        ];
+
+        // Only add transformation key if it's a non-empty array
+        // Passing null or empty array to Cloudinary causes array_merge errors
+        if (is_array($transformation) && count($transformation) > 0) {
+            $baseOptions['transformation'] = $transformation;
+        }
+
+        $uploadOptions = array_merge($baseOptions, $cloudinaryOptions);
 
         try {
             $result = $this->uploadApi->upload($file->getRealPath(), $uploadOptions);
@@ -116,7 +146,7 @@ class CloudinaryService implements StorageServiceInterface
             ]);
 
             throw new StorageUploadException(
-                message:  'Photo upload failed: ' . $e->getMessage(),
+                message:  'Upload failed: ' . $e->getMessage(),
                 previous: $e
             );
         }
@@ -175,9 +205,6 @@ class CloudinaryService implements StorageServiceInterface
     public function deletePhoto(string $publicId, string $resourceType = 'image'): array
     {
         try {
-            // ✅ FIX: type must match how the asset was uploaded.
-            // Since we now upload as 'upload' (public), we must delete as 'upload' too.
-            // Deleting with type='authenticated' would fail to find the asset.
             $result = $this->uploadApi->destroy($publicId, [
                 'resource_type' => $resourceType,
                 'type'          => 'upload',
@@ -209,6 +236,15 @@ class CloudinaryService implements StorageServiceInterface
                 previous: $e
             );
         }
+    }
+
+    // -------------------------------------------------------------------------
+    // delete()  — generic delete used by VoiceNoteController and others
+    // -------------------------------------------------------------------------
+
+    public function delete(string $publicId, string $resourceType = 'video'): array
+    {
+        return $this->deletePhoto($publicId, $resourceType);
     }
 
     // -------------------------------------------------------------------------
@@ -298,7 +334,6 @@ class CloudinaryService implements StorageServiceInterface
 
         return Cache::remember($cacheKey, self::STORAGE_CACHE_TTL, function () use ($userId) {
             try {
-                // ✅ FIX: query 'upload' type assets (was 'authenticated')
                 $resources = $this->adminApi->assets([
                     'type'        => 'upload',
                     'tags'        => true,
@@ -320,6 +355,84 @@ class CloudinaryService implements StorageServiceInterface
         });
     }
 
+    // -------------------------------------------------------------------------
+    // uploadAudio()
+    // -------------------------------------------------------------------------
+
+    /**
+     * Upload an audio file to Cloudinary.
+     *
+     * Used by two distinct features — the folder and tags differ per context:
+     *   $context = 'voice_notes'  → yearbook/voice-notes folder, moderation tags
+     *   $context = 'transcripts'  → transcripts folder, Groq pipeline tags
+     *
+     * Cloudinary requires resource_type = 'video' for all audio files.
+     * The 25 MB cap matches the Groq free-tier transcription limit.
+     */
+    public function uploadAudio(
+        UploadedFile $file,
+        int          $userId,
+        string       $context = 'voice_notes'
+    ): array {
+        $maxBytes = 25 * 1024 * 1024; // 25 MB — Groq free-tier limit
+        if ($file->getSize() > $maxBytes) {
+            throw new StorageUploadException(
+                'Audio file ' . $this->formatBytes($file->getSize()) .
+                ' exceeds the 25 MB limit.'
+            );
+        }
+
+        $env = app()->environment();
+
+        [$folder, $tags] = match ($context) {
+            'transcripts' => [
+                "{$env}/transcripts/users/{$userId}",
+                ["user_{$userId}", 'audio', 'transcript'],
+            ],
+            default => [
+                "{$env}/voice-notes/users/{$userId}",
+                ["user_{$userId}", 'audio', 'voice_note'],
+            ],
+        };
+
+        $uploadOptions = [
+            'folder'          => $folder,
+            'resource_type'   => 'video',   // Cloudinary uses 'video' for audio files
+            'type'            => 'upload',
+            'use_filename'    => false,
+            'unique_filename' => true,
+            'overwrite'       => false,
+            'tags'            => $tags,
+        ];
+
+        try {
+            $result = $this->uploadApi->upload($file->getRealPath(), $uploadOptions);
+
+            $this->bustStorageCache($userId);
+
+            Log::info('CloudinaryService@uploadAudio: success', [
+                'user_id'   => $userId,
+                'context'   => $context,
+                'public_id' => $result['public_id'] ?? '',
+                'bytes'     => $result['bytes']     ?? 0,
+            ]);
+
+            return $this->buildUploadResponse($result);
+
+        } catch (Throwable $e) {
+            Log::error('CloudinaryService@uploadAudio: failed', [
+                'user_id' => $userId,
+                'context' => $context,
+                'error'   => $e->getMessage(),
+            ]);
+
+            throw new StorageUploadException(
+                message:  'Audio upload failed: ' . $e->getMessage(),
+                previous: $e
+            );
+        }
+    }
+
     // =========================================================================
     // PRIVATE HELPERS
     // =========================================================================
@@ -330,7 +443,7 @@ class CloudinaryService implements StorageServiceInterface
             ->where('status', 'active')
             ->where(function ($query) {
                 $query->whereNull('expires_at')
-                      ->orWhere('expires_at', '>', now());
+                    ->orWhere('expires_at', '>', now());
             })
             ->latest('created_at')
             ->first();
@@ -339,13 +452,13 @@ class CloudinaryService implements StorageServiceInterface
             return 'free';
         }
 
-        $plan = strtolower(trim($subscription->plan ?? 'free'));
-        $tier = strtolower(trim($subscription->tier ?? 'standard'));
+        $plan = strtolower(trim($subscription->plan ?? ''));
+        $tier = strtolower(trim($subscription->tier ?? ''));
 
         return match (true) {
-            $plan === 'premium' && $tier === 'premium'  => 'premium',
-            $plan === 'premium' && $tier === 'standard' => 'premium_standard',
-            default                                      => 'free',
+            $tier === 'premium'  => 'premium',
+            $tier === 'standard' => 'premium_standard',
+            default              => 'free',
         };
     }
 
@@ -374,8 +487,13 @@ class CloudinaryService implements StorageServiceInterface
                 'hd_enabled'           => false,
                 'bulk_upload_limit'    => 5,
                 'folder_prefix'        => 'free',
-                'allowed_mime_types'   => ['image/jpeg', 'image/png', 'image/webp'],
-                'transformations'      => [[
+                'allowed_mime_types'   => [
+                    'image/jpeg', 'image/png', 'image/webp', 'image/heic',
+                    'video/mp4', 'video/quicktime', 'video/webm',
+                    'audio/mpeg', 'audio/mp3', 'audio/wav', 'audio/ogg',
+                    'application/pdf',
+                ],
+                'transformations' => [[
                     'quality'      => 'auto:low',
                     'fetch_format' => 'auto',
                     'width'        => 1280,
@@ -396,7 +514,7 @@ class CloudinaryService implements StorageServiceInterface
         if (! in_array($mime, $allowed, true)) {
             throw new StorageUploadException(
                 "File type [{$mime}] is not allowed on your current plan. "
-                . 'Upgrade to premium for video support.'
+                . 'Upgrade to premium for additional file type support.'
             );
         }
     }
@@ -444,10 +562,27 @@ class CloudinaryService implements StorageServiceInterface
 
         return match (true) {
             str_starts_with($mime, 'video/') => 'video',
-            str_starts_with($mime, 'audio/') => 'video',
+            str_starts_with($mime, 'audio/') => 'video',  // Cloudinary uses 'video' for audio
             str_starts_with($mime, 'image/') => 'image',
-            default                          => 'raw',
+            default                          => 'raw',    // PDFs and other docs
         };
+    }
+
+    /**
+     * Only apply image transformations for actual image uploads.
+     * Videos, audio, and raw files (PDFs) must NOT have image transformations.
+     * Returns null for non-image files to prevent array_merge errors.
+     */
+    private function resolveTransformations(UploadedFile $file, array $tierConfig): ?array
+    {
+        $mime = (string) $file->getMimeType();
+
+        if (str_starts_with($mime, 'image/')) {
+            $transformations = $tierConfig['transformations'] ?? null;
+            return is_array($transformations) ? $transformations : null;
+        }
+
+        return null;
     }
 
     private function bustStorageCache(int $userId): void
@@ -478,58 +613,6 @@ class CloudinaryService implements StorageServiceInterface
             'duration'      => isset($data['duration']) ? (float) $data['duration'] : null,
             'created_at'    => $data['created_at']     ?? now()->toIso8601String(),
         ];
-    }
-
-     public function uploadAudio(
-        UploadedFile $file,
-        int          $userId,
-        string       $folder = 'transcripts'
-    ): array {
-        // Groq free tier limit
-        $maxBytes = 25 * 1024 * 1024;   // 25 MB
-        if ($file->getSize() > $maxBytes) {
-            throw new StorageUploadException(
-                'Audio file ' . $this->formatBytes($file->getSize()) .
-                ' exceeds the 25 MB limit (Groq free tier).'
-            );
-        }
- 
-        $env = app()->environment();
- 
-        $uploadOptions = [
-            'folder'          => "{$env}/transcripts/users/{$userId}/{$folder}",
-            'resource_type'   => 'video',   // ← Cloudinary uses 'video' for audio
-            'type'            => 'upload',
-            'use_filename'    => false,
-            'unique_filename' => true,
-            'overwrite'       => false,
-            'tags'            => ["user_{$userId}", 'audio', 'transcript'],
-        ];
- 
-        try {
-            $result = $this->uploadApi->upload($file->getRealPath(), $uploadOptions);
- 
-            $this->bustStorageCache($userId);
- 
-            Log::info('CloudinaryService@uploadAudio: success', [
-                'user_id'   => $userId,
-                'public_id' => $result['public_id'] ?? '',
-                'bytes'     => $result['bytes']     ?? 0,
-            ]);
- 
-            return $this->buildUploadResponse($result);
- 
-        } catch (Throwable $e) {
-            Log::error('CloudinaryService@uploadAudio: failed', [
-                'user_id' => $userId,
-                'error'   => $e->getMessage(),
-            ]);
- 
-            throw new StorageUploadException(
-                message:  'Audio upload failed: ' . $e->getMessage(),
-                previous: $e
-            );
-        }
     }
 
     private function formatBytes(int $bytes): string

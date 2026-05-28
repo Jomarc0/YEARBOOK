@@ -22,6 +22,7 @@
         "meilisearch/meilisearch-php": "^1.16",
         "phpmailer/phpmailer": "^7.1",
         "predis/predis": "^3.4",
+        "setasign/fpdf": "^1.8",
         "setasign/fpdi": "^2.6"
     },
     "require-dev": {

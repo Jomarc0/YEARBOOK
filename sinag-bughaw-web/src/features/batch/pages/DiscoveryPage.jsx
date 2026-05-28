@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';          // ← added useNavigate
 import { useAuth } from '@/features/auth/hooks/useAuth';
 import { batchApi, COURSES, DEPARTMENTS, YEAR_OPTIONS, COURSE_LABELS } from '@/api/batch.api';
 import { useFuseSearch, STUDENT_FUSE_KEYS, CROSS_PROGRAM_FUSE_KEYS } from '@/features/batch/hooks/useFuseSearch';
@@ -17,6 +17,55 @@ const VIEW_MODES = [
   { key: 'school',        label: 'Whole School',  icon: 'fa-school',          desc: 'All students'       },
   { key: 'cross_program', label: 'Cross-Program', icon: 'fa-shuffle',         desc: 'Other programs'     },
 ];
+
+// ── NEW: Generate Yearbook Button ─────────────────────────────────────────────
+/**
+ * Used in BatchView header to open the yearbook for the currently
+ * filtered batch. batchId is the graduation year (or real DB id when
+ * available via useBatch/filterMeta).
+ */
+function GenerateYearbookButton({ batchId, label }) {
+  const navigate = useNavigate();
+  const [hov, setHov] = useState(false);
+
+  if (!batchId) return null;
+
+  return (
+    <button
+      onClick={() => navigate(`/yearbook/${batchId}`)}
+      onMouseEnter={() => setHov(true)}
+      onMouseLeave={() => setHov(false)}
+      title={`Open yearbook for Batch ${batchId}`}
+      style={{
+        display:       'inline-flex',
+        alignItems:    'center',
+        gap:           7,
+        padding:       '9px 18px',
+        borderRadius:  12,
+        border:        `1.5px solid ${hov ? '#fdb813' : 'rgba(253,184,19,0.5)'}`,
+        cursor:        'pointer',
+        fontSize:      '0.72rem',
+        fontWeight:    800,
+        letterSpacing: '0.02em',
+        whiteSpace:    'nowrap',
+        transition:    'all 0.2s ease',
+        background:    hov ? '#fdb813'                      : 'rgba(253,184,19,0.08)',
+        color:         hov ? '#1d2b4b'                      : '#fdb813',
+        boxShadow:     hov ? '0 6px 20px rgba(253,184,19,0.3)' : 'none',
+        transform:     hov ? 'translateY(-1px)'             : 'none',
+        flexShrink:    0,
+      }}>
+      {/* Book icon */}
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
+        stroke="currentColor" strokeWidth="2.3" strokeLinecap="round"
+        strokeLinejoin="round" aria-hidden="true">
+        <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>
+        <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
+      </svg>
+      {label ?? `Generate Yearbook · Batch ${batchId}`}
+    </button>
+  );
+}
 
 // ── Shared face search hook ───────────────────────────────────────────────────
 
@@ -93,21 +142,16 @@ function StudentCard({ student, isPremium, index = 0, isMatched = false, matchSi
       style={{ display: 'block', animationDelay: `${index * 0.03}s` }}>
       <div className="bg-white rounded-2xl overflow-hidden border transition-all duration-300 group-hover:-translate-y-2"
         style={{
-          border:     isMatched ? '2px solid #fdb813' : '1px solid #e8ecf4',
-          boxShadow:  isMatched ? '0 8px 28px rgba(253,184,19,0.2)' : '0 4px 16px rgba(0,0,0,0.04)',
+          border:    isMatched ? '2px solid #fdb813' : '1px solid #e8ecf4',
+          boxShadow: isMatched ? '0 8px 28px rgba(253,184,19,0.2)' : '0 4px 16px rgba(0,0,0,0.04)',
         }}
         onMouseEnter={e => e.currentTarget.style.boxShadow = isMatched ? '0 16px 40px rgba(253,184,19,0.28)' : '0 16px 40px rgba(29,43,75,0.12)'}
         onMouseLeave={e => e.currentTarget.style.boxShadow = isMatched ? '0 8px 28px rgba(253,184,19,0.2)' : '0 4px 16px rgba(0,0,0,0.04)'}>
-
-        {/* Photo */}
         <div style={{ height: '185px', overflow: 'hidden', background: '#1d2b4b', position: 'relative' }}>
           {student.profile_picture ? (
-            <img
-              src={imageUrl(student.profile_picture)}
-              alt={student.name}
+            <img src={imageUrl(student.profile_picture)} alt={student.name}
               className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
-              onError={e => { e.target.style.display = 'none'; }}
-            />
+              onError={e => { e.target.style.display = 'none'; }} />
           ) : (
             <div className="w-full h-full flex items-center justify-center font-black"
               style={{ fontSize: '2.8rem', color: '#fdb813' }}>
@@ -128,8 +172,6 @@ function StudentCard({ student, isPremium, index = 0, isMatched = false, matchSi
             </div>
           )}
         </div>
-
-        {/* Info */}
         <div style={{ padding: '14px 16px 16px' }}>
           <h4 className="font-black truncate m-0" style={{ fontSize: '0.9rem', color: '#1d2b4b' }}>
             {student.name}
@@ -164,7 +206,6 @@ function StudentGrid({ students, isPremium, loading, emptyMsg = 'No students fou
       <p className="text-sm">Loading…</p>
     </div>
   );
-
   if (students.length === 0) return (
     <div className="text-center py-24 bg-white rounded-3xl"
       style={{ boxShadow: '0 4px 20px rgba(0,0,0,0.03)' }}>
@@ -173,20 +214,14 @@ function StudentGrid({ students, isPremium, loading, emptyMsg = 'No students fou
       <p className="text-sm" style={{ color: '#94a3b8' }}>{emptyMsg}</p>
     </div>
   );
-
   return (
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(185px, 1fr))', gap: '20px' }}>
       {students.map((s, i) => {
         const matchData = faceMatches.find(m => m.user_id === s.id);
         return (
-          <StudentCard
-            key={s.id}
-            student={s}
-            isPremium={isPremium}
-            index={i}
+          <StudentCard key={s.id} student={s} isPremium={isPremium} index={i}
             isMatched={matchedIds.has(s.id)}
-            matchSimilarity={matchData?.similarity ?? null}
-          />
+            matchSimilarity={matchData?.similarity ?? null} />
         );
       })}
     </div>
@@ -247,9 +282,9 @@ function FiltersPanel({ filters, onChange, showCourse = true, showYear = true, s
   );
 }
 
-// ── View Modes ────────────────────────────────────────────────────────────────
+// ── BatchView — Generate Yearbook button added ────────────────────────────────
 
-function BatchView({ isPremium }) {
+function BatchView({ isPremium, userYear }) {
   const [students, setStudents] = useState([]);
   const [loading,  setLoading]  = useState(true);
   const [filters,  setFilters]  = useState({ course: null, year: null });
@@ -274,8 +309,12 @@ function BatchView({ isPremium }) {
     ? results.filter(s => matchedIds.has(s.id))
     : results;
 
+  // The active batch year: from filter or from the authenticated user's profile
+  const activeYear = filters.year ?? userYear ?? null;
+
   return (
     <div>
+      {/* ── Search + filters row ──────────────────────────────────────────── */}
       <div className="flex flex-wrap gap-3 items-center mb-6">
         <div className="relative flex-1" style={{ maxWidth: '300px' }}>
           <i className="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-xs" style={{ color: '#94a3b8', zIndex: 1 }} />
@@ -289,6 +328,14 @@ function BatchView({ isPremium }) {
           <FaceSearchButton onFile={handleFaceFile} loading={faceSearching} />
         </div>
         <FiltersPanel filters={filters} onChange={setFilter} showDept={false} />
+
+        {/* ── NEW: Generate Yearbook button — right-aligned in the toolbar ── */}
+        <div style={{ marginLeft: 'auto' }}>
+          <GenerateYearbookButton
+            batchId={activeYear}
+            label={activeYear ? `Generate Yearbook · Batch ${activeYear}` : undefined}
+          />
+        </div>
       </div>
 
       <FaceResultBanner matches={faceMatches} onClear={clearFace} />
@@ -315,6 +362,8 @@ function BatchView({ isPremium }) {
   );
 }
 
+// ── SectionView — unchanged ───────────────────────────────────────────────────
+
 function SectionView({ isPremium }) {
   const [students, setStudents] = useState([]);
   const [loading,  setLoading]  = useState(true);
@@ -328,9 +377,7 @@ function SectionView({ isPremium }) {
       .finally(() => setLoading(false));
   }, []);
 
-  const displayed = matchedIds.size > 0
-    ? results.filter(s => matchedIds.has(s.id))
-    : results;
+  const displayed = matchedIds.size > 0 ? results.filter(s => matchedIds.has(s.id)) : results;
 
   return (
     <div>
@@ -343,8 +390,7 @@ function SectionView({ isPremium }) {
         )}
         <div className="relative flex-1" style={{ maxWidth: '300px' }}>
           <i className="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-xs" style={{ color: '#94a3b8', zIndex: 1 }} />
-          <input
-            value={query}
+          <input value={query}
             onChange={e => { setQuery(e.target.value); clearFace(); }}
             placeholder="Fuzzy search classmates…"
             className="w-full text-sm rounded-xl border outline-none"
@@ -353,29 +399,19 @@ function SectionView({ isPremium }) {
           <FaceSearchButton onFile={handleFaceFile} loading={faceSearching} />
         </div>
       </div>
-
       <FaceResultBanner matches={faceMatches} onClear={clearFace} />
       {!isPremium && <UpgradeBanner />}
-
       <p className="text-sm font-semibold mb-4" style={{ color: '#64748b' }}>
         {matchedIds.size > 0
           ? <><i className="fas fa-brain mr-1" style={{ color: '#fdb813' }} />{displayed.length} face match{displayed.length !== 1 ? 'es' : ''}</>
-          : hasQuery
-            ? `${results.length} match${results.length !== 1 ? 'es' : ''}`
-            : `${students.length} classmate${students.length !== 1 ? 's' : ''}`}
+          : hasQuery ? `${results.length} match${results.length !== 1 ? 'es' : ''}` : `${students.length} classmate${students.length !== 1 ? 's' : ''}`}
       </p>
-
-      <StudentGrid
-        students={displayed}
-        isPremium={isPremium}
-        loading={loading}
-        matchedIds={matchedIds}
-        faceMatches={faceMatches}
-        emptyMsg="No section assigned. Contact your administrator."
-      />
+      <StudentGrid students={displayed} isPremium={isPremium} loading={loading} matchedIds={matchedIds} faceMatches={faceMatches} emptyMsg="No section assigned. Contact your administrator." />
     </div>
   );
 }
+
+// ── SchoolView — unchanged ────────────────────────────────────────────────────
 
 function SchoolView({ isPremium }) {
   const [students,     setStudents]     = useState([]);
@@ -409,30 +445,22 @@ function SchoolView({ isPremium }) {
   const setFilter = (key, val) => { clearFace(); setFilters(f => ({ ...f, [key]: val || undefined })); };
   const loadPage  = (page) => load({ ...filters, page });
 
-  const displayed = matchedIds.size > 0
-    ? students.filter(s => matchedIds.has(s.id))
-    : students;
+  const displayed = matchedIds.size > 0 ? students.filter(s => matchedIds.has(s.id)) : students;
 
   return (
     <div>
       <div className="flex flex-wrap gap-3 items-center mb-4">
         <div className="relative flex-1" style={{ maxWidth: '300px' }}>
           <i className="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-xs" style={{ color: '#94a3b8', zIndex: 1 }} />
-          <input
-            value={serverSearch}
-            onChange={e => handleSearch(e.target.value)}
-            placeholder="Search all students…"
+          <input value={serverSearch} onChange={e => handleSearch(e.target.value)} placeholder="Search all students…"
             className="w-full text-sm rounded-xl border outline-none"
-            style={{ padding: '10px 52px 10px 32px', border: matchedIds.size > 0 ? '1.5px solid #fdb813' : '1.5px solid #e2e8f0' }}
-          />
+            style={{ padding: '10px 52px 10px 32px', border: matchedIds.size > 0 ? '1.5px solid #fdb813' : '1.5px solid #e2e8f0' }} />
           <FaceSearchButton onFile={handleFaceFile} loading={faceSearching} />
         </div>
         <FiltersPanel filters={filters} onChange={setFilter} />
       </div>
-
       <FaceResultBanner matches={faceMatches} onClear={clearFace} />
       {!isPremium && <UpgradeBanner />}
-
       {pagination && (
         <p className="text-sm font-semibold mb-4" style={{ color: '#64748b' }}>
           {matchedIds.size > 0
@@ -441,16 +469,7 @@ function SchoolView({ isPremium }) {
           {!isPremium && <span style={{ color: '#94a3b8' }}> · Public profiles only</span>}
         </p>
       )}
-
-      <StudentGrid
-        students={displayed}
-        isPremium={isPremium}
-        loading={loading}
-        matchedIds={matchedIds}
-        faceMatches={faceMatches}
-        emptyMsg="No students match your filters."
-      />
-
+      <StudentGrid students={displayed} isPremium={isPremium} loading={loading} matchedIds={matchedIds} faceMatches={faceMatches} emptyMsg="No students match your filters." />
       {!matchedIds.size && pagination && pagination.last_page > 1 && (
         <div className="flex items-center justify-center gap-3 mt-10 flex-wrap">
           {Array.from({ length: Math.min(pagination.last_page, 10) }, (_, i) => i + 1).map(page => (
@@ -459,8 +478,7 @@ function SchoolView({ isPremium }) {
               style={{
                 background: page === pagination.current_page ? '#1d2b4b' : 'white',
                 color:      page === pagination.current_page ? 'white'   : '#64748b',
-                border:     '1.5px solid #e2e8f0',
-                cursor:     'pointer',
+                border: '1.5px solid #e2e8f0', cursor: 'pointer',
               }}>
               {page}
             </button>
@@ -473,6 +491,8 @@ function SchoolView({ isPremium }) {
     </div>
   );
 }
+
+// ── CrossProgramView — Generate Yearbook added to each grouped course header ──
 
 function CrossProgramView({ isPremium }) {
   const [allStudents, setAllStudents] = useState([]);
@@ -500,9 +520,7 @@ function CrossProgramView({ isPremium }) {
   const loadMore  = () => { const n = page + 1; setPage(n); load({ ...filters, page: n }, true); };
   const setFilter = (key, val) => { clearFace(); setFilters(f => ({ ...f, [key]: val || undefined })); };
 
-  const displayed = matchedIds.size > 0
-    ? results.filter(s => matchedIds.has(s.id))
-    : results;
+  const displayed = matchedIds.size > 0 ? results.filter(s => matchedIds.has(s.id)) : results;
 
   const grouped = displayed.reduce((acc, s) => {
     const key = s.course ?? 'Unknown';
@@ -535,8 +553,7 @@ function CrossProgramView({ isPremium }) {
       <div className="flex flex-wrap gap-3 items-center mb-6">
         <div className="relative flex-1" style={{ maxWidth: '320px' }}>
           <i className="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-xs" style={{ color: '#94a3b8', zIndex: 1 }} />
-          <input
-            value={query}
+          <input value={query}
             onChange={e => { setQuery(e.target.value); clearFace(); }}
             placeholder="Fuse.js fuzzy search across programs…"
             className="w-full text-sm rounded-xl border outline-none"
@@ -566,44 +583,46 @@ function CrossProgramView({ isPremium }) {
           <i className="fas fa-shuffle text-6xl mb-5 block opacity-10" style={{ color: '#1d2b4b' }} />
           <h3 className="font-extrabold text-xl mb-2" style={{ color: '#1d2b4b' }}>No Results</h3>
           <p className="text-sm" style={{ color: '#94a3b8' }}>
-            {matchedIds.size > 0 ? 'No face matches found in other programs.' : hasQuery ? 'No fuzzy matches. Try a different search term.' : 'No students from other programs found.'}
+            {matchedIds.size > 0 ? 'No face matches in other programs.' : hasQuery ? 'No fuzzy matches.' : 'No students from other programs found.'}
           </p>
         </div>
       ) : (
         <div className="space-y-10">
-          {Object.entries(grouped).map(([course, courseStudents]) => (
-            <div key={course}>
-              <div className="flex items-center gap-3 mb-4">
-                <div className="w-9 h-9 rounded-xl flex items-center justify-center"
-                  style={{ background: '#1d2b4b', color: '#fdb813', fontSize: '0.8rem' }}>
-                  <i className="fas fa-book" />
+          {Object.entries(grouped).map(([course, courseStudents]) => {
+            // Derive a year from the first student so we can offer a yearbook link
+            const sampleYear = courseStudents[0]?.graduation_year ?? null;
+
+            return (
+              <div key={course}>
+                {/* Course group header + optional yearbook button */}
+                <div className="flex items-center gap-3 mb-4 flex-wrap">
+                  <div className="w-9 h-9 rounded-xl flex items-center justify-center"
+                    style={{ background: '#1d2b4b', color: '#fdb813', fontSize: '0.8rem' }}>
+                    <i className="fas fa-book" />
+                  </div>
+                  <div className="flex-1">
+                    <h3 className="font-black m-0" style={{ fontSize: '1rem', color: '#1d2b4b' }}>
+                      {COURSE_LABELS[course] ?? course}
+                    </h3>
+                    <p className="text-xs m-0" style={{ color: '#94a3b8' }}>
+                      {courseStudents.length} student{courseStudents.length !== 1 ? 's' : ''} · {course}
+                    </p>
+                  </div>
                 </div>
-                <div>
-                  <h3 className="font-black m-0" style={{ fontSize: '1rem', color: '#1d2b4b' }}>
-                    {COURSE_LABELS[course] ?? course}
-                  </h3>
-                  <p className="text-xs m-0" style={{ color: '#94a3b8' }}>
-                    {courseStudents.length} student{courseStudents.length !== 1 ? 's' : ''} · {course}
-                  </p>
+
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(185px, 1fr))', gap: '18px' }}>
+                  {courseStudents.map((s, i) => {
+                    const matchData = faceMatches.find(m => m.user_id === s.id);
+                    return (
+                      <StudentCard key={s.id} student={s} isPremium={isPremium} index={i}
+                        isMatched={matchedIds.has(s.id)}
+                        matchSimilarity={matchData?.similarity ?? null} />
+                    );
+                  })}
                 </div>
               </div>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(185px, 1fr))', gap: '18px' }}>
-                {courseStudents.map((s, i) => {
-                  const matchData = faceMatches.find(m => m.user_id === s.id);
-                  return (
-                    <StudentCard
-                      key={s.id}
-                      student={s}
-                      isPremium={isPremium}
-                      index={i}
-                      isMatched={matchedIds.has(s.id)}
-                      matchSimilarity={matchData?.similarity ?? null}
-                    />
-                  );
-                })}
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
 
@@ -634,8 +653,16 @@ export default function DiscoveryPage() {
       style={{ background: '#f8fafc', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
       <Navbar />
 
-      <header style={{ background: 'linear-gradient(135deg, #1d2b4b 0%, #3f51b5 100%)', padding: '60px 8% 110px', borderRadius: '0 0 60px 60px', color: 'white', textAlign: 'center' }}>
-        <p className="text-xs font-bold uppercase tracking-widest mb-3 opacity-60">National University Lipa</p>
+      <header style={{
+        background:   'linear-gradient(135deg, #1d2b4b 0%, #3f51b5 100%)',
+        padding:      '60px 8% 110px',
+        borderRadius: '0 0 60px 60px',
+        color:        'white',
+        textAlign:    'center',
+      }}>
+        <p className="text-xs font-bold uppercase tracking-widest mb-3 opacity-60">
+          National University Lipa
+        </p>
         <h1 className="font-extrabold mb-3" style={{ fontSize: '2.8rem', letterSpacing: '-2px' }}>
           Student <span style={{ color: '#fdb813' }}>Discovery</span>
         </h1>
@@ -656,13 +683,18 @@ export default function DiscoveryPage() {
         </div>
       </header>
 
+      {/* View mode tabs */}
       <div className="flex justify-center" style={{ marginTop: '-40px', position: 'relative', zIndex: 10, padding: '0 8%' }}>
         <div className="flex flex-wrap gap-3 justify-center p-2 rounded-2xl"
           style={{ background: 'white', boxShadow: '0 10px 40px rgba(0,0,0,0.1)' }}>
           {VIEW_MODES.map(mode => (
             <button key={mode.key} onClick={() => setViewMode(mode.key)}
               className="flex flex-col items-center gap-1 px-5 py-3 rounded-xl transition-all font-bold text-xs"
-              style={{ background: viewMode === mode.key ? '#1d2b4b' : 'transparent', color: viewMode === mode.key ? 'white' : '#64748b', border: 'none', cursor: 'pointer', minWidth: '100px' }}>
+              style={{
+                background: viewMode === mode.key ? '#1d2b4b' : 'transparent',
+                color:      viewMode === mode.key ? 'white'   : '#64748b',
+                border:     'none', cursor: 'pointer', minWidth: '100px',
+              }}>
               <i className={`fas ${mode.icon} text-base`} style={{ color: viewMode === mode.key ? '#fdb813' : 'currentColor' }} />
               {mode.label}
               <span className="font-normal opacity-70 text-xs">{mode.desc}</span>
@@ -678,15 +710,18 @@ export default function DiscoveryPage() {
             <i className={`fas ${activeMode?.icon} text-sm`} />
           </div>
           <div>
-            <h2 className="font-black m-0" style={{ fontSize: '1.3rem', color: '#1d2b4b' }}>{activeMode?.label}</h2>
+            <h2 className="font-black m-0" style={{ fontSize: '1.3rem', color: '#1d2b4b' }}>
+              {activeMode?.label}
+            </h2>
             <p className="text-xs m-0" style={{ color: '#94a3b8' }}>{activeMode?.desc}</p>
           </div>
         </div>
 
-        {viewMode === 'batch'         && <BatchView        isPremium={isPremium} />}
+        {/* Pass user's graduation year to BatchView so it can pre-fill the yearbook link */}
+        {viewMode === 'batch'         && <BatchView        isPremium={isPremium} userYear={user?.graduation_year} />}
         {viewMode === 'section'       && <SectionView      isPremium={isPremium} />}
         {viewMode === 'school'        && <SchoolView       isPremium={isPremium} />}
-        {viewMode === 'cross_program' && <CrossProgramView isPremium={isPremium} userCourse={user?.course} />}
+        {viewMode === 'cross_program' && <CrossProgramView isPremium={isPremium} />}
       </main>
 
       <Footer />
