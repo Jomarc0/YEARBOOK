@@ -2,8 +2,9 @@
 
 namespace App\Jobs\AI;
 
+use App\Contracts\AnalyzablePhoto;
 use App\Contracts\FaceRecognition;
-use App\Models\Photo;
+use App\Events\PhotoFacesAnalyzed;
 use App\Models\TaggedPhoto;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -21,30 +22,37 @@ class AnalyzePhotoFaces implements ShouldQueue
     public int $timeout = 300;
 
     public function __construct(
-        public readonly Photo $photo,
-        public readonly bool  $force = false,
+        public readonly AnalyzablePhoto $photo,
+        public readonly bool            $force = false,
     ) {}
 
     public function handle(FaceRecognition $faceRecognition): void
     {
+        /** @var \Illuminate\Database\Eloquent\Model&AnalyzablePhoto $photo */
+        $photo = $this->photo;
+
         if (! $faceRecognition->isEnabled()) {
-            Log::info("Face recognition disabled – skipping Photo #{$this->photo->id}");
+            Log::info("Face recognition disabled – skipping Photo #{$photo->getKey()}");
             return;
         }
 
-        if (! $this->force && $this->photo->taggedPhotos()->exists()) {
-            Log::info("Photo #{$this->photo->id} already tagged – skipping");
+        if (! $this->force && $photo->taggedPhotos()->exists()) {
+            Log::info("Photo #{$photo->getKey()} already tagged – skipping");
             return;
         }
 
         try {
-            $result    = $faceRecognition->analyzePhoto('public', $this->photo->file_path);
+            $filePath = $photo->getAttribute('file_path');
+
+            $faceRecognition->indexPhoto($filePath, 'photo:' . $photo->getKey());
+
+            $result    = $faceRecognition->analyzePhoto('public', $filePath);
             $matches   = $result['matches']    ?? [];
             $faceCount = $result['face_count'] ?? 0;
 
             if (! empty($matches)) {
                 if ($this->force) {
-                    $this->photo->taggedPhotos()->where('source', 'rekognition')->delete();
+                    $photo->taggedPhotos()->where('source', 'rekognition')->delete();
                 }
 
                 foreach ($matches as $match) {
@@ -53,7 +61,7 @@ class AnalyzePhotoFaces implements ShouldQueue
 
                     TaggedPhoto::updateOrCreate(
                         [
-                            'photo_id' => $this->photo->id,
+                            'photo_id' => $photo->getKey(),
                             'user_id'  => (int) $userId,
                             'source'   => 'rekognition',
                         ],
@@ -66,31 +74,19 @@ class AnalyzePhotoFaces implements ShouldQueue
                 }
             }
 
-            $this->photo->update([
-                'ai_metadata' => array_merge($this->photo->ai_metadata ?? [], [
-                    'status'      => 'analyzed',
-                    'provider'    => $result['provider'] ?? 'aws-rekognition',
-                    'face_count'  => $faceCount,
-                    'analyzed_at' => now()->toIso8601String(),
-                ]),
+            $photo->markAiDone([
+                'provider'    => $result['provider'] ?? 'aws-rekognition',
+                'face_count'  => $faceCount,
+                'analyzed_at' => now()->toIso8601String(),
             ]);
 
-            Log::info("Photo #{$this->photo->id}: {$faceCount} face(s), " . count($matches) . " match(es).");
+            Log::info("Photo #{$photo->getKey()}: {$faceCount} face(s), " . count($matches) . ' match(es).');
 
             event(new \App\Events\PhotoFacesAnalyzed($this->photo, $result));
 
         } catch (\Throwable $e) {
-            Log::error("AnalyzePhotoFaces failed for Photo #{$this->photo->id}: {$e->getMessage()}");
-
-            $this->photo->update([
-                'ai_metadata' => array_merge($this->photo->ai_metadata ?? [], [
-                    'status'      => 'error',
-                    'error'       => $e->getMessage(),
-                    'analyzed_at' => now()->toIso8601String(),
-                ]),
-            ]);
-
-            // Don't re-throw — let the upload succeed even if AI analysis fails
+            Log::error("AnalyzePhotoFaces failed for Photo #{$photo->getKey()}: {$e->getMessage()}");
+            $photo->markAiError($e->getMessage());
         }
     }
 }

@@ -10,6 +10,7 @@ use Illuminate\Notifications\Notifiable;
 use Laravel\Sanctum\HasApiTokens;
 use Laravel\Scout\Searchable;
 use Illuminate\Database\Eloquent\Relations\HasOne;
+use App\Models\Achievement;
 
 class User extends Authenticatable
 {
@@ -62,6 +63,11 @@ class User extends Authenticatable
     public function subscriptions(): HasMany
     {
         return $this->hasMany(Subscription::class);
+    }
+    
+    public function achievements(): HasMany
+    {
+        return $this->hasMany(Achievement::class);
     }
 
     /** Convenience: the current active, non-expired subscription. */

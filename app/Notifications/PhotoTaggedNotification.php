@@ -1,59 +1,76 @@
 <?php
 
-declare(strict_types=1);
-
 namespace App\Notifications;
 
-use App\Models\Photo;
+use App\Jobs\Notification\SendTaggedEmail;
+use App\Jobs\SendPushNotification;
 use App\Models\User;
 use Illuminate\Bus\Queueable;
-use Illuminate\Contracts\Queue\ShouldQueue;
-use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Notifications\Notification;
 
-/**
- * PhotoTaggedNotification
- *
- * Fired when a user is tagged in a photo (on upload or post edit).
- * Delivered via database (bell icon) + email (queued).
- */
-class PhotoTaggedNotification extends Notification implements ShouldQueue
+class PhotoTaggedNotification extends Notification
 {
     use Queueable;
 
     public function __construct(
-        private readonly Photo $photo,
-        private readonly User  $tagger,
+        public User    $tagger,       // the person who did the tagging
+        public string  $photoUrl,     // thumbnail / direct URL of the photo
+        public ?string $actionUrl = null,  // deep-link into the app / web view
     ) {}
+
+    // -------------------------------------------------------------------------
+    // Channels
+    // -------------------------------------------------------------------------
 
     public function via(object $notifiable): array
     {
-        return ['database', 'mail'];
+        // We handle delivery ourselves via jobs, so no built-in channels needed.
+        return [];
     }
 
-    public function toDatabase(object $notifiable): array
-    {
-        return [
-            'type'          => 'photo_tagged',
-            'message'       => "{$this->tagger->name} tagged you in a photo.",
-            'photo_id'      => $this->photo->id,
-            'photo_url'     => $this->photo->file_path,
-            'tagger_id'     => $this->tagger->id,
-            'tagger_name'   => $this->tagger->name,
-            'tagger_avatar' => $this->tagger->profile_picture,
-            'album_id'      => $this->photo->album_id,
-            'url'           => "/profile/{$notifiable->id}?tab=tagged",
-        ];
-    }
+    // -------------------------------------------------------------------------
+    // Dispatch helpers — call this instead of Notification::send()
+    // -------------------------------------------------------------------------
 
-    public function toMail(object $notifiable): MailMessage
-    {
-        return (new MailMessage)
-            ->subject("{$this->tagger->name} tagged you in a photo — Sinag-Bughaw")
-            ->greeting("Hello, {$notifiable->name}!")
-            ->line("{$this->tagger->name} tagged you in a photo on Sinag-Bughaw.")
-            ->action('View Tagged Photo', url("/profile/{$notifiable->id}?tab=tagged"))
-            ->line('You can remove the tag anytime from your profile.')
-            ->salutation('The Sinag-Bughaw Team');
+    /**
+     * Dispatch both push + email for a tagged user.
+     *
+     * Usage:
+     *   PhotoTaggedNotification::dispatchFor($taggedUser, $tagger, $photoUrl, $actionUrl);
+     */
+    public static function dispatchFor(
+        User    $tagged,
+        User    $tagger,
+        string  $photoUrl,
+        ?string $actionUrl = null,
+    ): void {
+        $taggerName = $tagger->name ?? 'Someone';
+
+        // 1. In-app + FCM push notification
+        SendPushNotification::dispatch(
+            userId: $tagged->id,
+            title:  '📸 You were tagged in a photo!',
+            body:   "{$taggerName} tagged you in a photo.",
+            data:   [
+                'type'       => 'photo_tagged',
+                'tagger_id'  => (string) $tagger->id,
+                'tagger_name'=> $taggerName,
+                'photo_url'  => $photoUrl,
+                'action_url' => $actionUrl ?? '',
+            ],
+            type: 'photo_tagged',
+        );
+
+        // 2. Email notification (only if the user has an email)
+        if ($tagged->email) {
+            SendTaggedEmail::dispatch(
+                email:       $tagged->email,
+                name:        $tagged->name ?? $tagged->email,
+                taggedBy:    $taggerName,
+                photoUrl:    $photoUrl,
+                actionUrl:   $actionUrl,
+                actionLabel: 'View Photo',
+            );
+        }
     }
 }

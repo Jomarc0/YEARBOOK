@@ -2,7 +2,7 @@
 
 namespace App\Events;
 
-use App\Models\Photo;
+use App\Contracts\AnalyzablePhoto;
 use Illuminate\Broadcasting\Channel;
 use Illuminate\Broadcasting\InteractsWithSockets;
 use Illuminate\Contracts\Broadcasting\ShouldBroadcast;
@@ -31,11 +31,14 @@ class PhotoFacesAnalyzed implements ShouldBroadcast
     public string $status;
     public array  $matches;
 
+    /**
+     * @param \Illuminate\Database\Eloquent\Model&AnalyzablePhoto $photo
+     */
     public function __construct(
-        public readonly Photo $photo,
+        public readonly AnalyzablePhoto $photo,
         array $result,
     ) {
-        $this->photo_id   = $photo->id;
+        $this->photo_id   = $photo->getKey();
         $this->face_count = $result['face_count'] ?? 0;
         $this->status     = $result['status']     ?? 'analyzed';
         $this->matches    = collect($result['matches'] ?? [])

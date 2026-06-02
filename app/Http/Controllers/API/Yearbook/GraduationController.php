@@ -4,11 +4,15 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\API\Yearbook;
 
+use App\Contracts\FaceRecognition;
 use App\Contracts\StorageServiceInterface;
 use App\Exceptions\StorageLimitExceededException;
 use App\Exceptions\StorageUploadException;
+use App\Http\Controllers\API\Concerns\AutoTranscribesVideo;
 use App\Http\Controllers\Controller;
+use App\Jobs\AI\AnalyzePhotoFaces;
 use App\Models\Album;
+use App\Models\Transcript;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -18,8 +22,11 @@ use Throwable;
 
 class GraduationController extends Controller
 {
+    use AutoTranscribesVideo;
+
     public function __construct(
-        private readonly StorageServiceInterface $storage
+        private readonly StorageServiceInterface $storage,
+        private readonly FaceRecognition $faceRecognition,
     ) {}
 
     // ─────────────────────────────────────────────────────────────────────
@@ -40,25 +47,19 @@ class GraduationController extends Controller
 
             return response()->json(['data' => $albums]);
         } catch (Throwable $e) {
-            Log::error('[Graduation] index failed', [
-                'message' => $e->getMessage(),
-                'trace'   => $e->getTraceAsString(),
-            ]);
+            Log::error('[Graduation] index failed', ['message' => $e->getMessage(), 'trace' => $e->getTraceAsString()]);
             return response()->json(['message' => 'Failed to load graduation content.'], 500);
         }
     }
 
     // ─────────────────────────────────────────────────────────────────────
-    // SHOW (single album)
+    // SHOW
     // ─────────────────────────────────────────────────────────────────────
 
     public function show(int $id): JsonResponse
     {
         try {
-            $album = Album::where('type', 'graduation')
-                ->with('photos')
-                ->findOrFail($id);
-
+            $album = Album::where('type', 'graduation')->with('photos')->findOrFail($id);
             return response()->json($album);
         } catch (Throwable $e) {
             Log::error('[Graduation] show failed', ['id' => $id, 'message' => $e->getMessage()]);
@@ -97,7 +98,7 @@ class GraduationController extends Controller
     }
 
     // ─────────────────────────────────────────────────────────────────────
-    // UPLOAD PHOTO  (images — for photos / toga / archive)
+    // UPLOAD PHOTO
     // ─────────────────────────────────────────────────────────────────────
 
     public function uploadPhoto(Request $request): JsonResponse
@@ -116,20 +117,19 @@ class GraduationController extends Controller
             DB::transaction(function () use ($request, $album, $userId, &$saved) {
                 foreach ($request->file('photos') as $file) {
                     $result = $this->storage->uploadPhoto(
-                        $file,
-                        $userId,
-                        'graduation/photos',
+                        $file, $userId, 'graduation/photos',
                         ['resource_type' => 'image']
                     );
 
-                    // FIX: pass array directly — Photo model casts ai_metadata to array
-                    // DO NOT use json_encode() here or it will be double-encoded
-                    // causing array_merge() to fail in AnalyzePhotoFaces job
                     $photo = $album->photos()->create([
                         'file_path'            => $result['secure_url'],
-                        'cloudinary_public_id'  => $result['public_id'] ?? null,
-                        'ai_metadata'           => ['resource_type' => 'image'],
+                        'cloudinary_public_id' => $result['public_id'] ?? null,
+                        'ai_metadata'          => ['resource_type' => 'image'],
                     ]);
+
+                    // ✅ Auto-index and analyze faces after upload
+                    AnalyzePhotoFaces::dispatch($photo)->delay(now()->addSeconds(3));
+
                     $saved[] = $photo;
                 }
             });
@@ -148,7 +148,7 @@ class GraduationController extends Controller
     }
 
     // ─────────────────────────────────────────────────────────────────────
-    // UPLOAD VIDEO  (graduation ceremony / other videos)
+    // UPLOAD VIDEO
     // ─────────────────────────────────────────────────────────────────────
 
     public function uploadVideo(Request $request): JsonResponse
@@ -162,18 +162,10 @@ class GraduationController extends Controller
             ]);
 
             $userId = Auth::id() ?? 1;
-            $file   = $request->file('video');
 
             $result = $this->storage->uploadPhoto(
-                $file,
-                $userId,
-                'graduation/videos',
-                [
-                    'resource_type'   => 'video',
-                    'skip_mime_check' => true,
-                    'skip_size_check' => true,
-                    'chunk_size'      => 6000000,
-                ]
+                $request->file('video'), $userId, 'graduation/videos',
+                ['resource_type' => 'video', 'skip_mime_check' => true, 'skip_size_check' => true, 'chunk_size' => 6000000]
             );
 
             $album = Album::create([
@@ -186,6 +178,13 @@ class GraduationController extends Controller
                 'media_url'            => $result['secure_url'],
                 'cloudinary_public_id' => $result['public_id'] ?? null,
             ]);
+
+            $this->maybeQueueTranscription(
+                uploadResult: $result,
+                title:        $request->title,
+                userId:       $userId,
+                albumId:      $album->id,
+            );
 
             return response()->json(['data' => $album, 'message' => 'Video uploaded successfully.'], 201);
 
@@ -201,7 +200,7 @@ class GraduationController extends Controller
     }
 
     // ─────────────────────────────────────────────────────────────────────
-    // UPLOAD PROGRAM  (PDF)
+    // UPLOAD PROGRAM
     // ─────────────────────────────────────────────────────────────────────
 
     public function uploadProgram(Request $request): JsonResponse
@@ -215,16 +214,10 @@ class GraduationController extends Controller
             ]);
 
             $userId = Auth::id() ?? 1;
-            $file   = $request->file('program');
 
             $result = $this->storage->uploadPhoto(
-                $file,
-                $userId,
-                'graduation/programs',
-                [
-                    'resource_type'   => 'raw',
-                    'skip_mime_check' => true,
-                ]
+                $request->file('program'), $userId, 'graduation/programs',
+                ['resource_type' => 'raw', 'skip_mime_check' => true]
             );
 
             $album = Album::create([
@@ -252,7 +245,7 @@ class GraduationController extends Controller
     }
 
     // ─────────────────────────────────────────────────────────────────────
-    // UPLOAD INVITATION  (PDF or image)
+    // UPLOAD INVITATION
     // ─────────────────────────────────────────────────────────────────────
 
     public function uploadInvitation(Request $request): JsonResponse
@@ -276,13 +269,8 @@ class GraduationController extends Controller
             };
 
             $result = $this->storage->uploadPhoto(
-                $file,
-                $userId,
-                'graduation/invitations',
-                [
-                    'resource_type'   => $resourceType,
-                    'skip_mime_check' => true,
-                ]
+                $file, $userId, 'graduation/invitations',
+                ['resource_type' => $resourceType, 'skip_mime_check' => true]
             );
 
             $album = Album::create([
@@ -310,7 +298,7 @@ class GraduationController extends Controller
     }
 
     // ─────────────────────────────────────────────────────────────────────
-    // UPLOAD SONG  (audio OR video)
+    // UPLOAD SONG
     // ─────────────────────────────────────────────────────────────────────
 
     public function uploadSong(Request $request): JsonResponse
@@ -324,16 +312,10 @@ class GraduationController extends Controller
             ]);
 
             $userId = Auth::id() ?? 1;
-            $file   = $request->file('audio');
 
             $result = $this->storage->uploadPhoto(
-                $file,
-                $userId,
-                'graduation/songs',
-                [
-                    'resource_type'   => 'video',   // Cloudinary uses video for all audio
-                    'skip_mime_check' => true,
-                ]
+                $request->file('audio'), $userId, 'graduation/songs',
+                ['resource_type' => 'video', 'skip_mime_check' => true]
             );
 
             $album = Album::create([
@@ -346,6 +328,13 @@ class GraduationController extends Controller
                 'media_url'            => $result['secure_url'],
                 'cloudinary_public_id' => $result['public_id'] ?? null,
             ]);
+
+            $this->maybeQueueTranscription(
+                uploadResult: $result,
+                title:        $request->title,
+                userId:       $userId,
+                albumId:      $album->id,
+            );
 
             return response()->json(['data' => $album, 'message' => 'Song/video uploaded successfully.'], 201);
 
@@ -361,7 +350,7 @@ class GraduationController extends Controller
     }
 
     // ─────────────────────────────────────────────────────────────────────
-    // UPLOAD MASS VIDEO  (Baccalaureate)
+    // UPLOAD MASS VIDEO
     // ─────────────────────────────────────────────────────────────────────
 
     public function uploadMass(Request $request): JsonResponse
@@ -375,18 +364,10 @@ class GraduationController extends Controller
             ]);
 
             $userId = Auth::id() ?? 1;
-            $file   = $request->file('video');
 
             $result = $this->storage->uploadPhoto(
-                $file,
-                $userId,
-                'graduation/mass',
-                [
-                    'resource_type'   => 'video',
-                    'skip_mime_check' => true,
-                    'skip_size_check' => true,
-                    'chunk_size'      => 6000000,
-                ]
+                $request->file('video'), $userId, 'graduation/mass',
+                ['resource_type' => 'video', 'skip_mime_check' => true, 'skip_size_check' => true, 'chunk_size' => 6000000]
             );
 
             $album = Album::create([
@@ -399,6 +380,13 @@ class GraduationController extends Controller
                 'media_url'            => $result['secure_url'],
                 'cloudinary_public_id' => $result['public_id'] ?? null,
             ]);
+
+            $this->maybeQueueTranscription(
+                uploadResult: $result,
+                title:        $request->title,
+                userId:       $userId,
+                albumId:      $album->id,
+            );
 
             return response()->json(['data' => $album, 'message' => 'Mass video uploaded successfully.'], 201);
 
@@ -421,8 +409,31 @@ class GraduationController extends Controller
     {
         try {
             $album = Album::where('type', 'graduation')->findOrFail($id);
+
+            $transcript = Transcript::where('album_id', $album->id)->first();
+            if ($transcript) {
+                if ($transcript->public_id) {
+                    try {
+                        $this->storage->deletePhoto($transcript->public_id, 'video');
+                    } catch (Throwable $e) {
+                        Log::warning("[Graduation] destroy: could not delete Cloudinary asset [{$transcript->public_id}]: {$e->getMessage()}");
+                    }
+                }
+                $transcript->delete();
+            }
+
+            if ($album->cloudinary_public_id) {
+                try {
+                    $this->storage->deletePhoto($album->cloudinary_public_id, 'video');
+                } catch (Throwable $e) {
+                    Log::warning("[Graduation] destroy: could not delete album Cloudinary asset [{$album->cloudinary_public_id}]: {$e->getMessage()}");
+                }
+            }
+
             $album->delete();
+
             return response()->json(['message' => 'Album deleted successfully.']);
+
         } catch (Throwable $e) {
             Log::error('[Graduation] destroy failed', ['id' => $id, 'message' => $e->getMessage()]);
             return response()->json(['message' => 'Failed to delete album.'], 500);

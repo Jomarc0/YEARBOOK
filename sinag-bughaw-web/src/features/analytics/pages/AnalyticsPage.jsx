@@ -1,5 +1,3 @@
-// src/features/analytics/pages/AnalyticsPage.jsx
-
 import { useEffect, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import Navbar from '@/components/layout/Navbar';
@@ -12,162 +10,117 @@ import {
   trackTopViewedClick,
   trackAnalyticsTabSwitch,
 } from '../../../utils/ga4';
+import { 
+  Flame, 
+  Eye, 
+  BarChart2, 
+  Users, 
+  Image as ImageIcon, 
+  MessageSquare, 
+  Lock, 
+  ChevronRight, 
+  AlertCircle 
+} from 'lucide-react';
 
 const TABS = [
-  { id: 'trending',   label: 'Trending',    icon: 'fas fa-fire'      },
-  { id: 'top-viewed', label: 'Most Viewed', icon: 'fas fa-eye'       },
-  { id: 'my-stats',   label: 'My Stats',    icon: 'fas fa-chart-bar' },
+  { id: 'trending',   label: 'Trending',    icon: Flame     },
+  { id: 'top-viewed', label: 'Most Viewed', icon: Eye       },
+  { id: 'my-stats',   label: 'My Stats',    icon: BarChart2 },
 ];
 
-// ── Avatar ────────────────────────────────────────────────────────────────────
 function Avatar({ src, name, size = 44 }) {
   const initials = name?.split(' ').slice(0, 2).map(w => w[0]).join('').toUpperCase();
   if (src) {
     return (
-      <img src={src} alt={name} style={{
-        width: size, height: size, borderRadius: '50%',
-        objectFit: 'cover', flexShrink: 0,
-        border: '2px solid rgba(253,184,19,0.3)',
-      }} />
+      <img src={src} alt={name} style={{ width: size, height: size }} className="rounded-full object-cover shrink-0 border-2 border-yellow-400/30" />
     );
   }
   return (
-    <div style={{
-      width: size, height: size, borderRadius: '50%', flexShrink: 0,
-      background: '#1d2b4b', color: '#fdb813',
-      display: 'flex', alignItems: 'center', justifyContent: 'center',
-      fontSize: size * 0.35, fontWeight: 800,
-      border: '2px solid rgba(253,184,19,0.3)',
-    }}>
+    <div style={{ width: size, height: size, fontSize: size * 0.35 }} className="rounded-full shrink-0 bg-slate-900 text-yellow-400 flex items-center justify-center font-extrabold border-2 border-yellow-400/30">
       {initials}
     </div>
   );
 }
 
-// ── Stat Card ─────────────────────────────────────────────────────────────────
-function StatCard({ label, value, icon, color }) {
+function StatCard({ label, value, icon: Icon, colorClass, bgClass }) {
   return (
-    <div style={{
-      background: '#fff', borderRadius: 16, padding: '20px',
-      border: '1.5px solid #e8edf5',
-      boxShadow: '0 2px 12px rgba(29,43,75,0.06)',
-      display: 'flex', flexDirection: 'column', gap: 12,
-    }}>
-      <div style={{
-        width: 40, height: 40, borderRadius: 10,
-        background: color + '18',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-      }}>
-        <i className={icon} style={{ color, fontSize: 16 }} />
+    <div className="bg-white rounded-2xl p-5 border-[1.5px] border-slate-100 shadow-[0_2px_12px_rgba(29,43,75,0.06)] flex flex-col gap-3">
+      <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${bgClass}`}>
+        <Icon className={`w-5 h-5 ${colorClass}`} />
       </div>
       <div>
-        <div style={{ fontSize: 24, fontWeight: 800, color: '#1d2b4b', lineHeight: 1 }}>
+        <div className="text-2xl font-extrabold text-slate-900 leading-none">
           {value ?? '—'}
         </div>
-        <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 4 }}>{label}</div>
+        <div className="text-xs text-slate-400 mt-1">{label}</div>
       </div>
     </div>
   );
 }
 
-// ── Skeleton ──────────────────────────────────────────────────────────────────
 function Skeleton({ height = 16, radius = 8 }) {
   return (
-    <div style={{
-      height, borderRadius: radius,
-      background: 'linear-gradient(90deg, #f1f5f9 25%, #e2e8f0 50%, #f1f5f9 75%)',
-      backgroundSize: '200% 100%',
-      animation: 'shimmer 1.5s infinite',
-    }} />
+    <div 
+      style={{ height, borderRadius: radius }} 
+      className="bg-[linear-gradient(90deg,#f1f5f9_25%,#e2e8f0_50%,#f1f5f9_75%)] bg-[length:200%_100%] animate-pulse" 
+    />
   );
 }
 
-// ── Alumni Row Card ───────────────────────────────────────────────────────────
 function AlumniCard({ person, rank, badge, onClick }) {
-  const [hovered, setHovered] = useState(false);
   const medals = ['🥇', '🥈', '🥉'];
 
   return (
     <button
       onClick={onClick}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-      style={{
-        display: 'flex', alignItems: 'center', gap: 14,
-        width: '100%', textAlign: 'left',
-        background: hovered ? '#f8faff' : '#fff',
-        border: hovered ? '1.5px solid #3f51b5' : '1.5px solid #e8edf5',
-        borderRadius: 16, padding: '14px 18px',
-        cursor: 'pointer', transition: 'all 0.2s',
-        boxShadow: hovered ? '0 8px 24px rgba(63,81,181,0.1)' : '0 2px 8px rgba(29,43,75,0.04)',
-      }}
+      className="group flex items-center gap-3.5 w-full text-left bg-white hover:bg-indigo-50 border-[1.5px] border-slate-100 hover:border-indigo-600 rounded-2xl p-3.5 cursor-pointer transition-all duration-200 shadow-[0_2px_8px_rgba(29,43,75,0.04)] hover:shadow-[0_8px_24px_rgba(63,81,181,0.1)]"
     >
-      {/* Rank */}
-      <span style={{
-        width: 28, flexShrink: 0, textAlign: 'center',
-        fontSize: rank <= 3 ? 20 : 13, fontWeight: 700,
-        color: rank <= 3 ? '#fdb813' : '#94a3b8',
-      }}>
+      <span className={`w-7 shrink-0 text-center font-bold ${rank <= 3 ? 'text-[20px] text-yellow-400' : 'text-[13px] text-slate-400'}`}>
         {rank <= 3 ? medals[rank - 1] : `#${rank}`}
       </span>
 
       <Avatar src={person.profile_picture} name={person.name} size={44} />
 
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <p style={{
-          margin: 0, fontSize: 14, fontWeight: 700, color: '#1d2b4b',
-          whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-        }}>
+      <div className="flex-1 min-w-0">
+        <p className="m-0 text-sm font-bold text-slate-900 whitespace-nowrap overflow-hidden text-ellipsis">
           {person.name}
         </p>
-        <p style={{ margin: '2px 0 0', fontSize: 12, color: '#94a3b8' }}>
+        <p className="mt-0.5 text-xs text-slate-400">
           {person.course} · {person.batch || person.graduation_year}
         </p>
       </div>
 
-      <div style={{ textAlign: 'right', flexShrink: 0 }}>
-        <p style={{ margin: 0, fontSize: 15, fontWeight: 800, color: '#1d2b4b' }}>
+      <div className="text-right shrink-0">
+        <p className="m-0 text-[15px] font-extrabold text-slate-900">
           {(badge ?? 0).toLocaleString()}
         </p>
-        <p style={{ margin: 0, fontSize: 11, color: '#94a3b8' }}>views</p>
+        <p className="m-0 text-[11px] text-slate-400">views</p>
       </div>
     </button>
   );
 }
 
-// ── Spark Bars ────────────────────────────────────────────────────────────────
 function SparkBars({ labels, values }) {
   if (!values?.length) return null;
   const max = Math.max(...values, 1);
   const step = Math.max(1, Math.floor(labels.length / 6));
 
   return (
-    <div style={{
-      background: '#fff', borderRadius: 16, padding: 20,
-      border: '1.5px solid #e8edf5',
-      boxShadow: '0 2px 8px rgba(29,43,75,0.04)',
-      marginTop: 16,
-    }}>
-      <p style={{ margin: '0 0 16px', fontSize: 13, fontWeight: 600, color: '#1d2b4b' }}>
+    <div className="bg-white rounded-2xl p-5 border-[1.5px] border-slate-100 shadow-[0_2px_8px_rgba(29,43,75,0.04)] mt-4">
+      <p className="m-0 mb-4 text-[13px] font-semibold text-slate-900">
         Profile views — last {labels.length} days
       </p>
-      <div style={{ display: 'flex', alignItems: 'flex-end', gap: 3, height: 80 }}>
+      <div className="flex items-end gap-[3px] h-20">
         {values.map((v, i) => (
-          <div key={labels[i]} title={`${labels[i]}: ${v} views`} style={{
-            flex: 1,
-            height: `${Math.max(4, (v / max) * 80)}px`,
-            background: 'linear-gradient(to top, #3f51b5, #7986cb)',
-            borderRadius: '3px 3px 0 0',
-            transition: 'height 0.3s',
-          }} />
+          <div key={labels[i]} title={`${labels[i]}: ${v} views`} 
+            className="flex-1 rounded-t-[3px] transition-[height] duration-300 bg-gradient-to-t from-indigo-600 to-indigo-400"
+            style={{ height: `${Math.max(4, (v / max) * 80)}px` }} 
+          />
         ))}
       </div>
-      <div style={{ display: 'flex', marginTop: 6 }}>
+      <div className="flex mt-1.5">
         {labels.map((l, i) => (
-          <span key={l} style={{
-            flex: 1, textAlign: 'center',
-            fontSize: 10, color: '#94a3b8',
-          }}>
+          <span key={l} className="flex-1 text-center text-[10px] text-slate-400">
             {i % step === 0 ? l.slice(5) : ''}
           </span>
         ))}
@@ -176,8 +129,19 @@ function SparkBars({ labels, values }) {
   );
 }
 
-// ── Main Page ─────────────────────────────────────────────────────────────────
-export default function AnalyticsPage({ isAuthenticated = false, currentUser = null }) {
+function EmptyState({ icon: Icon, colorClass, bgClass, title, desc }) {
+  return (
+    <div className="text-center py-[60px] px-10 bg-white rounded-2xl border-[1.5px] border-slate-100 shadow-[0_2px_12px_rgba(29,43,75,0.06)]">
+      <div className={`w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-4 ${bgClass}`}>
+        <Icon className={`w-6 h-6 ${colorClass}`} />
+      </div>
+      <h3 className="text-base font-extrabold text-slate-900 m-0 mb-2">{title}</h3>
+      <p className="text-[13px] text-slate-400 m-0">{desc}</p>
+    </div>
+  );
+}
+
+export default function AnalyticsPage({ isAuthenticated = true, currentUser = null }) {
   const navigate = useNavigate();
   const location = useLocation();
   const [tab, setTab] = useState('trending');
@@ -207,75 +171,55 @@ export default function AnalyticsPage({ isAuthenticated = false, currentUser = n
   }
 
   return (
-    <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', background: '#f4f7fe' }}>
-      <style>{`
-        @keyframes shimmer { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
-        @keyframes fadeInUp { from{opacity:0;transform:translateY(16px)} to{opacity:1;transform:translateY(0)} }
-      `}</style>
-
+    <div className="min-h-screen flex flex-col bg-slate-50 font-sans">
       <Navbar />
 
       {/* ── Hero ── */}
-      <div style={{
-        background: 'linear-gradient(135deg, #0e1628 0%, #1d2b4b 50%, #2d3f6e 100%)',
-        padding: '48px 40px 56px',
-        position: 'relative', overflow: 'hidden',
-      }}>
+      <div className="bg-gradient-to-br from-slate-900 via-indigo-950 to-indigo-900 pt-12 px-10 pb-14 relative overflow-hidden">
         {/* Decorative blobs */}
-        <div style={{ position:'absolute', top:-80, right:-80, width:360, height:360, borderRadius:'50%', background:'rgba(63,81,181,0.12)', pointerEvents:'none' }} />
-        <div style={{ position:'absolute', bottom:-60, left:-40, width:280, height:280, borderRadius:'50%', background:'rgba(253,184,19,0.06)', pointerEvents:'none' }} />
+        <div className="absolute -top-20 -right-20 w-[360px] h-[360px] rounded-full bg-indigo-500/10 pointer-events-none blur-3xl" />
+        <div className="absolute -bottom-16 -left-10 w-[280px] h-[280px] rounded-full bg-yellow-400/5 pointer-events-none blur-2xl" />
 
-        <div style={{ maxWidth: 900, margin: '0 auto', position: 'relative', zIndex: 1 }}>
-
+        <div className="max-w-[900px] mx-auto relative z-10">
           {/* Breadcrumb */}
-          <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:20 }}>
-            <span style={{ fontSize:12, color:'rgba(255,255,255,0.4)', fontWeight:600, letterSpacing:1, textTransform:'uppercase' }}>Sinag-Bughaw</span>
-            <i className="fas fa-chevron-right" style={{ fontSize:9, color:'rgba(255,255,255,0.25)' }} />
-            <span style={{ fontSize:12, color:'#fdb813', fontWeight:700, letterSpacing:1, textTransform:'uppercase' }}>Analytics</span>
+          <div className="flex items-center gap-2 mb-5">
+            <span className="text-xs text-white/40 font-semibold tracking-widest uppercase">Sinag-Bughaw</span>
+            <ChevronRight className="w-3 h-3 text-white/25" />
+            <span className="text-xs text-yellow-400 font-bold tracking-widest uppercase">Analytics</span>
           </div>
 
-          <div style={{ display:'flex', alignItems:'flex-end', justifyContent:'space-between', gap:24, flexWrap:'wrap' }}>
+          <div className="flex items-end justify-between gap-6 flex-wrap">
             <div>
               {/* Badge */}
-              <div style={{
-                display:'inline-flex', alignItems:'center', gap:8, marginBottom:16,
-                background:'rgba(253,184,19,0.12)', border:'1px solid rgba(253,184,19,0.3)',
-                borderRadius:50, padding:'6px 16px',
-              }}>
-                <img src="/images/NU_logo.png" alt="NU" style={{ width:16, height:16, objectFit:'contain' }} />
-                <span style={{ fontSize:11, fontWeight:700, color:'#fdb813', letterSpacing:2, textTransform:'uppercase' }}>
+              <div className="inline-flex items-center gap-2 mb-4 bg-yellow-400/10 border border-yellow-400/30 rounded-full px-4 py-1.5">
+                <span className="text-[11px] font-bold text-yellow-400 tracking-widest uppercase">
                   National University Lipa
                 </span>
               </div>
 
-              <h1 style={{ margin:'0 0 10px', fontSize:'clamp(1.8rem,4vw,2.6rem)', fontWeight:900, color:'#fff', letterSpacing:-1, lineHeight:1.1 }}>
-                Alumni <span style={{ color:'#fdb813' }}>Analytics</span>
+              <h1 className="m-0 mb-2.5 text-[clamp(1.8rem,4vw,2.6rem)] font-black text-white tracking-tight leading-[1.1]">
+                Alumni <span className="text-yellow-400">Analytics</span>
               </h1>
-              <p style={{ margin:0, fontSize:15, color:'rgba(255,255,255,0.55)', lineHeight:1.7 }}>
+              <p className="m-0 text-[15px] text-white/55 leading-[1.7] max-w-md">
                 Discover trending profiles and engagement stats across your batch.
               </p>
             </div>
 
             {/* Summary stat pills in hero */}
             {!summary.loading && summary.data && (
-              <div style={{ display:'flex', gap:12, flexWrap:'wrap' }}>
+              <div className="flex gap-3 flex-wrap">
                 {[
-                  { label:'Alumni',   value: summary.data.total_students, icon:'fas fa-users' },
-                  { label:'Photos',   value: summary.data.total_photos,   icon:'fas fa-images' },
-                  { label:'Messages', value: summary.data.total_messages, icon:'fas fa-comment-dots' },
+                  { label:'Alumni',   value: summary.data.total_students, icon: Users },
+                  { label:'Photos',   value: summary.data.total_photos,   icon: ImageIcon },
+                  { label:'Messages', value: summary.data.total_messages, icon: MessageSquare },
                 ].map(s => (
-                  <div key={s.label} style={{
-                    background:'rgba(255,255,255,0.08)', backdropFilter:'blur(8px)',
-                    border:'1px solid rgba(255,255,255,0.12)',
-                    borderRadius:14, padding:'12px 18px',
-                    display:'flex', alignItems:'center', gap:10,
-                  }}>
-                    <i className={s.icon} style={{ color:'#fdb813', fontSize:14 }} />
+                  <div key={s.label} className="bg-white/10 backdrop-blur-md border border-white/10 rounded-2xl px-4 py-3 flex items-center gap-2.5">
+                    <s.icon className="w-4 h-4 text-yellow-400" />
                     <div>
-                      <div style={{ fontSize:18, fontWeight:800, color:'#fff', lineHeight:1 }}>
+                      <div className="text-lg font-extrabold text-white leading-none">
                         {s.value?.toLocaleString() ?? '—'}
                       </div>
-                      <div style={{ fontSize:11, color:'rgba(255,255,255,0.45)', marginTop:2 }}>{s.label}</div>
+                      <div className="text-[11px] text-white/45 mt-1">{s.label}</div>
                     </div>
                   </div>
                 ))}
@@ -286,15 +230,8 @@ export default function AnalyticsPage({ isAuthenticated = false, currentUser = n
       </div>
 
       {/* ── Tabs bar ── */}
-      <div style={{
-        background: '#fff', borderBottom: '1px solid #e8edf5',
-        boxShadow: '0 2px 12px rgba(29,43,75,0.06)',
-        position: 'sticky', top: 64, zIndex: 100,
-      }}>
-        <div style={{
-          maxWidth: 900, margin: '0 auto', padding: '0 40px',
-          display: 'flex', gap: 4,
-        }}>
+      <div className="bg-white border-b border-slate-200 shadow-[0_2px_12px_rgba(29,43,75,0.06)] sticky top-16 z-40">
+        <div className="max-w-[900px] mx-auto px-10 flex gap-1">
           {TABS.map(t => {
             const active   = t.id === tab;
             const disabled = t.id === 'my-stats' && !isAuthenticated;
@@ -303,25 +240,14 @@ export default function AnalyticsPage({ isAuthenticated = false, currentUser = n
                 key={t.id}
                 onClick={() => !disabled && handleTabSwitch(t.id)}
                 title={disabled ? 'Sign in to view your personal stats' : undefined}
-                style={{
-                  display: 'flex', alignItems: 'center', gap: 8,
-                  padding: '16px 20px',
-                  background: 'none', border: 'none',
-                  borderBottom: active ? '2px solid #1d2b4b' : '2px solid transparent',
-                  cursor: disabled ? 'not-allowed' : 'pointer',
-                  fontSize: 13, fontWeight: active ? 700 : 500,
-                  color: disabled ? '#cbd5e1' : active ? '#1d2b4b' : '#64748b',
-                  opacity: disabled ? 0.5 : 1,
-                  transition: 'all 0.15s', whiteSpace: 'nowrap',
-                }}
-                onMouseEnter={e => { if (!active && !disabled) e.currentTarget.style.color = '#1d2b4b'; }}
-                onMouseLeave={e => { if (!active && !disabled) e.currentTarget.style.color = '#64748b'; }}
+                className={`flex items-center gap-2 px-5 py-4 bg-transparent border-b-2 text-[13px] whitespace-nowrap transition-all duration-150
+                  ${disabled ? 'cursor-not-allowed opacity-50 text-slate-300 border-transparent' : 'cursor-pointer'}
+                  ${active ? 'border-slate-900 text-slate-900 font-bold' : 'border-transparent text-slate-500 font-medium hover:text-slate-900'}
+                `}
               >
-                <i className={t.icon} style={{ fontSize: 13 }} />
+                <t.icon className="w-4 h-4" />
                 {t.label}
-                {t.id === 'my-stats' && !isAuthenticated && (
-                  <i className="fas fa-lock" style={{ fontSize: 10, marginLeft: 2 }} />
-                )}
+                {t.id === 'my-stats' && !isAuthenticated && <Lock className="w-3 h-3 ml-0.5" />}
               </button>
             );
           })}
@@ -329,32 +255,30 @@ export default function AnalyticsPage({ isAuthenticated = false, currentUser = n
       </div>
 
       {/* ── Content ── */}
-      <main style={{ flex: 1, maxWidth: 900, margin: '0 auto', width: '100%', padding: '36px 40px 60px', boxSizing: 'border-box' }}>
+      <main className="flex-1 max-w-[900px] mx-auto w-full px-10 py-9 pb-16 box-border">
 
         {/* ── Trending Tab ── */}
         {tab === 'trending' && (
-          <section style={{ animation: 'fadeInUp 0.3s ease' }}>
-            <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:20 }}>
-              <div>
-                <h2 style={{ margin:0, fontSize:18, fontWeight:800, color:'#1d2b4b' }}>
-                  🔥 Trending this week
-                </h2>
-                <p style={{ margin:'4px 0 0', fontSize:13, color:'#94a3b8' }}>
-                  Profiles with the most views in the last 7 days
-                </p>
-              </div>
+          <section className="fade-in-up">
+            <div className="mb-5">
+              <h2 className="m-0 text-lg font-extrabold text-slate-900 flex items-center gap-2">
+                <Flame className="w-5 h-5 text-orange-500" /> Trending this week
+              </h2>
+              <p className="mt-1 text-[13px] text-slate-400">
+                Profiles with the most views in the last 7 days
+              </p>
             </div>
 
             {trending.loading ? (
-              <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
+              <div className="flex flex-col gap-2.5">
                 {[...Array(6)].map((_, i) => <Skeleton key={i} height={74} radius={16} />)}
               </div>
             ) : trending.error ? (
-              <EmptyState icon="fas fa-exclamation-circle" color="#ef4444" title="Failed to load" desc="Could not load trending alumni. Please try again." />
+              <EmptyState icon={AlertCircle} colorClass="text-red-500" bgClass="bg-red-500/10" title="Failed to load" desc="Could not load trending alumni. Please try again." />
             ) : trending.data.length === 0 ? (
-              <EmptyState icon="fas fa-fire" color="#f97316" title="No trending data yet" desc="Check back later — views are tracked weekly." />
+              <EmptyState icon={Flame} colorClass="text-orange-500" bgClass="bg-orange-500/10" title="No trending data yet" desc="Check back later — views are tracked weekly." />
             ) : (
-              <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
+              <div className="flex flex-col gap-2.5">
                 {trending.data.map((person, i) => (
                   <AlumniCard key={person.id} person={person} rank={i + 1} badge={person.views_this_week} onClick={() => handleTrendingClick(person)} />
                 ))}
@@ -365,26 +289,26 @@ export default function AnalyticsPage({ isAuthenticated = false, currentUser = n
 
         {/* ── Most Viewed Tab ── */}
         {tab === 'top-viewed' && (
-          <section style={{ animation: 'fadeInUp 0.3s ease' }}>
-            <div style={{ marginBottom: 20 }}>
-              <h2 style={{ margin:0, fontSize:18, fontWeight:800, color:'#1d2b4b' }}>
-                👁️ Most viewed all-time
+          <section className="fade-in-up">
+            <div className="mb-5">
+              <h2 className="m-0 text-lg font-extrabold text-slate-900 flex items-center gap-2">
+                <Eye className="w-5 h-5 text-indigo-500" /> Most viewed all-time
               </h2>
-              <p style={{ margin:'4px 0 0', fontSize:13, color:'#94a3b8' }}>
+              <p className="mt-1 text-[13px] text-slate-400">
                 Alumni with the highest total profile view counts
               </p>
             </div>
 
             {topViewed.loading ? (
-              <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
+              <div className="flex flex-col gap-2.5">
                 {[...Array(6)].map((_, i) => <Skeleton key={i} height={74} radius={16} />)}
               </div>
             ) : topViewed.error ? (
-              <EmptyState icon="fas fa-exclamation-circle" color="#ef4444" title="Failed to load" desc="Could not load top viewed alumni. Please try again." />
+              <EmptyState icon={AlertCircle} colorClass="text-red-500" bgClass="bg-red-500/10" title="Failed to load" desc="Could not load top viewed alumni. Please try again." />
             ) : topViewed.data.length === 0 ? (
-              <EmptyState icon="fas fa-eye" color="#64748b" title="No data yet" desc="Profile views will appear here once alumni start getting visits." />
+              <EmptyState icon={Eye} colorClass="text-slate-500" bgClass="bg-slate-500/10" title="No data yet" desc="Profile views will appear here once alumni start getting visits." />
             ) : (
-              <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
+              <div className="flex flex-col gap-2.5">
                 {topViewed.data.map((person, i) => (
                   <AlumniCard key={person.id} person={person} rank={i + 1} badge={person.views} onClick={() => handleTopViewedClick(person)} />
                 ))}
@@ -395,30 +319,30 @@ export default function AnalyticsPage({ isAuthenticated = false, currentUser = n
 
         {/* ── My Stats Tab ── */}
         {tab === 'my-stats' && isAuthenticated && (
-          <section style={{ animation: 'fadeInUp 0.3s ease' }}>
-            <div style={{ marginBottom: 20 }}>
-              <h2 style={{ margin:0, fontSize:18, fontWeight:800, color:'#1d2b4b' }}>
-                📊 Your engagement stats
+          <section className="fade-in-up">
+            <div className="mb-5">
+              <h2 className="m-0 text-lg font-extrabold text-slate-900 flex items-center gap-2">
+                <BarChart2 className="w-5 h-5 text-emerald-500" /> Your engagement stats
               </h2>
-              <p style={{ margin:'4px 0 0', fontSize:13, color:'#94a3b8' }}>
+              <p className="mt-1 text-[13px] text-slate-400">
                 How your profile is performing among your batchmates
               </p>
             </div>
 
             {myStats.loading ? (
-              <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(160px,1fr))', gap:14 }}>
+              <div className="grid grid-cols-[repeat(auto-fit,minmax(160px,1fr))] gap-3.5">
                 {[...Array(5)].map((_, i) => <Skeleton key={i} height={100} radius={16} />)}
               </div>
             ) : myStats.error ? (
-              <EmptyState icon="fas fa-exclamation-circle" color="#ef4444" title="Failed to load" desc="Could not load your stats. Please try again." />
+              <EmptyState icon={AlertCircle} colorClass="text-red-500" bgClass="bg-red-500/10" title="Failed to load" desc="Could not load your stats. Please try again." />
             ) : (
               <>
-                <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(160px,1fr))', gap:14, marginBottom:8 }}>
-                  <StatCard label="Profile views"     value={myStats.data?.profile_views?.toLocaleString()}     icon="fas fa-eye"           color="#3f51b5" />
-                  <StatCard label="Photos uploaded"   value={myStats.data?.photos_uploaded?.toLocaleString()}   icon="fas fa-images"        color="#22c55e" />
-                  <StatCard label="Times tagged"      value={myStats.data?.times_tagged?.toLocaleString()}      icon="fas fa-user-tag"      color="#8b5cf6" />
-                  <StatCard label="Messages sent"     value={myStats.data?.messages_sent?.toLocaleString()}     icon="fas fa-paper-plane"   color="#f97316" />
-                  <StatCard label="Messages received" value={myStats.data?.messages_received?.toLocaleString()} icon="fas fa-comment-dots"  color="#db2777" />
+                <div className="grid grid-cols-[repeat(auto-fit,minmax(160px,1fr))] gap-3.5 mb-2">
+                  <StatCard label="Profile views"     value={myStats.data?.profile_views?.toLocaleString()}     icon={Eye}           colorClass="text-indigo-600" bgClass="bg-indigo-600/10" />
+                  <StatCard label="Photos uploaded"   value={myStats.data?.photos_uploaded?.toLocaleString()}   icon={ImageIcon}     colorClass="text-emerald-500" bgClass="bg-emerald-500/10" />
+                  <StatCard label="Times tagged"      value={myStats.data?.times_tagged?.toLocaleString()}      icon={Users}         colorClass="text-purple-500" bgClass="bg-purple-500/10" />
+                  <StatCard label="Messages sent"     value={myStats.data?.messages_sent?.toLocaleString()}     icon={MessageSquare} colorClass="text-orange-500" bgClass="bg-orange-500/10" />
+                  <StatCard label="Messages received" value={myStats.data?.messages_received?.toLocaleString()} icon={MessageSquare} colorClass="text-pink-500" bgClass="bg-pink-500/10" />
                 </div>
 
                 {trend.loading ? (
@@ -431,11 +355,11 @@ export default function AnalyticsPage({ isAuthenticated = false, currentUser = n
 
             {/* Top Batchmates */}
             {batchmates.data?.top_profiles?.length > 0 && (
-              <div style={{ marginTop: 32 }}>
-                <h3 style={{ margin:'0 0 16px', fontSize:16, fontWeight:800, color:'#1d2b4b' }}>
+              <div className="mt-8">
+                <h3 className="m-0 mb-4 text-base font-extrabold text-slate-900">
                   Top batchmates
                 </h3>
-                <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
+                <div className="flex flex-col gap-2.5">
                   {batchmates.data.top_profiles.map((person, i) => (
                     <AlumniCard
                       key={person.id} person={person} rank={i + 1} badge={person.views}
@@ -450,29 +374,6 @@ export default function AnalyticsPage({ isAuthenticated = false, currentUser = n
       </main>
 
       <Footer />
-    </div>
-  );
-}
-
-// ── Empty state helper ────────────────────────────────────────────────────────
-function EmptyState({ icon, color, title, desc }) {
-  return (
-    <div style={{
-      textAlign: 'center', padding: '60px 40px',
-      background: '#fff', borderRadius: 20,
-      border: '1.5px solid #e8edf5',
-      boxShadow: '0 2px 12px rgba(29,43,75,0.06)',
-    }}>
-      <div style={{
-        width: 64, height: 64, borderRadius: 16,
-        background: color + '12',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        margin: '0 auto 16px',
-      }}>
-        <i className={icon} style={{ fontSize: 24, color }} />
-      </div>
-      <h3 style={{ fontSize: 16, fontWeight: 800, color: '#1d2b4b', margin: '0 0 8px' }}>{title}</h3>
-      <p style={{ fontSize: 13, color: '#94a3b8', margin: 0 }}>{desc}</p>
     </div>
   );
 }

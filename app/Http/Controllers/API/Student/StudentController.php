@@ -8,6 +8,7 @@ use App\Jobs\AI\ProcessFaceIndexing;
 use App\Models\AuditLog;
 use App\Models\TaggedPhoto;
 use App\Models\User;
+use App\Notifications\PhotoTaggedNotification;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
@@ -58,7 +59,6 @@ class StudentController extends Controller
         $isSubscribed = $request->attributes->get('viewer_is_subscribed', false);
         $isOwner      = $request->user()?->id === $id;
 
-        // Owner always gets full data
         if ($isOwner) {
             return response()->json(array_merge(
                 $student->toArray(),
@@ -66,7 +66,6 @@ class StudentController extends Controller
             ));
         }
 
-        // Free-tier viewers: return only name + profile picture
         if (! $isSubscribed) {
             return response()->json([
                 'id'                   => $student->id,
@@ -77,7 +76,6 @@ class StudentController extends Controller
             ]);
         }
 
-        // Subscribed viewer: full profile
         return response()->json(array_merge(
             $student->toArray(),
             ['is_subscribed_viewer' => true]
@@ -91,14 +89,12 @@ class StudentController extends Controller
 
         $user = $request->user();
 
-        // ✅ Delete old Cloudinary photo if it exists
         if ($user->profile_picture_public_id) {
             try {
                 $this->storage->deletePhoto($user->profile_picture_public_id, 'image');
             } catch (\Throwable) {}
         }
 
-        // ✅ Delete old local file if it still exists (legacy cleanup)
         if (
             $user->profile_picture &&
             !str_starts_with($user->profile_picture, 'http') &&
@@ -107,7 +103,6 @@ class StudentController extends Controller
             Storage::disk('public')->delete($user->profile_picture);
         }
 
-        // ✅ Upload to Cloudinary
         $result = $this->storage->uploadPhoto(
             file:   $request->file('photo'),
             userId: $user->id,
@@ -163,13 +158,13 @@ class StudentController extends Controller
     // ── Achievements ──────────────────────────────────────────────────────────
     public function achievements(Request $request, int $id): JsonResponse
     {
-
         $isSubscribed = $request->attributes->get('viewer_is_subscribed', false);
         $isOwner      = $request->user()?->id === $id;
 
         if (! $isOwner && ! $isSubscribed) {
             return response()->json(['success' => false, 'restricted' => true, 'data' => []], 200);
         }
+
         $user = User::findOrFail($id);
 
         $achievements = $user->achievements()
@@ -199,6 +194,7 @@ class StudentController extends Controller
         if (! $isOwner && ! $isSubscribed) {
             return response()->json(['success' => false, 'restricted' => true, 'data' => []], 200);
         }
+
         $user = User::findOrFail($id);
 
         $photos = $user->taggedPhotos()
@@ -240,6 +236,16 @@ class StudentController extends Controller
             'caption'     => $request->caption,
             'status'      => 'approved',
         ]);
+
+        // Notify the tagged user via push + email
+        $taggedUser = User::find($request->user_id);
+        if ($taggedUser) {
+            PhotoTaggedNotification::dispatchFor(
+                tagged:   $taggedUser,
+                tagger:   $request->user(),
+                photoUrl: $photo->photo_url,
+            );
+        }
 
         return response()->json([
             'success' => true,

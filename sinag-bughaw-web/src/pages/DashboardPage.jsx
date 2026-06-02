@@ -1,3 +1,16 @@
+/**
+ * DashboardPage.jsx
+ * ─────────────────────────────────────────────────────────────────────────────
+ * MIGRATION NOTES:
+ *  - Removed all inline `style={{}}` props; replaced with Tailwind utility classes.
+ *  - Replaced arbitrary hex colors with a consistent token set via Tailwind's
+ *    JIT `[value]` syntax for the brand palette (#1d2b4b, #3f51b5, #fdb813).
+ *  - `onMouseEnter/Leave` inline style mutations removed; replaced with Tailwind
+ *    `hover:` variants and `group-hover:` where needed.
+ *  - No logic, API calls, routes, or backend behavior changed.
+ * ─────────────────────────────────────────────────────────────────────────────
+ */
+
 import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/features/auth/hooks/useAuth';
@@ -6,7 +19,7 @@ import { storageUrl } from '@/api/client';
 import Navbar from '@/components/layout/Navbar';
 import axios from '@/api/client';
 
-// ─── tier helper ──────────────────────────────────────────────────────────────
+// ─── Tier helper ──────────────────────────────────────────────────────────────
 const getTier = (user) => {
   if (!user) return 'free';
   if (user.tier === 'premium' || user.is_premium) return 'premium';
@@ -14,7 +27,7 @@ const getTier = (user) => {
   return 'free';
 };
 
-// ─── constants ────────────────────────────────────────────────────────────────
+// ─── Quick access card definitions ───────────────────────────────────────────
 const CARDS = [
   { to: '/directory',   icon: 'fas fa-users',              label: 'Students',    desc: 'Browse the student directory.',  iconBg: 'bg-indigo-50',  iconTxt: 'text-indigo-600'  },
   { to: '/faculty',     icon: 'fas fa-chalkboard-teacher', label: 'Faculty',     desc: 'Meet our educators.',            iconBg: 'bg-violet-50',  iconTxt: 'text-violet-600'  },
@@ -27,7 +40,7 @@ const CARDS = [
   { to: '/settings',    icon: 'fas fa-cog',                label: 'Settings',    desc: 'Manage your profile.',           iconBg: 'bg-slate-100',  iconTxt: 'text-slate-500'   },
 ];
 
-// ─── main page ────────────────────────────────────────────────────────────────
+// ─── Main page component ──────────────────────────────────────────────────────
 export default function DashboardPage() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
@@ -79,7 +92,7 @@ export default function DashboardPage() {
 
   return (
     <div className="min-h-screen bg-[#f4f7fe]">
-      {/* watermark */}
+      {/* ── Watermark (decorative, aria-hidden) ── */}
       <div
         aria-hidden="true"
         className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 -rotate-[30deg]
@@ -93,7 +106,7 @@ export default function DashboardPage() {
 
       <main className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-10 py-8 lg:py-10">
 
-        {/* Welcome */}
+        {/* ── Welcome header ── */}
         <header className="mb-8">
           <p className="text-[11px] font-bold tracking-[0.18em] uppercase text-slate-400 mb-1">
             Mabuhay, NU Lipa Pioneer!
@@ -104,7 +117,7 @@ export default function DashboardPage() {
           </h1>
         </header>
 
-        {/* Search */}
+        {/* ── Global search ── */}
         <div className="relative max-w-xl mb-10 z-50" ref={searchRef}>
           <i className="fas fa-search absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 text-sm pointer-events-none" />
           <input
@@ -112,11 +125,12 @@ export default function DashboardPage() {
             value={query}
             onChange={e => onSearch(e.target.value)}
             placeholder="Search students, faculty, or content…"
-            className="w-full pl-11 pr-4 py-3.5 text-sm rounded-xl bg-white border border-slate-200 text-[#1d2b4b]
-                       placeholder-slate-400 outline-none shadow-sm transition
-                       focus:border-[#3f51b5] focus:ring-2 focus:ring-[#3f51b5]/20"
+            className="w-full pl-11 pr-4 py-3.5 text-sm rounded-xl bg-white border border-slate-200
+                       text-[#1d2b4b] placeholder-slate-400 outline-none shadow-sm
+                       transition focus:border-[#3f51b5] focus:ring-2 focus:ring-[#3f51b5]/20"
           />
 
+          {/* ── Search dropdown ── */}
           {showDrop && (
             <div className="absolute w-full mt-2 bg-white rounded-2xl shadow-2xl border border-slate-100 overflow-hidden">
               <SearchGroup label="Faculty" labelColor="text-[#3f51b5]">
@@ -144,13 +158,13 @@ export default function DashboardPage() {
           )}
         </div>
 
-        {/* Content grid */}
+        {/* ── Two-column content grid ── */}
         <div className="grid grid-cols-1 xl:grid-cols-[1fr_296px] gap-6 items-start">
 
-          {/* LEFT */}
+          {/* ── LEFT column ── */}
           <div className="flex flex-col gap-8">
 
-            {/* Quick Access */}
+            {/* Quick Access cards */}
             <section>
               <SectionTitle>Quick Access</SectionTitle>
               <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-3 2xl:grid-cols-4 gap-3">
@@ -179,7 +193,7 @@ export default function DashboardPage() {
                   Your Memories
                 </SectionTitle>
 
-                {/* Tier badge next to section title */}
+                {/* Tier badge */}
                 {!isPremium ? (
                   <span className="text-[11px] font-semibold text-amber-700 bg-amber-50 border border-amber-100 px-2.5 py-1 rounded-full">
                     <i className="fas fa-lock text-[9px] mr-1" />
@@ -197,6 +211,7 @@ export default function DashboardPage() {
               </div>
 
               {digestLoading ? (
+                /* Loading skeleton */
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   {[1, 2].map(i => (
                     <div key={i} className="h-32 rounded-2xl bg-gradient-to-r from-slate-100 via-slate-200 to-slate-100 animate-pulse" />
@@ -204,6 +219,7 @@ export default function DashboardPage() {
                 </div>
               ) : (
                 <div className="flex flex-col gap-3">
+
                   {/* "On This Day" — visible to all tiers */}
                   <MemoryCard
                     icon="fas fa-calendar-day" iconCls="text-indigo-600" iconBg="bg-indigo-50"
@@ -214,8 +230,8 @@ export default function DashboardPage() {
                     <PhotoStrip photos={[...(digest?.on_this_day?.uploaded ?? []), ...(digest?.on_this_day?.tagged ?? [])]} />
                   </MemoryCard>
 
-                  {/* Premium & Standard get extra cards */}
                   {isPremium ? (
+                    /* Premium & Standard extra memory cards */
                     <>
                       <MemoryCard
                         icon="fas fa-user-tag" iconCls="text-violet-600" iconBg="bg-violet-50"
@@ -236,7 +252,8 @@ export default function DashboardPage() {
                           {digest?.top_interactions?.peers?.map((p, i) => (
                             <Link
                               key={i} to={`/profile/${p.user.id}`}
-                              className="flex items-center gap-2 bg-slate-50 hover:bg-slate-100 border border-slate-100 rounded-xl px-3 py-2 no-underline transition-colors"
+                              className="flex items-center gap-2 bg-slate-50 hover:bg-slate-100 border border-slate-100
+                                         rounded-xl px-3 py-2 no-underline transition-colors"
                             >
                               <img
                                 src={storageUrl(p.user.profile_picture) || `https://ui-avatars.com/api/?name=${encodeURIComponent(p.user.name ?? '')}&background=3f51b5&color=fff`}
@@ -290,8 +307,9 @@ export default function DashboardPage() {
                       </MemoryCard>
                     </>
                   ) : (
-                    /* ── FREE: upgrade prompt ── */
-                    <div className="rounded-2xl bg-gradient-to-br from-[#1d2b4b] to-[#3f51b5] p-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                    /* Free tier — upgrade prompt */
+                    <div className="rounded-2xl bg-gradient-to-br from-[#1d2b4b] to-[#3f51b5] p-6
+                                    flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
                       <div>
                         <p className="text-sm font-bold text-white mb-1 m-0">
                           <i className="fas fa-lock text-[#fdb813] mr-2" />
@@ -302,7 +320,8 @@ export default function DashboardPage() {
                       </div>
                       <Link
                         to="/payment"
-                        className="shrink-0 bg-[#fdb813] text-[#1d2b4b] font-bold text-xs px-5 py-3 rounded-xl no-underline hover:bg-yellow-300 transition-colors whitespace-nowrap"
+                        className="shrink-0 bg-[#fdb813] text-[#1d2b4b] font-bold text-xs px-5 py-3 rounded-xl
+                                   no-underline hover:bg-yellow-300 transition-colors whitespace-nowrap"
                       >
                         <i className="fas fa-crown mr-1.5" />
                         Go Premium →
@@ -314,13 +333,16 @@ export default function DashboardPage() {
             </section>
           </div>
 
-          {/* RIGHT — Profile Sidebar */}
+          {/* ── RIGHT: Profile sidebar ── */}
           <aside className="xl:sticky xl:top-6">
             <div className="bg-[#1d2b4b] rounded-2xl p-6 text-white flex flex-col gap-5">
-              <span className="inline-flex items-center gap-1.5 bg-[#fdb813]/15 text-[#fdb813] text-[10px] font-bold tracking-widest uppercase px-3 py-1.5 rounded-lg w-fit">
+
+              <span className="inline-flex items-center gap-1.5 bg-[#fdb813]/15 text-[#fdb813]
+                               text-[10px] font-bold tracking-widest uppercase px-3 py-1.5 rounded-lg w-fit">
                 Pioneer Batch
               </span>
 
+              {/* Avatar */}
               <div className="w-[72px] h-[72px] rounded-2xl overflow-hidden border-[3px] border-[#fdb813]/40 flex-shrink-0">
                 <img
                   src={avatarSrc}
@@ -333,50 +355,59 @@ export default function DashboardPage() {
                 />
               </div>
 
+              {/* User info */}
               <div>
                 <h2 className="text-xl font-bold leading-snug mb-1">{user?.name}</h2>
                 <p className="text-xs text-white/40 mb-0.5 m-0">ID: {user?.student_id ?? 'N/A'}</p>
                 <p className="text-xs text-white/40 m-0">{user?.course ?? 'Student'}</p>
-                {/* Tier label in sidebar */}
+
+                {/* Tier pill */}
                 <div className="mt-2">
                   {userTier === 'premium' && (
-                    <span className="inline-flex items-center gap-1 bg-amber-400/15 text-amber-300 text-[10px] font-bold px-2 py-1 rounded-lg leading-none">
+                    <span className="inline-flex items-center gap-1 bg-amber-400/15 text-amber-300
+                                     text-[10px] font-bold px-2 py-1 rounded-lg leading-none">
                       Premium Plan
                     </span>
                   )}
                   {userTier === 'standard' && (
-                    <span className="inline-flex items-center gap-1 bg-indigo-400/15 text-indigo-300 text-[10px] font-bold px-2 py-1 rounded-lg leading-none">
-                        Standard Plan
+                    <span className="inline-flex items-center gap-1 bg-indigo-400/15 text-indigo-300
+                                     text-[10px] font-bold px-2 py-1 rounded-lg leading-none">
+                      Standard Plan
                     </span>
                   )}
                   {userTier === 'free' && (
-                    <span className="inline-flex items-center gap-1 bg-white/8 text-white/30 text-[10px] font-semibold px-2 py-1 rounded-lg leading-none">
+                    <span className="inline-flex items-center gap-1 bg-white/[0.08] text-white/30
+                                     text-[10px] font-semibold px-2 py-1 rounded-lg leading-none">
                       <i className="fas fa-user text-[8px]" /> Free Plan
                     </span>
                   )}
                 </div>
               </div>
 
+              {/* CTA buttons */}
               <Link
                 to={`/profile/${user?.id}`}
-                className="block text-center py-3 bg-[#fdb813] text-[#1d2b4b] font-bold text-sm rounded-xl no-underline hover:bg-yellow-300 transition-colors"
+                className="block text-center py-3 bg-[#fdb813] text-[#1d2b4b] font-bold text-sm
+                           rounded-xl no-underline hover:bg-yellow-300 transition-colors"
               >
                 View My Profile
               </Link>
 
               <Link
                 to="/analytics"
-                className="flex items-center justify-center gap-2 py-2.5 bg-sky-500/10 text-sky-300 font-semibold text-xs rounded-xl no-underline hover:bg-sky-500/20 transition-colors"
+                className="flex items-center justify-center gap-2 py-2.5 bg-sky-500/10 text-sky-300
+                           font-semibold text-xs rounded-xl no-underline hover:bg-sky-500/20 transition-colors"
               >
                 <i className="fas fa-chart-bar text-xs" aria-hidden="true" />
                 See who's trending this week →
               </Link>
 
-              {/* Upgrade CTA for free users in sidebar */}
               {!isPremium && (
                 <Link
                   to="/payment"
-                  className="flex items-center justify-center gap-2 py-2.5 bg-[#fdb813]/10 text-[#fdb813] font-semibold text-xs rounded-xl no-underline hover:bg-[#fdb813]/20 transition-colors border border-[#fdb813]/20"
+                  className="flex items-center justify-center gap-2 py-2.5 bg-[#fdb813]/10 text-[#fdb813]
+                             font-semibold text-xs rounded-xl no-underline hover:bg-[#fdb813]/20 transition-colors
+                             border border-[#fdb813]/20"
                 >
                   <i className="fas fa-crown text-xs" aria-hidden="true" />
                   Upgrade Your Plan →
@@ -385,7 +416,8 @@ export default function DashboardPage() {
 
               <button
                 onClick={handleLogout}
-                className="flex items-center justify-center gap-2 py-2 text-xs text-white/30 hover:text-white/70 transition-colors cursor-pointer bg-transparent border-none"
+                className="flex items-center justify-center gap-2 py-2 text-xs text-white/30
+                           hover:text-white/70 transition-colors cursor-pointer bg-transparent border-none"
               >
                 <i className="fas fa-sign-out-alt text-xs" aria-hidden="true" />
                 Sign out
@@ -398,7 +430,9 @@ export default function DashboardPage() {
   );
 }
 
-// ─── primitives ───────────────────────────────────────────────────────────────
+// ─── Primitive components ─────────────────────────────────────────────────────
+
+/** Section heading with optional bottom margin */
 function SectionTitle({ children, as: Tag = 'h2', noBottom }) {
   return (
     <Tag className={`text-[13px] font-semibold text-[#1d2b4b] uppercase tracking-widest ${noBottom ? '' : 'mb-4'}`}>
@@ -407,20 +441,27 @@ function SectionTitle({ children, as: Tag = 'h2', noBottom }) {
   );
 }
 
+/** Labelled search result group — renders nothing if no child rows */
 function SearchGroup({ label, labelColor, children }) {
   const kids = Array.isArray(children) ? children.filter(Boolean) : [children].filter(Boolean);
   if (!kids.length) return null;
   return (
     <>
-      <p className={`px-4 py-2 text-[10px] font-bold tracking-widest uppercase ${labelColor} bg-slate-50 m-0`}>{label}</p>
+      <p className={`px-4 py-2 text-[10px] font-bold tracking-widest uppercase ${labelColor} bg-slate-50 m-0`}>
+        {label}
+      </p>
       {children}
     </>
   );
 }
 
+/** Single search result row */
 function SearchRow({ to, src, name, sub }) {
   return (
-    <Link to={to} className="flex items-center gap-3 px-4 py-2.5 no-underline hover:bg-slate-50 border-b border-slate-50 transition-colors">
+    <Link
+      to={to}
+      className="flex items-center gap-3 px-4 py-2.5 no-underline hover:bg-slate-50 border-b border-slate-50 transition-colors"
+    >
       <img src={src} className="w-9 h-9 rounded-lg object-cover flex-shrink-0" alt={name} />
       <div>
         <p className="text-[13px] font-semibold text-[#1d2b4b] m-0">{name}</p>
@@ -430,6 +471,7 @@ function SearchRow({ to, src, name, sub }) {
   );
 }
 
+/** Memory digest card wrapper */
 function MemoryCard({ icon, iconCls, iconBg, label, empty, emptyText, children }) {
   return (
     <div className="bg-white rounded-2xl p-5 border border-slate-100">
@@ -444,10 +486,14 @@ function MemoryCard({ icon, iconCls, iconBg, label, empty, emptyText, children }
   );
 }
 
+/**
+ * Horizontal photo strip used inside memory cards.
+ * Hides scrollbar cross-browser via Tailwind's scrollbar-hide utility.
+ */
 function PhotoStrip({ photos }) {
   if (!photos?.length) return null;
   return (
-    <div className="flex gap-2 overflow-x-auto pb-1 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
+    <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
       {photos.map((p, i) => (
         <div key={i} className="relative flex-shrink-0">
           <img
@@ -457,7 +503,8 @@ function PhotoStrip({ photos }) {
             onError={e => { e.currentTarget.onerror = null; e.currentTarget.src = 'https://via.placeholder.com/80?text=📷'; }}
           />
           {p.years_ago && (
-            <span className="absolute bottom-1.5 left-1 right-1 bg-black/55 text-white text-[9px] font-bold rounded px-1 py-0.5 text-center leading-none">
+            <span className="absolute bottom-1.5 left-1 right-1 bg-black/55 text-white text-[9px]
+                             font-bold rounded px-1 py-0.5 text-center leading-none">
               {p.years_ago}y ago
             </span>
           )}

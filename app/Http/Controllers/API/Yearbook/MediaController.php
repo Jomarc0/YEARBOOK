@@ -16,6 +16,7 @@ use App\Models\Photo;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\Log;
 
 class MediaController extends Controller
 {
@@ -44,6 +45,7 @@ class MediaController extends Controller
 
             $uploaded->map(function ($result) use ($album) {
                 return $album->photos()->create([
+                    'user_id'     => Auth::id(),         // ← fix: always stamp uploader
                     'file_path'   => $result['secure_url'],
                     'public_id'   => $result['public_id'],
                     'caption'     => null,
@@ -89,6 +91,7 @@ class MediaController extends Controller
             );
 
             $album->photos()->create([
+                'user_id'     => Auth::id(),             // ← fix: always stamp uploader
                 'file_path'   => $result['secure_url'],
                 'public_id'   => $result['public_id'],
                 'caption'     => $request->validated('caption'),
@@ -120,7 +123,14 @@ class MediaController extends Controller
      */
     public function deletePhoto(int $id): JsonResponse
     {
-        $photo = Photo::findOrFail($id);
+        $photo = Photo::with('album')->findOrFail($id);
+
+        Log::info('deletePhoto debug', [
+            'auth_user_id'  => Auth::id(),
+            'photo_user_id' => $photo->user_id,
+            'album_user_id' => $photo->album?->user_id,
+            'photo_id'      => $photo->id,
+        ]);
 
         Gate::authorize('delete', $photo);
 
@@ -144,46 +154,40 @@ class MediaController extends Controller
     // =========================================================================
 
     /**
-     * GET /api/media/storage-usage
-     *
-     * Returns used bytes, storage limit, and tier for the current user.
-     * Used by the frontend StorageUsageBar component.
+     * GET /api/profile/storage-usage
      */
-   // Replace the entire storageUsage() method with this:
+    public function storageUsage(): JsonResponse
+    {
+        $userId = Auth::id();
 
-public function storageUsage(): JsonResponse
-{
-    $userId = Auth::id();
-    
-    $subscription = \App\Models\Subscription::where('user_id', $userId)
-        ->where('status', 'active')
-        ->first();
+        $subscription = \App\Models\Subscription::where('user_id', $userId)
+            ->where('status', 'active')
+            ->first();
 
-    // Direct from DB - no accessors
-    $tier = $subscription?->tier ?? 'free';
+        $tier = $subscription?->tier ?? 'free';
 
-    $limitBytes = match($tier) {
-        'premium' => 50 * 1024 * 1024 * 1024,
-        'premium_standard' => 10 * 1024 * 1024 * 1024,
-        'standard' => 2 * 1024 * 1024 * 1024,
-        default => 500 * 1024 * 1024,
-    };
+        $limitBytes = match($tier) {
+            'premium'          => 50 * 1024 * 1024 * 1024,
+            'premium_standard' => 10 * 1024 * 1024 * 1024,
+            'standard'         => 2  * 1024 * 1024 * 1024,
+            default            => 500 * 1024 * 1024,
+        };
 
-    $label = match($tier) {
-        'premium' => 'Premium HD',
-        'premium_standard' => 'Premium Standard',
-        'standard' => 'Standard',
-        default => 'Free',
-    };
+        $label = match($tier) {
+            'premium'          => 'Premium HD',
+            'premium_standard' => 'Premium Standard',
+            'standard'         => 'Standard',
+            default            => 'Free',
+        };
 
-    return $this->success(data: [
-        'used_bytes' => 0,
-        'limit_bytes' => $limitBytes,
-        'tier' => $tier,
-        'label' => $label,
-        'percent' => 0,
-    ]);
-}
+        return $this->success(data: [
+            'used_bytes'  => 0,
+            'limit_bytes' => $limitBytes,
+            'tier'        => $tier,
+            'label'       => $label,
+            'percent'     => 0,
+        ]);
+    }
 
     // =========================================================================
     // Response helpers

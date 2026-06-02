@@ -3,7 +3,10 @@
 namespace App\Http\Controllers\API\Payment;
 
 use App\Http\Controllers\Controller;
+use App\Jobs\Notification\SendSubscriptionConfirmedEmail;
+use App\Jobs\SendPushNotification;
 use App\Models\Subscription;
+use App\Models\User;
 use App\Services\Payment\PayMongoService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -52,7 +55,7 @@ class PaymentController extends Controller
 
     public function webhook(Request $request)
     {
-        Log::info('Webhook RAW payload', $request->all()); // ← temporary, remove after debugging
+        Log::info('Webhook RAW payload', $request->all());
 
         $type = $request->json('data.attributes.type');
 
@@ -77,7 +80,10 @@ class PaymentController extends Controller
                 return response()->json(['received' => true]);
             }
 
-            $plan = $this->plans[$planKey] ?? $this->plans['standard_monthly'];
+            $plan      = $this->plans[$planKey] ?? $this->plans['standard_monthly'];
+            $expiresAt = $plan['duration'] === 'year'
+                ? now()->addYear()
+                : now()->addMonth();
 
             Subscription::updateOrCreate(
                 ['user_id' => $userId],
@@ -87,11 +93,47 @@ class PaymentController extends Controller
                     'status'                     => 'active',
                     'paymongo_payment_intent_id' => $intentId,
                     'amount_paid'                => $amountPaid,
-                    'expires_at'                 => $plan['duration'] === 'year'
-                        ? now()->addYear()
-                        : now()->addMonth(),
+                    'expires_at'                 => $expiresAt,
                 ]
             );
+
+            // ── Notify the user ───────────────────────────────────────────────
+            $user      = User::find($userId);
+            $planLabel = ucwords(str_replace('_', ' ', $planKey)); // e.g. "Premium Monthly"
+            $expiry    = $expiresAt->format('F d, Y');             // e.g. "June 29, 2026"
+
+            if ($user) {
+                // Push
+                try {
+                    SendPushNotification::dispatch(
+                        userId: $user->id,
+                        title:  '🎉 Subscription Activated!',
+                        body:   "Your {$planLabel} plan is now active until {$expiry}.",
+                        data:   [
+                            'type'        => 'subscription_confirmed',
+                            'plan'        => $planKey,
+                            'expires_at'  => $expiresAt->toDateString(),
+                        ],
+                        type: 'subscription_confirmed',
+                    );
+                } catch (\Throwable $e) {
+                    Log::warning('Subscription push notification failed: ' . $e->getMessage());
+                }
+
+                // Email
+                try {
+                    if ($user->email) {
+                        SendSubscriptionConfirmedEmail::dispatch(
+                            email:      $user->email,
+                            name:       $user->name ?? $user->email,
+                            planName:   $planLabel,
+                            expiryDate: $expiry,
+                        );
+                    }
+                } catch (\Throwable $e) {
+                    Log::warning('Subscription email notification failed: ' . $e->getMessage());
+                }
+            }
         }
 
         return response()->json(['received' => true]);
@@ -109,11 +151,11 @@ class PaymentController extends Controller
         $sub = Subscription::where('user_id', $request->user()->id)->latest()->first();
 
         return response()->json([
-            'is_active'   => $sub?->isActive()  ?? false,
-            'is_standard' => $sub?->isStandard() ?? false,
-            'is_premium'  => $sub?->isPremium()  ?? false,
-            'tier'        => $sub?->tier         ?? 'free',
-            'plan'        => $sub?->plan         ?? null,
+            'is_active'   => $sub?->isActive()   ?? false,
+            'is_standard' => $sub?->isStandard()  ?? false,
+            'is_premium'  => $sub?->isPremium()   ?? false,
+            'tier'        => $sub?->tier          ?? 'free',
+            'plan'        => $sub?->plan          ?? null,
             'expires_at'  => $sub?->expires_at,
         ]);
     }

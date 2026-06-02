@@ -5,6 +5,9 @@
 //    to match how GalleryPage.jsx calls it:
 //    useMediaUpload(albumId, tier, onSuccess)
 //  - mediaApi used for all API calls (consistent with gallery.api.js)
+//  - Added `limits`, `queue`, `errors`, `clearQueue`, `upload`, `dragHandlers`
+//    aliases in the return value so BulkUploadZone receives the exact prop
+//    names it expects without any adapter code in GalleryPage.
 
 import { useState, useCallback, useRef } from 'react';
 import { mediaApi } from '../api/gallery.api';
@@ -13,11 +16,20 @@ const TIER_LIMITS = {
   free: {
     maxFiles:       5,
     maxFileSizeMB:  5,
-    maxVideoSizeMB: 50,
+    maxVideoSizeMB: 0,   // no video on free tier
     hdEnabled:      false,
     label:          'Free',
     storageGB:      0.5,
   },
+  standard: {
+    maxFiles:       20,
+    maxFileSizeMB:  20,
+    maxVideoSizeMB: 500,
+    hdEnabled:      true,
+    label:          'Standard',
+    storageGB:      5,
+  },
+  // Legacy key kept for backward compat
   premium_standard: {
     maxFiles:       20,
     maxFileSizeMB:  20,
@@ -46,19 +58,19 @@ const VIDEO_TYPES = ['video/mp4', 'video/quicktime', 'video/x-msvideo', 'video/w
  * Matches GalleryPage.jsx usage exactly.
  *
  * @param {number|null} albumId    - Target album ID
- * @param {string}      tierKey   - 'free' | 'premium_standard' | 'premium'
+ * @param {string}      tierKey   - 'free' | 'standard' | 'premium_standard' | 'premium'
  * @param {Function}    onSuccess - Called after successful upload
  */
 export function useMediaUpload(albumId = null, tierKey = 'free', onSuccess = null) {
   const tier = TIER_LIMITS[tierKey] ?? TIER_LIMITS.free;
 
-  const [files,     setFiles]     = useState([]);
-  const [progress,  setProgress]  = useState(0);
-  const [uploading, setUploading] = useState(false);
-  const [results,   setResults]   = useState(null);
-  const [error,     setError]     = useState(null);
-  const [isDragging,setIsDragging]= useState(false);
-  const [mode,      setMode]      = useState('bulk'); // 'bulk' | 'video'
+  const [files,      setFiles]      = useState([]);
+  const [progress,   setProgress]   = useState(0);
+  const [uploading,  setUploading]  = useState(false);
+  const [results,    setResults]    = useState(null);
+  const [error,      setError]      = useState(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const [mode,       setMode]       = useState('bulk'); // 'bulk' | 'video'
 
   const inputRef = useRef(null);
 
@@ -75,7 +87,10 @@ export function useMediaUpload(albumId = null, tierKey = 'free', onSuccess = nul
     if (mode === 'video' && !isVideo) {
       return `${file.name}: Only MP4, MOV, AVI, WebM accepted.`;
     }
-    if (mode === 'bulk'  && sizeMB > tier.maxFileSizeMB) {
+    if (mode === 'video' && tier.maxVideoSizeMB === 0) {
+      return `${file.name}: Video uploads require a paid plan.`;
+    }
+    if (mode === 'bulk' && sizeMB > tier.maxFileSizeMB) {
       return `${file.name}: Exceeds ${tier.maxFileSizeMB} MB limit.`;
     }
     if (mode === 'video' && sizeMB > tier.maxVideoSizeMB) {
@@ -98,6 +113,7 @@ export function useMediaUpload(albumId = null, tierKey = 'free', onSuccess = nul
     const mapped = arr.map((file) => ({
       id:      `${file.name}-${file.size}-${Date.now()}`,
       file,
+      type:    file.type.startsWith('video/') ? 'video' : 'image',
       preview: file.type.startsWith('image/') ? URL.createObjectURL(file) : null,
       status:  validateFile(file) ? 'error' : 'pending',
       error:   validateFile(file),
@@ -188,25 +204,53 @@ export function useMediaUpload(albumId = null, tierKey = 'free', onSuccess = nul
     onChange: (e) => addFiles(e.target.files),
   };
 
+  // ── BulkUploadZone-compatible shape ────────────────────────────────────────
+  //
+  // BulkUploadZone expects:
+  //   queue, uploading, progress, errors, isDragging,
+  //   limits { videoAllowed, maxFiles, maxPhotoMB, maxVideoMB },
+  //   addFiles, removeFile, clearQueue, upload, dragHandlers
+  //
+  // We build these as aliases so GalleryPage can keep doing {...uploadHook}.
+
+  const limits = {
+    videoAllowed: tier.maxVideoSizeMB > 0,
+    maxFiles:     tier.maxFiles,
+    maxPhotoMB:   tier.maxFileSizeMB,
+    maxVideoMB:   tier.maxVideoSizeMB,
+  };
+
   return {
-    // File queue
-    files, addFiles, removeFile, clearFiles,
-    // Upload
-    submit, remove,
-    // State
-    uploading, progress, results, error,
-    // Mode toggle
-    mode, setMode,
-    // Drag-and-drop
-    isDragging, dragProps,
-    // File input
-    inputProps, openFilePicker,
-    // Derived
+    // ── canonical names (internal / advanced usage) ──
+    files,
+    addFiles,
+    removeFile,
+    clearFiles,
+    submit,
+    remove,
+    uploading,
+    progress,
+    results,
+    error,
+    mode,
+    setMode,
+    isDragging,
+    dragProps,
+    inputProps,
+    openFilePicker,
     pendingCount:  files.filter((f) => f.status !== 'error').length,
     hasFiles:      files.length > 0,
     canSubmit:     files.filter((f) => f.status !== 'error').length > 0 && !uploading && !!albumId,
     limitReached:  mode === 'bulk' && files.length >= tier.maxFiles,
-    // Tier info for UI
-    tier, tierKey,
+    tier,
+    tierKey,
+
+    // ── BulkUploadZone aliases ───────────────────────────────────────────────
+    queue:        files,           // BulkUploadZone prop: queue
+    errors:       error ? [error] : [],  // BulkUploadZone prop: errors (array)
+    clearQueue:   clearFiles,      // BulkUploadZone prop: clearQueue
+    upload:       submit,          // BulkUploadZone prop: upload
+    dragHandlers: dragProps,       // BulkUploadZone prop: dragHandlers
+    limits,                        // BulkUploadZone prop: limits
   };
 }

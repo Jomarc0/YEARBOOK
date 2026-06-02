@@ -23,22 +23,23 @@ return Application::configure(basePath: dirname(__DIR__))
             'visibility'          => \App\Http\Middleware\CheckProfileVisibility::class,
             'content.security'    => \App\Http\Middleware\ContentSecurityMiddleware::class,
             'subscription.access' => \App\Http\Middleware\CheckSubscriptionAccess::class,
+            'admin.only'          => \App\Http\Middleware\AdminOnly::class, 
         ]);
     })
-->withExceptions(function (Exceptions $exceptions) {
-    $exceptions->render(function (
-        \Illuminate\Auth\AuthenticationException $e,
-        \Illuminate\Http\Request $request
-    ) {
-        return response()->json(['message' => 'Unauthenticated.'], 401);
-    });
-
-    $exceptions->render(function (
-        \Symfony\Component\Routing\Exception\RouteNotFoundException $e,
-        \Illuminate\Http\Request $request
-    ) {
-        if ($request->is('api/*') || $request->expectsJson()) {
+    ->withExceptions(function (Exceptions $exceptions) {
+        $exceptions->render(function (
+            \Illuminate\Auth\AuthenticationException $e,
+            \Illuminate\Http\Request $request
+        ) {
             return response()->json(['message' => 'Unauthenticated.'], 401);
-        }
-    });
-})->create();
+        });
+
+        $exceptions->render(function (
+            \Symfony\Component\Routing\Exception\RouteNotFoundException $e,
+            \Illuminate\Http\Request $request
+        ) {
+            if ($request->is('api/*') || $request->expectsJson()) {
+                return response()->json(['message' => 'Unauthenticated.'], 401);
+            }
+        });
+    })->create();

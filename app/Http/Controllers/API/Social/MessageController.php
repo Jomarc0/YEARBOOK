@@ -5,8 +5,10 @@ namespace App\Http\Controllers\API\Social;
 use App\Events\MessageSent;
 use App\Events\UserTyping;
 use App\Http\Controllers\Controller;
+use App\Jobs\Notification\SendNewMessageEmail;
 use App\Jobs\SendPushNotification;
 use App\Models\Message;
+use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -31,8 +33,7 @@ class MessageController extends Controller
                     ? $message->receiver_id
                     : $message->sender_id;
 
-                // Skip if other user doesn't exist or already shown
-                if (!$otherId)             return false;
+                if (!$otherId)              return false;
                 if (isset($seen[$otherId])) return false;
 
                 $seen[$otherId] = true;
@@ -43,30 +44,30 @@ class MessageController extends Controller
                     ? $message->receiver
                     : $message->sender;
 
-                // Skip if related user was deleted
                 if (!$other) return null;
 
                 return [
-                    'id'          => $message->id,
-                    'body'        => $message->body,
-                    'is_read'     => $message->is_read,
-                    'sender_id'   => $message->sender_id,
-                    'receiver_id' => $message->receiver_id,
-                    'created_at'  => $message->created_at->toISOString(),
-                    'sender'      => $message->sender,
-                    'receiver'    => $message->receiver,
-                    'other_user'  => $other,
-                    'unread_count'=> Message::where('sender_id', $other->id)
+                    'id'           => $message->id,
+                    'body'         => $message->body,
+                    'is_read'      => $message->is_read,
+                    'sender_id'    => $message->sender_id,
+                    'receiver_id'  => $message->receiver_id,
+                    'created_at'   => $message->created_at->toISOString(),
+                    'sender'       => $message->sender,
+                    'receiver'     => $message->receiver,
+                    'other_user'   => $other,
+                    'unread_count' => Message::where('sender_id', $other->id)
                         ->where('receiver_id', $userId)
                         ->where('is_read', false)
                         ->count(),
                 ];
             })
-            ->filter()   // remove any nulls
+            ->filter()
             ->values();
 
         return response()->json($conversations);
     }
+
     // ── Unread badge count ────────────────────────────────────────────────────
 
     public function unreadCount(Request $request): JsonResponse
@@ -86,7 +87,6 @@ class MessageController extends Controller
             ->orderBy('created_at')
             ->paginate(50);
 
-        // Mark incoming messages as read
         Message::where('sender_id', $userId)
             ->where('receiver_id', $myId)
             ->where('is_read', false)
@@ -113,12 +113,14 @@ class MessageController extends Controller
             'body'        => $request->body,
         ]);
 
+        // ── Broadcast (realtime) ──────────────────────────────────────────────
         try {
             broadcast(new MessageSent($message))->toOthers();
         } catch (\Throwable $e) {
             Log::warning('MessageSent broadcast failed: ' . $e->getMessage());
         }
 
+        // ── Push notification ─────────────────────────────────────────────────
         try {
             SendPushNotification::dispatch(
                 $request->receiver_id,
@@ -129,6 +131,21 @@ class MessageController extends Controller
             );
         } catch (\Throwable $e) {
             Log::warning('Push notification failed: ' . $e->getMessage());
+        }
+
+        // ── Email notification ────────────────────────────────────────────────
+        try {
+            $receiver = User::find($request->receiver_id);
+            if ($receiver?->email) {
+                SendNewMessageEmail::dispatch(
+                    email:          $receiver->email,
+                    name:           $receiver->name ?? $receiver->email,
+                    senderName:     $request->user()->name,
+                    messagePreview: $request->body,
+                );
+            }
+        } catch (\Throwable $e) {
+            Log::warning('Message email notification failed: ' . $e->getMessage());
         }
 
         return response()->json($message->load('sender:id,name,profile_picture'), 201);

@@ -287,16 +287,6 @@ export default function Navbar() {
             )}
           </div>
 
-          {/* Settings icon link */}
-          <Link
-            to="/settings"
-            className={`w-9 h-9 rounded-lg flex items-center justify-center no-underline transition-all duration-150
-              ${isActive('/settings') ? 'text-[#fdb813] bg-[#fdb813]/12' : 'text-white/40 hover:text-white hover:bg-white/8'}`}
-            aria-label="Settings"
-          >
-            <i className="fas fa-cog text-[15px]" aria-hidden="true" />
-          </Link>
-
           {/* Hamburger (mobile) */}
           <button
             className="lg:hidden w-9 h-9 rounded-lg flex items-center justify-center text-white/60 hover:text-white

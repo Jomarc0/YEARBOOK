@@ -9,21 +9,18 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 class Album extends Model
 {
     protected $fillable = [
-        'user_id',
-        'title',
-        'description',
-        'cover_image',
-        'event_date',
-        'type',                  // general | graduation | profile
-        'category',              // photos | videos | program | archive
-        'media_url',             // for single-media albums (video/PDF)
-        'cloudinary_public_id',
+        'user_id', 'batch_id', 'title', 'description',
+        'cover_image', 'event_date', 'type', 'category',
+        'media_url', 'cloudinary_public_id', 'status', 'published_at',
+        'approved_at', 'approved_by',                  // ← add these
+        'rejected_at', 'rejected_by',
+        'cover_url',
     ];
 
     protected $casts = [
-        'event_date' => 'date',
+        'event_date'   => 'date',
+        'published_at' => 'datetime',  // ← add
     ];
-
     // ── Relationships ──────────────────────────────────────────────────────
 
     public function user(): BelongsTo
@@ -55,6 +52,11 @@ class Album extends Model
     public function getPhotoCountAttribute(): int
     {
         return $this->photos_count ?? $this->photos()->count();
+    }
+
+    public function batch(): BelongsTo
+    {
+        return $this->belongsTo(Batch::class);
     }
 
     // ── Scopes ─────────────────────────────────────────────────────────────

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\API\AI;
 
 use App\Contracts\FaceRecognition;
+use Aws\Rekognition\RekognitionClient;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\TaggedPhotoResource;
 use App\Jobs\AI\AnalyzePhotoFaces;
@@ -61,65 +62,119 @@ class FaceRecognitionController extends Controller
         ]);
 
         try {
-            $threshold    = (float) Setting::getValue('face_recognition_threshold', '90');
-            $searchResult = $this->faceRecognition->searchUploadedFace(
-                $request->file('face_image'),
-                5,
-                $threshold
-            );
+            $threshold = (float) Setting::getValue('face_recognition_threshold', '75');
+            $file      = $request->file('face_image');
+            $bytes     = file_get_contents($file->getRealPath());
 
-            // Enrich each matched student with their tagged gallery photos
-            $studentPhotos = [];
+            // Search Rekognition — returns ALL matches (student:X and photo:X)
+            $rekognitionResult = $this->faceRecognition->searchUploadedFace($file, 20, $threshold);
 
-            if (! empty($searchResult['matches'])) {
-                $matchedIds = collect($searchResult['matches'])
-                    ->pluck('user_id')
-                    ->filter()
-                    ->values()
-                    ->all();
+            $matches      = $rekognitionResult['matches'] ?? [];
+            $studentIds   = [];
+            $photoIds     = [];
 
-                if (! empty($matchedIds)) {
-                    $studentPhotos = TaggedPhoto::whereIn('user_id', $matchedIds)
-                        ->with([
-                            'photo:id,file_path,caption,album_id',
-                            'user:id,name,profile_picture',
-                        ])
-                        ->get()
-                        ->groupBy('user_id')
-                        ->map(fn ($tags, $userId) => [
-                            'user_id' => $userId,
-                            'photos'  => $tags->take(6)->map(fn ($t) => [
-                                'photo_id'  => $t->photo_id,
-                                'file_path' => $t->photo?->file_path,
-                                'album_id'  => $t->photo?->album_id,
-                                'caption'   => $t->photo?->caption,
-                            ])->values()->all(),
-                        ])
-                        ->values()
-                        ->all();
+            // Also directly search by photo:X from raw Rekognition result
+            // We need to call searchFacesByImage ourselves to get photo:X hits
+            $client = new \Aws\Rekognition\RekognitionClient([
+                'version'     => 'latest',
+                'region'      => config('services.rekognition.region'),
+                'credentials' => [
+                    'key'    => config('services.rekognition.key'),
+                    'secret' => config('services.rekognition.secret'),
+                ],
+            ]);
+
+            try {
+                $raw = $client->searchFacesByImage([
+                    'CollectionId'       => config('services.rekognition.collection'),
+                    'Image'              => ['Bytes' => $bytes],
+                    'FaceMatchThreshold' => $threshold,
+                    'MaxFaces'           => 20,
+                    'QualityFilter'      => 'AUTO',
+                ]);
+
+                foreach ($raw['FaceMatches'] ?? [] as $match) {
+                    $extId = data_get($match, 'Face.ExternalImageId');
+                    if (str_starts_with($extId, 'student:')) {
+                        $studentIds[] = (int) substr($extId, 8);
+                    } elseif (str_starts_with($extId, 'photo:')) {
+                        $photoIds[] = (int) substr($extId, 6);
+                    }
                 }
+            } catch (\Exception $e) {
+                // no face detected or error
             }
 
-            AuditLog::record(
-                $request,
-                'Face Search',
-                'Matches: ' . count($searchResult['matches'] ?? [])
+            $studentIds = array_unique($studentIds);
+            $photoIds   = array_unique($photoIds);
+
+            // Get photos directly matched by face
+            $directPhotos = Photo::whereIn('id', $photoIds)
+                ->with('album:id,title,event_date')
+                ->get()
+                ->map(fn ($p) => [
+                    'photo_id'  => $p->id,
+                    'file_path' => $p->file_path,
+                    'caption'   => $p->caption,
+                    'album'     => $p->album ? [
+                        'id'         => $p->album->id,
+                        'title'      => $p->album->title,
+                        'event_date' => $p->album->event_date,
+                    ] : null,
+                    'source' => 'direct_match',
+                ])
+                ->values()
+                ->all();
+
+            // Get photos from tagged_photos for matched students
+            $taggedPhotos = [];
+            if (!empty($studentIds)) {
+                $taggedPhotos = TaggedPhoto::whereIn('user_id', $studentIds)
+                    ->with(['photo:id,file_path,caption,album_id', 'photo.album:id,title,event_date'])
+                    ->get()
+                    ->map(fn ($t) => [
+                        'photo_id'  => $t->photo_id,
+                        'file_path' => $t->photo?->file_path,
+                        'caption'   => $t->photo?->caption,
+                        'album'     => $t->photo?->album ? [
+                            'id'         => $t->photo->album->id,
+                            'title'      => $t->photo->album->title,
+                            'event_date' => $t->photo->album->event_date,
+                        ] : null,
+                        'source' => 'tagged',
+                    ])
+                    ->values()
+                    ->all();
+            }
+
+            // Merge and deduplicate
+            $allPhotos = collect(array_merge($directPhotos, $taggedPhotos))
+                ->unique('photo_id')
+                ->values()
+                ->all();
+
+            $status = count($allPhotos) > 0 ? 'matched' : 'no_matches';
+
+            AuditLog::record($request, 'Face Search',
+                'Photos found: ' . count($allPhotos)
             );
 
-            return response()->json(array_merge($searchResult, [
-                'student_photos' => $studentPhotos,
-            ]));
+            return response()->json([
+                'status'  => $status,
+                'photos'  => $allPhotos,
+                'message' => count($allPhotos) > 0 ? null : 'No matching photos found.',
+            ]);
+
         } catch (\Exception $e) {
             AuditLog::record($request, 'Face Search Error', $e->getMessage(), 'Warning');
 
             return response()->json([
                 'status'  => 'error',
-                'matches' => [],
+                'photos'  => [],
                 'message' => $e->getMessage(),
             ], 500);
         }
     }
-
     // ── Return face tags for a single photo ───────────────────────────────
 
     public function photoTags(Photo $photo): JsonResponse

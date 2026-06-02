@@ -1,14 +1,19 @@
 <?php
+
 namespace App\Http\Controllers\API\Student;
+
 use App\Http\Controllers\Controller;
 use App\Models\AlumniActivity;
+use App\Models\AuditLog;
 use App\Models\ProfileView;
 use App\Models\User;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 class ProfileSettingsController extends Controller
 {
-    public function updateVisibility(Request $request)
+    // ── Update visibility ─────────────────────────────────────────────────────
+    public function updateVisibility(Request $request): JsonResponse
     {
         $request->validate([
             'visibility' => 'required|in:public,private,alumni_only',
@@ -19,18 +24,105 @@ class ProfileSettingsController extends Controller
         return response()->json(['message' => 'Visibility updated.']);
     }
 
-    public function updateMotto(Request $request)
+    // ── Update motto ──────────────────────────────────────────────────────────
+    public function updateMotto(Request $request): JsonResponse
     {
         $request->validate(['motto' => 'nullable|string|max:255']);
         $request->user()->update(['motto' => $request->motto]);
         return response()->json(['message' => 'Motto updated.']);
     }
 
-    public function trackView(Request $request, int $id)
+    // ── Update academic info ──────────────────────────────────────────────────
+    public function updateAcademic(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'student_id'      => 'nullable|string|max:255',
+            'course'          => 'nullable|string|max:255',
+            'graduation_year' => 'nullable|integer|min:1990|max:2100',
+            'batch'           => 'nullable|string|max:255',
+        ]);
+
+        if (isset($validated['graduation_year'])) {
+            $validated['graduation_year'] = (int) $validated['graduation_year'];
+        }
+
+        $request->user()->update($validated);
+
+        AuditLog::record($request, 'API Update Academic', 'Updated academic info for ' . $request->user()->email);
+
+        return response()->json(['success' => true, 'message' => 'Academic info updated.']);
+    }
+
+    // ── Update achievements ───────────────────────────────────────────────────
+    // Expects: { achievements: [{ id, title, subtitle, type: '{"icon":"fa-star","color":"#fdb813"}' }] }
+    public function updateAchievements(Request $request): JsonResponse
+    {
+        $user  = $request->user();
+        $items = $request->input('achievements', []);
+
+        $keptIds = [];
+
+        foreach ($items as $item) {
+            $payload = [
+                'title'    => $item['title']    ?? '',
+                'subtitle' => $item['subtitle'] ?? null,
+                'type'     => isset($item['type']) ? (string) $item['type'] : null,
+            ];
+
+            $itemId = $item['id'] ?? null;
+
+            if ($itemId && is_numeric($itemId)) {
+                // Check the record actually belongs to this user
+                // (guards against fake DEFAULT_ACHIEVEMENTS ids like 1, 2, 3)
+                $existing = $user->achievements()->where('id', (int) $itemId)->first();
+
+                if ($existing) {
+                    $existing->update($payload);
+                    $keptIds[] = $existing->id;
+                } else {
+                    // Numeric id but not owned by this user — treat as new
+                    $created   = $user->achievements()->create($payload);
+                    $keptIds[] = $created->id;
+                }
+            } else {
+                // New achievement (null id or Date.now() placeholder from React)
+                $created   = $user->achievements()->create($payload);
+                $keptIds[] = $created->id; // track so it isn't deleted below
+            }
+        }
+
+        // Delete achievements the user removed from the list
+        if (!empty($keptIds)) {
+            $user->achievements()->whereNotIn('id', $keptIds)->delete();
+        } else {
+            // User intentionally cleared all achievements
+            $user->achievements()->delete();
+        }
+
+        AuditLog::record($request, 'API Update Achievements', 'Updated achievements for ' . $user->email);
+
+        return response()->json(['success' => true, 'message' => 'Achievements updated.']);
+    }
+
+    // ── Get achievements for a user ───────────────────────────────────────────
+    // GET /students/{id}/achievements  (handled by StudentController::achievements)
+    // This method kept for reference — routing goes to StudentController
+    public function getAchievements(Request $request): JsonResponse
+    {
+        $user = $request->user();
+
+        $achievements = $user->achievements()
+            ->orderBy('created_at', 'asc')
+            ->get(['id', 'title', 'subtitle', 'type', 'date_awarded']);
+
+        return response()->json(['data' => $achievements]);
+    }
+
+    // ── Track profile view ────────────────────────────────────────────────────
+    public function trackView(Request $request, int $id): JsonResponse
     {
         $profile = User::findOrFail($id);
 
-        // Don't track own views
         if ($request->user()?->id === $id) {
             return response()->json(['tracked' => false]);
         }
@@ -53,12 +145,13 @@ class ProfileSettingsController extends Controller
         return response()->json(['tracked' => true]);
     }
 
-    public function topViewed()
+    // ── Top viewed profiles ───────────────────────────────────────────────────
+    public function topViewed(): JsonResponse
     {
         $students = User::withCount('profileViews')
             ->orderByDesc('profile_views')
             ->limit(10)
-            ->get(['id','name','course','profile_picture','profile_views','student_id']);
+            ->get(['id', 'name', 'course', 'profile_picture', 'profile_views', 'student_id']);
 
         return response()->json($students);
     }

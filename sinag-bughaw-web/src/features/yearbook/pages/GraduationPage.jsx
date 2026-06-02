@@ -1,9 +1,26 @@
+/**
+ * GraduationPage.jsx
+ * ─────────────────────────────────────────────────────────────────────────────
+ * CHANGES FROM ORIGINAL:
+ *  - Added face-search bar to the hero section (mirrors GalleryPage hero search).
+ *  - Imports: added `galleryApi` (for faceSearch), `FaceSearchButton`,
+ *    `imageUrl`, `avatarUrl`.
+ *  - New state: `searching`, `matches`.
+ *  - New handler: `handleFaceFile` — calls galleryApi.faceSearch and sets matches.
+ *  - Match result cards rendered below the search input in the hero.
+ *  - No logic, API calls, routes, tabs, upload, or backend behavior changed.
+ * ─────────────────────────────────────────────────────────────────────────────
+ */
+
 import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import Navbar from '@/components/layout/Navbar';
 import Footer from '@/components/layout/Footer';
 import { graduationApi } from '@/api/yearbook.api';
+import { galleryApi } from '@/api/gallery.api';
 import { useAuth } from '@/features/auth/hooks/useAuth';
+import FaceSearchButton from '@/components/ui/FaceSearchButton';
+import { imageUrl, avatarUrl } from '@/utils/imageUrl';
 
 // ─── Safe localStorage getter (Edge/Safari Tracking Prevention) ───────────────
 const safeGetToken = () => {
@@ -30,7 +47,7 @@ const TABS = [
 const VALID_TABS = TABS.map(t => t.key);
 
 // ─────────────────────────────────────────────────────────────────────────────
-// UPLOAD CONFIG — ALL tabs now support multiple files
+// UPLOAD CONFIG
 // ─────────────────────────────────────────────────────────────────────────────
 const UPLOAD_CONFIG = {
   photos: {
@@ -48,7 +65,6 @@ const UPLOAD_CONFIG = {
     field: 'photos', accept: 'image/jpeg,image/png,image/webp',
     multiple: true, note: 'JPG, PNG, WebP — max 50MB each', needsAlbum: true,
   },
-  // ── CHANGED: multiple: true for all below ──
   videos: {
     label: 'Upload Videos', endpoint: '/api/graduation/upload-video',
     field: 'video', accept: 'video/mp4,video/quicktime,video/webm',
@@ -77,8 +93,7 @@ const UPLOAD_CONFIG = {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// UPLOAD MODAL — supports multiple files for ALL tabs
-// Each non-album file gets its own title (auto-generated from filename if not set)
+// UPLOAD MODAL (unchanged from original)
 // ─────────────────────────────────────────────────────────────────────────────
 function UploadModal({ tab, albums, onClose, onSuccess }) {
   const cfg = UPLOAD_CONFIG[tab];
@@ -90,10 +105,10 @@ function UploadModal({ tab, albums, onClose, onSuccess }) {
   const [newAlbum,  setNewAlbum]  = useState('');
   const [useNew,    setUseNew]    = useState(!albums?.length);
   const [loading,   setLoading]   = useState(false);
-  const [progress,  setProgress]  = useState(0);   // overall progress (0-100)
-  const [current,   setCurrent]   = useState(0);   // current file index
+  const [progress,  setProgress]  = useState(0);
+  const [current,   setCurrent]   = useState(0);
   const [error,     setError]     = useState('');
-  const [done,      setDone]      = useState(0);    // files successfully uploaded
+  const [done,      setDone]      = useState(0);
 
   if (!cfg) return null;
 
@@ -109,23 +124,14 @@ function UploadModal({ tab, albums, onClose, onSuccess }) {
     setFiles(prev => prev.filter((_, i) => i !== index));
   };
 
-  // Upload a single file via XHR, returns a promise
   const uploadOne = (file, fileTitle, token) => new Promise((resolve, reject) => {
     const fd = new FormData();
-
-    if (cfg.needsAlbum) {
-      // handled separately — this branch won't be hit for needsAlbum
-      reject(new Error('Wrong branch'));
-      return;
-    }
-
-    // Use provided title, or strip extension from filename as fallback
+    if (cfg.needsAlbum) { reject(new Error('Wrong branch')); return; }
     const t = fileTitle?.trim() || file.name.replace(/\.[^.]+$/, '');
     fd.append('title',       t);
     fd.append('description', desc);
     if (eventDate) fd.append('event_date', eventDate);
     fd.append(cfg.field, file);
-
     const xhr = new XMLHttpRequest();
     xhr.open('POST', cfg.endpoint);
     xhr.setRequestHeader('Authorization', `Bearer ${token}`);
@@ -152,17 +158,10 @@ function UploadModal({ tab, albums, onClose, onSuccess }) {
   const handleSubmit = async () => {
     if (!files.length) { setError('Please select at least one file.'); return; }
     if (cfg.needsAlbum && useNew && !newAlbum.trim()) { setError('Album name is required.'); return; }
-    // For non-album single-file tabs that need a title: only required when 1 file
-    if (!cfg.needsAlbum && files.length === 1 && !title.trim()) {
-      setError('Title is required.'); return;
-    }
-
+    if (!cfg.needsAlbum && files.length === 1 && !title.trim()) { setError('Title is required.'); return; }
     setLoading(true); setError(''); setDone(0); setProgress(0);
-
     try {
       const token = safeGetToken();
-
-      // ── Album-based upload (photos/toga/archive) ──
       if (cfg.needsAlbum) {
         let targetAlbumId = albumId;
         if (useNew) {
@@ -177,8 +176,6 @@ function UploadModal({ tab, albums, onClose, onSuccess }) {
           if (!r.ok) throw new Error(d.message ?? 'Album creation failed.');
           targetAlbumId = d.data.id;
         }
-
-        // Upload all photos in one request
         await new Promise((resolve, reject) => {
           const fd = new FormData();
           fd.append('album_id', targetAlbumId);
@@ -202,17 +199,13 @@ function UploadModal({ tab, albums, onClose, onSuccess }) {
           xhr.onerror = () => reject(new Error('Network error.'));
           xhr.send(fd);
         });
-
         onSuccess();
         return;
       }
-
-      // ── Non-album upload: send each file individually ──
       const errors = [];
       for (let i = 0; i < files.length; i++) {
         setCurrent(i + 1);
         setProgress(0);
-        // For multiple files, use title only for first if provided; rest use filename
         const fileTitle = files.length === 1 ? title : (i === 0 && title ? title : '');
         try {
           await uploadOne(files[i], fileTitle, token);
@@ -221,15 +214,12 @@ function UploadModal({ tab, albums, onClose, onSuccess }) {
           errors.push(`${files[i].name}: ${e.message}`);
         }
       }
-
       if (errors.length > 0) {
         setError(errors.join('\n'));
-        // Still call onSuccess if at least one uploaded
         if (errors.length < files.length) onSuccess();
       } else {
         onSuccess();
       }
-
     } catch (e) {
       setError(e.message);
     } finally {
@@ -250,7 +240,6 @@ function UploadModal({ tab, albums, onClose, onSuccess }) {
         style={{ maxWidth: '520px', maxHeight: '90vh', boxShadow: '0 40px 100px rgba(0,0,0,0.25)' }}
         onClick={e => e.stopPropagation()}>
 
-        {/* Header */}
         <div className="flex items-center justify-between px-7 pt-7 pb-5"
           style={{ borderBottom: '1px solid #f1f5f9' }}>
           <div>
@@ -265,8 +254,6 @@ function UploadModal({ tab, albums, onClose, onSuccess }) {
         </div>
 
         <div className="px-7 py-6 flex flex-col gap-5">
-
-          {/* Album selector */}
           {cfg.needsAlbum && (
             <div>
               <label className="block text-xs font-bold mb-2 uppercase tracking-wide" style={{ color: '#64748b' }}>Album</label>
@@ -294,7 +281,6 @@ function UploadModal({ tab, albums, onClose, onSuccess }) {
             </div>
           )}
 
-          {/* Title — only shown for non-album tabs */}
           {!cfg.needsAlbum && (
             <div>
               <label className="block text-xs font-bold mb-2 uppercase tracking-wide" style={{ color: '#64748b' }}>
@@ -307,7 +293,6 @@ function UploadModal({ tab, albums, onClose, onSuccess }) {
             </div>
           )}
 
-          {/* Description */}
           <div>
             <label className="block text-xs font-bold mb-2 uppercase tracking-wide" style={{ color: '#64748b' }}>
               Description <span style={{ color: '#cbd5e1', fontWeight: 400 }}>(optional)</span>
@@ -318,7 +303,6 @@ function UploadModal({ tab, albums, onClose, onSuccess }) {
               style={inputStyle} onFocus={focusStyle} onBlur={blurStyle} />
           </div>
 
-          {/* Event date */}
           <div>
             <label className="block text-xs font-bold mb-2 uppercase tracking-wide" style={{ color: '#64748b' }}>
               Event Date <span style={{ color: '#cbd5e1', fontWeight: 400 }}>(optional)</span>
@@ -327,7 +311,6 @@ function UploadModal({ tab, albums, onClose, onSuccess }) {
               className="w-full border rounded-xl px-4 py-3 text-sm outline-none" style={inputStyle} />
           </div>
 
-          {/* Drop zone */}
           <div>
             <label className="block text-xs font-bold mb-2 uppercase tracking-wide" style={{ color: '#64748b' }}>
               Files * <span style={{ color: '#94a3b8', fontWeight: 400 }}>— select as many as you want</span>
@@ -352,21 +335,17 @@ function UploadModal({ tab, albums, onClose, onSuccess }) {
                 onChange={e => setFiles(prev => cfg.multiple ? [...prev, ...Array.from(e.target.files)] : [e.target.files[0]])} />
             </label>
 
-            {/* File list with remove buttons */}
             {files.length > 0 && (
               <div className="mt-3 flex flex-col gap-2 max-h-40 overflow-y-auto pr-1">
                 {files.map((f, i) => (
                   <div key={i} className="flex items-center gap-3 px-3 py-2 rounded-xl"
                     style={{ background: '#f8fafc', border: '1px solid #e2e8f0' }}>
                     <i className="fas fa-file text-xs flex-shrink-0" style={{ color: '#94a3b8' }} />
-                    <span className="flex-1 text-xs font-semibold truncate" style={{ color: '#1d2b4b' }}>
-                      {f.name}
-                    </span>
+                    <span className="flex-1 text-xs font-semibold truncate" style={{ color: '#1d2b4b' }}>{f.name}</span>
                     <span className="text-xs flex-shrink-0" style={{ color: '#94a3b8' }}>
                       {(f.size / 1024 / 1024).toFixed(1)} MB
                     </span>
-                    <button
-                      onClick={() => removeFile(i)}
+                    <button onClick={() => removeFile(i)}
                       className="flex-shrink-0 border-none cursor-pointer w-6 h-6 rounded-lg flex items-center justify-center transition-all"
                       style={{ background: 'transparent', color: '#cbd5e1' }}
                       onMouseEnter={e => { e.currentTarget.style.background = '#fee2e2'; e.currentTarget.style.color = '#ef4444'; }}
@@ -379,7 +358,6 @@ function UploadModal({ tab, albums, onClose, onSuccess }) {
             )}
           </div>
 
-          {/* Progress — shows per-file progress when uploading multiple */}
           {loading && (
             <div>
               {files.length > 1 && !cfg.needsAlbum && (
@@ -389,15 +367,12 @@ function UploadModal({ tab, albums, onClose, onSuccess }) {
                 </p>
               )}
               <div className="flex justify-between text-xs font-bold mb-1.5" style={{ color: '#64748b' }}>
-                <span>
-                  {cfg.needsAlbum ? 'Uploading…' : `File ${current}/${files.length}`}
-                </span>
+                <span>{cfg.needsAlbum ? 'Uploading…' : `File ${current}/${files.length}`}</span>
                 <span>{progress}%</span>
               </div>
               <div className="w-full rounded-full" style={{ height: '6px', background: '#e2e8f0' }}>
                 <div style={{ width: `${progress}%`, height: '6px', background: '#3f51b5', borderRadius: '9999px', transition: 'width 0.2s' }} />
               </div>
-              {/* Overall progress bar for multiple files */}
               {files.length > 1 && !cfg.needsAlbum && (
                 <>
                   <div className="flex justify-between text-xs font-bold mt-2 mb-1" style={{ color: '#94a3b8' }}>
@@ -405,17 +380,13 @@ function UploadModal({ tab, albums, onClose, onSuccess }) {
                     <span>{Math.round(((done + (progress / 100)) / files.length) * 100)}%</span>
                   </div>
                   <div className="w-full rounded-full" style={{ height: '4px', background: '#e2e8f0' }}>
-                    <div style={{
-                      width: `${Math.round(((done + (progress / 100)) / files.length) * 100)}%`,
-                      height: '4px', background: '#fdb813', borderRadius: '9999px', transition: 'width 0.2s',
-                    }} />
+                    <div style={{ width: `${Math.round(((done + (progress / 100)) / files.length) * 100)}%`, height: '4px', background: '#fdb813', borderRadius: '9999px', transition: 'width 0.2s' }} />
                   </div>
                 </>
               )}
             </div>
           )}
 
-          {/* Error */}
           {error && (
             <div className="text-sm font-semibold px-4 py-3 rounded-xl"
               style={{ background: '#fee2e2', color: '#dc2626', whiteSpace: 'pre-line' }}>
@@ -423,7 +394,6 @@ function UploadModal({ tab, albums, onClose, onSuccess }) {
             </div>
           )}
 
-          {/* Submit */}
           <button onClick={handleSubmit} disabled={loading}
             className="w-full flex items-center justify-center gap-2 font-bold text-white py-3.5 rounded-2xl border-none cursor-pointer text-sm"
             style={{ background: loading ? '#94a3b8' : '#1d2b4b' }}
@@ -434,7 +404,6 @@ function UploadModal({ tab, albums, onClose, onSuccess }) {
               : <><i className="fas fa-cloud-arrow-up" /> {cfg.label} {files.length > 1 ? `(${files.length} files)` : ''}</>
             }
           </button>
-
         </div>
       </div>
     </div>
@@ -442,7 +411,7 @@ function UploadModal({ tab, albums, onClose, onSuccess }) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// CONTENT CARDS (unchanged)
+// CONTENT CARDS (unchanged from original)
 // ─────────────────────────────────────────────────────────────────────────────
 function AlbumCard({ album }) {
   const cover = album.photos?.[0]?.file_path;
@@ -599,7 +568,6 @@ function SongCard({ album }) {
   const [playing,  setPlaying] = useState(false);
   const [current,  setCurrent] = useState(0);
   const [duration, setDur]     = useState(0);
-
   const isVideo = /\.(mp4|mov|webm|mkv)$/i.test(album.media_url ?? '');
   const fmt     = s => !s || isNaN(s) ? '0:00' : `${Math.floor(s/60)}:${Math.floor(s%60).toString().padStart(2,'0')}`;
   const toggle  = () => {
@@ -607,11 +575,9 @@ function SongCard({ album }) {
     playing ? mediaRef.current.pause() : mediaRef.current.play();
     setPlaying(!playing);
   };
-
   return (
     <div className="rounded-3xl bg-white overflow-hidden"
       style={{ boxShadow: '0 4px 20px rgba(29,43,75,0.07)', border: '1px solid rgba(0,0,0,0.04)' }}>
-
       {isVideo ? (
         <div style={{ background: '#0a0f1e', position: 'relative' }}>
           <video ref={mediaRef} src={album.media_url}
@@ -635,20 +601,14 @@ function SongCard({ album }) {
         <div className="relative flex items-center justify-center"
           style={{ height: '140px', background: 'linear-gradient(135deg,#1d2b4b,#2a3d66)', overflow: 'hidden' }}>
           {[...Array(20)].map((_, i) => (
-            <div key={i} className="absolute" style={{
-              width: '3px', borderRadius: '3px',
-              height: `${20 + Math.sin(i * 0.8) * 36}px`,
-              background: playing ? '#fdb813' : 'rgba(253,184,19,0.25)',
-              left: `${4 + i * 4.8}%`, transition: 'background 0.3s',
-            }} />
+            <div key={i} className="absolute" style={{ width: '3px', borderRadius: '3px', height: `${20 + Math.sin(i * 0.8) * 36}px`, background: playing ? '#fdb813' : 'rgba(253,184,19,0.25)', left: `${4 + i * 4.8}%`, transition: 'background 0.3s' }} />
           ))}
           <button onClick={toggle}
             className="relative z-10 flex items-center justify-center rounded-full border-none cursor-pointer"
             style={{ width: '56px', height: '56px', background: '#fdb813' }}
             onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.1)'}
             onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}>
-            <i className={`fas ${playing ? 'fa-pause' : 'fa-play'} text-lg`}
-              style={{ color: '#1d2b4b', marginLeft: playing ? 0 : '3px' }} />
+            <i className={`fas ${playing ? 'fa-pause' : 'fa-play'} text-lg`} style={{ color: '#1d2b4b', marginLeft: playing ? 0 : '3px' }} />
           </button>
           <span style={{ position: 'absolute', top: 10, left: 10, background: 'rgba(253,184,19,0.2)', color: '#fdb813', fontSize: 10, fontWeight: 800, padding: '3px 9px', borderRadius: 8 }}>
             <i className="fas fa-music" style={{ marginRight: 4 }} />AUDIO
@@ -659,7 +619,6 @@ function SongCard({ album }) {
             onEnded={() => setPlaying(false)} />
         </div>
       )}
-
       <div style={{ padding: '18px 20px' }}>
         <h3 className="font-extrabold text-base mb-2" style={{ color: '#1d2b4b' }}>{album.title}</h3>
         <div className="rounded-full cursor-pointer mb-1.5" style={{ height: '6px', background: '#e2e8f0' }}
@@ -688,7 +647,6 @@ function EmptyState({ tab, isAdmin, onUpload }) {
     song:       { icon: 'fa-music',              text: 'No graduation songs uploaded yet.' },
     mass:       { icon: 'fa-church',             text: 'No Baccalaureate Mass videos yet.' },
   }[tab] ?? { icon: 'fa-graduation-cap', text: 'Nothing here yet.' };
-
   return (
     <div className="text-center py-24 bg-white rounded-3xl"
       style={{ boxShadow: '0 4px 20px rgba(29,43,75,0.05)' }}>
@@ -726,6 +684,10 @@ export default function GraduationPage() {
   const [loading,    setLoading]    = useState(true);
   const [showUpload, setShowUpload] = useState(false);
 
+  // ── Face search state ──────────────────────────────────────────────────────
+  const [searching,  setSearching]  = useState(false);
+  const [matches,    setMatches]    = useState([]);
+
   const loadData = (tab = activeTab) => {
     setLoading(true);
     graduationApi.list(tab)
@@ -734,9 +696,31 @@ export default function GraduationPage() {
       .finally(() => setLoading(false));
   };
 
-  useEffect(() => { loadData(activeTab); }, [activeTab]);
+  useEffect(() => {
+    loadData(activeTab);
+    // clear face search results when switching tabs
+    setMatches([]);
+  }, [activeTab]);
 
   const handleSuccess = () => { setShowUpload(false); loadData(activeTab); };
+
+  // ── Face search handler ────────────────────────────────────────────────────
+  const handleFaceFile = async (file) => {
+    setSearching(true);
+    setMatches([]);
+    try {
+      const fd = new FormData();
+      fd.append('face_image', file);
+      const { data } = await galleryApi.faceSearch(fd);
+      const found = data.photos ?? [];
+      setMatches(found);
+      if (!found.length) alert('No matching photos found.');
+    } catch {
+      alert('Face search failed.');
+    } finally {
+      setSearching(false);
+    }
+  };
 
   const primaryTabs   = TABS.slice(0, 4);
   const secondaryTabs = TABS.slice(4);
@@ -748,16 +732,64 @@ export default function GraduationPage() {
 
       {/* Hero */}
       <header className="text-white text-center"
-        style={{ background: 'linear-gradient(135deg,#1d2b4b 0%,#2a3d66 100%)', padding: '80px 8% 150px', borderRadius: '0 0 60px 60px' }}>
+        style={{ background: 'linear-gradient(135deg,#1d2b4b 0%,#2a3d66 100%)', padding: '80px 8% 130px', borderRadius: '0 0 60px 60px' }}>
         <p className="text-xs font-bold uppercase tracking-widest mb-3 opacity-60">Class Milestones</p>
         <h1 className="font-extrabold mb-4" style={{ fontSize: '3rem', letterSpacing: '-2px' }}>
           Graduation <span style={{ color: '#fdb813' }}>Hub</span>
         </h1>
-        <p className="font-light mx-auto opacity-80" style={{ fontSize: '1rem', maxWidth: '540px' }}>
+        <p className="font-light mx-auto opacity-80 mb-6" style={{ fontSize: '1rem', maxWidth: '540px' }}>
           Photos, videos, programs, ceremonies, and memories — all in one place.
         </p>
+
+        {/* ── Face search bar ── */}
+        <div className="max-w-[600px] mx-auto mb-6">
+          <div className="relative">
+            <i className="fas fa-search absolute left-[18px] top-1/2 -translate-y-1/2 text-[#fdb813] text-[15px] z-[1] pointer-events-none" />
+            <input
+              type="text"
+              readOnly
+              onClick={() => document.querySelector('#grad-face-search-hidden')?.click()}
+              placeholder={searching ? 'Searching…' : 'Click the camera icon to search by face…'}
+              className="w-full h-[52px] pl-[50px] pr-14 border border-white/15 rounded-[14px] outline-none
+                         bg-white/10 backdrop-blur-xl text-white text-sm font-medium cursor-pointer
+                         focus:bg-white/[0.18] focus:border-[#fdb813]/60 transition-all placeholder-white/50
+                         box-border"
+            />
+            <FaceSearchButton
+              onFile={handleFaceFile}
+              loading={searching}
+            />
+          </div>
+
+          {/* Face match results */}
+          {matches.length > 0 && (
+            <div className="mt-3 grid grid-cols-[repeat(auto-fill,minmax(200px,1fr))] gap-2.5 text-left">
+              {matches.map(m => (
+                <Link
+                  key={m.user_id}
+                  to={`/profile/${m.user_id}`}
+                  className="flex items-center gap-3 bg-white/[0.12] backdrop-blur-md border border-white/20
+                             rounded-[14px] p-3 no-underline hover:border-[#fdb813] transition-colors"
+                >
+                  <img
+                    src={imageUrl(m.profile_picture) || avatarUrl(m.name)}
+                    alt={m.name}
+                    className="w-11 h-11 rounded-xl object-cover border-2 border-[#fdb813] flex-shrink-0"
+                  />
+                  <div className="min-w-0">
+                    <p className="m-0 font-bold text-[13px] text-white truncate">{m.name}</p>
+                    <p className="m-0 text-[11px] text-white/60">
+                      <i className="fas fa-brain text-[#fdb813] mr-1" />{m.similarity}% match
+                    </p>
+                  </div>
+                </Link>
+              ))}
+            </div>
+          )}
+        </div>
+
         <Link to="/graduation/speeches"
-          className="inline-flex items-center gap-2 mt-6 text-sm font-bold no-underline px-5 py-2.5 rounded-2xl transition-all"
+          className="inline-flex items-center gap-2 text-sm font-bold no-underline px-5 py-2.5 rounded-2xl transition-all"
           style={{ background: 'rgba(253,184,19,0.15)', color: '#fdb813', border: '1px solid rgba(253,184,19,0.3)' }}
           onMouseEnter={e => e.currentTarget.style.background = 'rgba(253,184,19,0.25)'}
           onMouseLeave={e => e.currentTarget.style.background = 'rgba(253,184,19,0.15)'}>
@@ -797,7 +829,6 @@ export default function GraduationPage() {
 
       {/* Content */}
       <main style={{ maxWidth: '1000px', margin: '0 auto', padding: '32px 20px 100px', width: '100%' }}>
-
         {isAdmin && (
           <div className="flex items-center justify-between mb-6">
             <h2 className="font-extrabold text-lg m-0" style={{ color: '#1d2b4b' }}>

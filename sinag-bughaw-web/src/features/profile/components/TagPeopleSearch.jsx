@@ -11,69 +11,46 @@ export default function TagPeopleSearch({ tagged = [], onTag, onUntag, excludeId
 
   useEffect(() => {
     if (!query.trim()) { setResults([]); setOpen(false); return; }
-
     clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(async () => {
       setLoading(true);
       try {
-        const { data } = await studentsApi.search({ q: query, per_page: 8 }); // FIXED
+        const { data } = await studentsApi.search({ q: query, per_page: 8 });
         const list = data.data ?? data ?? [];
         setResults(list.filter(u => u.id !== excludeId));
         setOpen(true);
-      } catch {
-        setResults([]);
-      } finally {
-        setLoading(false);
-      }
+      } catch { setResults([]); }
+      finally { setLoading(false); }
     }, 350);
-
     return () => clearTimeout(debounceRef.current);
   }, [query, excludeId]);
 
   useEffect(() => {
-    const handler = (e) => {
-      if (wrapperRef.current && !wrapperRef.current.contains(e.target)) {
-        setOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
+    const h = e => { if (wrapperRef.current && !wrapperRef.current.contains(e.target)) setOpen(false); };
+    document.addEventListener('mousedown', h);
+    return () => document.removeEventListener('mousedown', h);
   }, []);
 
-  const isTagged = (id) => tagged.some(u => u.id === id);
+  const isTagged = id => tagged.some(u => u.id === id);
 
-  const avatar = (user) =>
-    user.profile_picture
-      ? user.profile_picture
-      : `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name)}&background=1d2b4b&color=fff&size=80`;
+  const getAvatar = user =>
+    user.profile_picture ||
+    `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name)}&background=1d2b4b&color=fff&size=80`;
 
   return (
-    <div ref={wrapperRef} style={{ position: 'relative', marginTop: 12 }}>
+    <div ref={wrapperRef} className="relative mt-3">
 
       {/* Tagged chips */}
       {tagged.length > 0 && (
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
+        <div className="flex flex-wrap gap-1.5 mb-3">
           {tagged.map(user => (
-            <div key={user.id} style={{
-              display: 'flex', alignItems: 'center', gap: 6,
-              background: '#f0f3fa', border: '1px solid #dbe3f0',
-              borderRadius: 20, padding: '4px 10px 4px 6px',
-            }}>
-              <img
-                src={avatar(user)}
-                alt={user.name}
-                style={{ width: 22, height: 22, borderRadius: '50%', objectFit: 'cover' }}
-              />
-              <span style={{ fontSize: 12, fontWeight: 600, color: '#1d2b4b' }}>
-                {user.name}
-              </span>
-              <button
-                onClick={() => onUntag(user.id)}
-                style={{
-                  background: 'none', border: 'none', cursor: 'pointer',
-                  color: '#94a3b8', fontSize: 11, padding: 0, lineHeight: 1,
-                }}
-              >
+            <div key={user.id}
+              className="flex items-center gap-1.5 bg-indigo-50 border border-indigo-100 rounded-full pl-1 pr-3 py-1">
+              <img src={getAvatar(user)} alt={user.name}
+                className="w-5 h-5 rounded-full object-cover" />
+              <span className="text-xs font-semibold text-[#1d2b4b]">{user.name}</span>
+              <button onClick={() => onUntag(user.id)}
+                className="text-slate-400 hover:text-red-500 text-[10px] transition bg-transparent border-none cursor-pointer p-0 leading-none ml-0.5">
                 <i className="fas fa-times" />
               </button>
             </div>
@@ -82,68 +59,34 @@ export default function TagPeopleSearch({ tagged = [], onTag, onUntag, excludeId
       )}
 
       {/* Search input */}
-      <div style={{
-        display: 'flex', alignItems: 'center', gap: 8,
-        border: '1.5px solid #e2e8f0', borderRadius: 12,
-        padding: '9px 12px', background: '#f8fafc',
-      }}>
-        <i className="fas fa-user-tag" style={{ color: '#94a3b8', fontSize: 12 }} />
+      <div className="flex items-center gap-2 border-2 border-slate-200 focus-within:border-[#3f51b5] rounded-xl px-3 py-2.5 bg-slate-50 transition-colors">
+        <i className="fas fa-user-tag text-slate-400 text-xs" aria-hidden="true" />
         <input
           value={query}
           onChange={e => setQuery(e.target.value)}
           onFocus={() => results.length && setOpen(true)}
-          placeholder="Tag classmates or alumni..."
-          style={{
-            flex: 1, border: 'none', background: 'none',
-            fontSize: 13, color: '#1d2b4b', outline: 'none',
-            fontFamily: 'inherit',
-          }}
+          placeholder="Search classmates to tag…"
+          className="flex-1 border-none bg-transparent text-sm text-[#1d2b4b] outline-none placeholder-slate-400"
+          style={{ fontFamily: 'inherit' }}
         />
-        {loading && <i className="fas fa-spinner fa-spin" style={{ color: '#94a3b8', fontSize: 11 }} />}
+        {loading && <i className="fas fa-spinner animate-spin text-slate-400 text-xs" />}
       </div>
 
-      {/* Dropdown results */}
+      {/* Dropdown */}
       {open && results.length > 0 && (
-        <div style={{
-          position: 'absolute', top: '100%', left: 0, right: 0,
-          background: '#fff', border: '1px solid #e2e8f0',
-          borderRadius: 14, marginTop: 4,
-          boxShadow: '0 8px 24px rgba(29,43,75,0.12)',
-          zIndex: 9000, overflow: 'hidden',
-          maxHeight: 220, overflowY: 'auto',
-        }}>
+        <div className="absolute top-full left-0 right-0 mt-1.5 bg-white border border-slate-200 rounded-2xl shadow-xl z-[9000] overflow-hidden max-h-56 overflow-y-auto">
           {results.map(user => (
-            <div
-              key={user.id}
-              onClick={() => {
-                if (isTagged(user.id)) {
-                  onUntag(user.id);
-                } else {
-                  onTag(user);
-                }
-                setQuery('');
-                setOpen(false);
-              }}
-              style={{
-                display: 'flex', alignItems: 'center', gap: 10,
-                padding: '10px 14px', cursor: 'pointer',
-                background: isTagged(user.id) ? '#f0f3fa' : '#fff',
-                transition: 'background 0.1s',
-              }}
-              onMouseEnter={e => e.currentTarget.style.background = '#f8fafc'}
-              onMouseLeave={e => e.currentTarget.style.background = isTagged(user.id) ? '#f0f3fa' : '#fff'}
-            >
-              <img
-                src={avatar(user)}
-                alt={user.name}
-                style={{ width: 34, height: 34, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }}
-              />
-              <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 13, fontWeight: 600, color: '#1d2b4b' }}>{user.name}</div>
-                <div style={{ fontSize: 11, color: '#94a3b8' }}>{user.course ?? user.student_id ?? ''}</div>
+            <div key={user.id}
+              onClick={() => { isTagged(user.id) ? onUntag(user.id) : onTag(user); setQuery(''); setOpen(false); }}
+              className={`flex items-center gap-3 px-4 py-3 cursor-pointer transition-colors border-b border-slate-50 last:border-0
+                ${isTagged(user.id) ? 'bg-indigo-50' : 'bg-white hover:bg-slate-50'}`}>
+              <img src={getAvatar(user)} alt={user.name} className="w-8 h-8 rounded-full object-cover shrink-0" />
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold text-[#1d2b4b] m-0 truncate">{user.name}</p>
+                <p className="text-xs text-slate-400 m-0">{user.course ?? user.student_id ?? ''}</p>
               </div>
               {isTagged(user.id) && (
-                <i className="fas fa-check-circle" style={{ color: '#3f51b5', fontSize: 14 }} />
+                <i className="fas fa-check-circle text-[#3f51b5] text-base shrink-0" />
               )}
             </div>
           ))}

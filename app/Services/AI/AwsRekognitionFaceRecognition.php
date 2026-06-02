@@ -7,19 +7,18 @@ use App\Models\User;
 use Aws\Exception\AwsException;
 use Aws\Rekognition\RekognitionClient;
 use Illuminate\Http\UploadedFile;
-use Illuminate\Support\Facades\Storage;
-use InvalidArgumentException;
 use Illuminate\Support\Facades\Log;
+use InvalidArgumentException;
 
 class AwsRekognitionFaceRecognition implements FaceRecognition
 {
-    private ?RekognitionClient $clientInstance = null;  // ← cached instance
+    private ?RekognitionClient $clientInstance = null;
 
     public function __construct(
         private readonly array $config,
     ) {}
 
-    // ── Contract: isEnabled ───────────────────────────────────────────────
+    // ── isEnabled ─────────────────────────────────────────────────────────
 
     public function isEnabled(): bool
     {
@@ -30,7 +29,7 @@ class AwsRekognitionFaceRecognition implements FaceRecognition
             && filled($this->config['collection'] ?? null);
     }
 
-    // ── Contract: indexStudent ────────────────────────────────────────────
+    // ── indexStudent ──────────────────────────────────────────────────────
 
     public function indexStudent(User $user): array
     {
@@ -42,7 +41,6 @@ class AwsRekognitionFaceRecognition implements FaceRecognition
             return ['indexed' => false, 'reason' => 'No profile picture set.'];
         }
 
-        // ← resolves from local disk OR Cloudinary URL
         $bytes = $this->resolveImageBytes($user->profile_picture);
 
         if ($bytes === null || $bytes === '') {
@@ -66,62 +64,54 @@ class AwsRekognitionFaceRecognition implements FaceRecognition
         ];
     }
 
-    private function resolveImageBytes(string $path): ?string
+    // ── indexPhoto ────────────────────────────────────────────────────────
+
+    public function indexPhoto(string $imageUrl, string $externalImageId): array
     {
-        // 1. Full URL passed directly
-        if (str_starts_with($path, 'http://') || str_starts_with($path, 'https://')) {
-            return $this->fetchUrlBytes($path);
+        if (! $this->isEnabled()) {
+            return ['indexed' => false, 'reason' => 'Face recognition not configured.'];
         }
 
-        // 2. Try local public disk - use fread instead of Storage::get
-        $fullPath = storage_path('app/public/' . $path);
-        
-        if (file_exists($fullPath) && is_readable($fullPath)) {
-            $handle = fopen($fullPath, 'rb');
-            if ($handle) {
-                $contents = fread($handle, filesize($fullPath));
-                fclose($handle);
-                return $contents !== false && $contents !== '' ? $contents : null;
-            }
+        $this->ensureCollectionExists();
+
+        $bytes = $this->resolveImageBytes($imageUrl);
+
+        if (! $bytes) {
+            return ['indexed' => false, 'reason' => 'Could not read image bytes.'];
         }
 
-        // 3. Fallback - try asset URL
-        $url = asset('storage/' . ltrim($path, '/'));
-        return $this->fetchUrlBytes($url);
-    }
+        try {
+            $result = $this->client()->indexFaces([
+                'CollectionId'        => $this->collectionId(),
+                'ExternalImageId'     => $externalImageId,
+                'Image'               => ['Bytes' => $bytes],
+                'DetectionAttributes' => ['DEFAULT'],
+                'QualityFilter'       => 'AUTO',
+            ]);
 
-    private function buildUrlFromKnownDisks(string $path): ?string
-    {
-        $disks = ['cloudinary', 's3', 'gcs'];
-        
-        foreach ($disks as $diskName) {
-            $disk = Storage::disk($diskName);
-            
-            if ($disk->exists($path) && method_exists($disk, 'url')) {
-                return $disk->url($path);
-            }
+            $indexed = count($result['FaceRecords'] ?? []) > 0;
+
+            Log::info('[Rekognition] indexPhoto', [
+                'external_image_id' => $externalImageId,
+                'indexed'           => $indexed,
+                'face_records'      => count($result['FaceRecords'] ?? []),
+            ]);
+
+            return [
+                'indexed'      => $indexed,
+                'face_records' => count($result['FaceRecords'] ?? []),
+            ];
+
+        } catch (AwsException $e) {
+            Log::error('[Rekognition] indexPhoto failed', [
+                'external_image_id' => $externalImageId,
+                'error'             => $e->getMessage(),
+            ]);
+            return ['indexed' => false, 'reason' => $e->getMessage()];
         }
-        
-        return null;
     }
 
-    private function fetchUrlBytes(string $url): ?string
-    {
-        $context = stream_context_create([
-            'http' => [
-                'timeout'          => 10,
-                'follow_location'  => true,
-            ],
-            'ssl' => [
-                'verify_peer'      => false,   // needed for some Cloudinary URLs
-                'verify_peer_name' => false,
-            ],
-        ]);
-
-        $bytes = @file_get_contents($url, false, $context);
-        return ($bytes !== false && $bytes !== '') ? $bytes : null;
-    }
-    // ── Contract: syncStudents ────────────────────────────────────────────
+    // ── syncStudents ──────────────────────────────────────────────────────
 
     public function syncStudents(iterable $students): array
     {
@@ -146,7 +136,7 @@ class AwsRekognitionFaceRecognition implements FaceRecognition
         return $summary;
     }
 
-    // ── Contract: analyzePhoto ────────────────────────────────────────────
+    // ── analyzePhoto ──────────────────────────────────────────────────────
 
     public function analyzePhoto(string $disk, string $path): array
     {
@@ -202,7 +192,7 @@ class AwsRekognitionFaceRecognition implements FaceRecognition
         ];
     }
 
-    // ── Contract: searchUploadedFace ──────────────────────────────────────
+    // ── searchUploadedFace ────────────────────────────────────────────────
 
     public function searchUploadedFace(
         UploadedFile $file,
@@ -222,7 +212,81 @@ class AwsRekognitionFaceRecognition implements FaceRecognition
         );
     }
 
-    // ── Contract: analyzeUploadedImage ────────────────────────────────────
+    // ── searchPhotosByFace ────────────────────────────────────────────────
+
+    public function searchPhotosByFace(
+        UploadedFile $file,
+        int $maxMatches = 20,
+        ?float $threshold = null
+    ): array {
+        if (! $this->isEnabled()) {
+            return ['status' => 'disabled', 'photos' => [], 'message' => 'Face recognition is not configured.'];
+        }
+
+        $this->ensureCollectionExists();
+
+        $bytes     = file_get_contents($file->getRealPath()) ?: '';
+        $threshold = $threshold ?? (float) ($this->config['threshold'] ?? 75);
+
+        try {
+            $result = $this->client()->searchFacesByImage([
+                'CollectionId'       => $this->collectionId(),
+                'Image'              => ['Bytes' => $bytes],
+                'FaceMatchThreshold' => $threshold,
+                'MaxFaces'           => $maxMatches,
+                'QualityFilter'      => 'AUTO',
+            ]);
+        } catch (AwsException $e) {
+            $message = $e->getAwsErrorMessage() ?: $e->getMessage();
+            return [
+                'status'  => str_contains(strtolower($message), 'no face') ? 'no_face' : 'error',
+                'photos'  => [],
+                'message' => $message,
+            ];
+        }
+
+        // Collect photo:X matches with similarity scores
+        $photoMatches = collect($result['FaceMatches'] ?? [])
+            ->filter(fn ($m) => str_starts_with((string) data_get($m, 'Face.ExternalImageId'), 'photo:'))
+            ->map(fn ($m) => [
+                'photo_id'   => (int) substr(data_get($m, 'Face.ExternalImageId'), 6),
+                'similarity' => round((float) ($m['Similarity'] ?? 0), 2),
+            ])
+            ->sortByDesc('similarity')
+            ->unique('photo_id')
+            ->values();
+
+        $photoIds = $photoMatches->pluck('photo_id')->all();
+
+        $photos = \App\Models\Photo::whereIn('id', $photoIds)
+            ->with('album:id,title,event_date')
+            ->get()
+            ->keyBy('id');
+
+        $results = $photoMatches->map(fn ($m) => [
+            'photo_id'   => $m['photo_id'],
+            'similarity' => $m['similarity'],
+            'file_path'  => $photos[$m['photo_id']]?->file_path,
+            'caption'    => $photos[$m['photo_id']]?->caption,
+            'album_id'   => $photos[$m['photo_id']]?->album_id,
+            'album'      => $photos[$m['photo_id']]?->album ? [
+                'id'         => $photos[$m['photo_id']]->album->id,
+                'title'      => $photos[$m['photo_id']]->album->title,
+                'event_date' => $photos[$m['photo_id']]->album->event_date,
+            ] : null,
+        ])
+        ->filter(fn ($r) => filled($r['file_path']))
+        ->values()
+        ->all();
+
+        return [
+            'status'  => count($results) > 0 ? 'matched' : 'no_matches',
+            'photos'  => $results,
+            'message' => count($results) > 0 ? null : 'No matching photos found.',
+        ];
+    }
+
+    // ── analyzeUploadedImage ──────────────────────────────────────────────
 
     public function analyzeUploadedImage(UploadedFile $file): array
     {
@@ -361,9 +425,46 @@ class AwsRekognitionFaceRecognition implements FaceRecognition
         return User::find((int) substr($externalImageId, strlen('student:')));
     }
 
+    private function resolveImageBytes(string $path): ?string
+    {
+        if (str_starts_with($path, 'http://') || str_starts_with($path, 'https://')) {
+            return $this->fetchUrlBytes($path);
+        }
+
+        $fullPath = storage_path('app/public/' . $path);
+
+        if (file_exists($fullPath) && is_readable($fullPath)) {
+            $handle = fopen($fullPath, 'rb');
+            if ($handle) {
+                $contents = fread($handle, filesize($fullPath));
+                fclose($handle);
+                return $contents !== false && $contents !== '' ? $contents : null;
+            }
+        }
+
+        $url = asset('storage/' . ltrim($path, '/'));
+        return $this->fetchUrlBytes($url);
+    }
+
+    private function fetchUrlBytes(string $url): ?string
+    {
+        $context = stream_context_create([
+            'http' => [
+                'timeout'         => 10,
+                'follow_location' => true,
+            ],
+            'ssl' => [
+                'verify_peer'      => false,
+                'verify_peer_name' => false,
+            ],
+        ]);
+
+        $bytes = @file_get_contents($url, false, $context);
+        return ($bytes !== false && $bytes !== '') ? $bytes : null;
+    }
+
     private function readDiskBytes(string $disk, string $path): string
     {
-        // Try the same resolution logic
         $bytes = $this->resolveImageBytes($path);
 
         if ($bytes === null) {
@@ -373,7 +474,6 @@ class AwsRekognitionFaceRecognition implements FaceRecognition
         return $bytes;
     }
 
-    /** Returns the cached RekognitionClient (one instance per request). */
     private function client(): RekognitionClient
     {
         return $this->clientInstance ??= new RekognitionClient([

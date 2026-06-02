@@ -6,7 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Jobs\AI\GenerateTranscript;
 use App\Models\Transcript;
 use App\Services\AI\TranscriptionService;
-use App\Services\Storage\CloudinaryService;   // ← direct, not interface
+use App\Services\Storage\CloudinaryService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -15,30 +15,33 @@ use Illuminate\Http\Request;
  * ─────────────────────────────────────────────────────────────
  * Premium-only. Routes gated by 'premium' middleware in api.php.
  *
- * Audio is uploaded to Cloudinary (resource_type: video).
- * Groq Whisper fetches it from the Cloudinary URL.
- *
  * GET    /api/transcripts                → index   (list + searchable)
- * POST   /api/transcripts               → store   (upload to Cloudinary + queue Groq)
+ * POST   /api/transcripts               → store   (manual upload)
  * GET    /api/transcripts/{id}          → show
- * DELETE /api/transcripts/{id}          → destroy (also removes from Cloudinary)
- * GET    /api/transcripts/{id}/subtitles → subtitles (SRT / VTT download)
+ * DELETE /api/transcripts/{id}          → destroy
+ * GET    /api/transcripts/{id}/subtitles → subtitles (SRT / VTT)
  * POST   /api/transcripts/{id}/notes    → regenerate speech notes
+ *
+ * Visibility rules (index + show):
+ *   - User's own manual uploads (any status)
+ *   - All auto-generated transcripts with status 'done'
+ *     (uploaded by admins from graduation videos, visible to all premium users)
  */
 class TranscriptController extends Controller
 {
     public function __construct(
         private readonly TranscriptionService $transcriptionService,
-        private readonly CloudinaryService    $cloudinary,   // ← for uploadAudio()
+        private readonly CloudinaryService    $cloudinary,
     ) {}
 
-    // ── Feature: List + Searchable speeches ──────────────────────────────
+    // ── List + Searchable ─────────────────────────────────────────────────
 
     public function index(Request $request): JsonResponse
     {
-        $query = Transcript::where('uploaded_by', $request->user()->id)->latest();
+        $userId = $request->user()->id;
 
-        // Search across title, transcript text, and AI notes
+        $query = Transcript::visibleTo($userId)->latest();
+
         if ($search = $request->query('q')) {
             $query->where(function ($q) use ($search) {
                 $q->where('title',            'like', "%{$search}%")
@@ -49,11 +52,12 @@ class TranscriptController extends Controller
 
         if ($lang   = $request->query('lang'))   $query->where('language', $lang);
         if ($status = $request->query('status')) $query->where('status',   $status);
+        if ($source = $request->query('source')) $query->where('source',   $source);
 
         return response()->json($query->paginate(10));
     }
 
-    // ── Feature: Transcript generation ───────────────────────────────────
+    // ── Manual upload ─────────────────────────────────────────────────────
 
     public function store(Request $request): JsonResponse
     {
@@ -61,30 +65,26 @@ class TranscriptController extends Controller
             'audio' => [
                 'required',
                 'file',
-                // Groq supports: flac, mp3, mp4, mpeg, mpga, m4a, ogg, wav, webm
                 'mimes:mp3,wav,m4a,ogg,flac,webm,mp4,mpeg,mpga',
-                'max:25600',   // 25 MB — Groq free tier limit
+                'max:25600',
             ],
             'title' => 'required|string|max:255',
         ]);
 
-        // ── Upload audio to Cloudinary ────────────────────────────────────
-        // Uses uploadAudio() which sets resource_type: 'video' automatically
         $uploaded = $this->cloudinary->uploadAudio(
             $request->file('audio'),
             $request->user()->id,
         );
 
-        // ── Create transcript record ──────────────────────────────────────
         $transcript = Transcript::create([
             'title'       => $request->input('title'),
-            'audio_path'  => $uploaded['secure_url'],  // ← full Cloudinary HTTPS URL
-            'public_id'   => $uploaded['public_id'],   // ← for deletion later
+            'audio_path'  => $uploaded['secure_url'],
+            'public_id'   => $uploaded['public_id'],
             'status'      => 'pending',
+            'source'      => 'manual',
             'uploaded_by' => $request->user()->id,
         ]);
 
-        // ── Dispatch Groq Whisper job ─────────────────────────────────────
         GenerateTranscript::dispatch($transcript);
 
         return response()->json($transcript, 201);
@@ -94,30 +94,26 @@ class TranscriptController extends Controller
 
     public function show(int $id, Request $request): JsonResponse
     {
-        $transcript = Transcript::where('id', $id)
-            ->where('uploaded_by', $request->user()->id)
+        $transcript = Transcript::visibleTo($request->user()->id)
+            ->where('id', $id)
             ->firstOrFail();
 
         return response()->json($transcript);
     }
 
-    // ── Delete (removes from Cloudinary too) ──────────────────────────────
+    // ── Delete ────────────────────────────────────────────────────────────
 
     public function destroy(int $id, Request $request): JsonResponse
     {
+        // Users can only delete their own transcripts (not auto-generated ones)
         $transcript = Transcript::where('id', $id)
             ->where('uploaded_by', $request->user()->id)
             ->firstOrFail();
 
-        // Remove audio from Cloudinary
-        if ($transcript->public_id) {
+        if ($transcript->public_id && $transcript->source === 'manual') {
             try {
-                $this->cloudinary->deletePhoto(
-                    $transcript->public_id,
-                    'video'   // audio stored as 'video' resource type
-                );
+                $this->cloudinary->deletePhoto($transcript->public_id, 'video');
             } catch (\Throwable $e) {
-                // Log but don't block deletion of DB record
                 \Illuminate\Support\Facades\Log::warning(
                     "Could not delete Cloudinary audio [{$transcript->public_id}]: {$e->getMessage()}"
                 );
@@ -129,12 +125,12 @@ class TranscriptController extends Controller
         return response()->json(['deleted' => true]);
     }
 
-    // ── Feature: Subtitle generation ─────────────────────────────────────
+    // ── Subtitles ─────────────────────────────────────────────────────────
 
     public function subtitles(int $id, Request $request): \Symfony\Component\HttpFoundation\Response
     {
-        $transcript = Transcript::where('id', $id)
-            ->where('uploaded_by', $request->user()->id)
+        $transcript = Transcript::visibleTo($request->user()->id)
+            ->where('id', $id)
             ->where('status', 'done')
             ->firstOrFail();
 
@@ -150,12 +146,12 @@ class TranscriptController extends Controller
             ->header('Content-Disposition', "attachment; filename=\"{$filename}\"");
     }
 
-    // ── Feature: Speech notes ─────────────────────────────────────────────
+    // ── Regenerate notes ──────────────────────────────────────────────────
 
     public function regenerateNotes(int $id, Request $request): JsonResponse
     {
-        $transcript = Transcript::where('id', $id)
-            ->where('uploaded_by', $request->user()->id)
+        $transcript = Transcript::visibleTo($request->user()->id)
+            ->where('id', $id)
             ->where('status', 'done')
             ->firstOrFail();
 

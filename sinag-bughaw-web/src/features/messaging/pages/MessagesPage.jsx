@@ -4,44 +4,14 @@ import { useAuth }                                   from '@/features/auth/hooks
 import { studentsApi }                               from '@/api/student.api';
 import Navbar                                        from '@/components/layout/Navbar';
 import { useMessaging }                              from '@/features/messaging/hooks/useMessaging';
+import { imageUrl, avatarUrl }                       from '@/utils/imageUrl';
 
-// ── Avatar helpers ─────────────────────────────────────────────────────────────
-
-function avatarSrc(profilePicture, name) {
-  const fallback = `https://ui-avatars.com/api/?name=${encodeURIComponent(name ?? 'User')}&background=1d2b4b&color=fff`;
-  if (!profilePicture?.trim()) return fallback;
-  if (profilePicture.startsWith('http')) return profilePicture;
-  // relative path → prepend storage base
-  return `${import.meta.env.VITE_API_URL}/storage/${profilePicture}`;
-}
-
-function avatarError(e, name) {
-  e.currentTarget.onerror = null; // prevent infinite loop
-  e.currentTarget.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(name ?? 'User')}&background=1d2b4b&color=fff`;
-}
-
-// ── Tiny helpers ───────────────────────────────────────────────────────────────
-
-function OnlineDot({ online }) {
-  return (
-    <span
-      style={{
-        display:      'inline-block',
-        width:        '10px',
-        height:       '10px',
-        borderRadius: '50%',
-        background:   online ? '#22c55e' : '#94a3b8',
-        border:       '2px solid white',
-        flexShrink:   0,
-      }}
-    />
-  );
-}
+// ── Helpers ────────────────────────────────────────────────────────────────────
 
 function formatTime(iso) {
   if (!iso) return '';
-  const d = new Date(iso);
-  const now = new Date();
+  const d        = new Date(iso);
+  const now      = new Date();
   const diffDays = Math.floor((now - d) / 86400000);
   if (diffDays === 0) return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   if (diffDays === 1) return 'Yesterday';
@@ -49,7 +19,67 @@ function formatTime(iso) {
   return d.toLocaleDateString([], { month: 'short', day: 'numeric' });
 }
 
-// ── Component ──────────────────────────────────────────────────────────────────
+function initials(name = '') {
+  return name.trim().split(/\s+/).map(w => w[0]?.toUpperCase() || '').slice(0, 2).join('');
+}
+
+// ── Avatar ─────────────────────────────────────────────────────────────────────
+// Generates colored initials; falls back to user photo if available.
+
+const PALETTES = [
+  { bg: '#fff3cd', fg: '#1d2b4b' },  // NU gold tint
+  { bg: '#e0e7ff', fg: '#3730a3' },
+  { bg: '#d1fae5', fg: '#065f46' },
+  { bg: '#fce7f3', fg: '#9d174d' },
+  { bg: '#e0f2fe', fg: '#0369a1' },
+  { bg: '#f3e8ff', fg: '#7e22ce' },
+];
+
+function getPalette(name = '') {
+  const code = [...name].reduce((acc, c) => acc + c.charCodeAt(0), 0);
+  return PALETTES[code % PALETTES.length];
+}
+
+function Avatar({ src, name, size = 44, radius = 12 }) {
+  const [errored, setErrored] = useState(false);
+  const resolved = (!errored && src) ? imageUrl(src) : null;
+  const palette  = getPalette(name);
+
+  if (!resolved) {
+    return (
+      <div style={{
+        width: size, height: size, borderRadius: radius,
+        background: palette.bg, color: palette.fg,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        fontWeight: 600, fontSize: size * 0.34, flexShrink: 0,
+        fontFamily: "'Figtree', sans-serif", letterSpacing: '0.02em',
+      }}>
+        {initials(name)}
+      </div>
+    );
+  }
+
+  return (
+    <img
+      src={resolved} alt={name} onError={() => setErrored(true)}
+      style={{ width: size, height: size, borderRadius: radius, objectFit: 'cover', flexShrink: 0 }}
+    />
+  );
+}
+
+function OnlineDot({ online, size = 10, borderColor = '#fff' }) {
+  return (
+    <span style={{
+      display: 'inline-block', width: size, height: size,
+      borderRadius: '50%',
+      background: online ? '#22c55e' : '#d1d5db',
+      border: `2px solid ${borderColor}`,
+      flexShrink: 0,
+    }} />
+  );
+}
+
+// ── Page ───────────────────────────────────────────────────────────────────────
 
 export default function MessagesPage() {
   const { id: recipientId } = useParams();
@@ -57,15 +87,8 @@ export default function MessagesPage() {
   const navigate            = useNavigate();
 
   const {
-    conversations,
-    thread,
-    loading,
-    isTyping,
-    onlineUsers,
-    unreadTotal,
-    sendMessage,
-    onKeystroke,
-    fetchConversations,
+    conversations, thread, loading, isTyping,
+    onlineUsers, unreadTotal, sendMessage, onKeystroke,
   } = useMessaging(recipientId ? Number(recipientId) : null);
 
   const [body,      setBody]      = useState('');
@@ -75,40 +98,27 @@ export default function MessagesPage() {
   const bottomRef = useRef();
   const inputRef  = useRef();
 
-  // ── Load recipient profile ──────────────────────────────────────────────────
-
   useEffect(() => {
     if (!recipientId) { setRecipient(null); return; }
     studentsApi.show(recipientId).then(({ data }) => setRecipient(data)).catch(() => {});
   }, [recipientId]);
 
-  // ── Auto-scroll ─────────────────────────────────────────────────────────────
-
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [thread, isTyping]);
-
-  // ── Send ────────────────────────────────────────────────────────────────────
 
   const handleSend = async (e) => {
     e.preventDefault();
     if (!body.trim() || !recipientId) return;
     const text = body;
     setBody('');
-    try {
-      await sendMessage(Number(recipientId), text);
-    } catch {
-      setBody(text); // restore on error
-    }
+    try { await sendMessage(Number(recipientId), text); }
+    catch { setBody(text); }
   };
-
-  // ── Typing ──────────────────────────────────────────────────────────────────
 
   const handleKeyDown = useCallback(() => {
     if (recipientId) onKeystroke(Number(recipientId));
   }, [recipientId, onKeystroke]);
-
-  // ── Filtered conversations ──────────────────────────────────────────────────
 
   const filtered = conversations.filter(conv => {
     if (!search.trim()) return true;
@@ -116,55 +126,233 @@ export default function MessagesPage() {
     return other?.name?.toLowerCase().includes(search.toLowerCase());
   });
 
-  // ── Styles ──────────────────────────────────────────────────────────────────
+  // ── CSS ──────────────────────────────────────────────────────────────────────
 
-  const S = {
-    page:        { display:'flex', flexDirection:'column', height:'100vh', background:'#f8fafc' },
-    body:        { display:'flex', flex:1, overflow:'hidden', maxWidth:'1400px', width:'100%', margin:'0 auto' },
-    sidebar:     { width:'300px', flexShrink:0, background:'white', borderRight:'1px solid #e2e8f0', display:'flex', flexDirection:'column', overflow:'hidden' },
-    sidebarHead: { padding:'20px', borderBottom:'1px solid #e2e8f0', flexShrink:0 },
-    searchWrap:  { padding:'0 16px 12px', flexShrink:0 },
-    searchInput: { width:'100%', padding:'8px 14px', borderRadius:'50px', border:'1px solid #e2e8f0', fontSize:'13px', outline:'none', background:'#f8fafc', boxSizing:'border-box' },
-    convList:    { overflowY:'auto', flex:1 },
-    chatArea:    { flex:1, display:'flex', flexDirection:'column', overflow:'hidden' },
-    chatHeader:  { background:'white', borderBottom:'1px solid #e2e8f0', padding:'16px 24px', display:'flex', alignItems:'center', gap:'12px', flexShrink:0 },
-    messages:    { flex:1, overflowY:'auto', padding:'24px', display:'flex', flexDirection:'column', gap:'12px', background:'#f8fafc' },
-    inputArea:   { background:'white', borderTop:'1px solid #e2e8f0', padding:'16px 24px', display:'flex', gap:'12px', alignItems:'center', flexShrink:0 },
-  };
+  const css = `
+    @import url('https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600&display=swap');
+    .nu-msg * { box-sizing: border-box; }
+    .nu-msg {
+      font-family: 'Figtree', -apple-system, sans-serif;
+      display: flex; flex-direction: column; height: 100vh; background: #eef0f5;
+    }
+
+    /* ── Sidebar ── */
+    .nu-sidebar {
+      width: 280px; flex-shrink: 0; background: #fff;
+      border-right: 1px solid #e4e7ed;
+      display: flex; flex-direction: column; overflow: hidden;
+    }
+    .sb-head { padding: 20px 16px 10px; }
+    .sb-title {
+      font-size: 15px; font-weight: 600; color: #1d2b4b;
+      margin: 0 0 12px; letter-spacing: -0.2px;
+      display: flex; align-items: center; gap: 8px;
+    }
+    .sb-title-pip {
+      width: 8px; height: 8px; border-radius: 50%;
+      background: #fdb813; flex-shrink: 0;
+    }
+    .sb-search {
+      display: flex; align-items: center; gap: 8px;
+      background: #f4f6fa; border-radius: 10px; padding: 8px 12px;
+      border: 1px solid transparent; transition: border-color .15s, background .15s;
+    }
+    .sb-search:focus-within { border-color: #fdb813; background: #fff; }
+    .sb-search input {
+      background: none; border: none; outline: none;
+      font-size: 13px; color: #1d2b4b; width: 100%; font-family: inherit;
+    }
+    .sb-search input::placeholder { color: #9aa3b5; }
+
+    .conv-list { flex: 1; overflow-y: auto; }
+    .conv-list::-webkit-scrollbar { width: 3px; }
+    .conv-list::-webkit-scrollbar-thumb { background: #e4e7ed; border-radius: 4px; }
+    .conv-empty { font-size: 12px; color: #9aa3b5; padding: 20px 16px; text-align: center; }
+
+    .conv-item {
+      display: flex; align-items: center; gap: 10px;
+      padding: 11px 16px; cursor: pointer;
+      border-bottom: 1px solid #f2f4f7;
+      text-decoration: none; color: inherit;
+      transition: background .12s;
+      border-left: 3px solid transparent;
+    }
+    .conv-item:hover { background: #f8f9fc; }
+    .conv-item.active { background: #fffbeb; border-left-color: #fdb813; padding-left: 13px; }
+
+    .conv-av-wrap { position: relative; flex-shrink: 0; }
+    .conv-dot { position: absolute; bottom: -2px; right: -2px; }
+    .conv-info { flex: 1; min-width: 0; }
+    .conv-name {
+      font-size: 13px; font-weight: 600; color: #1d2b4b;
+      margin: 0 0 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .conv-preview { font-size: 11.5px; color: #9aa3b5; margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .conv-meta { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; flex-shrink: 0; }
+    .conv-time { font-size: 10.5px; color: #9aa3b5; }
+    .unread-badge {
+      background: #fdb813; color: #1d2b4b;
+      border-radius: 20px; font-size: 10px; font-weight: 700;
+      padding: 1px 6px; min-width: 18px; text-align: center;
+    }
+
+    .sb-footer { padding: 12px 14px; border-top: 1px solid #f2f4f7; flex-shrink: 0; }
+    .find-btn {
+      display: block; text-align: center;
+      background: #1d2b4b; color: #fff; border-radius: 10px;
+      padding: 10px; font-size: 12.5px; font-weight: 600;
+      text-decoration: none; transition: background .15s;
+    }
+    .find-btn:hover { background: #263654; }
+
+    /* ── Chat ── */
+    .nu-chat { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+
+    .chat-header {
+      background: #fff; border-bottom: 1px solid #e4e7ed;
+      padding: 14px 24px; display: flex; align-items: center; gap: 12px; flex-shrink: 0;
+    }
+    .ch-back {
+      background: none; border: none; cursor: pointer;
+      font-size: 18px; color: #5a6a8a; padding: 0;
+    }
+    .ch-info { flex: 1; }
+    .ch-name { font-size: 14px; font-weight: 600; color: #1d2b4b; margin: 0; }
+    .ch-status { font-size: 12px; margin: 0; display: flex; align-items: center; gap: 5px; }
+    .ch-status-pip { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+    .ch-actions { display: flex; gap: 8px; }
+    .ch-btn {
+      width: 34px; height: 34px; border-radius: 8px;
+      background: #f4f6fa; border: 1px solid #e4e7ed;
+      cursor: pointer; display: flex; align-items: center; justify-content: center;
+      color: #5a6a8a; font-size: 15px; transition: background .12s, color .12s;
+    }
+    .ch-btn:hover { background: #ebedf2; color: #1d2b4b; }
+
+    /* Messages */
+    .nu-messages {
+      flex: 1; overflow-y: auto; padding: 24px;
+      display: flex; flex-direction: column; gap: 8px; background: #f4f6fa;
+    }
+    .nu-messages::-webkit-scrollbar { width: 3px; }
+    .nu-messages::-webkit-scrollbar-thumb { background: #dde1ea; border-radius: 4px; }
+
+    .day-label {
+      text-align: center; font-size: 11px; color: #9aa3b5;
+      margin: 4px 0 8px; font-weight: 500;
+      display: flex; align-items: center; gap: 8px;
+    }
+    .day-label::before, .day-label::after { content: ''; flex: 1; height: 1px; background: #e4e7ed; }
+
+    .msg-loading { text-align: center; font-size: 13px; color: #9aa3b5; padding: 20px 0; }
+
+    .msg-row { display: flex; }
+    .msg-row.mine { justify-content: flex-end; }
+    .msg-row.theirs { justify-content: flex-start; align-items: flex-end; gap: 7px; }
+
+    .bubble { max-width: 320px; padding: 10px 15px; font-size: 13.5px; line-height: 1.55; word-break: break-word; }
+    .bubble.mine {
+      background: #1d2b4b; color: #fff;
+      border-radius: 18px 18px 4px 18px;
+    }
+    .bubble.mine.optimistic { opacity: 0.6; }
+    .bubble.theirs {
+      background: #fff; color: #1d2b4b;
+      border-radius: 18px 18px 18px 4px;
+      border: 1px solid #e4e7ed;
+    }
+
+    .msg-meta { font-size: 10.5px; color: #9aa3b5; margin: 3px 4px 0; }
+    .msg-meta.right { text-align: right; }
+    .seen-check { color: #fdb813; margin-left: 4px; font-size: 9px; }
+
+    /* Typing */
+    .typing-row { display: flex; align-items: flex-end; gap: 7px; }
+    .typing-bub {
+      background: #fff; border: 1px solid #e4e7ed;
+      border-radius: 18px 18px 18px 4px;
+      padding: 12px 16px; display: flex; gap: 4px; align-items: center;
+    }
+    .t-dot { width: 6px; height: 6px; border-radius: 50%; background: #c8cdd8; animation: tBounce 1.2s ease-in-out infinite; }
+    .t-dot:nth-child(2) { animation-delay: .2s; }
+    .t-dot:nth-child(3) { animation-delay: .4s; }
+    @keyframes tBounce { 0%,60%,100%{transform:translateY(0)} 30%{transform:translateY(-5px)} }
+
+    /* Input */
+    .input-bar {
+      background: #fff; border-top: 1px solid #e4e7ed;
+      padding: 12px 24px; display: flex; gap: 10px; align-items: center; flex-shrink: 0;
+    }
+    .input-wrap {
+      flex: 1; background: #f4f6fa; border-radius: 12px;
+      padding: 9px 14px; display: flex; align-items: center; gap: 8px;
+      border: 1px solid transparent; transition: border-color .15s, background .15s;
+    }
+    .input-wrap:focus-within { border-color: #fdb813; background: #fff; }
+    .input-wrap input {
+      flex: 1; background: none; border: none; outline: none;
+      font-size: 13.5px; color: #1d2b4b; font-family: inherit;
+    }
+    .input-wrap input::placeholder { color: #9aa3b5; }
+    .in-icon { font-size: 16px; color: #9aa3b5; cursor: pointer; flex-shrink: 0; }
+    .in-icon:hover { color: #5a6a8a; }
+
+    .send-btn {
+      width: 40px; height: 40px; border-radius: 11px;
+      background: #fdb813; border: none; cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      color: #1d2b4b; font-size: 15px; flex-shrink: 0;
+      transition: background .15s, transform .1s;
+    }
+    .send-btn:hover:not(:disabled) { background: #e6a510; transform: scale(1.05); }
+    .send-btn:disabled { background: #e4e7ed; color: #9aa3b5; cursor: default; }
+
+    /* Empty state */
+    .empty-state {
+      flex: 1; display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      color: #9aa3b5; gap: 8px; padding: 40px;
+    }
+    .empty-icon { font-size: 52px; opacity: 0.15; color: #1d2b4b; margin-bottom: 8px; }
+    .empty-heading { font-size: 15px; font-weight: 600; color: #344054; margin: 0; }
+    .empty-sub { font-size: 13px; color: #9aa3b5; margin: 0; }
+    .empty-cta {
+      margin-top: 16px; background: #1d2b4b; color: #fff;
+      padding: 11px 28px; border-radius: 10px;
+      font-weight: 600; font-size: 13px; text-decoration: none;
+      transition: background .15s;
+    }
+    .empty-cta:hover { background: #263654; }
+
+    @media (max-width: 640px) {
+      .nu-sidebar { display: none !important; }
+      .ch-back { display: block !important; }
+    }
+  `;
 
   return (
-    <div style={S.page}>
+    <div className="nu-msg">
+      <style>{css}</style>
       <Navbar unreadMessageCount={unreadTotal} />
 
-      <div style={S.body}>
+      <div style={{ display: 'flex', flex: 1, overflow: 'hidden', maxWidth: 1400, width: '100%', margin: '0 auto' }}>
 
-        {/* ── Sidebar ─────────────────────────────────────────────────────── */}
-        <div style={S.sidebar} className="hidden sm:flex flex-col">
-
-          {/* Header */}
-          <div style={S.sidebarHead}>
-            <p style={{ fontWeight:700, fontSize:'15px', color:'var(--nu-blue)', margin:0 }}>
-              <i className="fas fa-comment-dots mr-2" style={{ color:'var(--nu-blue-bright)' }} />
+        {/* ── Sidebar ── */}
+        <div className="nu-sidebar">
+          <div className="sb-head">
+            <p className="sb-title">
+              <span className="sb-title-pip" />
               Messages
             </p>
+            <div className="sb-search">
+              <i className="fas fa-search" style={{ fontSize: 13, color: '#9aa3b5', flexShrink: 0 }} />
+              <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search conversations…" />
+            </div>
           </div>
 
-          {/* Search */}
-          <div style={S.searchWrap}>
-            <input
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              placeholder="Search conversations…"
-              style={S.searchInput}
-            />
-          </div>
-
-          {/* List */}
-          <div style={S.convList}>
+          <div className="conv-list">
             {filtered.length === 0 && (
-              <p style={{ fontSize:'12px', color:'#94a3b8', padding:'16px' }}>
-                {search ? 'No matches found.' : 'No conversations yet.'}
-              </p>
+              <p className="conv-empty">{search ? 'No results found.' : 'No conversations yet.'}</p>
             )}
 
             {filtered.map(conv => {
@@ -174,142 +362,87 @@ export default function MessagesPage() {
               const isOnline = onlineUsers.has(other.id);
 
               return (
-                <Link
-                  key={conv.id}
-                  to={`/messages/${other.id}`}
-                  style={{
-                    display:        'flex',
-                    alignItems:     'center',
-                    gap:            '12px',
-                    padding:        '14px 16px',
-                    borderBottom:   '1px solid #f1f5f9',
-                    background:     isActive ? '#eef2ff' : 'white',
-                    textDecoration: 'none',
-                    color:          'inherit',
-                    transition:     'background .15s',
-                  }}
+                <Link key={conv.id} to={`/messages/${other.id}`}
+                  className={`conv-item${isActive ? ' active' : ''}`}
                 >
-                  {/* ✅ FIXED: Avatar with onError fallback */}
-                  <div style={{ position:'relative', flexShrink:0 }}>
-                    <img
-                      src={avatarSrc(other.profile_picture, other.name)}
-                      onError={e => avatarError(e, other.name)}
-                      alt={other.name}
-                      style={{ width:'44px', height:'44px', borderRadius:'12px', objectFit:'cover' }}
-                    />
-                    <span style={{ position:'absolute', bottom:'-2px', right:'-2px' }}>
-                      <OnlineDot online={isOnline} />
+                  <div className="conv-av-wrap">
+                    <Avatar src={other.profile_picture} name={other.name} size={42} radius={12} />
+                    <span className="conv-dot">
+                      <OnlineDot online={isOnline} size={9} borderColor={isActive ? '#fffbeb' : '#fff'} />
                     </span>
                   </div>
-
-                  {/* Name + preview */}
-                  <div style={{ flex:1, minWidth:0 }}>
-                    <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
-                      <p style={{ fontWeight:700, fontSize:'13px', color:'var(--nu-blue)', margin:0, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
-                        {other.name}
-                      </p>
-                      <span style={{ fontSize:'11px', color:'#94a3b8', flexShrink:0, marginLeft:'8px' }}>
-                        {formatTime(conv.created_at)}
-                      </span>
-                    </div>
-                    <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
-                      <p style={{ fontSize:'12px', color:'#94a3b8', margin:0, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', maxWidth:'150px' }}>
-                        {conv.body}
-                      </p>
-                      {conv.unread_count > 0 && (
-                        <span style={{ background:'var(--nu-blue-bright)', color:'white', borderRadius:'50px', fontSize:'11px', fontWeight:700, padding:'2px 7px', flexShrink:0 }}>
-                          {conv.unread_count}
-                        </span>
-                      )}
-                    </div>
+                  <div className="conv-info">
+                    <p className="conv-name">{other.name}</p>
+                    <p className="conv-preview">{conv.body}</p>
+                  </div>
+                  <div className="conv-meta">
+                    <span className="conv-time">{formatTime(conv.created_at)}</span>
+                    {conv.unread_count > 0 && <span className="unread-badge">{conv.unread_count}</span>}
                   </div>
                 </Link>
               );
             })}
           </div>
 
-          {/* Find students CTA */}
-          <div style={{ padding:'16px', borderTop:'1px solid #f1f5f9', flexShrink:0 }}>
-            <Link
-              to="/directory"
-              style={{ display:'block', textAlign:'center', background:'var(--nu-blue)', color:'white', borderRadius:'12px', padding:'10px', fontSize:'13px', fontWeight:700, textDecoration:'none' }}
-            >
-              <i className="fas fa-search mr-2" />Find Students
+          <div className="sb-footer">
+            <Link to="/directory" className="find-btn">
+              <i className="fas fa-search" style={{ marginRight: 6 }} />Find Students
             </Link>
           </div>
         </div>
 
-        {/* ── Chat area ───────────────────────────────────────────────────── */}
-        <div style={S.chatArea}>
+        {/* ── Chat ── */}
+        <div className="nu-chat">
           {recipientId ? (
             <>
-              {/* Header */}
-              <div style={S.chatHeader}>
-                {/* Mobile back button */}
-                <button
-                  onClick={() => navigate('/messages')}
-                  className="sm:hidden"
-                  style={{ background:'none', border:'none', cursor:'pointer', fontSize:'18px', color:'var(--nu-blue)', padding:0 }}
-                >
+              <div className="chat-header">
+                <button onClick={() => navigate('/messages')} className="ch-back" style={{ display: 'none' }}>
                   <i className="fas fa-arrow-left" />
                 </button>
 
                 {recipient && (
                   <>
-                    {/* ✅ FIXED: Avatar with onError fallback */}
-                    <div style={{ position:'relative' }}>
-                      <img
-                        src={avatarSrc(recipient.profile_picture, recipient.name)}
-                        onError={e => avatarError(e, recipient.name)}
-                        alt={recipient.name}
-                        style={{ width:'40px', height:'40px', borderRadius:'10px', objectFit:'cover' }}
-                      />
-                      <span style={{ position:'absolute', bottom:'-2px', right:'-2px' }}>
-                        <OnlineDot online={onlineUsers.has(recipient.id)} />
+                    <div className="conv-av-wrap">
+                      <Avatar src={recipient.profile_picture} name={recipient.name} size={38} radius={10} />
+                      <span className="conv-dot">
+                        <OnlineDot online={onlineUsers.has(recipient.id)} size={9} />
                       </span>
                     </div>
-                    <div>
-                      <p style={{ fontWeight:700, fontSize:'14px', color:'var(--nu-blue)', margin:0 }}>
-                        {recipient.name}
+                    <div className="ch-info">
+                      <p className="ch-name">{recipient.name}</p>
+                      <p className="ch-status" style={{ color: onlineUsers.has(recipient.id) ? '#22c55e' : '#9aa3b5' }}>
+                        <span className="ch-status-pip" style={{ background: onlineUsers.has(recipient.id) ? '#22c55e' : '#d1d5db' }} />
+                        {onlineUsers.has(recipient.id) ? 'Online' : (recipient.course ?? 'Offline')}
                       </p>
-                      <p style={{ fontSize:'12px', color: onlineUsers.has(recipient.id) ? '#22c55e' : '#94a3b8', margin:0 }}>
-                        {onlineUsers.has(recipient.id) ? 'Online' : (recipient.course ?? '')}
-                      </p>
+                    </div>
+                    <div className="ch-actions">
+                      <button className="ch-btn"><i className="fas fa-phone" /></button>
+                      <button className="ch-btn"><i className="fas fa-ellipsis-h" /></button>
                     </div>
                   </>
                 )}
               </div>
 
-              {/* Messages */}
-              <div style={S.messages}>
-                {loading && (
-                  <p style={{ textAlign:'center', fontSize:'13px', color:'#94a3b8' }}>Loading messages…</p>
-                )}
+              <div className="nu-messages">
+                {loading && <p className="msg-loading">Loading messages…</p>}
+                {thread.length > 0 && <div className="day-label">Today</div>}
 
                 {thread.map(msg => {
                   const isMine = String(msg.sender_id) === String(user?.id);
                   return (
-                    <div key={msg.id} style={{ display:'flex', justifyContent: isMine ? 'flex-end' : 'flex-start' }}>
+                    <div key={msg.id} className={`msg-row ${isMine ? 'mine' : 'theirs'}`}>
+                      {!isMine && (
+                        <Avatar src={recipient?.profile_picture} name={recipient?.name ?? ''} size={26} radius={7} />
+                      )}
                       <div>
-                        <div
-                          style={{
-                            maxWidth:     '320px',
-                            padding:      '11px 17px',
-                            borderRadius: isMine ? '20px 20px 4px 20px' : '20px 20px 20px 4px',
-                            background:   isMine ? 'var(--nu-blue-bright)' : 'white',
-                            color:        isMine ? 'white' : 'var(--nu-blue)',
-                            fontSize:     '14px',
-                            boxShadow:    '0 2px 8px rgba(0,0,0,0.06)',
-                            opacity:      msg._optimistic ? 0.7 : 1,
-                          }}
-                        >
+                        <div className={`bubble ${isMine ? 'mine' : 'theirs'}${msg._optimistic ? ' optimistic' : ''}`}>
                           {msg.body}
                         </div>
-                        <p style={{ fontSize:'11px', color:'#94a3b8', margin:'4px 4px 0', textAlign: isMine ? 'right' : 'left' }}>
+                        <p className={`msg-meta${isMine ? ' right' : ''}`}>
                           {formatTime(msg.created_at)}
                           {isMine && msg.is_read && (
-                            <span style={{ marginLeft:'6px', color:'var(--nu-blue-bright)' }}>
-                              <i className="fas fa-check-double" style={{ fontSize:'10px' }} />
+                            <span className="seen-check">
+                              <i className="fas fa-check-double" style={{ fontSize: 9 }} /> Seen
                             </span>
                           )}
                         </p>
@@ -318,75 +451,46 @@ export default function MessagesPage() {
                   );
                 })}
 
-                {/* Typing indicator */}
                 {isTyping && (
-                  <div style={{ display:'flex', justifyContent:'flex-start' }}>
-                    <div style={{ background:'white', borderRadius:'20px 20px 20px 4px', padding:'12px 18px', boxShadow:'0 2px 8px rgba(0,0,0,0.06)', display:'flex', gap:'4px', alignItems:'center' }}>
-                      {[0, 1, 2].map(i => (
-                        <span
-                          key={i}
-                          style={{
-                            width:'7px', height:'7px', borderRadius:'50%',
-                            background:'#94a3b8',
-                            animation:`typing-bounce 1.2s ease-in-out ${i * 0.2}s infinite`,
-                          }}
-                        />
-                      ))}
+                  <div className="typing-row">
+                    <Avatar src={recipient?.profile_picture} name={recipient?.name ?? ''} size={26} radius={7} />
+                    <div className="typing-bub">
+                      <span className="t-dot" /><span className="t-dot" /><span className="t-dot" />
                     </div>
                   </div>
                 )}
-
                 <div ref={bottomRef} />
               </div>
 
-              {/* Input */}
-              <form onSubmit={handleSend} style={S.inputArea}>
-                <input
-                  ref={inputRef}
-                  value={body}
-                  onChange={e => setBody(e.target.value)}
-                  onKeyDown={handleKeyDown}
-                  placeholder="Type a message…"
-                  style={{ flex:1, padding:'12px 20px', borderRadius:'50px', border:'1px solid #e2e8f0', background:'#f8fafc', fontSize:'14px', outline:'none' }}
-                />
-                <button
-                  type="submit"
-                  disabled={!body.trim()}
-                  style={{
-                    padding:'12px 24px', borderRadius:'50px', background:'var(--nu-blue-bright)',
-                    color:'white', border:'none', cursor:'pointer', fontWeight:700, fontSize:'13px',
-                    opacity: !body.trim() ? 0.5 : 1, display:'flex', alignItems:'center', gap:'6px',
-                  }}
-                >
-                  <i className="fas fa-paper-plane" /> Send
+              <form onSubmit={handleSend} className="input-bar">
+                <div className="input-wrap">
+                  <i className="far fa-smile in-icon" />
+                  <input
+                    ref={inputRef} value={body}
+                    onChange={e => setBody(e.target.value)}
+                    onKeyDown={handleKeyDown}
+                    placeholder="Type a message…"
+                  />
+                  <i className="fas fa-paperclip in-icon" />
+                </div>
+                <button type="submit" className="send-btn" disabled={!body.trim()}>
+                  <i className="fas fa-paper-plane" />
                 </button>
               </form>
             </>
           ) : (
-            /* Empty state */
-            <div style={{ flex:1, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', color:'#94a3b8' }}>
-              <i className="fas fa-comment-dots" style={{ fontSize:'64px', opacity:0.2, marginBottom:'16px' }} />
-              <p style={{ fontWeight:600, margin:0 }}>Select a conversation</p>
-              <p style={{ fontSize:'13px', marginTop:'4px' }}>or find someone to chat with</p>
-              <Link
-                to="/directory"
-                style={{ marginTop:'20px', background:'var(--nu-blue)', color:'white', padding:'12px 24px', borderRadius:'12px', fontWeight:700, fontSize:'13px', textDecoration:'none' }}
-              >
-                Find Students
+            <div className="empty-state">
+              <div className="empty-icon"><i className="fas fa-comment-dots" /></div>
+              <p className="empty-heading">No conversation selected</p>
+              <p className="empty-sub">Pick one from the list or find someone to chat with.</p>
+              <Link to="/directory" className="empty-cta">
+                <i className="fas fa-search" style={{ marginRight: 7 }} />Find Students
               </Link>
             </div>
           )}
         </div>
 
       </div>
-
-      {/* Typing bounce animation */}
-      <style>{`
-        @keyframes typing-bounce {
-          0%, 60%, 100% { transform: translateY(0); }
-          30%            { transform: translateY(-6px); }
-        }
-      `}</style>
     </div>
   );
 }

@@ -14,6 +14,7 @@ class Section extends Model
     protected $fillable = [
         'name',
         'course',
+        'department', 
         'batch_year',
         'batch_id',
         'adviser_id',
@@ -31,10 +32,9 @@ class Section extends Model
 
     // ── Relationships ──────────────────────────────────────────────────────
 
-    /** Students enrolled in this section. */
     public function students(): HasMany
     {
-        return $this->hasMany(User::class, 'section_id');
+        return $this->hasMany(Student::class);  // ← was User::class
     }
 
     /** Alias used by withCount('users'). */
@@ -54,4 +54,5 @@ class Section extends Model
     {
         return $this->belongsTo(Batch::class);
     }
+    
 }

@@ -6,9 +6,11 @@ use App\Contracts\FaceRecognition;
 use App\Contracts\StorageServiceInterface;
 use App\Models\Photo;
 use App\Observers\PhotoObserver;
+use App\Policies\PhotoPolicy;
 use App\Services\AI\AwsRekognitionFaceRecognition;
 use App\Services\Notification\PHPMailerService;
 use App\Services\Storage\CloudinaryService;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\ServiceProvider;
 
 class AppServiceProvider extends ServiceProvider
@@ -46,8 +48,6 @@ class AppServiceProvider extends ServiceProvider
         $this->app->singleton(PHPMailerService::class, fn() => new PHPMailerService());
 
         // ── WatermarkService (yearbook PDF watermarking) ──────────────
-        // Only register if the class exists — keeps app bootable even if
-        // the yearbook feature hasn't been fully set up yet.
         if (class_exists(\App\Services\Yearbook\WatermarkService::class)) {
             $this->app->singleton(
                 \App\Services\Yearbook\WatermarkService::class,
@@ -63,5 +63,8 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         Photo::observe(PhotoObserver::class);
+
+        // ── Policies ──────────────────────────────────────────────────
+        Gate::policy(Photo::class, PhotoPolicy::class);
     }
 }

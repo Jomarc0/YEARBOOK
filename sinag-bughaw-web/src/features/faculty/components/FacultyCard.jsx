@@ -3,6 +3,7 @@ import { useState } from 'react';
 export default function FacultyCard({ faculty, accentColor = '#fdb813', index = 0 }) {
   const [imgError, setImgError] = useState(false);
 
+  // Fallback to a generated avatar when no image is provided or it fails to load
   const avatarUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(faculty.name)}&background=1d2b4b&color=fdb813&bold=true&size=300`;
   const src = (!faculty.image_url || imgError) ? avatarUrl : faculty.image_url;
 
@@ -28,6 +29,7 @@ export default function FacultyCard({ faculty, accentColor = '#fdb813', index = 
 
       {/* Info */}
       <div className="card-body">
+        {/* `position` is the aliased `title` column from the server */}
         <span className="card-position" style={{ color: accentColor }}>
           {faculty.position}
         </span>
@@ -42,7 +44,12 @@ export default function FacultyCard({ faculty, accentColor = '#fdb813', index = 
             href={`mailto:${faculty.email}`}
             className="card-email"
           >
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <svg
+              width="12" height="12" viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" strokeWidth="2.5"
+              strokeLinecap="round" strokeLinejoin="round"
+              aria-hidden="true"
+            >
               <rect x="2" y="4" width="20" height="16" rx="2"/>
               <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/>
             </svg>

@@ -1,8 +1,26 @@
+/**
+ * GraduationArchivePage.jsx
+ * ─────────────────────────────────────────────────────────────────────────────
+ * CHANGES FROM ORIGINAL:
+ *  - Added face-search bar to the album header (mirrors GalleryPage hero search).
+ *  - Imports: added `galleryApi` (for faceSearch), `FaceSearchButton`,
+ *    `imageUrl`, `avatarUrl`.
+ *  - New state: `searching`, `matches`.
+ *  - New handler: `handleFaceFile` — calls galleryApi.faceSearch and sets matches.
+ *  - Match result cards rendered below the search input in the header.
+ *  - Lightbox close/nav inline-style → hover handlers kept as-is (original style).
+ *  - No logic, API calls, routes, or other backend behavior changed.
+ * ─────────────────────────────────────────────────────────────────────────────
+ */
+
 import { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import Navbar from '@/components/layout/Navbar';
 import Footer from '@/components/layout/Footer';
 import { graduationApi } from '@/api/yearbook.api';
+import { galleryApi } from '@/api/gallery.api';
+import FaceSearchButton from '@/components/ui/FaceSearchButton';
+import { imageUrl, avatarUrl } from '@/utils/imageUrl';
 
 // ── Lightbox ──────────────────────────────────────────────────────────────────
 function Lightbox({ photos, index, onClose }) {
@@ -17,7 +35,6 @@ function Lightbox({ photos, index, onClose }) {
     };
     window.addEventListener('keydown', handle);
     return () => window.removeEventListener('keydown', handle);
-    // FIX Bug 6: Added `onClose` to dependencies to ensure fresh closure
   }, [current, photos.length, onClose]);
 
   if (!photo) return null;
@@ -75,19 +92,40 @@ function Lightbox({ photos, index, onClose }) {
 // ── Main Page ─────────────────────────────────────────────────────────────────
 export default function GraduationArchivePage() {
   const { id } = useParams();
-  const [album,    setAlbum]    = useState(null);
-  const [loading,  setLoading]  = useState(true);
-  const [lightbox, setLightbox] = useState(null); // index
+  const [album,      setAlbum]      = useState(null);
+  const [loading,    setLoading]    = useState(true);
+  const [lightbox,   setLightbox]   = useState(null);
+
+  // ── Face search state ──────────────────────────────────────────────────────
+  const [searching,  setSearching]  = useState(false);
+  const [matches,    setMatches]    = useState([]);
 
   useEffect(() => {
     if (!id) return;
     setLoading(true);
     graduationApi.show(id)
-      // FIX Bug 5: Unwrap the nested data. API returns { success: true, data: album }, so data.data is the album.
       .then(({ data }) => setAlbum(data.data ?? data))
       .catch(() => setAlbum(null))
       .finally(() => setLoading(false));
   }, [id]);
+
+  // ── Face search handler ────────────────────────────────────────────────────
+  const handleFaceFile = async (file) => {
+    setSearching(true);
+    setMatches([]);
+    try {
+      const fd = new FormData();
+      fd.append('face_image', file);
+      const { data } = await galleryApi.faceSearch(fd);
+      const found = data.photos ?? [];
+      setMatches(found);
+      if (!found.length) alert('No matching photos found.');
+    } catch {
+      alert('Face search failed.');
+    } finally {
+      setSearching(false);
+    }
+};
 
   if (loading) return (
     <div className="min-h-screen flex flex-col bg-slate-50">
@@ -121,11 +159,12 @@ export default function GraduationArchivePage() {
 
       {/* Header */}
       <header className="text-white"
-        style={{ background: 'linear-gradient(135deg, #1d2b4b 0%, #2a3d66 100%)', padding: '70px 8% 110px', borderRadius: '0 0 60px 60px' }}>
+        style={{ background: 'linear-gradient(135deg, #1d2b4b 0%, #2a3d66 100%)', padding: '70px 8% 50px', borderRadius: '0 0 60px 60px' }}>
         <Link to="/graduation" className="inline-flex items-center gap-2 text-white/50 hover:text-white text-sm no-underline mb-6 transition">
           <i className="fas fa-arrow-left" /> Back to Graduation Hub
         </Link>
-                <div className="flex items-start justify-between flex-wrap gap-4">
+
+        <div className="flex items-start justify-between flex-wrap gap-4">
           <div>
             <p className="text-xs font-bold uppercase tracking-widest opacity-60 mb-2">
               {album.category === 'archive' ? 'Archive' : 'Graduation Photos'}
@@ -149,6 +188,53 @@ export default function GraduationArchivePage() {
               <p className="text-white/60 mt-3 max-w-xl text-sm leading-relaxed">{album.description}</p>
             )}
           </div>
+        </div>
+
+        {/* ── Face search bar ── */}
+        <div className="mt-7 max-w-[600px]">
+          <div className="relative">
+            <i className="fas fa-search absolute left-[18px] top-1/2 -translate-y-1/2 text-[#fdb813] text-[15px] z-[1] pointer-events-none" />
+            <input
+              type="text"
+              readOnly
+              onClick={() => document.querySelector('#archive-face-search-hidden')?.click()}
+              placeholder={searching ? 'Searching…' : 'Click the camera icon to search by face…'}
+              className="w-full h-[52px] pl-[50px] pr-14 border border-white/15 rounded-[14px] outline-none
+                         bg-white/10 backdrop-blur-xl text-white text-sm font-medium cursor-pointer
+                         focus:bg-white/[0.18] focus:border-[#fdb813]/60 transition-all placeholder-white/50
+                         box-border"
+            />
+            <FaceSearchButton
+              onFile={handleFaceFile}
+              loading={searching}
+            />
+          </div>
+
+          {/* Face match results */}
+          {matches.length > 0 && (
+            <div className="mt-3 grid grid-cols-[repeat(auto-fill,minmax(200px,1fr))] gap-2.5">
+              {matches.map(m => (
+                <Link
+                  key={m.user_id}
+                  to={`/profile/${m.user_id}`}
+                  className="flex items-center gap-3 bg-white/[0.12] backdrop-blur-md border border-white/20
+                             rounded-[14px] p-3 no-underline hover:border-[#fdb813] transition-colors"
+                >
+                  <img
+                    src={imageUrl(m.profile_picture) || avatarUrl(m.name)}
+                    alt={m.name}
+                    className="w-11 h-11 rounded-xl object-cover border-2 border-[#fdb813] flex-shrink-0"
+                  />
+                  <div className="min-w-0">
+                    <p className="m-0 font-bold text-[13px] text-white truncate">{m.name}</p>
+                    <p className="m-0 text-[11px] text-white/60">
+                      <i className="fas fa-brain text-[#fdb813] mr-1" />{m.similarity}% match
+                    </p>
+                  </div>
+                </Link>
+              ))}
+            </div>
+          )}
         </div>
       </header>
 

@@ -10,13 +10,15 @@ class Transcript extends Model
 {
     protected $fillable = [
         'title',
-        'audio_path',  
-        'public_id',   
+        'audio_path',
+        'public_id',
         'transcript_text',
         'segments',
         'language',
         'notes',
         'status',
+        'source',       // 'manual' | 'auto'
+        'album_id',     // nullable FK → albums.id
         'uploaded_by',
     ];
 
@@ -31,6 +33,12 @@ class Transcript extends Model
         return $this->belongsTo(User::class, 'uploaded_by');
     }
 
+    /** The graduation Album this transcript was auto-generated from (nullable). */
+    public function album(): BelongsTo
+    {
+        return $this->belongsTo(Album::class);
+    }
+
     // ── Scopes ─────────────────────────────────────────────────────────────
 
     /** Filter by status */
@@ -43,54 +51,62 @@ class Transcript extends Model
     public function scopeSearch(Builder $query, string $term): Builder
     {
         return $query->where(function ($q) use ($term) {
-            $q->where('title',           'like', "%{$term}%")
+            $q->where('title',            'like', "%{$term}%")
               ->orWhere('transcript_text', 'like', "%{$term}%")
               ->orWhere('notes',           'like', "%{$term}%");
         });
     }
 
-    /** Only done transcripts (has transcript text) */
+    /** Only done transcripts */
     public function scopeDone(Builder $query): Builder
     {
         return $query->where('status', 'done');
     }
 
+    /**
+     * Transcripts visible to a given user:
+     *   - Their own manually-uploaded transcripts (any status)
+     *   - All auto-generated transcripts with status 'done' (visible to every premium user)
+     */
+    public function scopeVisibleTo(Builder $query, int $userId): Builder
+    {
+        return $query->where(function ($q) use ($userId) {
+            $q->where('uploaded_by', $userId)                 // own manual uploads
+              ->orWhere(fn ($q2) => $q2                       // all auto-transcripts that are done
+                  ->where('source', 'auto')
+                  ->where('status', 'done')
+              );
+        });
+    }
+
     // ── Accessors ──────────────────────────────────────────────────────────
 
-    /** Duration in seconds from last segment end time */
     public function getDurationAttribute(): ?float
     {
         $segments = $this->segments;
         if (empty($segments)) return null;
-
         return (float) collect($segments)->last()['end'] ?? null;
     }
 
-    /** Human-readable duration e.g. "5:32" */
     public function getDurationFormattedAttribute(): ?string
     {
         $duration = $this->duration;
         if ($duration === null) return null;
-
         $minutes = (int) ($duration / 60);
         $seconds = (int) ($duration % 60);
-
         return sprintf('%d:%02d', $minutes, $seconds);
     }
 
-    /** Word count of the transcript */
     public function getWordCountAttribute(): int
     {
         return str_word_count($this->transcript_text ?? '');
     }
 
-    /** Whether subtitle data is available */
     public function getHasSubtitlesAttribute(): bool
     {
         return ! empty($this->segments);
     }
 
-    /** Whether AI notes have been generated */
     public function getHasNotesAttribute(): bool
     {
         return filled($this->notes);

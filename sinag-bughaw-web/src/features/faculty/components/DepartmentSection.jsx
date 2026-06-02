@@ -14,7 +14,10 @@ export default function DepartmentSection({ department, isOnly = false }) {
             <div className="dept-title-row">
               <h2 className="dept-name">{name}</h2>
               {code && (
-                <span className="dept-code" style={{ background: `${accent}1a`, color: accent }}>
+                <span
+                  className="dept-code"
+                  style={{ background: `${accent}1a`, color: accent }}
+                >
                   {code}
                 </span>
               )}

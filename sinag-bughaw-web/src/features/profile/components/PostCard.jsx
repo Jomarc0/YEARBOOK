@@ -15,128 +15,78 @@ export default function PostCard({ post, onClick, isOwn, onMenuClick }) {
 
   return (
     <div
-      className="ig-post"
-      style={{ position: 'relative', aspectRatio: '1/1', overflow: 'hidden', background: '#1d2b4b', cursor: 'pointer' }}
+      className="post-cell relative aspect-square overflow-hidden bg-[#1d2b4b] cursor-pointer"
       onClick={() => onClick?.(post, activeIdx)}
     >
       {/* Media */}
       {isVideo ? (
-        <video
-          src={current.file_path}
-          style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
-          muted
-        />
+        <video src={current.file_path} className="w-full h-full object-cover block" muted />
       ) : (
-        <img
-          src={current.file_path}
-          alt={post.caption ?? ''}
-          style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
-        />
+        <img src={current.file_path} alt={post.caption ?? ''} className="w-full h-full object-cover block" />
       )}
 
-      {/* Multi-image counter badge */}
+      {/* Multi badge */}
       {isMulti && (
-        <div style={{
-          position: 'absolute', top: 8, right: 8,
-          background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(4px)',
-          borderRadius: 6, padding: '3px 7px',
-          display: 'flex', alignItems: 'center', gap: 4, zIndex: 3,
-        }}>
-          <i className="fas fa-images" style={{ color: '#fff', fontSize: 9 }} />
-          <span style={{ color: '#fff', fontSize: 10, fontWeight: 700 }}>
-            {activeIdx + 1}/{mediaCount}
-          </span>
+        <div className="absolute top-2 right-2 bg-black/60 backdrop-blur-sm rounded-md px-1.5 py-0.5 flex items-center gap-1 z-[3]">
+          <i className="fas fa-images text-white text-[9px]" />
+          <span className="text-white text-[10px] font-bold">{activeIdx + 1}/{mediaCount}</span>
         </div>
       )}
 
-      {/* Dot nav for multi */}
+      {/* Dot nav */}
       {isMulti && (
-        <div style={{
-          position: 'absolute', bottom: 26, left: '50%',
-          transform: 'translateX(-50%)',
-          display: 'flex', gap: 4, zIndex: 3,
-        }}>
+        <div className="absolute bottom-6 left-1/2 -translate-x-1/2 flex gap-1 z-[3]">
           {media.map((_, i) => (
-            <div
-              key={i}
+            <div key={i}
               onClick={e => { e.stopPropagation(); setActiveIdx(i); }}
-              style={{
-                width: i === activeIdx ? 16 : 6, height: 6,
-                borderRadius: 99,
-                background: i === activeIdx ? '#fff' : 'rgba(255,255,255,0.5)',
-                transition: 'all 0.2s', cursor: 'pointer',
-              }}
+              className={`h-1.5 rounded-full cursor-pointer transition-all duration-200 ${i === activeIdx ? 'w-4 bg-white' : 'w-1.5 bg-white/50'}`}
             />
           ))}
         </div>
       )}
 
-      {/* Video play icon */}
+      {/* Video play badge */}
       {isVideo && !isMulti && (
-        <i className="fas fa-play-circle" style={{
-          position: 'absolute', top: 8, right: 8,
-          color: '#fff', fontSize: 16,
-          filter: 'drop-shadow(0 1px 4px rgba(0,0,0,0.6))', zIndex: 3,
-        }} />
+        <i className="fas fa-play-circle absolute top-2 right-2 text-white text-base z-[3]"
+          style={{ filter: 'drop-shadow(0 1px 4px rgba(0,0,0,0.6))' }} />
       )}
 
       {/* Tagged badge */}
       {post.tagged_students?.length > 0 && (
-        <div style={{
-          position: 'absolute', top: 8, left: 8,
-          background: 'rgba(29,43,75,0.75)', backdropFilter: 'blur(4px)',
-          borderRadius: 6, padding: '3px 7px',
-          display: 'flex', alignItems: 'center', gap: 4, zIndex: 3,
-        }}>
-          <i className="fas fa-user-tag" style={{ color: '#fdb813', fontSize: 9 }} />
-          <span style={{ color: '#fff', fontSize: 10, fontWeight: 700 }}>
-            {post.tagged_students.length}
-          </span>
+        <div className="absolute top-2 left-2 bg-[#1d2b4b]/75 backdrop-blur-sm rounded-md px-1.5 py-0.5 flex items-center gap-1 z-[3]">
+          <i className="fas fa-user-tag text-[#fdb813] text-[9px]" />
+          <span className="text-white text-[10px] font-bold">{post.tagged_students.length}</span>
         </div>
       )}
 
       {/* Hover overlay */}
-      <div className="ig-overlay" style={{
-        position: 'absolute', inset: 0,
-        background: 'rgba(29,43,75,0.55)', opacity: 0,
-        transition: 'opacity 0.2s',
-        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 20, zIndex: 2,
-      }}>
-        <span style={{ color: '#fff', fontSize: 14, fontWeight: 700 }}>
-          <i className="fas fa-heart" style={{ marginRight: 5, color: '#fdb813' }} />0
+      <div className="post-overlay absolute inset-0 bg-[#1d2b4b]/55 opacity-0 transition-opacity duration-200
+                      flex items-center justify-center gap-5 z-[2]">
+        <span className="text-white text-sm font-bold">
+          <i className="fas fa-heart text-[#fdb813] mr-1" />0
         </span>
-        <span style={{ color: '#fff', fontSize: 14, fontWeight: 700 }}>
-          <i className="fas fa-comment" style={{ marginRight: 5, color: '#fdb813' }} />0
+        <span className="text-white text-sm font-bold">
+          <i className="fas fa-comment text-[#fdb813] mr-1" />0
         </span>
       </div>
 
       {/* Owner menu button */}
       {isOwn && (
         <button
-          className="ig-menu-btn"
+          className="ig-menu-btn absolute bottom-2 right-2 w-7 h-7 rounded-lg
+                     bg-[#1d2b4b]/75 backdrop-blur-sm border border-white/10
+                     text-white cursor-pointer flex items-center justify-center
+                     text-xs opacity-0 transition-opacity duration-200 z-[4]"
           onClick={e => { e.stopPropagation(); onMenuClick?.(e, post); }}
-          style={{
-            position: 'absolute', bottom: 8, right: 8,
-            width: 28, height: 28, borderRadius: 7,
-            background: 'rgba(29,43,75,0.75)', backdropFilter: 'blur(4px)',
-            border: '1px solid rgba(255,255,255,0.12)',
-            color: '#fff', cursor: 'pointer',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: 12, opacity: 0, transition: 'opacity 0.18s', zIndex: 4,
-          }}
         >
           <i className="fas fa-ellipsis-v" />
         </button>
       )}
 
-      {/* Caption */}
+      {/* Caption overlay */}
       {post.caption && (
-        <div style={{
-          position: 'absolute', bottom: 0, left: 0, right: 0,
-          background: 'linear-gradient(transparent, rgba(29,43,75,0.85))',
-          padding: '24px 10px 10px',
-          fontSize: 11, color: '#fff', fontWeight: 500, lineHeight: 1.3, zIndex: 3,
-        }}>
+        <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-[#1d2b4b]/85 to-transparent
+                        px-2.5 pb-2 pt-6 text-[11px] text-white font-medium leading-tight z-[3]">
           {post.caption.length > 38 ? post.caption.slice(0, 38) + '…' : post.caption}
         </div>
       )}

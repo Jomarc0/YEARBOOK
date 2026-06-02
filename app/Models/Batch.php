@@ -34,10 +34,10 @@ class Batch extends Model
         return $this->hasMany(Section::class);
     }
 
-    /** All students assigned to this batch. */
+    // In app/Models/Batch.php — fix students() relationship
     public function students(): HasMany
     {
-        return $this->hasMany(User::class, 'batch_id');
+        return $this->hasMany(Student::class);  // ← was User::class
     }
 
     // ── Accessors ─────────────────────────────────────────────────────────

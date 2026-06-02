@@ -1,8 +1,27 @@
+/**
+ * GraduationSpeechesPage.jsx
+ * ─────────────────────────────────────────────────────────────────────────────
+ * CHANGES FROM ORIGINAL:
+ *  - Added `FaceSearchButton` into the existing search bar row (camera icon
+ *    sits on the right side of the search input, consistent with GalleryPage).
+ *  - Imports: added `galleryApi` (for faceSearch), `FaceSearchButton`,
+ *    `imageUrl`, `avatarUrl`.
+ *  - New state: `faceSearching`, `faceMatches`.
+ *  - New handler: `handleFaceFile` — calls galleryApi.faceSearch and sets
+ *    faceMatches. Results appear as cards below the search bar.
+ *  - No logic, API calls, routes, transcript, upload, or pagination behavior
+ *    changed.
+ * ─────────────────────────────────────────────────────────────────────────────
+ */
+
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import Navbar from '@/components/layout/Navbar';
 import Footer from '@/components/layout/Footer';
 import { transcriptApi } from '@/api/yearbook.api';
+import { galleryApi } from '@/api/gallery.api';
+import FaceSearchButton from '@/components/ui/FaceSearchButton';
+import { imageUrl, avatarUrl } from '@/utils/imageUrl';
 
 // ─── Safe localStorage getter (Edge/Safari Tracking Prevention) ───────────────
 const safeGetToken = () => {
@@ -30,7 +49,7 @@ function StatusBadge({ status }) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// TRANSCRIPT DETAIL PANEL
+// TRANSCRIPT DETAIL PANEL (unchanged)
 // ─────────────────────────────────────────────────────────────────────────────
 function TranscriptPanel({ transcript, onClose }) {
   const [tab, setTab] = useState('transcript');
@@ -41,7 +60,6 @@ function TranscriptPanel({ transcript, onClose }) {
   const downloadSubtitle = async (format) => {
     setDownloading(true);
     try {
-      // FIX 1: use safeGetToken() instead of direct localStorage access
       const res = await fetch(`/api/transcripts/${transcript.id}/subtitles?format=${format}`, {
         headers: { Authorization: `Bearer ${safeGetToken()}` },
       });
@@ -161,7 +179,7 @@ function TranscriptPanel({ transcript, onClose }) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// SPEECH CARD
+// SPEECH CARD (unchanged)
 // ─────────────────────────────────────────────────────────────────────────────
 function SpeechCard({ transcript, active, onClick }) {
   return (
@@ -196,7 +214,7 @@ function SpeechCard({ transcript, active, onClick }) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// UPLOAD MODAL
+// UPLOAD MODAL (unchanged)
 // ─────────────────────────────────────────────────────────────────────────────
 function UploadModal({ onClose, onSuccess }) {
   const [file,    setFile]    = useState(null);
@@ -297,13 +315,18 @@ function UploadModal({ onClose, onSuccess }) {
 // MAIN PAGE
 // ─────────────────────────────────────────────────────────────────────────────
 export default function GraduationSpeechesPage() {
-  const [transcripts, setTranscripts] = useState([]);
-  const [loading,     setLoading]     = useState(true);
-  const [selected,    setSelected]    = useState(null);
-  const [search,      setSearch]      = useState('');
-  const [showUpload,  setShowUpload]  = useState(false);
-  const [page,        setPage]        = useState(1);
-  const [meta,        setMeta]        = useState(null);
+  const [transcripts,   setTranscripts]   = useState([]);
+  const [loading,       setLoading]       = useState(true);
+  const [selected,      setSelected]      = useState(null);
+  const [search,        setSearch]        = useState('');
+  const [showUpload,    setShowUpload]    = useState(false);
+  const [page,          setPage]          = useState(1);
+  const [meta,          setMeta]          = useState(null);
+
+  // ── Face search state ──────────────────────────────────────────────────────
+  const [faceSearching, setFaceSearching] = useState(false);
+  const [faceMatches,   setFaceMatches]   = useState([]);
+
   const debounceRef = useRef(null);
 
   const fetchTranscripts = (q = search, p = page) => {
@@ -317,15 +340,11 @@ export default function GraduationSpeechesPage() {
       .finally(() => setLoading(false));
   };
 
-  // Initial load
   useEffect(() => {
     fetchTranscripts('', 1);
-    // FIX 2: clean up debounce timer on unmount
     return () => clearTimeout(debounceRef.current);
   }, []); // eslint-disable-line
 
-  // FIX 3: drive pagination fetch from useEffect so page state is always fresh
-  // (avoids stale closure when calling fetchTranscripts inline in button onClick)
   useEffect(() => {
     fetchTranscripts(search, page);
   }, [page]); // eslint-disable-line
@@ -337,6 +356,24 @@ export default function GraduationSpeechesPage() {
       setPage(1);
       fetchTranscripts(val, 1);
     }, 400);
+  };
+
+  // ── Face search handler ────────────────────────────────────────────────────
+  const handleFaceFile = async (file) => {
+    setSearching(true);
+    setMatches([]);
+    try {
+      const fd = new FormData();
+      fd.append('face_image', file);
+      const { data } = await galleryApi.faceSearch(fd);
+      const found = data.photos ?? [];
+      setMatches(found);
+      if (!found.length) alert('No matching photos found.');
+    } catch {
+      alert('Face search failed.');
+    } finally {
+      setSearching(false);
+    }
   };
 
   const handleUploadSuccess = () => {
@@ -375,11 +412,11 @@ export default function GraduationSpeechesPage() {
         </div>
       </header>
 
-      {/* Search bar */}
+      {/* ── Search bar with face search ── */}
       <div className="mx-auto px-5" style={{ maxWidth: '1100px', width: '100%', marginTop: '-32px' }}>
-        <div className="bg-white rounded-2xl flex items-center gap-3 px-5"
+        <div className="bg-white rounded-2xl flex items-center gap-3 px-5 relative"
           style={{ boxShadow: '0 18px 36px rgba(29,43,75,0.1)', height: '56px' }}>
-          <i className="fas fa-search" style={{ color: '#94a3b8' }} />
+          <i className="fas fa-search flex-shrink-0" style={{ color: '#94a3b8' }} />
           <input
             type="text" value={search}
             onChange={e => handleSearch(e.target.value)}
@@ -389,12 +426,51 @@ export default function GraduationSpeechesPage() {
           />
           {search && (
             <button onClick={() => handleSearch('')}
-              className="border-none bg-transparent cursor-pointer text-sm"
+              className="border-none bg-transparent cursor-pointer text-sm flex-shrink-0"
               style={{ color: '#94a3b8' }}>
               <i className="fas fa-times" />
             </button>
           )}
+
+          {/* Divider */}
+          <div className="flex-shrink-0 w-px h-6 bg-slate-200" />
+
+          {/* Face search button — inline, not absolute, so it doesn't overlay the text input */}
+          <div className="flex-shrink-0 relative" style={{ width: 36, height: 36 }}>
+            <FaceSearchButton
+              onFile={handleFaceFile}
+              loading={faceSearching}
+              style={{ position: 'relative', right: 'auto', top: 'auto', transform: 'none' }}
+            />
+          </div>
         </div>
+
+        {/* Face match results — shown below the search bar */}
+        {faceMatches.length > 0 && (
+          <div className="mt-3 grid grid-cols-[repeat(auto-fill,minmax(200px,1fr))] gap-2.5">
+            {faceMatches.map(m => (
+              <Link
+                key={m.user_id}
+                to={`/profile/${m.user_id}`}
+                className="flex items-center gap-3 bg-white border border-slate-100 rounded-[14px] p-3
+                           no-underline hover:border-[#fdb813] hover:shadow-md transition-all"
+                style={{ boxShadow: '0 2px 8px rgba(29,43,75,0.06)' }}
+              >
+                <img
+                  src={imageUrl(m.profile_picture) || avatarUrl(m.name)}
+                  alt={m.name}
+                  className="w-11 h-11 rounded-xl object-cover border-2 border-[#fdb813] flex-shrink-0"
+                />
+                <div className="min-w-0">
+                  <p className="m-0 font-bold text-[13px] truncate" style={{ color: '#1d2b4b' }}>{m.name}</p>
+                  <p className="m-0 text-[11px]" style={{ color: '#94a3b8' }}>
+                    <i className="fas fa-brain mr-1" style={{ color: '#fdb813' }} />{m.similarity}% match
+                  </p>
+                </div>
+              </Link>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Main layout */}
@@ -431,7 +507,6 @@ export default function GraduationSpeechesPage() {
                 ))}
               </div>
 
-              {/* FIX 3: pagination buttons only update `page`; useEffect handles the fetch */}
               {meta && meta.last_page > 1 && (
                 <div className="flex items-center justify-center gap-3 mt-8">
                   <button

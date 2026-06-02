@@ -5,6 +5,7 @@ namespace App\Services\Notification;
 use PHPMailer\PHPMailer\PHPMailer;
 use PHPMailer\PHPMailer\Exception;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
 
 class PHPMailerService
 {
@@ -111,6 +112,78 @@ class PHPMailerService
             return true;
         } catch (Exception $e) {
             Log::error('PHPMailer Graduation error: ' . $e->getMessage());
+            return false;
+        }
+    }
+
+    // ── 5. Photo Tagged ───────────────────────────────────────────────
+
+    public function sendTaggedNotification(
+        string $toEmail,
+        string $toName,
+        string $taggedBy,
+        string $photoUrl,
+        ?string $actionUrl   = null,
+        ?string $actionLabel = null
+    ): bool {
+        try {
+            $this->mailer->clearAddresses();
+            $this->mailer->addAddress($toEmail, $toName);
+            $this->mailer->Subject = "📸 {$taggedBy} tagged you in a photo";
+            $this->mailer->Body    = $this->taggedTemplate($toName, $taggedBy, $photoUrl, $actionUrl, $actionLabel);
+            $this->mailer->AltBody = "Hi $toName, $taggedBy tagged you in a photo."
+                . ($actionUrl ? " View it here: $actionUrl" : '');
+            $this->mailer->send();
+            return true;
+        } catch (Exception $e) {
+            Log::error('PHPMailer Tagged error: ' . $e->getMessage());
+            return false;
+        }
+    }
+
+    // ── 6. New Message ────────────────────────────────────────────────
+
+    public function sendNewMessageNotification(
+        string $toEmail,
+        string $toName,
+        string $senderName,
+        string $messagePreview,
+        ?string $actionUrl = null
+    ): bool {
+        try {
+            $this->mailer->clearAddresses();
+            $this->mailer->addAddress($toEmail, $toName);
+            $this->mailer->Subject = "💬 New message from {$senderName} — Sinag-Bughaw";
+            $this->mailer->Body    = $this->newMessageTemplate($toName, $senderName, $messagePreview, $actionUrl);
+            $this->mailer->AltBody = "Hi $toName, you have a new message from $senderName: \"$messagePreview\""
+                . ($actionUrl ? " Reply here: $actionUrl" : '');
+            $this->mailer->send();
+            return true;
+        } catch (Exception $e) {
+            Log::error('PHPMailer NewMessage error: ' . $e->getMessage());
+            return false;
+        }
+    }
+
+    // ── 7. Subscription Confirmed ─────────────────────────────────────
+
+    public function sendSubscriptionConfirmed(
+        string $toEmail,
+        string $toName,
+        string $planName,
+        string $expiryDate,
+        ?string $actionUrl = null
+    ): bool {
+        try {
+            $this->mailer->clearAddresses();
+            $this->mailer->addAddress($toEmail, $toName);
+            $this->mailer->Subject = "🎉 Your Sinag-Bughaw subscription is active!";
+            $this->mailer->Body    = $this->subscriptionConfirmedTemplate($toName, $planName, $expiryDate, $actionUrl);
+            $this->mailer->AltBody = "Hi $toName, your $planName plan is now active until $expiryDate.";
+            $this->mailer->send();
+            return true;
+        } catch (Exception $e) {
+            Log::error('PHPMailer SubscriptionConfirmed error: ' . $e->getMessage());
             return false;
         }
     }
@@ -224,6 +297,81 @@ class PHPMailerService
           <div style='margin-top:20px'>$btn</div>
           <div class='divider'></div>
           <p style='font-size:12px;color:#94a3b8'>Congratulations on your achievement, Pioneer! 🎉</p>
+        " . $this->footer();
+    }
+
+    private function taggedTemplate(
+        string $toName, string $taggedBy, string $photoUrl,
+        ?string $actionUrl, ?string $actionLabel
+    ): string {
+        $btn = $actionUrl
+            ? "<a href=\"$actionUrl\" class=\"btn\">" . ($actionLabel ?? 'View Photo') . "</a>"
+            : '';
+        return $this->header() . "
+          <div class='badge' style='background:#fce7f3;color:#db2777'>📸 Photo Tag</div>
+          <h1>You were tagged!</h1>
+          <p>Hi <strong>" . htmlspecialchars($toName) . "</strong>,</p>
+          <p><strong>" . htmlspecialchars($taggedBy) . "</strong> tagged you in a photo on your Sinag-Bughaw yearbook.</p>
+          <div style='margin:24px 0;text-align:center;'>
+            <img src=\"$photoUrl\" alt=\"Tagged photo\"
+                 style=\"max-width:100%;max-height:300px;border-radius:12px;border:1px solid #e2e8f0;box-shadow:0 4px 16px rgba(0,0,0,0.08);\" />
+          </div>
+          $btn
+          <div class='divider'></div>
+          <p style='font-size:12px;color:#94a3b8'>
+            You can manage your tagged photos from your profile settings.
+          </p>
+        " . $this->footer();
+    }
+
+    private function newMessageTemplate(
+        string $toName, string $senderName,
+        string $messagePreview, ?string $actionUrl
+    ): string {
+        $btn = $actionUrl
+            ? "<a href=\"$actionUrl\" class=\"btn\">Reply to Message</a>"
+            : '';
+        $preview = htmlspecialchars(Str::limit($messagePreview, 120));
+        return $this->header() . "
+          <div class='badge' style='background:#e0f2fe;color:#0369a1'>💬 New Message</div>
+          <h1>You have a new message</h1>
+          <p>Hi <strong>" . htmlspecialchars($toName) . "</strong>,</p>
+          <p><strong>" . htmlspecialchars($senderName) . "</strong> sent you a message on Sinag-Bughaw.</p>
+          <div style='background:#f8fafc;border-left:4px solid #3f51b5;border-radius:8px;padding:16px 20px;margin:20px 0;'>
+            <div style='font-size:12px;color:#94a3b8;font-weight:700;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;'>Message Preview</div>
+            <div style='font-size:14px;color:#1d2b4b;font-style:italic;line-height:1.6;'>\"$preview\"</div>
+          </div>
+          $btn
+          <div class='divider'></div>
+          <p style='font-size:12px;color:#94a3b8'>
+            You are receiving this because someone sent you a message on Sinag-Bughaw.
+            Log in to view the full conversation.
+          </p>
+        " . $this->footer();
+    }
+
+    private function subscriptionConfirmedTemplate(
+        string $toName, string $planName,
+        string $expiryDate, ?string $actionUrl
+    ): string {
+        $btn = $actionUrl
+            ? "<a href=\"$actionUrl\" class=\"btn\">Explore Premium Features</a>"
+            : '';
+        return $this->header() . "
+          <div class='badge' style='background:#fef9c3;color:#854d0e'>⭐ Subscription Active</div>
+          <h1>Welcome to Premium, $toName!</h1>
+          <p>Your subscription has been confirmed. You now have full access to all Sinag-Bughaw premium features.</p>
+          <table class='info-table' style='margin:24px 0;'>
+            <tr><td class='info-label'>Plan</td><td class='info-value'>" . htmlspecialchars($planName) . "</td></tr>
+            <tr><td class='info-label'>Valid Until</td><td class='info-value'>" . htmlspecialchars($expiryDate) . "</td></tr>
+            <tr><td class='info-label'>Status</td><td class='info-value' style='color:#16a34a;'>✓ Active</td></tr>
+          </table>
+          $btn
+          <div class='divider'></div>
+          <p style='font-size:12px;color:#94a3b8'>
+            Thank you for supporting Sinag-Bughaw. If you have questions about your subscription,
+            please contact the NU Lipa administration.
+          </p>
         " . $this->footer();
     }
 }

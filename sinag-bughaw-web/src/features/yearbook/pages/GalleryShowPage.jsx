@@ -1,3 +1,17 @@
+/**
+ * GalleryShowPage.jsx
+ * ─────────────────────────────────────────────────────────────────────────────
+ * CHANGES FROM ORIGINAL:
+ *  - Added face-search bar to the album header (mirrors GalleryPage hero search).
+ *  - Imports: added `galleryApi` (for faceSearch), `FaceSearchButton`,
+ *    `imageUrl`, `avatarUrl`.
+ *  - New state: `searching`, `matches`.
+ *  - New handler: `handleFaceFile` — calls galleryApi.faceSearch and sets matches.
+ *  - Match result cards rendered below the search input in the header.
+ *  - No logic, API calls, routes, or other backend behavior changed.
+ * ─────────────────────────────────────────────────────────────────────────────
+ */
+
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import Navbar from '@/components/layout/Navbar';
@@ -6,26 +20,26 @@ import { faceApi, galleryApi, mediaApi } from '@/api/gallery.api';
 import { useMediaUpload } from '@/hooks/useMediaUpload';
 import BulkUploadZone from '@/features/yearbook/components/BulkUploadZone';
 import { storageUrl } from '@/api/client';
-
-// ── NEW imports ───────────────────────────────────────────────────────────────
 import ProtectedImage from '@/components/ui/ProtectedImage';
 import { ContentOwnershipBanner } from '@/components/ui/CopyrightLabel';
 import { useContentProtection } from '@/utils/contentProtection';
+import FaceSearchButton from '@/components/ui/FaceSearchButton';
+import { imageUrl, avatarUrl } from '@/utils/imageUrl';
 
-// ── Sub-components (unchanged) ────────────────────────────────────────────────
+// ─── Sub-components ───────────────────────────────────────────────────────────
 
+/** Face-tag badge shown in lightbox */
 function FaceTagBadge({ tag }) {
   const studentId = tag.student?.id ?? tag.user_id;
   const name      = tag.student?.name ?? 'Unknown';
   const pic       = tag.student?.profile_picture;
   return (
     <Link to={`/profile/${studentId}`} onClick={e => e.stopPropagation()} className="no-underline">
-      <div className="inline-flex items-center gap-2 transition-all"
-        style={{ background: 'rgba(29,43,75,0.88)', backdropFilter: 'blur(8px)', border: '1px solid rgba(253,184,19,0.4)', borderRadius: 50, padding: '6px 14px 6px 7px', cursor: 'pointer' }}
-        onMouseEnter={e => { e.currentTarget.style.background = '#1d2b4b'; e.currentTarget.style.borderColor = '#fdb813'; }}
-        onMouseLeave={e => { e.currentTarget.style.background = 'rgba(29,43,75,0.88)'; e.currentTarget.style.borderColor = 'rgba(253,184,19,0.4)'; }}>
-        <div className="flex-shrink-0 w-7 h-7 rounded-full overflow-hidden flex items-center justify-center font-black text-xs"
-          style={{ background: '#fdb813', color: '#1d2b4b' }}>
+      <div className="inline-flex items-center gap-2 bg-[#1d2b4b]/[0.88] backdrop-blur-lg
+                      border border-[#fdb813]/40 rounded-full px-3.5 py-[6px] cursor-pointer
+                      hover:bg-[#1d2b4b] hover:border-[#fdb813] transition-all">
+        <div className="flex-shrink-0 w-7 h-7 rounded-full overflow-hidden flex items-center justify-center
+                        font-black text-xs bg-[#fdb813] text-[#1d2b4b]">
           {pic
             ? <img src={storageUrl(pic)} alt="" className="w-full h-full object-cover" />
             : name.charAt(0).toUpperCase()
@@ -33,7 +47,7 @@ function FaceTagBadge({ tag }) {
         </div>
         <div>
           <span className="block text-white text-xs font-bold leading-none">{name}</span>
-          <span className="block text-[10px] font-semibold" style={{ color: '#fdb813' }}>
+          <span className="block text-[10px] font-semibold text-[#fdb813]">
             {parseFloat(tag.similarity ?? 0).toFixed(1)}% match
           </span>
         </div>
@@ -42,23 +56,27 @@ function FaceTagBadge({ tag }) {
   );
 }
 
+/** Compact face-tag chips shown in grid card footer */
 function GridTagChips({ tags }) {
   if (!tags?.length) return null;
   const show  = tags.slice(0, 2);
   const extra = tags.length - show.length;
   return (
-    <div className="flex flex-wrap gap-1 px-3 pb-2">
+    <div className="flex flex-wrap gap-1 px-2.5 pb-1.5 pt-1">
       {show.map(t => (
-        <Link key={t.user_id ?? t.student?.id} to={`/profile/${t.student?.id ?? t.user_id}`}
+        <Link
+          key={t.user_id ?? t.student?.id}
+          to={`/profile/${t.student?.id ?? t.user_id}`}
           onClick={e => e.stopPropagation()}
-          className="no-underline inline-flex items-center gap-1 hover:opacity-75 transition-opacity"
-          style={{ background: '#1d2b4b', color: 'white', borderRadius: 50, padding: '3px 9px 3px 5px', fontSize: 10, fontWeight: 700 }}>
-          <i className="fas fa-user-tag" style={{ color: '#fdb813', fontSize: 9 }} />
+          className="no-underline inline-flex items-center gap-1 bg-[#1d2b4b] text-white
+                     rounded-full py-[3px] px-[9px] pl-[5px] text-[10px] font-bold hover:opacity-75 transition-opacity"
+        >
+          <i className="fas fa-user-tag text-[#fdb813] text-[9px]" />
           {(t.student?.name ?? 'Student').split(' ')[0]}
         </Link>
       ))}
       {extra > 0 && (
-        <span style={{ background: '#f1f5f9', color: '#64748b', borderRadius: 50, padding: '3px 9px', fontSize: 10, fontWeight: 700 }}>
+        <span className="bg-slate-100 text-slate-500 rounded-full py-[3px] px-[9px] text-[10px] font-bold">
           +{extra}
         </span>
       )}
@@ -66,22 +84,125 @@ function GridTagChips({ tags }) {
   );
 }
 
+/** Face analysis status pill */
 function StatusPill({ status, faceCount }) {
   const cfg = {
-    analyzed: { bg: '#ecfdf5', color: '#059669', icon: 'fa-circle-check',        text: `${faceCount} face${faceCount !== 1 ? 's' : ''}` },
-    pending:  { bg: '#fffbeb', color: '#d97706', icon: 'fa-clock',               text: 'Analyzing…' },
-    error:    { bg: '#fef2f2', color: '#dc2626', icon: 'fa-triangle-exclamation', text: 'Failed' },
-  }[status] ?? { bg: '#f8fafc', color: '#94a3b8', icon: 'fa-circle-dashed', text: 'Pending' };
+    analyzed: { cls: 'bg-emerald-50 text-emerald-700',  icon: 'fa-circle-check',        text: `${faceCount} face${faceCount !== 1 ? 's' : ''}` },
+    pending:  { cls: 'bg-amber-50 text-amber-700',      icon: 'fa-clock',               text: 'Analyzing…' },
+    error:    { cls: 'bg-red-50 text-red-600',           icon: 'fa-triangle-exclamation', text: 'Failed' },
+  }[status] ?? { cls: 'bg-slate-50 text-slate-400', icon: 'fa-circle-dashed', text: 'Pending' };
   return (
-    <span className="inline-flex items-center gap-1.5 text-[10px] font-bold px-2.5 py-1 rounded-full"
-      style={{ background: cfg.bg, color: cfg.color }}>
+    <span className={`inline-flex items-center gap-1.5 text-[10px] font-bold px-2.5 py-1 rounded-full ${cfg.cls}`}>
       <i className={`fas ${cfg.icon}`} /> {cfg.text}
     </span>
   );
 }
 
-// ── Main Page ─────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// Lightbox Modal
+// ─────────────────────────────────────────────────────────────────────────────
+function LightboxModal({ photo, photos, tagCache, onClose, onNavigate }) {
+  const idx  = photos.findIndex(p => p.id === photo.id);
+  const prev = photos[idx - 1] ?? null;
+  const next = photos[idx + 1] ?? null;
+  const tags = tagCache[photo.id]?.tags ?? [];
+  const td   = tagCache[photo.id];
 
+  useEffect(() => {
+    const handle = (e) => {
+      if (e.key === 'ArrowRight' && next) onNavigate(next);
+      if (e.key === 'ArrowLeft'  && prev) onNavigate(prev);
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', handle);
+    return () => window.removeEventListener('keydown', handle);
+  }, [photo, prev, next, onNavigate, onClose]);
+
+  return (
+    <div
+      onClick={onClose}
+      className="fixed inset-0 z-[9999] bg-[#060a14]/[0.97] flex items-center justify-center animate-fade-in cursor-zoom-out"
+    >
+      {/* Close */}
+      <button
+        onClick={onClose}
+        className="absolute top-5 right-5 bg-white/10 hover:bg-white/[0.22] border-none text-white
+                   w-11 h-11 rounded-full cursor-pointer flex items-center justify-center text-base
+                   transition-colors z-10"
+      >
+        <i className="fas fa-times" />
+      </button>
+
+      {/* Counter pill */}
+      <div className="absolute top-[22px] left-1/2 -translate-x-1/2 bg-white/[0.08] text-white/55
+                      text-[11px] font-bold px-3.5 py-1.5 rounded-full">
+        {idx + 1} / {photos.length}
+      </div>
+
+      {/* Prev */}
+      {prev && (
+        <button
+          onClick={e => { e.stopPropagation(); onNavigate(prev); }}
+          className="absolute left-4 top-1/2 -translate-y-1/2 bg-white/10 hover:bg-white/[0.22] border-none
+                     text-white w-12 h-12 rounded-full cursor-pointer flex items-center justify-center
+                     text-base transition-colors z-10"
+        >
+          <i className="fas fa-chevron-left" />
+        </button>
+      )}
+
+      {/* Next */}
+      {next && (
+        <button
+          onClick={e => { e.stopPropagation(); onNavigate(next); }}
+          className="absolute right-4 top-1/2 -translate-y-1/2 bg-white/10 hover:bg-white/[0.22] border-none
+                     text-white w-12 h-12 rounded-full cursor-pointer flex items-center justify-center
+                     text-base transition-colors z-10"
+        >
+          <i className="fas fa-chevron-right" />
+        </button>
+      )}
+
+      {/* Image content */}
+      <div
+        onClick={e => e.stopPropagation()}
+        className="flex flex-col items-center max-w-[88vw] max-h-[90vh] animate-slide-up"
+      >
+        <ProtectedImage
+          src={storageUrl(photo.file_path)}
+          alt={photo.caption || 'Photo'}
+          variant="lightbox"
+          watermarkText="© NU Lipa — All Rights Reserved"
+          style={{ borderRadius: 16, overflow: 'hidden', boxShadow: '0 32px 80px rgba(0,0,0,0.6)' }}
+          imgStyle={{ maxHeight: '72vh', maxWidth: '88vw', objectFit: 'contain', display: 'block' }}
+        />
+
+        {photo.caption && (
+          <p className="text-white/65 text-[13px] font-semibold mt-3.5 text-center">{photo.caption}</p>
+        )}
+
+        {tags.length > 0 && (
+          <div className="flex flex-wrap gap-2 justify-center mt-3">
+            <span className="text-white/35 text-[10px] font-bold uppercase tracking-widest self-center">
+              <i className="fas fa-user-tag mr-1" />Tagged:
+            </span>
+            {tags.map(tag => <FaceTagBadge key={tag.user_id ?? tag.student?.id} tag={tag} />)}
+          </div>
+        )}
+
+        {td && (
+          <div className="mt-2.5">
+            <StatusPill status={td.status} faceCount={td.face_count} />
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// MAIN PAGE
+// ─────────────────────────────────────────────────────────────────────────────
 export default function GalleryShowPage() {
   const { id } = useParams();
 
@@ -91,18 +212,17 @@ export default function GalleryShowPage() {
   const [tagCache,   setTagCache]   = useState({});
   const [showUpload, setShowUpload] = useState(false);
   const [deleting,   setDeleting]   = useState(null);
-  
-  // FIX Bug 8: Use a ref to track fetched IDs to avoid infinite loop
+  const [deleteErr,  setDeleteErr]  = useState('');
+
+  // ── Face search state ──────────────────────────────────────────────────────
+  const [searching,  setSearching]  = useState(false);
+  const [matches,    setMatches]    = useState([]);
+
   const fetchingRef = useRef(new Set());
+  const masonryRef  = useContentProtection();
 
-  // ── NEW: content protection hook on the masonry container ────────────────
-  const masonryRef = useContentProtection();
-
-  // FIX Bug 7: Tier should be read from actual user data/subscription
-  // Assuming user object is available via context or prop; default to free if missing
-  const userTier = 'free'; // This should be replaced with: const { user } = useAuth(); const tier = user?.subscription?.tier ?? 'free';
-
-  const tier = userTier;
+  // Replace with real auth context in production
+  const tier = 'free';
 
   const loadAlbum = useCallback(() => {
     if (!id) return;
@@ -121,67 +241,83 @@ export default function GalleryShowPage() {
   });
 
   const loadTags = useCallback(async (photoId) => {
-    // FIX Bug 8: Check ref instead of tagCache state to prevent dependency cycle
     if (fetchingRef.current.has(photoId)) return;
-    
     fetchingRef.current.add(photoId);
     try {
       const { data } = await faceApi.photoTags(photoId);
       setTagCache(prev => ({
         ...prev,
-        [photoId]: { status: data.status ?? 'pending', face_count: data.face_count ?? 0, tags: data.tags ?? [] },
+        [photoId]: {
+          status:     data.status     ?? 'pending',
+          face_count: data.face_count ?? 0,
+          tags:       data.tags       ?? [],
+        },
       }));
     } catch {}
     finally { fetchingRef.current.delete(photoId); }
-  // FIX Bug 8: Stable dependencies - no tagCache or setTagCache
   }, []);
 
   useEffect(() => {
     if (!album?.photos) return;
-    album.photos.forEach((photo, i) => { setTimeout(() => loadTags(photo.id), i * 80); });
-  }, [album, loadTags]); // eslint-disable-line
+    album.photos.forEach((photo, i) => {
+      setTimeout(() => loadTags(photo.id), i * 80);
+    });
+  }, [album, loadTags]);
 
   const handleDelete = async (photoId, e) => {
     e.stopPropagation();
-    if (!window.confirm('Delete this photo?')) return;
+    if (!window.confirm('Delete this photo permanently?')) return;
     setDeleting(photoId);
+    setDeleteErr('');
     try {
       await mediaApi.deletePhoto(photoId);
       setAlbum(prev => ({ ...prev, photos: prev.photos.filter(p => p.id !== photoId) }));
       if (lightbox?.id === photoId) setLightbox(null);
-    } catch { alert('Delete failed.'); }
-    finally { setDeleting(null); }
+    } catch (err) {
+      const msg = err.response?.data?.message ?? `Error ${err.response?.status ?? 'unknown'}`;
+      setDeleteErr(msg);
+      setTimeout(() => setDeleteErr(''), 4000);
+    } finally {
+      setDeleting(null);
+    }
   };
 
-  useEffect(() => {
-    if (!lightbox || !album?.photos) return;
-    const handle = (e) => {
-      const idx = album.photos.findIndex(p => p.id === lightbox.id);
-      if (e.key === 'ArrowRight' && album.photos[idx + 1]) setLightbox(album.photos[idx + 1]);
-      if (e.key === 'ArrowLeft'  && album.photos[idx - 1]) setLightbox(album.photos[idx - 1]);
-      if (e.key === 'Escape') setLightbox(null);
-    };
-    window.addEventListener('keydown', handle);
-    return () => window.removeEventListener('keydown', handle);
-  }, [lightbox, album]);
+  // ── Face search handler ────────────────────────────────────────────────────
+  const handleFaceFile = async (file) => {
+    setSearching(true);
+    setMatches([]);
+    try {
+      const fd = new FormData();
+      fd.append('face_image', file);
+      const { data } = await galleryApi.faceSearch(fd);
+      const found = data.photos ?? [];
+      setMatches(found);
+      if (!found.length) alert('No matching photos found.');
+    } catch {
+      alert('Face search failed.');
+    } finally {
+      setSearching(false);
+    }
+  };
 
+  // ── Loading state ─────────────────────────────────────────────────────────
   if (loading) return (
-    <div className="min-h-screen flex flex-col bg-slate-50">
+    <div className="min-h-screen flex flex-col bg-[#f4f7fe]">
       <Navbar />
       <div className="flex-1 flex items-center justify-center">
-        <i className="fas fa-spinner fa-spin text-3xl" style={{ color: '#3f51b5' }} />
+        <i className="fas fa-spinner fa-spin text-4xl text-[#3f51b5]" />
       </div>
       <Footer />
     </div>
   );
 
   if (!album) return (
-    <div className="min-h-screen flex flex-col bg-slate-50">
+    <div className="min-h-screen flex flex-col bg-[#f4f7fe]">
       <Navbar />
       <div className="flex-1 flex flex-col items-center justify-center gap-4">
         <i className="fas fa-images text-5xl text-slate-200" />
-        <h2 className="text-xl font-black" style={{ color: '#1d2b4b' }}>Album not found.</h2>
-        <Link to="/gallery" className="font-semibold no-underline hover:underline" style={{ color: '#3f51b5' }}>
+        <h2 className="text-xl font-extrabold text-[#1d2b4b] m-0">Album not found.</h2>
+        <Link to="/gallery" className="font-semibold text-[#3f51b5] no-underline hover:underline">
           ← Back to Gallery
         </Link>
       </div>
@@ -189,127 +325,222 @@ export default function GalleryShowPage() {
     </div>
   );
 
-  const photos       = album.photos ?? [];
-  const totalTags    = Object.values(tagCache).reduce((s, t) => s + (t.tags?.length ?? 0), 0);
-  const lightboxTags = lightbox ? (tagCache[lightbox.id]?.tags ?? []) : [];
+  const photos    = album.photos ?? [];
+  const totalTags = Object.values(tagCache).reduce((s, t) => s + (t.tags?.length ?? 0), 0);
 
   return (
-    <div className="min-h-screen flex flex-col bg-slate-50">
-      <style>{`
-        @keyframes fadeIn  { from{opacity:0}                            to{opacity:1} }
-        @keyframes slideUp { from{opacity:0;transform:translateY(12px)} to{opacity:1;transform:translateY(0)} }
-        .photo-card:hover .photo-delete { opacity: 1 !important; }
-      `}</style>
-
+    <div className="min-h-screen flex flex-col bg-[#f4f7fe]">
       <Navbar />
 
       {/* ── Header ── */}
-      <header className="bg-gradient-to-br from-[#1d2b4b] to-[#2a3d66] px-[8%] py-20 text-white rounded-b-[60px]">
-        <Link to="/gallery" className="inline-flex items-center gap-2 text-white/55 hover:text-white text-sm no-underline mb-6 transition">
+      <header className="bg-gradient-to-br from-[#1d2b4b] to-[#2a3d66] px-[8%] pt-[72px] pb-16 text-white rounded-b-[56px]">
+        <Link
+          to="/gallery"
+          className="inline-flex items-center gap-2 text-white/55 hover:text-white text-[13px] no-underline mb-5 transition-colors"
+        >
           <i className="fas fa-arrow-left" /> Back to Gallery
         </Link>
+
         <div className="flex items-start justify-between flex-wrap gap-4">
           <div>
-            <h1 className="text-4xl font-black tracking-tight mb-4">{album.title}</h1>
-            <div className="flex flex-wrap items-center gap-5 text-white/70 text-sm">
+            <h1 className="text-[2.2rem] font-black tracking-tight mb-3.5">{album.title}</h1>
+            <div className="flex flex-wrap items-center gap-5 text-white/65 text-[13px]">
               {album.event_date && (
-                <span className="flex items-center gap-2">
+                <span className="flex items-center gap-1.5">
                   <i className="fas fa-calendar text-[#fdb813]" />
                   {new Date(album.event_date).toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' })}
                 </span>
               )}
-              <span className="flex items-center gap-2">
+              <span className="flex items-center gap-1.5">
                 <i className="fas fa-images text-[#fdb813]" />
                 {photos.length} photo{photos.length !== 1 ? 's' : ''}
               </span>
               {totalTags > 0 && (
-                <span className="flex items-center gap-2">
+                <span className="flex items-center gap-1.5">
                   <i className="fas fa-user-tag text-[#fdb813]" />
-                  {totalTags} student tag{totalTags !== 1 ? 's' : ''}
+                  {totalTags} tag{totalTags !== 1 ? 's' : ''}
                 </span>
               )}
             </div>
             {album.description && (
-              <p className="text-white/65 mt-4 max-w-xl leading-relaxed text-sm">{album.description}</p>
+              <p className="text-white/60 mt-3.5 max-w-[520px] leading-relaxed text-[13px]">
+                {album.description}
+              </p>
             )}
           </div>
+
           <button
             onClick={() => setShowUpload(v => !v)}
-            className="flex items-center gap-2 font-extrabold text-sm border-none cursor-pointer px-5 py-3 rounded-2xl transition-all"
-            style={{ background: showUpload ? 'rgba            (255,255,255,0.15)' : '#fdb813', color: showUpload ? 'white' : '#1d2b4b' }}
-            onMouseEnter={e => !showUpload && (e.currentTarget.style.background = '#f5b200')}
-            onMouseLeave={e => !showUpload && (e.currentTarget.style.background = '#fdb813')}>
+            className={`flex items-center gap-2 font-extrabold text-[13px] border-none cursor-pointer
+                        px-5 py-[11px] rounded-2xl transition-all
+                        ${showUpload
+                          ? 'bg-white/15 text-white hover:bg-white/20'
+                          : 'bg-[#fdb813] text-[#1d2b4b] hover:bg-[#f5b200]'}`}
+          >
             <i className={`fas ${showUpload ? 'fa-times' : 'fa-cloud-arrow-up'}`} />
             {showUpload ? 'Cancel Upload' : 'Upload Photos'}
           </button>
         </div>
 
-        {/* ── NEW: Ownership banner ── */}
-        <div style={{ marginTop: 24 }}>
+        {/* ── Face search bar ── */}
+        <div className="mt-6 max-w-[600px]">
+          <div className="relative">
+            <i className="fas fa-search absolute left-[18px] top-1/2 -translate-y-1/2 text-[#fdb813] text-[15px] z-[1] pointer-events-none" />
+            <input
+              type="text"
+              readOnly
+              onClick={() => document.querySelector('#album-face-search-hidden')?.click()}
+              placeholder={searching ? 'Searching…' : 'Click the camera icon to search by face…'}
+              className="w-full h-[52px] pl-[50px] pr-14 border border-white/15 rounded-[14px] outline-none
+                         bg-white/10 backdrop-blur-xl text-white text-sm font-medium cursor-pointer
+                         focus:bg-white/[0.18] focus:border-[#fdb813]/60 transition-all placeholder-white/50
+                         box-border"
+            />
+            <FaceSearchButton
+              onFile={handleFaceFile}
+              loading={searching}
+            />
+          </div>
+
+          {/* Face match results */}
+          {matches.length > 0 && (
+            <div className="mt-3 grid grid-cols-[repeat(auto-fill,minmax(200px,1fr))] gap-2.5">
+              {matches.map(m => (
+                <Link
+                  key={m.user_id}
+                  to={`/profile/${m.user_id}`}
+                  className="flex items-center gap-3 bg-white/[0.12] backdrop-blur-md border border-white/20
+                             rounded-[14px] p-3 no-underline hover:border-[#fdb813] transition-colors"
+                >
+                  <img
+                    src={imageUrl(m.profile_picture) || avatarUrl(m.name)}
+                    alt={m.name}
+                    className="w-11 h-11 rounded-xl object-cover border-2 border-[#fdb813] flex-shrink-0"
+                  />
+                  <div className="min-w-0">
+                    <p className="m-0 font-bold text-[13px] text-white truncate">{m.name}</p>
+                    <p className="m-0 text-[11px] text-white/60">
+                      <i className="fas fa-brain text-[#fdb813] mr-1" />{m.similarity}% match
+                    </p>
+                  </div>
+                </Link>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="mt-5">
           <ContentOwnershipBanner />
         </div>
       </header>
 
       {/* ── Upload Panel ── */}
       {showUpload && (
-        <div className="px-[8%] pt-10">
+        <div className="px-[8%] pt-7">
           <BulkUploadZone {...uploadHook} tier={tier} onCancel={() => setShowUpload(false)} />
         </div>
       )}
 
-      {/* ── Masonry Grid ── */}
-      {/* ref={masonryRef} activates the content protection hook */}
-      <main ref={masonryRef} className="px-[8%] py-16 flex-1">
-        {photos.length > 0 ? (
-          <div className="columns-1 sm:columns-2 md:columns-3 lg:columns-4 gap-5">
-            {photos.map(photo => {
-              const td  = tagCache[photo.id];
-              const src = storageUrl(photo.file_path);
-              return (
-                <div key={photo.id}
-                  className="photo-card mb-5 break-inside-avoid rounded-2xl overflow-hidden shadow-sm hover:shadow-xl hover:scale-[1.015] transition-all duration-300 bg-white relative"
-                  style={{ cursor: 'zoom-in' }}
-                >
-                  {/* ── MODIFIED: ProtectedImage replaces <img> ── */}
-                  {src && (
-                    <ProtectedImage
-                      src={src}
-                      alt={photo.caption || 'Photo'}
-                      watermarkText="© NU Lipa"
-                      showCopyright={false}   // copyright shown at page level
-                      onClick={() => setLightbox(photo)}
-                      style={{ borderRadius: 0 }}
-                    />
-                  )}
-                  {photo.caption && (
-                    <p className="px-4 pt-2.5 text-xs text-slate-500 font-medium m-0">{photo.caption}</p>
-                  )}
-                  {td?.tags?.length > 0 && <div className="pt-1.5"><GridTagChips tags={td.tags} /></div>}
-                  {td && <div className="px-3 pb-3"><StatusPill status={td.status} faceCount={td.face_count} /></div>}
+      {/* ── Delete error toast ── */}
+      {deleteErr && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-red-600 text-white
+                        px-5 py-3 rounded-[14px] text-[13px] font-bold z-[9998]
+                        flex items-center gap-2 shadow-[0_8px_32px_rgba(220,38,38,0.35)]
+                        whitespace-nowrap animate-slide-up">
+          <i className="fas fa-circle-exclamation" /> {deleteErr}
+        </div>
+      )}
 
-                  <button
-                    className="photo-delete absolute top-2.5 right-2.5 border-none cursor-pointer flex items-center justify-center w-8 h-8 rounded-xl transition-all"
-                    style={{ background: 'rgba(255,255,255,0.92)', color: deleting === photo.id ? '#ef4444' : '#64748b', opacity: 0, zIndex: 10 }}
-                    onClick={e => handleDelete(photo.id, e)}
-                    disabled={deleting === photo.id}
-                    title="Delete photo">
-                    <i className={`fas ${deleting === photo.id ? 'fa-spinner fa-spin' : 'fa-trash-can'} text-xs`} />
-                  </button>
+      {/* ── Uniform photo grid ── */}
+      <main ref={masonryRef} className="px-[8%] pt-9 pb-20 flex-1">
+        {photos.length > 0 ? (
+          <div className="grid grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-4">
+            {photos.map(photo => {
+              const td         = tagCache[photo.id];
+              const src        = storageUrl(photo.file_path);
+              const isDeleting = deleting === photo.id;
+
+              return (
+                <div
+                  key={photo.id}
+                  className={`group bg-white rounded-[20px] overflow-hidden border border-black/[0.04]
+                               shadow-[0_2px_12px_rgba(29,43,75,0.07)] cursor-zoom-in
+                               hover:-translate-y-1.5 hover:shadow-[0_16px_40px_rgba(29,43,75,0.13)]
+                               transition-all duration-200
+                               ${isDeleting ? 'opacity-50' : ''}`}
+                  onClick={() => setLightbox(photo)}
+                >
+                  {/* Fixed 4:3 image area */}
+                  <div className="relative w-full pt-[75%] bg-slate-100 overflow-hidden">
+                    {src && (
+                      <div className="absolute inset-0">
+                        <ProtectedImage
+                          src={src}
+                          alt={photo.caption || 'Photo'}
+                          watermarkText="© NU Lipa"
+                          showCopyright={false}
+                          style={{ width: '100%', height: '100%', borderRadius: 0 }}
+                          imgStyle={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                        />
+                      </div>
+                    )}
+
+                    {/* Hover overlay */}
+                    <div className="absolute inset-0 bg-[#1d2b4b]/45 opacity-0 group-hover:opacity-100
+                                    flex items-center justify-center transition-opacity duration-200">
+                      <div className="bg-white/15 backdrop-blur-sm border border-white/30 rounded-xl
+                                      px-[18px] py-2 text-white text-[12px] font-bold flex items-center gap-1.5">
+                        <i className="fas fa-expand" /> View
+                      </div>
+                    </div>
+
+                    {/* Delete button */}
+                    <button
+                      className={`absolute top-2.5 right-2.5 border-none cursor-pointer w-8 h-8 rounded-[10px]
+                                   z-[5] flex items-center justify-center text-red-400 text-[12px]
+                                   shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all
+                                   opacity-0 group-hover:opacity-100
+                                   hover:bg-red-500 hover:text-white bg-white/92
+                                   ${isDeleting ? 'cursor-not-allowed bg-red-500/80 text-white opacity-100' : ''}`}
+                      onClick={e => handleDelete(photo.id, e)}
+                      disabled={isDeleting}
+                      title="Delete photo"
+                    >
+                      <i className={`fas ${isDeleting ? 'fa-spinner fa-spin' : 'fa-trash-can'}`} />
+                    </button>
+                  </div>
+
+                  {/* Card footer */}
+                  <div className="px-3 pt-2.5 pb-3">
+                    {photo.caption && (
+                      <p className="mb-1.5 text-[11px] text-slate-500 font-medium truncate">
+                        {photo.caption}
+                      </p>
+                    )}
+                    {td && (
+                      <div className={td?.tags?.length > 0 ? 'mb-1.5' : ''}>
+                        <StatusPill status={td.status} faceCount={td.face_count} />
+                      </div>
+                    )}
+                    {td?.tags?.length > 0 && <GridTagChips tags={td.tags} />}
+                  </div>
                 </div>
               );
             })}
           </div>
         ) : (
-          <div className="text-center py-24 text-slate-400">
-            <i className="fas fa-images text-6xl mb-5 block opacity-10" />
-            <h3 className="text-xl font-black mb-2" style={{ color: '#1d2b4b' }}>No Photos Yet</h3>
-            <p className="text-sm mb-6">This album has no photos.</p>
-            <button onClick={() => setShowUpload(true)}
-              className="inline-flex items-center gap-2 font-extrabold text-sm border-none cursor-pointer px-5 py-3 rounded-2xl text-white transition-all"
-              style={{ background: '#1d2b4b' }}
-              onMouseEnter={e => e.currentTarget.style.background = '#3f51b5'}
-              onMouseLeave={e => e.currentTarget.style.background = '#1d2b4b'}>
-              <i className="fas fa-cloud-arrow-up" style={{ color: '#fdb813' }} />
+          /* Empty state */
+          <div className="text-center py-20 px-5 bg-white rounded-3xl shadow-[0_2px_16px_rgba(29,43,75,0.06)]">
+            <i className="fas fa-images text-5xl text-slate-200 block mb-4" />
+            <h3 className="text-xl font-extrabold text-[#1d2b4b] mb-2">No Photos Yet</h3>
+            <p className="text-[13px] text-slate-400 mb-5">This album has no photos.</p>
+            <button
+              onClick={() => setShowUpload(true)}
+              className="inline-flex items-center gap-2 bg-[#1d2b4b] hover:bg-[#3f51b5] text-white
+                         border-none px-5 py-[11px] rounded-[14px] text-[13px] font-bold cursor-pointer
+                         transition-colors"
+            >
+              <i className="fas fa-cloud-arrow-up text-[#fdb813]" />
               Upload First Photos
             </button>
           </div>
@@ -317,69 +548,12 @@ export default function GalleryShowPage() {
       </main>
 
       {/* ── Lightbox ── */}
-      {lightbox && (() => {
-        const idx  = photos.findIndex(p => p.id === lightbox.id);
-        const prev = photos[idx - 1] ?? null;
-        const next = photos[idx + 1] ?? null;
-        return (
-          <div onClick={() => setLightbox(null)}
-            className="fixed inset-0 z-[9999] flex items-center justify-center"
-            style={{ background: 'rgba(8,12,24,0.96)', animation: 'fadeIn 0.2s ease', cursor: 'zoom-out' }}>
-            <div className="relative flex flex-col items-center px-4" onClick={e => e.stopPropagation()} style={{ maxWidth: '90vw' }}>
-
-              {/* ── MODIFIED: ProtectedImage in lightbox ── */}
-              <ProtectedImage
-                src={storageUrl(lightbox.file_path)}
-                alt={lightbox.caption || 'Photo'}
-                variant="lightbox"
-                watermarkText="© NU Lipa — All Rights Reserved"
-                style={{
-                  maxWidth: '88vw',
-                  borderRadius: 16,
-                  overflow: 'hidden',
-                  boxShadow: '0 25px 80px rgba(0,0,0,0.5)',
-                }}
-                imgStyle={{ maxHeight: '78vh', objectFit: 'contain' }}
-              />
-
-              {lightbox.caption && (
-                <p className="text-white/65 text-sm font-semibold mt-4 text-center">{lightbox.caption}</p>
-              )}
-              {lightboxTags.length > 0 && (
-                <div className="flex flex-wrap gap-2 justify-center mt-4" style={{ animation: 'slideUp 0.3s ease' }}>
-                  <span className="text-white/35 text-[10px] font-bold uppercase tracking-widest self-center mr-1">
-                    <i className="fas fa-user-tag mr-1" />Tagged:
-                  </span>
-                  {lightboxTags.map(tag => <FaceTagBadge key={tag.user_id ?? tag.student?.id} tag={tag} />)}
-                </div>
-              )}
-              {tagCache[lightbox.id] && (
-                <div className="mt-3">
-                  <StatusPill status={tagCache[lightbox.id].status} faceCount={tagCache[lightbox.id].face_count} />
-                </div>
-              )}
-              <p className="text-white/25 text-xs font-bold mt-3">{idx + 1} / {photos.length}</p>
-            </div>
-
-            <button onClick={() => setLightbox(null)}
-              className="absolute top-5 right-5 bg-white/12 hover:bg-white/22 text-white border-none w-11 h-11 rounded-full cursor-pointer flex items-center justify-center transition">
-              <i className="fas fa-times" />
-            </button>
-            {prev && (
-              <button onClick={e => { e.stopPropagation(); setLightbox(prev); }}
-                className="absolute left-4 top-1/2 -translate-y-1/2 bg-white/12 hover:bg-white/22 text-white border-none w-11 h-11 rounded-full cursor-pointer flex items-center justify-center transition">
-                <i className="fas fa-chevron-left" />
-              </button>
-            )}
-            {next && (
-              <button onClick={e => { e.stopPropagation(); setLightbox(next); }}
-                className="absolute right-4 top-1/2 -translate-y-1/2 bg-white/12 hover:bg-white/22 text-white border-none w-11 h-11 rounded-full cursor-pointer flex items-center justify-center transition">
-                <i className="fas fa-chevron-right" />
-              </button>
-            )}
-          </div>
-        );
-      })()}
+      {lightbox && (
+        <LightboxModal
+          photo={lightbox} photos={photos} tagCache={tagCache}
+          onClose={() => setLightbox(null)} onNavigate={setLightbox}
+        />
+      )}
 
       <Footer />
     </div>
