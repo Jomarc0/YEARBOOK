@@ -3,21 +3,23 @@
 namespace App\Http\Controllers\API\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Http\Controllers\Concerns\AuditsAdminActions;
+use App\Models\AuditLog;
 use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Password;
 use Illuminate\Validation\Rule;
 
 class UserManagementController extends Controller
 {
-    // ── GET /api/admin/users ───────────────────────────────────────────────────
+    use AuditsAdminActions;
+
+    // GET /api/admin/users
     public function index(Request $request): JsonResponse
     {
         $query = User::query()->with(['section', 'batchRecord']);
 
-        // Search by name, email, or student_id
         if ($search = $request->get('search')) {
             $query->where(function ($q) use ($search) {
                 $q->where('first_name', 'like', "%{$search}%")
@@ -27,12 +29,10 @@ class UserManagementController extends Controller
             });
         }
 
-        // Filter by role
         if ($role = $request->get('role')) {
             $query->where('role', $role);
         }
 
-        // Filter by status
         if ($status = $request->get('status')) {
             match ($status) {
                 'verified'   => $query->where('email_verified', true)->whereNull('suspended_at'),
@@ -49,21 +49,21 @@ class UserManagementController extends Controller
         return response()->json($users);
     }
 
-    // ── GET /api/admin/users/{id} ──────────────────────────────────────────────
+    // GET /api/admin/users/{id}
     public function show(User $user): JsonResponse
     {
         $user->load(['section', 'batchRecord', 'consents', 'subscriptions', 'achievements']);
 
         return response()->json([
             'data' => array_merge($user->toArray(), [
-                'is_premium'    => $user->is_premium,
-                'is_sso'        => $user->isSsoUser(),
-                'active_sub'    => $user->activeSubscription(),
+                'is_premium' => $user->is_premium,
+                'is_sso'     => $user->isSsoUser(),
+                'active_sub' => $user->activeSubscription(),
             ]),
         ]);
     }
 
-    // ── PATCH /api/admin/users/{id} ────────────────────────────────────────────
+    // PATCH /api/admin/users/{id}
     public function update(Request $request, User $user): JsonResponse
     {
         $validated = $request->validate([
@@ -80,13 +80,22 @@ class UserManagementController extends Controller
 
         $user->update($validated);
 
+        $this->audit(
+            AuditLog::ACTION_USER_UPDATED,
+            "Updated user #{$user->id} ({$user->email}). Fields changed: " . implode(', ', array_keys($validated)),
+            AuditLog::STATUS_SUCCESS,
+            null,
+            $user->id,
+            "user#{$user->id}",
+        );
+
         return response()->json([
             'message' => 'User updated successfully.',
             'data'    => $user->fresh(),
         ]);
     }
 
-    // ── PATCH /api/admin/users/{id}/suspend ────────────────────────────────────
+    // PATCH /api/admin/users/{id}/suspend
     public function suspend(User $user): JsonResponse
     {
         if ($user->role === 'admin') {
@@ -94,22 +103,38 @@ class UserManagementController extends Controller
         }
 
         $user->update(['suspended_at' => now()]);
-
-        // Revoke all tokens so active sessions are terminated immediately
         $user->tokens()->delete();
+
+        $this->audit(
+            AuditLog::ACTION_USER_UPDATED,
+            "Suspended user #{$user->id} ({$user->email}). All active sessions revoked.",
+            AuditLog::STATUS_WARNING,
+            null,
+            $user->id,
+            "user#{$user->id}",
+        );
 
         return response()->json(['message' => 'User suspended and sessions revoked.']);
     }
 
-    // ── PATCH /api/admin/users/{id}/unsuspend ──────────────────────────────────
+    // PATCH /api/admin/users/{id}/unsuspend
     public function unsuspend(User $user): JsonResponse
     {
         $user->update(['suspended_at' => null]);
 
+        $this->audit(
+            AuditLog::ACTION_USER_UPDATED,
+            "Unsuspended user #{$user->id} ({$user->email}).",
+            AuditLog::STATUS_SUCCESS,
+            null,
+            $user->id,
+            "user#{$user->id}",
+        );
+
         return response()->json(['message' => 'User unsuspended.']);
     }
 
-    // ── PATCH /api/admin/users/{id}/verify ────────────────────────────────────
+    // PATCH /api/admin/users/{id}/verify
     public function verify(User $user): JsonResponse
     {
         $user->update([
@@ -117,32 +142,68 @@ class UserManagementController extends Controller
             'email_verified_at' => now(),
         ]);
 
+        $this->audit(
+            AuditLog::ACTION_USER_UPDATED,
+            "Manually verified user #{$user->id} ({$user->email}) as alumni.",
+            AuditLog::STATUS_SUCCESS,
+            null,
+            $user->id,
+            "user#{$user->id}",
+        );
+
         return response()->json(['message' => 'User verified as alumni.']);
     }
 
-    // ── POST /api/admin/users/{id}/reset-password ──────────────────────────────
+    // POST /api/admin/users/{id}/reset-password
     public function resetPassword(User $user): JsonResponse
     {
-        // Uses Laravel's built-in password reset broker (sends email)
         $status = Password::sendResetLink(['email' => $user->email]);
 
         if ($status === Password::RESET_LINK_SENT) {
+            $this->audit(
+                AuditLog::ACTION_PASSWORD_RESET,
+                "Password reset email sent to {$user->email} (user #{$user->id}).",
+                AuditLog::STATUS_SUCCESS,
+                null,
+                $user->id,
+                "user#{$user->id}",
+            );
+
             return response()->json(['message' => 'Password reset email sent to ' . $user->email]);
         }
+
+        $this->audit(
+            AuditLog::ACTION_PASSWORD_RESET,
+            "Failed to send password reset email to {$user->email} (user #{$user->id}).",
+            AuditLog::STATUS_FAILED,
+            null,
+            $user->id,
+            "user#{$user->id}",
+        );
 
         return response()->json(['message' => 'Failed to send reset email.'], 422);
     }
 
-    // ── DELETE /api/admin/users/{id} ───────────────────────────────────────────
+    // DELETE /api/admin/users/{id}
     public function destroy(User $user): JsonResponse
     {
         if ($user->role === 'admin') {
             return response()->json(['message' => 'Cannot delete an admin account.'], 403);
         }
 
-        // Revoke all tokens before deletion
+        $snapshot = "{$user->email} (ID #{$user->id})";
+
         $user->tokens()->delete();
         $user->delete();
+
+        $this->audit(
+            AuditLog::ACTION_USER_DELETED,
+            "Soft-deleted user {$snapshot}. All tokens revoked.",
+            AuditLog::STATUS_WARNING,
+            null,
+            $user->id,
+            "user#{$user->id}",
+        );
 
         return response()->json(['message' => 'User deleted successfully.']);
     }

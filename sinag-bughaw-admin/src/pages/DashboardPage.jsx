@@ -1,6 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import api from "../services/api";
+import {
+  DASHBOARD_API_PATH,
+  AUDIT_LOGS_PATH,
+  LOCALE,
+  buildMetricCards,
+} from "../config/dashboard.config";
 
 const fmt = (n) => (n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n));
 const cx = (...v) => v.filter(Boolean).join(" ");
@@ -43,7 +49,7 @@ function MetricCard({ label, value, sub, subColorClass, subBgClass, icon, iconBg
 
 function EnrollmentChart({ data, loading }) {
   const canvasRef = useRef(null);
-  const chartRef = useRef(null);
+  const chartRef  = useRef(null);
 
   useEffect(() => {
     if (!data || loading) return;
@@ -175,10 +181,10 @@ function TrendingAlumni({ items, loading }) {
 }
 
 const TYPE_STYLES = {
-  image: { bgClass: "bg-indigo-50", textClass: "text-indigo-700", label: "IMG" },
-  video: { bgClass: "bg-amber-50", textClass: "text-amber-700", label: "VID" },
+  image: { bgClass: "bg-indigo-50",  textClass: "text-indigo-700",  label: "IMG" },
+  video: { bgClass: "bg-amber-50",   textClass: "text-amber-700",   label: "VID" },
   audio: { bgClass: "bg-emerald-50", textClass: "text-emerald-700", label: "AUD" },
-  doc: { bgClass: "bg-violet-50", textClass: "text-violet-700", label: "DOC" },
+  doc:   { bgClass: "bg-violet-50",  textClass: "text-violet-700",  label: "DOC" },
 };
 
 function RecentUploads({ items, loading }) {
@@ -218,12 +224,12 @@ function RecentUploads({ items, loading }) {
 
 const ACTIVITY_COLORS = {
   register: "bg-emerald-500",
-  upload: "bg-blue-500",
-  update: "bg-amber-500",
-  delete: "bg-red-500",
+  upload:   "bg-blue-500",
+  update:   "bg-amber-500",
+  delete:   "bg-red-500",
   settings: "bg-violet-500",
-  login: "bg-cyan-500",
-  default: "bg-slate-400",
+  login:    "bg-cyan-500",
+  default:  "bg-slate-400",
 };
 
 function ActivityFeed({ items, loading, onViewAll }) {
@@ -282,7 +288,10 @@ function EngagementBar({ label, value, max, colorClass, loading }) {
     <div className="mb-3 last:mb-0">
       <div className="mb-1.5 flex justify-between">
         <span className="text-sm font-medium text-slate-500">{label}</span>
-        {loading ? <Skeleton className="h-3 w-10" /> : <span className="text-sm font-bold text-slate-800">{value.toLocaleString()}</span>}
+        {loading
+          ? <Skeleton className="h-3 w-10" />
+          : <span className="text-sm font-bold text-slate-800">{value.toLocaleString()}</span>
+        }
       </div>
       <div className="h-1.5 overflow-hidden rounded-full bg-slate-200">
         {!loading && <div className={cx("h-full rounded-full transition-all duration-500", colorClass)} style={{ width: `${pct}%` }} />}
@@ -296,9 +305,9 @@ function EngagementCard({ data, loading }) {
   return (
     <Card className="p-5">
       <h3 className="mb-4 text-base font-extrabold text-slate-800">Engagement Overview</h3>
-      <EngagementBar label="Weekly Visits" value={data?.weekly_visits ?? 0} max={maxVal} colorClass="bg-indigo-600" loading={loading} />
-      <EngagementBar label="Returning Alumni" value={data?.returning_alumni ?? 0} max={maxVal} colorClass="bg-emerald-500" loading={loading} />
-      <EngagementBar label="New Registrations" value={data?.new_registrations ?? 0} max={maxVal} colorClass="bg-amber-500" loading={loading} />
+      <EngagementBar label="Weekly Visits"      value={data?.weekly_visits      ?? 0} max={maxVal} colorClass="bg-indigo-600" loading={loading} />
+      <EngagementBar label="Returning Alumni"   value={data?.returning_alumni   ?? 0} max={maxVal} colorClass="bg-emerald-500" loading={loading} />
+      <EngagementBar label="New Registrations"  value={data?.new_registrations  ?? 0} max={maxVal} colorClass="bg-amber-500" loading={loading} />
     </Card>
   );
 }
@@ -327,81 +336,40 @@ function PageHeader({ lastRefresh, onRefresh, refreshing }) {
 
 export default function DashboardPage() {
   const navigate = useNavigate();
-  const [data, setData] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const [data,       setData]       = useState(null);
+  const [loading,    setLoading]    = useState(true);
+  const [error,      setError]      = useState(null);
   const [refreshing, setRefreshing] = useState(false);
-  const [lastRefresh, setLastRefresh] = useState(null);
+  const [lastRefresh,setLastRefresh]= useState(null);
 
   const load = useCallback(async (isRefresh = false) => {
     if (isRefresh) setRefreshing(true);
     else setLoading(true);
     setError(null);
     try {
-      const res = await api.get("/admin/dashboard");
+      const res = await api.get(DASHBOARD_API_PATH);
       setData(res.data);
     } catch (err) {
-      const msg = err.response?.data?.message ?? err.response?.data?.error ?? err.message ?? "Failed to load dashboard data.";
+      const msg = err.response?.data?.message
+        ?? err.response?.data?.error
+        ?? err.message
+        ?? "Failed to load dashboard data.";
       setError(msg);
     } finally {
       setLoading(false);
       setRefreshing(false);
-      setLastRefresh(new Date().toLocaleTimeString("en-PH", { hour: "2-digit", minute: "2-digit" }));
+      setLastRefresh(
+        new Date().toLocaleTimeString(LOCALE, { hour: "2-digit", minute: "2-digit" })
+      );
     }
   }, []);
 
-  useEffect(() => {
-    load();
-  }, [load]);
+  useEffect(() => { load(); }, [load]);
 
-  const m = data?.metrics ?? {};
-  const metricCards = [
-    {
-      label: "Total Students",
-      value: fmt(m.total_students ?? 0),
-      sub: "Live from user records",
-      subColorClass: "text-emerald-700",
-      subBgClass: "bg-emerald-50",
-      icon: "Users",
-      iconBgClass: "bg-blue-50 text-blue-700",
-    },
-    {
-      label: "Faculty Members",
-      value: fmt(m.faculty_members ?? 0),
-      sub: "Active in system",
-      subColorClass: "text-violet-700",
-      subBgClass: "bg-violet-50",
-      icon: "Faculty",
-      iconBgClass: "bg-violet-50 text-violet-700",
-    },
-    {
-      label: "Gallery Photos",
-      value: fmt(m.gallery_photos ?? 0),
-      sub: "Across all albums",
-      subColorClass: "text-amber-700",
-      subBgClass: "bg-amber-50",
-      icon: "Photos",
-      iconBgClass: "bg-amber-50 text-amber-700",
-    },
-    {
-      label: "Active Subscriptions",
-      value: fmt(m.active_subscriptions ?? 0),
-      sub: "Premium users",
-      subColorClass: "text-emerald-700",
-      subBgClass: "bg-emerald-50",
-      icon: "Premium",
-      iconBgClass: "bg-emerald-50 text-emerald-700",
-    },
-    {
-      label: "System Alerts",
-      value: String(m.system_alerts ?? 0),
-      sub: (m.system_alerts ?? 0) > 0 ? "Failed actions today" : "All systems normal",
-      subColorClass: (m.system_alerts ?? 0) > 0 ? "text-red-700" : "text-emerald-700",
-      subBgClass: (m.system_alerts ?? 0) > 0 ? "bg-red-50" : "bg-emerald-50",
-      icon: "Alerts",
-      iconBgClass: (m.system_alerts ?? 0) > 0 ? "bg-red-50 text-red-700" : "bg-emerald-50 text-emerald-700",
-    },
-  ];
+  const metricCards = buildMetricCards(data?.metrics).map((card) => ({
+    ...card,
+    value: typeof card.value === "number" ? fmt(card.value) : card.value,
+  }));
 
   return (
     <div className="min-h-screen bg-slate-50 px-6 py-7 animate-[fadeIn_.3s_ease]">
@@ -433,7 +401,11 @@ export default function DashboardPage() {
 
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
         <RecentUploads items={data?.recent_uploads ?? []} loading={loading} />
-        <ActivityFeed items={data?.recent_activity ?? []} loading={loading} onViewAll={() => navigate("/audit-logs")} />
+        <ActivityFeed
+          items={data?.recent_activity ?? []}
+          loading={loading}
+          onViewAll={() => navigate(AUDIT_LOGS_PATH)}
+        />
       </div>
     </div>
   );

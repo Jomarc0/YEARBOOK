@@ -4,7 +4,7 @@ namespace App\Http\Controllers\API\Section;
 
 use App\Http\Controllers\Controller;
 use App\Models\Section;
-use App\Models\User;
+use App\Models\Student;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -20,7 +20,7 @@ class SectionController extends Controller
             ->with([
                 'batch:id,name,graduation_year,department',
                 'students' => fn ($q) => $q
-                    ->select('id', 'name', 'profile_picture', 'section_id')
+                    ->select('id', 'first_name', 'last_name', 'photo', 'section_id')
                     ->take(5),
             ]);
 
@@ -46,25 +46,53 @@ class SectionController extends Controller
         $section = Section::with('batch:id,name,graduation_year,department')
             ->findOrFail($id);
 
-        // ── Build student query with access rules ────────────────────────
+        // ── Base Student query ───────────────────────────────────────────
 
-        $studentQuery = User::where('section_id', $id)
-            ->where('profile_visibility', '!=', 'private')   // always hide private
-            ->orderBy('name');
+        $studentQuery = Student::where('section_id', $id)
+            ->orderBy('last_name')
+            ->orderBy('first_name');
 
         if (! $isPremium) {
-            // Free tier: public only + limited columns
-            $studentQuery
-                ->where('profile_visibility', 'public')
-                ->select(['id', 'name', 'profile_picture', 'student_id', 'section_id']);
+            // Free tier: limited columns — no premium yearbook fields
+            $studentQuery->select([
+                'id',
+                'first_name',
+                'last_name',
+                'photo',
+                'student_no',
+                'course',
+                'graduation_year',
+                'section_id',
+                'batch_id',
+            ]);
         } else {
-            // Premium: public + connections_only + full columns
-            $studentQuery
-                ->whereIn('profile_visibility', ['public', 'connections_only'])
-                ->select([
-                    'id', 'name', 'profile_picture', 'student_id', 'section_id',
-                    'email', 'course', 'graduation_year', 'motto', 'profile_visibility',
-                ]);
+            // Premium: all public + yearbook fields
+            $studentQuery->select([
+                'id',
+                'first_name',
+                'last_name',
+                'middle_name',
+                'nickname',
+                'photo',
+                'student_no',
+                'email',
+                'course',
+                'graduation_year',
+                'section_id',
+                'batch_id',
+                'honors',
+                'organizations',
+                'motto',
+                'student_quote',
+                'ambition',
+                'future_plans',
+                'most_likely_to',
+                'achievements',
+                'facebook_url',
+                'instagram_url',
+                'linkedin_url',
+                'github_url',
+            ]);
         }
 
         $students = $studentQuery->paginate(30);
@@ -73,8 +101,8 @@ class SectionController extends Controller
             'section'    => $section,
             'students'   => $students,
             'is_premium' => $isPremium,
-            'total'      => $section->students()->count(),          // true count (all)
-            'visible'    => $students->total(),                     // count respecting rules
+            'total'      => $section->students()->count(),
+            'visible'    => $students->total(),
         ]);
     }
 }

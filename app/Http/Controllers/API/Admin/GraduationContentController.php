@@ -24,9 +24,7 @@ use Throwable;
 
 class GraduationContentController extends Controller
 {
-    use AutoTranscribesVideo;  
-
-    // ── Constants ─────────────────────────────────────────────────────────────
+    use AutoTranscribesVideo;
 
     private const FACE_TYPES = ['photos', 'toga', 'highlights'];
 
@@ -58,7 +56,6 @@ class GraduationContentController extends Controller
 
     // =========================================================================
     // STATS
-    // GET /api/admin/graduation/content/stats
     // =========================================================================
 
     public function stats(): JsonResponse
@@ -89,7 +86,6 @@ class GraduationContentController extends Controller
 
     // =========================================================================
     // INDEX
-    // GET /api/admin/graduation/content
     // =========================================================================
 
     public function index(Request $request): JsonResponse
@@ -134,7 +130,6 @@ class GraduationContentController extends Controller
 
     // =========================================================================
     // SHOW
-    // GET /api/admin/graduation/content/{album}
     // =========================================================================
 
     public function show(GraduationAlbum $album): JsonResponse
@@ -149,7 +144,6 @@ class GraduationContentController extends Controller
 
     // =========================================================================
     // STUDENT INDEX (published only)
-    // GET /api/graduation/content
     // =========================================================================
 
     public function studentIndex(Request $request): JsonResponse
@@ -184,7 +178,6 @@ class GraduationContentController extends Controller
 
     // =========================================================================
     // CREATE ALBUM
-    // POST /api/admin/graduation/albums
     // =========================================================================
 
     public function createAlbum(Request $request): JsonResponse
@@ -213,8 +206,7 @@ class GraduationContentController extends Controller
     }
 
     // =========================================================================
-    // UPLOAD TO ALBUM (universal — all file types)
-    // POST /api/admin/graduation/albums/{album}/upload
+    // UPLOAD TO ALBUM
     // =========================================================================
 
     public function uploadToAlbum(Request $request, GraduationAlbum $album): JsonResponse
@@ -251,7 +243,6 @@ class GraduationContentController extends Controller
 
                     $result = $this->storage->uploadPhoto($file, $userId, $folder, $options);
 
-                    // ── Create a GraduationPhoto row ──────────────────────────
                     $photo = $album->photos()->create([
                         'file_path'            => $result['secure_url'],
                         'cloudinary_public_id' => $result['public_id'] ?? null,
@@ -261,7 +252,6 @@ class GraduationContentController extends Controller
                         'sort_order'           => $album->photos()->count(),
                     ]);
 
-                    // ── Update album's quick-preview URL ──────────────────────
                     if (! $album->media_url || $isImage) {
                         $album->update([
                             'media_url'            => $result['secure_url'],
@@ -269,27 +259,25 @@ class GraduationContentController extends Controller
                         ]);
                     }
 
-                    // ── Face recognition for image categories ─────────────────
                     if ($isImage && in_array($category, self::FACE_TYPES)) {
                         AnalyzePhotoFaces::dispatch($photo)->delay(now()->addSeconds(3));
                         $photo->markAiQueued();
                     }
 
-                    // ── Also run face recognition on archive images ────────────
                     if ($isImage && $category === 'archive') {
                         AnalyzePhotoFaces::dispatch($photo)->delay(now()->addSeconds(3));
                     }
 
-                    // ── Whisper transcription for video/audio ─────────────────
-                    if (($isVideo || $isAudio) &&
-                        (in_array($category, self::TRANSCRIPT_TYPES) || $category === 'archive')) {
-                        $this->maybeQueueTranscription(
-                            uploadResult: $result,
-                            title:        $album->title,
-                            userId:       $userId,
-                            albumId:      $album->id,
-                        );
-                    }
+                if (($isVideo || $isAudio) &&
+                    (in_array($category, self::TRANSCRIPT_TYPES) || $category === 'archive')) {
+                    $this->maybeQueueTranscription(
+                        uploadResult:       $result,
+                        title:              $album->title,
+                        userId:             $userId,
+                        albumId:            $album->id,
+                        graduationPhotoId:  $photo->id, 
+                    );
+                }
 
                     $type    = $isImage ? 'photo' : ($isVideo ? 'video' : ($isAudio ? 'audio' : 'document'));
                     $saved[] = ['type' => $type, 'url' => $result['secure_url'], 'photo_id' => $photo->id];
@@ -314,7 +302,7 @@ class GraduationContentController extends Controller
     }
 
     // =========================================================================
-    // UPLOAD HELPERS — each creates album then delegates to uploadToAlbum
+    // UPLOAD HELPERS
     // =========================================================================
 
     public function uploadPhotos(Request $request, string $type = 'photos'): JsonResponse
@@ -532,7 +520,6 @@ class GraduationContentController extends Controller
 
     // =========================================================================
     // UPDATE
-    // PUT /api/admin/graduation/content/{album}
     // =========================================================================
 
     public function update(Request $request, GraduationAlbum $album): JsonResponse
@@ -563,7 +550,6 @@ class GraduationContentController extends Controller
 
     // =========================================================================
     // PUBLISH
-    // POST /api/admin/graduation/content/{album}/publish
     // =========================================================================
 
     public function publish(GraduationAlbum $album): JsonResponse
@@ -579,7 +565,6 @@ class GraduationContentController extends Controller
 
     // =========================================================================
     // ARCHIVE
-    // POST /api/admin/graduation/content/{album}/archive
     // =========================================================================
 
     public function archiveContent(GraduationAlbum $album): JsonResponse
@@ -594,55 +579,22 @@ class GraduationContentController extends Controller
     }
 
     // =========================================================================
-    // DESTROY
-    // DELETE /api/admin/graduation/content/{album}
-    // Cleans up: Transcript → GraduationPhotos (Cloudinary) → GraduationAlbum
+    // DESTROY — soft delete only
+    //
+    // Previously: hard-deleted Transcript + GraduationPhotos (with Cloudinary purge) + Album.
+    // Now: soft-deletes the GraduationAlbum only (sets deleted_at).
+    //
+    // Cloudinary cleanup (GraduationPhotos, Transcripts) is handled by
+    // TrashController@forceDelete when the admin permanently deletes from Trash.
+    // This preserves restorability and keeps destroy() fast and non-destructive.
     // =========================================================================
 
     public function destroy(GraduationAlbum $album): JsonResponse
     {
         try {
-            // 1. Transcript linked to this album
-            $transcript = Transcript::where('album_id', $album->id)->first();
-            if ($transcript) {
-                if ($transcript->public_id) {
-                    try {
-                        $this->storage->deletePhoto($transcript->public_id, 'video');
-                    } catch (Throwable $e) {
-                        Log::warning("[GradContent] destroy: transcript asset: {$e->getMessage()}");
-                    }
-                }
-                $transcript->delete();
-            }
+            $album->delete(); // soft delete — sets deleted_at
 
-            // 2. All GraduationPhoto rows — delete their Cloudinary assets
-            $album->load('photos');
-            $album->photos->each(function (GraduationPhoto $photo) {
-                if ($photo->cloudinary_public_id) {
-                    $rt = $photo->resource_type === 'video' ? 'video' : 'image';
-                    try {
-                        $this->storage->deletePhoto($photo->cloudinary_public_id, $rt);
-                    } catch (Throwable $e) {
-                        Log::warning("[GradContent] destroy: photo asset [{$photo->cloudinary_public_id}]: {$e->getMessage()}");
-                    }
-                }
-                $photo->delete();
-            });
-
-            // 3. Album's own legacy Cloudinary asset (media_url era)
-            if ($album->cloudinary_public_id) {
-                $rt = in_array($album->category, ['photos', 'toga', 'highlights', 'invitations', 'messages'])
-                    ? 'image' : 'video';
-                try {
-                    $this->storage->deletePhoto($album->cloudinary_public_id, $rt);
-                } catch (Throwable $e) {
-                    Log::warning("[GradContent] destroy: album asset [{$album->cloudinary_public_id}]: {$e->getMessage()}");
-                }
-            }
-
-            $album->delete();
-
-            return response()->json(['message' => 'Content deleted successfully.']);
+            return response()->json(['message' => 'Content moved to trash.']);
         } catch (Throwable $e) {
             Log::error('[GradContent] destroy failed', ['id' => $album->id, 'message' => $e->getMessage()]);
             return response()->json(['message' => 'Delete failed.'], 500);
@@ -653,9 +605,6 @@ class GraduationContentController extends Controller
     // PRIVATE HELPERS
     // =========================================================================
 
-    /**
-     * Return existing album by album_id or create a new GraduationAlbum.
-     */
     private function getOrCreateAlbum(Request $request, string $category): GraduationAlbum
     {
         if ($request->filled('album_id')) {
@@ -674,13 +623,10 @@ class GraduationContentController extends Controller
         ]);
     }
 
-    /**
-     * Transform paginator collection to API response format.
-     */
     private function transformCollection($paginator, bool $studentView = false): array
     {
         $paginator->getCollection()->transform(function (GraduationAlbum $a) use ($studentView) {
-            $coverUrl = $a->cover_photo_url; // uses getCoverPhotoUrlAttribute()
+            $coverUrl = $a->cover_photo_url;
 
             $item = [
                 'id'               => $a->id,
@@ -717,9 +663,6 @@ class GraduationContentController extends Controller
         return $paginator->toArray();
     }
 
-    /**
-     * Infer a display MIME type from the album category.
-     */
     private function inferMimeType(string $category): string
     {
         return match ($category) {

@@ -10,6 +10,7 @@ use App\Models\User;
 use App\Models\Yearbook;
 use App\Models\YearbookBookmark;
 use App\Services\Yearbook\PageResolverService;
+use App\Support\PlatformSettings;
 use App\Services\Yearbook\WatermarkService;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\JsonResponse;
@@ -60,7 +61,7 @@ class YearbookController extends Controller
     public function flipbookData(): JsonResponse
     {
         $students = User::with('section')
-            ->where('role', 'student')
+            ->whereIn('role', PlatformSettings::directoryRoles())
             ->whereNotNull('student_id')
             ->orderBy('name')
             ->get(['id', 'name', 'student_id', 'course', 'bio', 'profile_picture']);
@@ -79,11 +80,13 @@ class YearbookController extends Controller
         $yearbook = Yearbook::where('batch_id', $batch->id)->first();
 
         return response()->json([
-            'title'    => $yearbook?->title ?? 'Senior Yearbook',
-            'school'   => config('app.school_name', 'National University Lipa'),
+            'title'    => $yearbook?->title ?? PlatformSettings::get('yearbook_name'),
+            'school'   => PlatformSettings::get('school_name'),
             'year'     => $batch->year ?? now()->year,
+            'academic_year' => PlatformSettings::get('academic_year'),
+            'graduation_date' => PlatformSettings::get('graduation_date'),
             'coverUrl' => $yearbook?->cover_url,
-            'theme'    => $yearbook?->theme ?? 'classic',
+            'theme'    => PlatformSettings::get('graduation_theme') ?: ($yearbook?->theme ?? 'classic'),
             'status'   => $yearbook?->status ?? 'published',
             'pdfReady' => $yearbook?->pdf_path !== null,
         ]);
@@ -173,6 +176,14 @@ class YearbookController extends Controller
      */
     public function download(Batch $batch): StreamedResponse|JsonResponse
     {
+        if ($denied = PlatformSettings::featureDisabled('enable_yearbook_pdf_download', 'Yearbook PDF download')) {
+            return $denied;
+        }
+
+        if ($denied = PlatformSettings::featureDisabled('publish_yearbook', 'Published yearbook')) {
+            return $denied;
+        }
+
         $yearbook = Yearbook::where('batch_id', $batch->id)->first();
 
         if (!$yearbook?->pdf_path || !Storage::exists($yearbook->pdf_path)) {

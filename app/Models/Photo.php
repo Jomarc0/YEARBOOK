@@ -7,9 +7,12 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Photo extends Model implements AnalyzablePhoto
 {
+    use SoftDeletes;
+
     protected $fillable = [
         'album_id', 'user_id', 'file_path', 'public_id',
         'caption', 'ai_metadata', 'visibility', 'is_profile_post',

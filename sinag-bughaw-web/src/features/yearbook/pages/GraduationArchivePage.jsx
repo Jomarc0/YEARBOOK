@@ -1,20 +1,5 @@
-/**
- * GraduationArchivePage.jsx
- * ─────────────────────────────────────────────────────────────────────────────
- * CHANGES FROM ORIGINAL:
- *  - Added face-search bar to the album header (mirrors GalleryPage hero search).
- *  - Imports: added `galleryApi` (for faceSearch), `FaceSearchButton`,
- *    `imageUrl`, `avatarUrl`.
- *  - New state: `searching`, `matches`.
- *  - New handler: `handleFaceFile` — calls galleryApi.faceSearch and sets matches.
- *  - Match result cards rendered below the search input in the header.
- *  - Lightbox close/nav inline-style → hover handlers kept as-is (original style).
- *  - No logic, API calls, routes, or other backend behavior changed.
- * ─────────────────────────────────────────────────────────────────────────────
- */
-
 import { useEffect, useState } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import Navbar from '@/components/layout/Navbar';
 import Footer from '@/components/layout/Footer';
 import { graduationApi } from '@/api/yearbook.api';
@@ -40,15 +25,19 @@ function Lightbox({ photos, index, onClose }) {
   if (!photo) return null;
 
   return (
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center"
-      style={{ background: 'rgba(8,12,24,0.97)' }}
-      onClick={onClose}>
-      <div className="relative flex flex-col items-center px-4"
-        style={{ maxWidth: '90vw' }}
-        onClick={e => e.stopPropagation()}>
-        <img src={photo.file_path} alt={photo.caption || 'Photo'}
-          className="rounded-2xl shadow-2xl"
-          style={{ maxWidth: '88vw', maxHeight: '80vh', objectFit: 'contain' }} />
+    <div
+      className="fixed inset-0 z-[9999] flex items-center justify-center bg-[#080c18]/[0.97]"
+      onClick={onClose}
+    >
+      <div
+        className="relative flex flex-col items-center px-4 max-w-[90vw]"
+        onClick={e => e.stopPropagation()}
+      >
+        <img
+          src={photo.file_path}
+          alt={photo.caption || 'Photo'}
+          className="rounded-2xl shadow-2xl max-w-[88vw] max-h-[80vh] object-contain"
+        />
         {photo.caption && (
           <p className="text-white/60 text-sm font-semibold mt-4 text-center">{photo.caption}</p>
         )}
@@ -56,32 +45,34 @@ function Lightbox({ photos, index, onClose }) {
       </div>
 
       {/* Close */}
-      <button onClick={onClose}
-        className="absolute top-5 right-5 border-none cursor-pointer flex items-center justify-center w-11 h-11 rounded-full transition-all"
-        style={{ background: 'rgba(255,255,255,0.1)', color: 'white' }}
-        onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.2)'}
-        onMouseLeave={e => e.currentTarget.style.background = 'rgba(255,255,255,0.1)'}>
+      <button
+        onClick={onClose}
+        className="absolute top-5 right-5 w-11 h-11 rounded-full bg-white/10 hover:bg-white/20
+                   text-white border-none cursor-pointer flex items-center justify-center transition-colors"
+      >
         <i className="fas fa-times" />
       </button>
 
       {/* Prev */}
       {current > 0 && (
-        <button onClick={e => { e.stopPropagation(); setCurrent(c => c - 1); }}
-          className="absolute left-4 top-1/2 -translate-y-1/2 border-none cursor-pointer flex items-center justify-center w-11 h-11 rounded-full transition-all"
-          style={{ background: 'rgba(255,255,255,0.1)', color: 'white' }}
-          onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.2)'}
-          onMouseLeave={e => e.currentTarget.style.background = 'rgba(255,255,255,0.1)'}>
+        <button
+          onClick={e => { e.stopPropagation(); setCurrent(c => c - 1); }}
+          className="absolute left-4 top-1/2 -translate-y-1/2 w-11 h-11 rounded-full
+                     bg-white/10 hover:bg-white/20 text-white border-none cursor-pointer
+                     flex items-center justify-center transition-colors"
+        >
           <i className="fas fa-chevron-left" />
         </button>
       )}
 
       {/* Next */}
       {current < photos.length - 1 && (
-        <button onClick={e => { e.stopPropagation(); setCurrent(c => c + 1); }}
-          className="absolute right-4 top-1/2 -translate-y-1/2 border-none cursor-pointer flex items-center justify-center w-11 h-11 rounded-full transition-all"
-          style={{ background: 'rgba(255,255,255,0.1)', color: 'white' }}
-          onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.2)'}
-          onMouseLeave={e => e.currentTarget.style.background = 'rgba(255,255,255,0.1)'}>
+        <button
+          onClick={e => { e.stopPropagation(); setCurrent(c => c + 1); }}
+          className="absolute right-4 top-1/2 -translate-y-1/2 w-11 h-11 rounded-full
+                     bg-white/10 hover:bg-white/20 text-white border-none cursor-pointer
+                     flex items-center justify-center transition-colors"
+        >
           <i className="fas fa-chevron-right" />
         </button>
       )}
@@ -91,14 +82,14 @@ function Lightbox({ photos, index, onClose }) {
 
 // ── Main Page ─────────────────────────────────────────────────────────────────
 export default function GraduationArchivePage() {
-  const { id } = useParams();
-  const [album,      setAlbum]      = useState(null);
-  const [loading,    setLoading]    = useState(true);
-  const [lightbox,   setLightbox]   = useState(null);
+  const { id }   = useParams();
+  const navigate = useNavigate();
 
-  // ── Face search state ──────────────────────────────────────────────────────
-  const [searching,  setSearching]  = useState(false);
-  const [matches,    setMatches]    = useState([]);
+  const [album,     setAlbum]     = useState(null);
+  const [loading,   setLoading]   = useState(true);
+  const [lightbox,  setLightbox]  = useState(null);
+  const [searching, setSearching] = useState(false);
+  const [matches,   setMatches]   = useState([]);
 
   useEffect(() => {
     if (!id) return;
@@ -109,7 +100,6 @@ export default function GraduationArchivePage() {
       .finally(() => setLoading(false));
   }, [id]);
 
-  // ── Face search handler ────────────────────────────────────────────────────
   const handleFaceFile = async (file) => {
     setSearching(true);
     setMatches([]);
@@ -125,27 +115,38 @@ export default function GraduationArchivePage() {
     } finally {
       setSearching(false);
     }
-};
+  };
 
+  const handleBack = (e) => {
+    e.preventDefault();
+    navigate('/gallery', { state: { tab: 'graduation:archive' } });
+  };
+
+  // ── Loading ────────────────────────────────────────────────────────────────
   if (loading) return (
     <div className="min-h-screen flex flex-col bg-slate-50">
       <Navbar />
       <div className="flex-1 flex items-center justify-center">
-        <i className="fas fa-spinner fa-spin text-3xl" style={{ color: '#3f51b5' }} />
+        <i className="fas fa-spinner fa-spin text-3xl text-indigo-600" />
       </div>
       <Footer />
     </div>
   );
 
+  // ── Not found ──────────────────────────────────────────────────────────────
   if (!album) return (
     <div className="min-h-screen flex flex-col bg-slate-50">
       <Navbar />
       <div className="flex-1 flex flex-col items-center justify-center gap-4">
-        <i className="fas fa-graduation-cap text-5xl" style={{ color: '#e2e8f0' }} />
-        <h2 className="text-xl font-black" style={{ color: '#1d2b4b' }}>Album not found.</h2>
-        <Link to="/graduation" className="font-semibold no-underline hover:underline" style={{ color: '#3f51b5' }}>
-          ← Back to Graduation
-        </Link>
+        <i className="fas fa-graduation-cap text-5xl text-slate-200" />
+        <h2 className="text-xl font-black text-[#1d2b4b]">Album not found.</h2>
+        <a
+          href="/gallery"
+          onClick={handleBack}
+          className="font-semibold no-underline hover:underline text-indigo-600 cursor-pointer"
+        >
+          ← Back to Gallery
+        </a>
       </div>
       <Footer />
     </div>
@@ -154,38 +155,47 @@ export default function GraduationArchivePage() {
   const photos = album.photos ?? [];
 
   return (
-    <div className="min-h-screen flex flex-col" style={{ background: '#f8fafc', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+    <div className="min-h-screen flex flex-col bg-[#f8fafc]" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
       <Navbar />
 
-      {/* Header */}
-      <header className="text-white"
-        style={{ background: 'linear-gradient(135deg, #1d2b4b 0%, #2a3d66 100%)', padding: '70px 8% 50px', borderRadius: '0 0 60px 60px' }}>
-        <Link to="/graduation" className="inline-flex items-center gap-2 text-white/50 hover:text-white text-sm no-underline mb-6 transition">
-          <i className="fas fa-arrow-left" /> Back to Graduation Hub
-        </Link>
+      {/* ── Header ── */}
+      <header className="bg-gradient-to-br from-[#1d2b4b] to-[#2a3d66] px-[8%] pt-[70px] pb-[50px] rounded-b-[60px] text-white">
+
+        <a
+          href="/gallery"
+          onClick={handleBack}
+          className="inline-flex items-center gap-2 text-white/50 hover:text-white
+                     text-sm no-underline mb-6 transition-colors cursor-pointer"
+        >
+          <i className="fas fa-arrow-left" /> Back to Gallery
+        </a>
 
         <div className="flex items-start justify-between flex-wrap gap-4">
           <div>
-            <p className="text-xs font-bold uppercase tracking-widest opacity-60 mb-2">
+            <p className="text-xs font-bold uppercase tracking-widest text-white/60 mb-2">
               {album.category === 'archive' ? 'Archive' : 'Graduation Photos'}
             </p>
-            <h1 className="font-extrabold mb-3" style={{ fontSize: '2.5rem', letterSpacing: '-1.5px' }}>
+            <h1 className="text-[2.5rem] font-extrabold tracking-tight mb-3 leading-tight">
               {album.title}
             </h1>
             <div className="flex flex-wrap items-center gap-5 text-white/70 text-sm">
               {album.event_date && (
                 <span className="flex items-center gap-2">
-                  <i className="fas fa-calendar" style={{ color: '#fdb813' }} />
-                  {new Date(album.event_date).toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' })}
+                  <i className="fas fa-calendar text-[#fdb813]" />
+                  {new Date(album.event_date).toLocaleDateString('en-PH', {
+                    month: 'long', day: 'numeric', year: 'numeric',
+                  })}
                 </span>
               )}
               <span className="flex items-center gap-2">
-                <i className="fas fa-images" style={{ color: '#fdb813' }} />
+                <i className="fas fa-images text-[#fdb813]" />
                 {photos.length} photo{photos.length !== 1 ? 's' : ''}
               </span>
             </div>
             {album.description && (
-              <p className="text-white/60 mt-3 max-w-xl text-sm leading-relaxed">{album.description}</p>
+              <p className="text-white/60 mt-3 max-w-xl text-sm leading-relaxed">
+                {album.description}
+              </p>
             )}
           </div>
         </div>
@@ -193,21 +203,18 @@ export default function GraduationArchivePage() {
         {/* ── Face search bar ── */}
         <div className="mt-7 max-w-[600px]">
           <div className="relative">
-            <i className="fas fa-search absolute left-[18px] top-1/2 -translate-y-1/2 text-[#fdb813] text-[15px] z-[1] pointer-events-none" />
+            <i className="fas fa-search absolute left-[18px] top-1/2 -translate-y-1/2
+                          text-[#fdb813] text-[15px] z-[1] pointer-events-none" />
             <input
               type="text"
               readOnly
-              onClick={() => document.querySelector('#archive-face-search-hidden')?.click()}
               placeholder={searching ? 'Searching…' : 'Click the camera icon to search by face…'}
-              className="w-full h-[52px] pl-[50px] pr-14 border border-white/15 rounded-[14px] outline-none
-                         bg-white/10 backdrop-blur-xl text-white text-sm font-medium cursor-pointer
-                         focus:bg-white/[0.18] focus:border-[#fdb813]/60 transition-all placeholder-white/50
-                         box-border"
+              className="w-full h-[52px] pl-[50px] pr-14 border border-white/15 rounded-[14px]
+                         outline-none bg-white/10 backdrop-blur-xl text-white text-sm font-medium
+                         cursor-pointer placeholder-white/50 box-border transition-all
+                         focus:bg-white/[0.18] focus:border-[#fdb813]/60"
             />
-            <FaceSearchButton
-              onFile={handleFaceFile}
-              loading={searching}
-            />
+            <FaceSearchButton onFile={handleFaceFile} loading={searching} />
           </div>
 
           {/* Face match results */}
@@ -238,29 +245,35 @@ export default function GraduationArchivePage() {
         </div>
       </header>
 
-      {/* Photo Grid */}
-      <main style={{ maxWidth: '1100px', margin: '0 auto', padding: '50px 20px 100px', width: '100%' }}>
+      {/* ── Photo Grid ── */}
+      <main className="max-w-[1100px] mx-auto w-full px-5 pt-[50px] pb-24">
         {photos.length === 0 ? (
-          <div className="text-center py-24 bg-white rounded-3xl"
-            style={{ boxShadow: '0 4px 20px rgba(29,43,75,0.05)' }}>
-            <i className="fas fa-images text-6xl mb-5 block" style={{ color: '#e2e8f0' }} />
-            <h3 className="font-extrabold text-lg mb-2" style={{ color: '#1d2b4b' }}>No Photos Yet</h3>
-            <p className="text-sm" style={{ color: '#94a3b8' }}>This album has no photos.</p>
+          <div className="text-center py-24 bg-white rounded-3xl shadow-sm border border-slate-100">
+            <i className="fas fa-images text-6xl text-slate-200 mb-5 block" />
+            <h3 className="font-extrabold text-lg text-[#1d2b4b] mb-2">No Photos Yet</h3>
+            <p className="text-sm text-slate-400">This album has no photos.</p>
           </div>
         ) : (
           <div className="columns-1 sm:columns-2 md:columns-3 lg:columns-4 gap-4">
             {photos.map((photo, i) => (
-              <div key={photo.id}
-                className="mb-4 break-inside-avoid rounded-2xl overflow-hidden bg-white cursor-zoom-in transition-all duration-300"
-                style={{ boxShadow: '0 4px 16px rgba(0,0,0,0.06)' }}
+              <div
+                key={photo.id}
+                className="mb-4 break-inside-avoid rounded-2xl overflow-hidden bg-white
+                           cursor-zoom-in shadow-sm hover:-translate-y-1 hover:shadow-xl
+                           transition-all duration-300"
                 onClick={() => setLightbox(i)}
-                onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-4px)'; e.currentTarget.style.boxShadow = '0 16px 32px rgba(29,43,75,0.1)'; }}
-                onMouseLeave={e => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = '0 4px 16px rgba(0,0,0,0.06)'; }}>
-                <img src={photo.file_path} alt={photo.caption || 'Photo'}
-                  className="w-full block" loading="lazy"
-                  onError={e => { e.target.style.display = 'none'; }} />
+              >
+                <img
+                  src={photo.file_path}
+                  alt={photo.caption || 'Photo'}
+                  className="w-full block"
+                  loading="lazy"
+                  onError={e => { e.target.style.display = 'none'; }}
+                />
                 {photo.caption && (
-                  <p className="px-4 py-2.5 text-xs font-medium m-0" style={{ color: '#64748b' }}>{photo.caption}</p>
+                  <p className="px-4 py-2.5 text-xs font-medium m-0 text-slate-500">
+                    {photo.caption}
+                  </p>
                 )}
               </div>
             ))}
@@ -268,7 +281,6 @@ export default function GraduationArchivePage() {
         )}
       </main>
 
-      {/* Lightbox */}
       {lightbox !== null && (
         <Lightbox photos={photos} index={lightbox} onClose={() => setLightbox(null)} />
       )}

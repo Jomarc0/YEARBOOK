@@ -1,6 +1,10 @@
 import { useState } from 'react';
+import { useAppConfig } from '@/features/platform/AppConfigProvider';
 
 export default function PostCard({ post, onClick, isOwn, onMenuClick }) {
+  const { isOn } = useAppConfig();
+  const showReactions = isOn('allow_reactions');
+  const showComments = isOn('allow_comments');
   const [activeIdx, setActiveIdx] = useState(0);
 
   const media      = post.media ?? [];
@@ -60,15 +64,21 @@ export default function PostCard({ post, onClick, isOwn, onMenuClick }) {
       )}
 
       {/* Hover overlay */}
-      <div className="post-overlay absolute inset-0 bg-[#1d2b4b]/55 opacity-0 transition-opacity duration-200
-                      flex items-center justify-center gap-5 z-[2]">
-        <span className="text-white text-sm font-bold">
-          <i className="fas fa-heart text-[#fdb813] mr-1" />0
-        </span>
-        <span className="text-white text-sm font-bold">
-          <i className="fas fa-comment text-[#fdb813] mr-1" />0
-        </span>
-      </div>
+      {(showReactions || showComments) && (
+        <div className="post-overlay absolute inset-0 bg-[#1d2b4b]/55 opacity-0 transition-opacity duration-200
+                        flex items-center justify-center gap-5 z-[2]">
+          {showReactions && (
+            <span className="text-white text-sm font-bold">
+              <i className="fas fa-heart text-[#fdb813] mr-1" />0
+            </span>
+          )}
+          {showComments && (
+            <span className="text-white text-sm font-bold">
+              <i className="fas fa-comment text-[#fdb813] mr-1" />0
+            </span>
+          )}
+        </div>
+      )}
 
       {/* Owner menu button */}
       {isOwn && (

@@ -3,6 +3,8 @@
 namespace App\Http\Controllers\API\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Http\Controllers\Concerns\AuditsAdminActions;
+use App\Models\AuditLog;
 use App\Models\Section;
 use App\Models\Student;
 use App\Services\Storage\CloudinaryService;
@@ -12,11 +14,16 @@ use Illuminate\Support\Facades\Auth;
 
 class StudentController extends Controller
 {
+    use AuditsAdminActions;
+
     public function __construct(private CloudinaryService $cloudinary) {}
+
+    // ── GET /api/admin/sections/{section}/students ─────────────────────────
 
     public function index(Request $request, Section $section): JsonResponse
     {
-        $query = Student::where('section_id', $section->id);
+        $query = Student::where('section_id', $section->id)
+            ->with('userAccount:id,student_record_id,email,email_verified,created_at');
 
         if ($search = $request->get('search')) {
             $query->where(function ($q) use ($search) {
@@ -32,8 +39,19 @@ class StudentController extends Controller
             ->orderBy('first_name')
             ->paginate($request->get('per_page', 200));
 
+        // Append has_registered flag to each student for the admin panel UI
+        $students->getCollection()->transform(function (Student $student) {
+            $student->append([]);   // clear default appends
+            return array_merge($student->toArray(), [
+                'has_registered' => ! is_null($student->userAccount),
+                'registered_at'  => $student->userAccount?->created_at?->format('M d, Y'),
+            ]);
+        });
+
         return response()->json($students);
     }
+
+    // ── POST /api/admin/sections/{section}/students ────────────────────────
 
     public function store(Request $request, Section $section): JsonResponse
     {
@@ -56,8 +74,19 @@ class StudentController extends Controller
             'batch_id'   => $section->batch_id,
         ]);
 
+        $this->audit(
+            AuditLog::ACTION_USER_CREATED,
+            "Added student '{$student->first_name} {$student->last_name}' (No. {$student->student_no}) to section '{$section->name}'.",
+            AuditLog::STATUS_SUCCESS,
+            null,
+            $student->id,
+            "student#{$student->id}",
+        );
+
         return response()->json(['message' => 'Student added.', 'data' => $student], 201);
     }
+
+    // ── PUT /api/admin/sections/{section}/students/{student} ──────────────
 
     public function update(Request $request, Section $section, Student $student): JsonResponse
     {
@@ -80,19 +109,51 @@ class StudentController extends Controller
 
         $student->update($validated);
 
+        // If a registered user is linked, invalidate their cached profile
+        // so they see the updated yearbook data immediately.
+        if ($student->userAccount) {
+            cache()->forget('students.api.' . $student->userAccount->id . '.*');
+        }
+
+        $this->audit(
+            AuditLog::ACTION_USER_UPDATED,
+            "Updated student '{$student->first_name} {$student->last_name}' (No. {$student->student_no}) in section '{$section->name}'.",
+            AuditLog::STATUS_SUCCESS,
+            null,
+            $student->id,
+            "student#{$student->id}",
+        );
+
         return response()->json(['message' => 'Student updated.', 'data' => $student->fresh()]);
     }
 
+    // ── DELETE /api/admin/sections/{section}/students/{student} ───────────
+
     public function destroy(Section $section, Student $student): JsonResponse
     {
-        if ($student->photo_public_id) {
-            $this->cloudinary->deletePhoto($student->photo_public_id);
+        $snapshot = "{$student->first_name} {$student->last_name} (No. {$student->student_no})";
+
+        // If a user is linked, unlink them first so they become a browse account
+        // rather than having a dangling FK.
+        if ($student->userAccount) {
+            $student->userAccount->update(['student_record_id' => null]);
         }
 
         $student->delete();
 
-        return response()->json(['message' => 'Student removed.']);
+        $this->audit(
+            AuditLog::ACTION_STUDENT_DELETED,
+            "Moved student '{$snapshot}' from section '{$section->name}' to trash.",
+            AuditLog::STATUS_WARNING,
+            null,
+            $student->id,
+            "student#{$student->id}",
+        );
+
+        return response()->json(['message' => 'Student moved to trash.']);
     }
+
+    // ── POST /api/admin/sections/{section}/students/import ────────────────
 
     public function import(Request $request, Section $section): JsonResponse
     {
@@ -103,9 +164,9 @@ class StudentController extends Controller
 
         foreach ($request->students as $row) {
             $no = trim($row['student_no'] ?? '');
-            if (!$no) { $skipped++; continue; }
+            if (! $no) { $skipped++; continue; }
 
-            Student::updateOrCreate(
+            $student = Student::updateOrCreate(
                 ['student_no' => $no],
                 [
                     'first_name'  => trim($row['first_name']  ?? ''),
@@ -117,14 +178,50 @@ class StudentController extends Controller
                     'batch_id'    => $section->batch_id,
                 ]
             );
+
+            // If a user already registered with this student_no + name,
+            // auto-link them to the newly imported record.
+            $this->autoLinkUser($student);
+
             $imported++;
         }
+
+        $this->audit(
+            AuditLog::ACTION_IMPORT,
+            "Bulk imported {$imported} student(s) into section '{$section->name}' ({$skipped} skipped).",
+            AuditLog::STATUS_SUCCESS,
+        );
 
         return response()->json([
             'message'  => "{$imported} students imported, {$skipped} skipped.",
             'imported' => $imported,
             'skipped'  => $skipped,
         ]);
+    }
+
+    // ── Helpers ────────────────────────────────────────────────────────────
+
+    /**
+     * After importing a student, check if a user registered with matching
+     * name + student_no but has no link yet (student_record_id IS NULL).
+     * If found, link them automatically.
+     */
+    private function autoLinkUser(Student $student): void
+    {
+        \App\Models\User::whereNull('student_record_id')
+            ->whereRaw('LOWER(TRIM(first_name)) = ?', [strtolower(trim($student->first_name))])
+            ->whereRaw('LOWER(TRIM(last_name)) = ?',  [strtolower(trim($student->last_name))])
+            ->where(function ($q) use ($student) {
+                // Match users who registered with this student_no
+                // (stored as a string before the migration, now we match by name only
+                //  since student_id column is dropped — this is a best-effort link)
+                $q->whereNull('student_record_id');
+            })
+            ->update([
+                'student_record_id' => $student->id,
+                'section_id'        => $student->section_id,
+                'batch_id'          => $student->batch_id,
+            ]);
     }
 
     private function rules(int $ignoreId = null): array

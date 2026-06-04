@@ -41,6 +41,25 @@ class AuditLog extends Model
     const ACTION_FACULTY_REMOVED   = 'Faculty Removed';
     const ACTION_STUDENT_DELETED   = 'Student Deleted';
 
+    // ── Batch ─────────────────────────────────────────────────────────────────
+    const ACTION_BATCH_CREATED     = 'Batch Created';
+    const ACTION_BATCH_UPDATED     = 'Batch Updated';
+    const ACTION_BATCH_DELETED     = 'Batch Deleted';
+
+    // ── Section ───────────────────────────────────────────────────────────────
+    const ACTION_SECTION_CREATED   = 'Section Created';
+    const ACTION_SECTION_UPDATED   = 'Section Updated';
+    const ACTION_SECTION_DELETED   = 'Section Deleted';
+
+    // ── Trash ─────────────────────────────────────────────────────────────────
+    const ACTION_TRASH_RESTORED    = 'Trash Restored';
+    const ACTION_TRASH_PURGED      = 'Trash Purged';
+    const ACTION_BULK_RESTORED     = 'Bulk Restored';
+    const ACTION_BULK_PURGED       = 'Bulk Purged';
+
+    // ── Import ────────────────────────────────────────────────────────────────
+    const ACTION_IMPORT            = 'Import';
+
     // ── Settings ──────────────────────────────────────────────────────────────
     const ACTION_SETTINGS_UPDATED  = 'Settings Updated';
 

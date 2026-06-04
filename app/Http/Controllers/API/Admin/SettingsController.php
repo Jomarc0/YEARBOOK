@@ -3,93 +3,234 @@
 namespace App\Http\Controllers\API\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Models\Admin;
 use App\Models\AuditLog;
+use App\Models\Batch;
 use App\Models\Setting;
+use App\Models\User;
+use App\Support\PlatformSettings;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Validator;
+use Illuminate\Validation\ValidationException;
 
 class SettingsController extends Controller
 {
-    // GET /api/admin/settings
-    public function index(): JsonResponse
-    {
-        return response()->json([
-            'data' => Setting::pluck('value', 'key'),
-        ]);
+  // GET /api/admin/settings
+  public function index(): JsonResponse
+  {
+    return response()->json([
+      'data' => PlatformSettings::all(),
+    ]);
+  }
+
+  // POST /api/admin/settings
+  public function save(Request $request): JsonResponse
+  {
+    $payload = $request->only(PlatformSettings::ALLOWED_KEYS);
+
+    foreach (['contact_email', 'graduation_date'] as $nullableKey) {
+      if (array_key_exists($nullableKey, $payload) && $payload[$nullableKey] === '') {
+        $payload[$nullableKey] = null;
+      }
     }
 
-    // POST /api/admin/settings
-    public function save(Request $request): JsonResponse
-    {
-        $allowed = [
-            'site_name', 'site_tagline', 'contact_email',
-            'maintenance_mode', 'allow_registration', 'require_email_verification',
-            'max_upload_size_mb', 'allowed_file_types',
-            'storage_limit_free_mb', 'storage_limit_premium_mb',
-            'enable_ai_recognition', 'enable_voice_notes',
-            'enable_subscriptions', 'enable_yearbook_flipbook',
-            'ai_confidence_threshold', 'session_lifetime_minutes', 'max_login_attempts',
-        ];
+    if ($payload === []) {
+      return response()->json(['message' => 'No settings provided.'], 422);
+    }
 
-        foreach ($request->only($allowed) as $key => $value) {
-            Setting::putValue($key, $value);
+    $validator = Validator::make($payload, PlatformSettings::validationRulesForKeys(array_keys($payload)));
+
+    if ($validator->fails()) {
+      throw new ValidationException($validator);
+    }
+
+    $changed = [];
+
+    foreach ($payload as $key => $value) {
+      $normalized = $this->normalizeValue($key, $value);
+      $previous   = (string) Setting::getValue($key, PlatformSettings::DEFAULTS[$key] ?? '');
+
+      if ($previous !== $normalized) {
+        $changed[] = $key;
+        Setting::putValue($key, $normalized);
+      }
+    }
+
+    if ($changed !== []) {
+      $this->logAction(
+        'settings_update',
+        'Admin updated system settings.',
+        'Changed keys: ' . implode(', ', $changed)
+      );
+    }
+
+    return response()->json([
+      'message' => 'Settings saved successfully.',
+      'changed' => $changed,
+    ]);
+  }
+
+  // DELETE /api/admin/settings/clear-audit-logs
+  public function clearAuditLogs(): JsonResponse
+  {
+    AuditLog::query()->truncate();
+
+    $this->logAction('settings_clear_audit', 'Admin cleared all audit logs.');
+
+    return response()->json(['message' => 'Audit logs cleared.']);
+  }
+
+  // POST /api/admin/settings/reset
+  public function reset(): JsonResponse
+  {
+    foreach (PlatformSettings::DEFAULTS as $key => $value) {
+      Setting::putValue($key, $value);
+    }
+
+    $this->logAction('settings_reset', 'Admin reset all settings to defaults.');
+
+    return response()->json([
+      'message' => 'Settings reset to defaults.',
+      'data'    => PlatformSettings::DEFAULTS,
+    ]);
+  }
+
+  // POST /api/admin/settings/archive-batch
+  public function archiveBatch(Request $request): JsonResponse
+  {
+    $request->validate([
+      'batch_id' => 'sometimes|integer|exists:batches,id',
+    ]);
+
+    $batchName = null;
+
+    try {
+      DB::transaction(function () use ($request, &$batchName) {
+        $batch = $this->resolveBatchForArchive($request);
+
+        if (! $batch) {
+          throw new \RuntimeException(
+            'No batch found. Set Graduation Batch in settings or provide batch_id.'
+          );
         }
 
-        $this->logAction('settings_update', 'Admin updated system settings.');
-
-        return response()->json(['message' => 'Settings saved successfully.']);
-    }
-
-    // DELETE /api/admin/settings/clear-audit-logs
-    public function clearAuditLogs(): JsonResponse
-    {
-        AuditLog::truncate();
-        return response()->json(['message' => 'Audit logs cleared.']);
-    }
-
-    // POST /api/admin/settings/reset
-    public function reset(): JsonResponse
-    {
-        $defaults = [
-            'site_name'                  => 'Sinag-Bughaw Digital Yearbook',
-            'site_tagline'               => 'NU Lipa College of Computing and Information Technology',
-            'contact_email'              => '',
-            'maintenance_mode'           => '0',
-            'allow_registration'         => '1',
-            'require_email_verification' => '1',
-            'max_upload_size_mb'         => '10',
-            'allowed_file_types'         => 'jpg,jpeg,png,mp4,mp3,pdf',
-            'storage_limit_free_mb'      => '500',
-            'storage_limit_premium_mb'   => '5120',
-            'enable_ai_recognition'      => '1',
-            'enable_voice_notes'         => '1',
-            'enable_subscriptions'       => '1',
-            'enable_yearbook_flipbook'   => '1',
-            'ai_confidence_threshold'    => '80',
-            'session_lifetime_minutes'   => '120',
-            'max_login_attempts'         => '5',
-        ];
-
-        foreach ($defaults as $key => $value) {
-            Setting::putValue($key, $value);
+        if ($batch->is_archived) {
+          throw new \RuntimeException('This batch is already archived.');
         }
 
-        $this->logAction('settings_reset', 'Admin reset all settings to defaults.');
+        $batchName = $batch->name;
+        $batch->update(['is_archived' => true]);
 
-        return response()->json(['message' => 'Settings reset to defaults.']);
+        $sectionIds = $batch->sections()->pluck('id');
+
+        User::query()
+          ->where('role', 'student')
+          ->where(function ($query) use ($batch, $sectionIds) {
+            $query->where('batch_id', $batch->id);
+            if ($sectionIds->isNotEmpty()) {
+              $query->orWhereIn('section_id', $sectionIds);
+            }
+          })
+          ->update(['role' => 'alumni']);
+
+        foreach (PlatformSettings::GRADUATION_KEYS as $key) {
+          Setting::putValue($key, (string) (PlatformSettings::DEFAULTS[$key] ?? ''));
+        }
+      });
+    } catch (\RuntimeException $exception) {
+      return response()->json(['message' => $exception->getMessage()], 422);
     }
 
-    private function logAction(string $action, string $details): void
-    {
-        $admin = auth('sanctum')->user();
-        AuditLog::create([
-            'admin_id'   => $admin?->id,
-            'user_name'  => $admin?->username ?? 'admin',
-            'action'     => $action,
-            'details'    => $details,
-            'ip_address' => request()->ip(),
-            'status'     => 'Success',
-            'logged_at'  => now(),
-        ]);
+    $this->logAction(
+      'batch_archive',
+      "Admin archived batch \"{$batchName}\" and promoted students to alumni.",
+      'Graduation settings cleared.'
+    );
+
+    return response()->json(['message' => 'Batch archived successfully.']);
+  }
+
+  private function resolveBatchForArchive(Request $request): ?Batch
+  {
+    if ($request->filled('batch_id')) {
+      return Batch::query()->find($request->integer('batch_id'));
     }
+
+    $identifier = trim((string) Setting::getValue(
+      'graduation_batch',
+      PlatformSettings::DEFAULTS['graduation_batch']
+    ));
+
+    if ($identifier === '') {
+      return null;
+    }
+
+    if (ctype_digit($identifier)) {
+      $byId = Batch::query()->find((int) $identifier);
+      if ($byId) {
+        return $byId;
+      }
+    }
+
+    return Batch::query()
+      ->where('name', $identifier)
+      ->orWhere('graduation_year', $identifier)
+      ->orWhere('course', $identifier)
+      ->first();
+  }
+
+  private function normalizeValue(string $key, mixed $value): string
+  {
+    if (in_array($key, [
+      'maintenance_mode',
+      'publish_yearbook',
+      'allow_student_posts',
+      'allow_comments',
+      'allow_reactions',
+      'enable_premium_subscription',
+      'premium_badge_display',
+      'enable_flipbook_viewer',
+      'enable_yearbook_pdf_download',
+      'enable_student_directory_search',
+      'auto_backup_database',
+      'audit_logs_enabled',
+    ], true)) {
+      return ($value === '1' || $value === 1 || $value === true) ? '1' : '0';
+    }
+
+    if ($key === 'graduation_date' && $value !== null && $value !== '') {
+      return date('Y-m-d', strtotime((string) $value));
+    }
+
+    return (string) $value;
+  }
+
+  private function logAction(string $action, string $details, ?string $note = null): void
+  {
+    if (! PlatformSettings::isAuditLoggingEnabled()) {
+      return;
+    }
+
+    $admin = $this->resolveAdmin();
+
+    AuditLog::query()->create([
+      'admin_id'   => $admin?->id,
+      'user_name'  => $admin?->username ?? 'admin',
+      'action'     => $action,
+      'details'    => $details,
+      'note'       => $note,
+      'ip_address' => request()->ip(),
+      'status'     => 'Success',
+      'logged_at'  => now(),
+    ]);
+  }
+
+  private function resolveAdmin(): ?Admin
+  {
+    $user = auth('sanctum')->user();
+
+    return $user instanceof Admin ? $user : null;
+  }
 }

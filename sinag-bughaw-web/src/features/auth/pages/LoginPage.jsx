@@ -22,7 +22,7 @@ export default function LoginPage() {
   const [error,       setError]    = useState(() => {
     const e = searchParams.get('error');
     if (e === 'sso_failed')          return 'Google sign-in failed. Please try again.';
-    if (e === 'unauthorized_domain') return 'Please use your @nu-lipa.edu.ph Google account.';
+    if (e === 'unauthorized_domain') return 'Please use a valid Google account.';
     return '';
   });
   const [loading,     setLoading]     = useState(false);
@@ -196,7 +196,7 @@ export default function LoginPage() {
                     <div className="relative">
                       <i className="far fa-envelope absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-300 text-sm pointer-events-none" aria-hidden="true" />
                       <input type="email" value={email} onChange={e => setEmail(e.target.value)}
-                        required autoFocus placeholder="student@nu-lipa.edu.ph"
+                        required autoFocus placeholder="you@gmail.com"
                         className="w-full pl-10 pr-4 py-3 bg-white border border-slate-200 rounded-xl text-sm outline-none focus:border-[#3f51b5] focus:ring-4 focus:ring-[#3f51b5]/10 transition shadow-sm" />
                     </div>
                   </div>
@@ -231,7 +231,7 @@ export default function LoginPage() {
                   <div className="flex-1 h-px bg-slate-200" />
                 </div>
 
-                {/* Google SSO — below the form */}
+                {/* Google SSO */}
                 <button onClick={handleGoogleSSO}
                   className="w-full flex items-center justify-center gap-3 border border-slate-200 bg-white hover:bg-slate-50 text-slate-600 font-semibold py-3 rounded-xl transition-colors shadow-sm cursor-pointer text-sm">
                   <GoogleIcon />

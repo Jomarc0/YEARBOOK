@@ -2,13 +2,16 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
-use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class GraduationAlbum extends Model
 {
+    use SoftDeletes;
+
     protected $fillable = [
         'user_id',
         'batch_id',
@@ -32,28 +35,44 @@ class GraduationAlbum extends Model
     // RELATIONSHIPS
     // =========================================================================
 
-    /**
-     * The admin who created this album.
-     */
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
     }
 
-    /**
-     * The batch this album belongs to.
-     */
     public function batch(): BelongsTo
     {
         return $this->belongsTo(Batch::class);
     }
 
     /**
-     * All files (photos, videos, audio, PDFs) in this album.
+     * All media files (images, videos, audio, documents) in this album.
      */
     public function photos(): HasMany
     {
         return $this->hasMany(GraduationPhoto::class)->orderBy('sort_order');
+    }
+
+    /**
+     * Only video files in this album.
+     * Used for eager-loading in GraduationController::index()
+     * so the Videos / Baccalaureate tabs show every individual video file.
+     */
+    public function videos(): HasMany
+    {
+        return $this->hasMany(GraduationPhoto::class)
+            ->where('resource_type', 'video')
+            ->orderBy('sort_order');
+    }
+
+    /**
+     * Only audio files in this album (e.g. Grad Song tab).
+     */
+    public function audios(): HasMany
+    {
+        return $this->hasMany(GraduationPhoto::class)
+            ->where('resource_type', 'audio')
+            ->orderBy('sort_order');
     }
 
     // =========================================================================
@@ -89,10 +108,6 @@ class GraduationAlbum extends Model
     // ACCESSORS
     // =========================================================================
 
-    /**
-     * Best available thumbnail URL for this album.
-     * Priority: cover_image → first photo → media_url
-     */
     public function getCoverPhotoUrlAttribute(): ?string
     {
         if ($this->cover_image) {
@@ -126,9 +141,6 @@ class GraduationAlbum extends Model
         return $this->status === 'archived';
     }
 
-    /**
-     * Publish the album.
-     */
     public function publish(): bool
     {
         return $this->update([
@@ -137,11 +149,13 @@ class GraduationAlbum extends Model
         ]);
     }
 
-    /**
-     * Archive the album.
-     */
     public function archive(): bool
     {
         return $this->update(['status' => 'archived']);
+    }
+
+    public function mediaFiles(): HasMany
+    {
+        return $this->hasMany(GraduationPhoto::class)->orderBy('sort_order');
     }
 }

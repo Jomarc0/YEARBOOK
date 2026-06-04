@@ -1,7 +1,10 @@
-import { BrowserRouter, Navigate, Route, Routes, useParams } from 'react-router-dom';
+import { BrowserRouter, Navigate, Outlet, Route, Routes, useParams } from 'react-router-dom';
 import { AuthProvider, useAuth } from '@/features/auth/hooks/useAuth';
 import { useEffect, useState } from 'react';
 import ConsentModal from '@/features/auth/components/ConsentModal';
+import { AppConfigProvider, useAppConfig } from '@/features/platform/AppConfigProvider';
+import FeatureRoute from '@/features/platform/FeatureRoute';
+import MaintenancePage from '@/pages/MaintenancePage';
 
 // ── Auth ──────────────────────────────────────────────────────────────────────
 import LandingPage        from '@/pages/LandingPage';
@@ -32,6 +35,7 @@ import BatchmatesPage    from '@/features/batch/pages/BatchmatesPage';
 import SectionsPage      from '@/features/batch/pages/SectionsPage';
 import SectionDetailPage from '@/features/batch/pages/SectionDetailPage';
 import DiscoveryPage     from '@/features/batch/pages/DiscoveryPage';
+import DiscoveryStudentProfile from '@/features/batch/pages/DiscoveryStudentProfile';
 
 // ── Messaging ─────────────────────────────────────────────────────────────────
 import MessagesPage   from '@/features/messaging/pages/MessagesPage';
@@ -47,9 +51,6 @@ import DirectoryPage from '@/features/search/pages/DirectoryPage';
 
 // ── Transcripts ───────────────────────────────────────────────────────────────
 import TranscriptsPage from '@/features/transcripts/pages/TranscriptsPage';
-
-// ── Announcements ─────────────────────────────────────────────────────────────
-import AnnouncementsPage from '@/features/announcements/pages/AnnouncementsPage';
 
 // ── Faculty ───────────────────────────────────────────────────────────────────
 import FacultyPage from '@/features/faculty/pages/FacultyPage';
@@ -109,15 +110,28 @@ function ProtectedRoute({ children }) {
 
 function GuestRoute({ children }) {
   const { user, loading } = useAuth();
-  if (loading) return null;
+  const { isOn, loading: configLoading } = useAppConfig();
+  if (loading || configLoading) return null;
+  if (isOn('maintenance_mode')) return <Navigate to="/maintenance" replace />;
   if (user) return <Navigate to="/dashboard" replace />;
   return children;
 }
 
+function MaintenanceLayout() {
+  const { isOn, loading } = useAppConfig();
+  if (loading) return null;
+  if (isOn('maintenance_mode')) return <Navigate to="/maintenance" replace />;
+  return <Outlet />;
+}
+
 function SubscriberRoute({ children }) {
   const { user, loading } = useAuth();
-  if (loading) return null;
-  if (!user)            return <Navigate to="/login"   replace />;
+  const { isOn, loading: configLoading } = useAppConfig();
+  if (loading || configLoading) return null;
+  if (!user) return <Navigate to="/login" replace />;
+  if (!isOn('enable_premium_subscription')) {
+    return <ConsentWrapper>{children}</ConsentWrapper>;
+  }
   if (!user.is_premium) return <Navigate to="/premium" replace />;
   return <ConsentWrapper>{children}</ConsentWrapper>;
 }
@@ -149,10 +163,13 @@ function OwnProfileRoute({ children }) {
 
 export default function App() {
   return (
-    <AuthProvider>
-      <BrowserRouter>
-        <Routes>
+    <AppConfigProvider>
+      <AuthProvider>
+        <BrowserRouter>
+          <Routes>
+            <Route path="/maintenance" element={<MaintenancePage />} />
 
+            <Route element={<MaintenanceLayout />}>
           {/* ── Public ───────────────────────────────────────────────────── */}
           <Route path="/"         element={<GuestRoute><LandingPage /></GuestRoute>} />
           <Route path="/login"    element={<GuestRoute><LoginPage /></GuestRoute>} />
@@ -169,7 +186,16 @@ export default function App() {
 
           <Route path="/students/:id" element={<ProtectedRoute><StudentProfileView /></ProtectedRoute>} />
 
-          <Route path="/directory" element={<ProtectedRoute><DirectoryPage /></ProtectedRoute>} />
+          <Route
+            path="/directory"
+            element={
+              <ProtectedRoute>
+                <FeatureRoute features="enable_student_directory_search">
+                  <DirectoryPage />
+                </FeatureRoute>
+              </ProtectedRoute>
+            }
+          />
 
           {/* ── Gallery ───────────────────────────────────────────────────── */}
           <Route path="/gallery"     element={<ProtectedRoute><GalleryPage /></ProtectedRoute>} />
@@ -181,16 +207,53 @@ export default function App() {
           <Route path="/graduation/speeches"    element={<SubscriberRoute><GraduationSpeechesPage /></SubscriberRoute>} />
 
           {/* ── Flipbook / Yearbook ───────────────────────────────────────── */}
-          <Route path="/flipbook"               element={<ProtectedRoute><FlipbookPage /></ProtectedRoute>} />
-          <Route path="/yearbook"               element={<ProtectedRoute><YearbookHomePage /></ProtectedRoute>} />
-          <Route path="/yearbook/:batchId"      element={<ProtectedRoute><YearbookHomePage /></ProtectedRoute>} />
-          <Route path="/yearbook/:batchId/view" element={<ProtectedRoute><FlipbookViewerPage /></ProtectedRoute>} />
+          <Route
+            path="/flipbook"
+            element={
+              <ProtectedRoute>
+                <FeatureRoute features={['enable_flipbook_viewer', 'publish_yearbook']}>
+                  <FlipbookPage />
+                </FeatureRoute>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/yearbook"
+            element={
+              <ProtectedRoute>
+                <FeatureRoute features="publish_yearbook">
+                  <YearbookHomePage />
+                </FeatureRoute>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/yearbook/:batchId"
+            element={
+              <ProtectedRoute>
+                <FeatureRoute features="publish_yearbook">
+                  <YearbookHomePage />
+                </FeatureRoute>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/yearbook/:batchId/view"
+            element={
+              <ProtectedRoute>
+                <FeatureRoute features={['enable_flipbook_viewer', 'publish_yearbook']}>
+                  <FlipbookViewerPage />
+                </FeatureRoute>
+              </ProtectedRoute>
+            }
+          />
 
           {/* ── Batch ────────────────────────────────────────────────────── */}
           <Route path="/batchmates"   element={<ProtectedRoute><BatchmatesPage /></ProtectedRoute>} />
           <Route path="/sections"     element={<ProtectedRoute><SectionsPage /></ProtectedRoute>} />
           <Route path="/sections/:id" element={<ProtectedRoute><SectionDetailPage /></ProtectedRoute>} />
           <Route path="/discover"     element={<ProtectedRoute><DiscoveryPage /></ProtectedRoute>} />
+          <Route path="/discover/students/:id" element={<ProtectedRoute><DiscoveryStudentProfile /></ProtectedRoute>} />
 
           {/* ── Faculty ───────────────────────────────────────────────────── */}
           <Route path="/faculty" element={<ProtectedRoute><FacultyPage /></ProtectedRoute>} />
@@ -200,11 +263,17 @@ export default function App() {
           <Route path="/messages/:id" element={<ProtectedRoute><MessagesPage /></ProtectedRoute>} />
           <Route path="/voice-notes"  element={<ProtectedRoute><VoiceNotesPage /></ProtectedRoute>} />
 
-          {/* ── Announcements ─────────────────────────────────────────────── */}
-          <Route path="/announcements" element={<ProtectedRoute><AnnouncementsPage /></ProtectedRoute>} />
-
           {/* ── Payment ───────────────────────────────────────────────────── */}
-          <Route path="/premium"        element={<ProtectedRoute><PaymentPage /></ProtectedRoute>} />
+          <Route
+            path="/premium"
+            element={
+              <ProtectedRoute>
+                <FeatureRoute features="enable_premium_subscription">
+                  <PaymentPage />
+                </FeatureRoute>
+              </ProtectedRoute>
+            }
+          />
           <Route path="/payment/success" element={<ProtectedRoute><PaymentSuccessPage /></ProtectedRoute>} />
           <Route path="/payment/cancel"  element={<ProtectedRoute><PaymentCancelPage /></ProtectedRoute>} />
 
@@ -239,9 +308,11 @@ export default function App() {
           {/* ── Fallback ──────────────────────────────────────────────────── */}
           <Route path="*" element={<NotFoundPage />} />
 
-        </Routes>
-      </BrowserRouter>
-    </AuthProvider>
+            </Route>
+          </Routes>
+        </BrowserRouter>
+      </AuthProvider>
+    </AppConfigProvider>
   );
 }
 

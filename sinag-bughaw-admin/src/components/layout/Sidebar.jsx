@@ -1,4 +1,5 @@
 import { useNavigate, useLocation } from "react-router-dom";
+import { useAuth } from "../../context/AuthContext";
 
 const NAV_GROUPS = [
   {
@@ -6,7 +7,6 @@ const NAV_GROUPS = [
     items: [
       { id: "dashboard",       label: "Dashboard"          },
       { id: "analytics",       label: "Analytics"          },
-      { id: "reports",         label: "Reports"            },
     ],
   },
   {
@@ -21,7 +21,6 @@ const NAV_GROUPS = [
     label: "Content",
     items: [
       { id: "media-library",   label: "Media & Moderation" },
-      { id: "archives",        label: "Archives"           },
     ],
   },
   {
@@ -34,15 +33,25 @@ const NAV_GROUPS = [
   {
     label: "System",
     items: [
-      { id: "audit-logs",      label: "Audit Logs"         },
+      { id: "trash",           label: "Trash"              },
       { id: "settings",        label: "Settings"           },
     ],
   },
 ];
 
+// Only rendered when the logged-in admin is a super_admin
+const SUPER_ADMIN_GROUP = {
+  label: "Super Admin",
+  items: [
+    { id: "reports",          label: "Reports"        },
+    { id: "admin-management", label: "Admin Accounts" },
+  ],
+};
+
 export default function Sidebar({ onLogout }) {
   const navigate   = useNavigate();
   const location   = useLocation();
+  const { isSuperAdmin } = useAuth();
 
   const currentPath = location.pathname.replace("/", "");
   const getIsActive = (id) => {
@@ -51,6 +60,10 @@ export default function Sidebar({ onLogout }) {
     }
     return currentPath === id;
   };
+
+  const groups = isSuperAdmin
+    ? [...NAV_GROUPS, SUPER_ADMIN_GROUP]
+    : NAV_GROUPS;
 
   return (
     <aside style={{
@@ -90,52 +103,62 @@ export default function Sidebar({ onLogout }) {
       </div>
 
       <nav style={{ display: "flex", flexDirection: "column", gap: 18, flex: 1 }}>
-        {NAV_GROUPS.map(group => (
-          <div key={group.label}>
-            <div style={{
-              fontSize: "0.64rem", fontWeight: 800, letterSpacing: ".15em",
-              color: "#6f87ba", textTransform: "uppercase",
-              padding: "0 10px", marginBottom: 7,
-              whiteSpace: "nowrap",
-            }}>
-              {group.label}
+        {groups.map(group => {
+          const isSuperGroup = group.label === "Super Admin";
+          return (
+            <div key={group.label}>
+              <div style={{
+                fontSize: "0.64rem", fontWeight: 800, letterSpacing: ".15em",
+                color: isSuperGroup ? "#a78bfa" : "#6f87ba",
+                textTransform: "uppercase",
+                padding: "0 10px", marginBottom: 7,
+                whiteSpace: "nowrap",
+              }}>
+                {isSuperGroup ? "★  Super Admin" : group.label}
+              </div>
+              <div style={{ display: "grid", gap: 3 }}>
+                {group.items.map(n => {
+                  const isActive = getIsActive(n.id);
+                  return (
+                    <button
+                      key={n.id}
+                      onClick={() => navigate(`/${n.id}`)}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 8,
+                        padding: "10px 12px",
+                        borderRadius: 12,
+                        border: "none",
+                        cursor: "pointer",
+                        fontWeight: isActive ? 700 : 600,
+                        fontSize: "0.88rem",
+                        textAlign: "left",
+                        transition: "all 0.16s ease",
+                        background: isActive
+                          ? (isSuperGroup ? "#6d3fcf" : "#4458ca")
+                          : "transparent",
+                        color: isActive ? "#ffffff" : "#d2def8",
+                        boxShadow: isActive
+                          ? (isSuperGroup
+                              ? "0 10px 22px rgba(109,63,207,.36)"
+                              : "0 10px 22px rgba(56,76,182,.36)")
+                          : "none",
+                        fontFamily: "inherit",
+                        width: "100%",
+                        whiteSpace: "nowrap",
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                      }}
+                    >
+                      {n.label}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
-            <div style={{ display: "grid", gap: 3 }}>
-              {group.items.map(n => {
-                const isActive = getIsActive(n.id);
-                return (
-                  <button
-                    key={n.id}
-                    onClick={() => navigate(`/${n.id}`)}
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 8,
-                      padding: "10px 12px",
-                      borderRadius: 12,
-                      border: "none",
-                      cursor: "pointer",
-                      fontWeight: isActive ? 700 : 600,
-                      fontSize: "0.88rem",
-                      textAlign: "left",
-                      transition: "all 0.16s ease",
-                      background: isActive ? "#4458ca" : "transparent",
-                      color: isActive ? "#ffffff" : "#d2def8",
-                      boxShadow: isActive ? "0 10px 22px rgba(56,76,182,.36)" : "none",
-                      fontFamily: "inherit",
-                      width: "100%",
-                      whiteSpace: "nowrap",
-                      overflow: "hidden",
-                      textOverflow: "ellipsis",
-                    }}
-                  >
-                    {n.label}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        ))}
+          );
+        })}
       </nav>
 
       <div style={{
@@ -161,7 +184,6 @@ export default function Sidebar({ onLogout }) {
           color: "#6378a5", fontSize: "0.68rem",
           whiteSpace: "nowrap",
         }}>
-          v2.4.0 • Secure Connection
         </div>
       </div>
     </aside>

@@ -3,352 +3,290 @@
 namespace App\Services\Student;
 
 use App\Models\Batch;
-use App\Models\Section;
+use App\Models\Student;
 use App\Models\User;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Collection;
 
 class BatchService
 {
-    // ── Static Maps ────────────────────────────────────────────────────────
+    // ── NU Lipa Department & Course Maps ───────────────────────────────────
 
     public const DEPARTMENT_MAP = [
-        'Bachelor of Science in Computer Science'       => 'College of Computing',
-        'Bachelor of Science in Information Technology' => 'College of Computing',
-        'Bachelor of Science in Civil Engineering'      => 'College of Engineering',
-        'Bachelor of Science in Mechanical Engineering' => 'College of Engineering',
-        'Bachelor of Science in Nursing'                => 'College of Nursing',
-        'Bachelor of Science in Accountancy'            => 'College of Business and Accountancy',
-        'Bachelor of Science in Psychology'             => 'College of Liberal Arts',
-        'Bachelor of Education'                         => 'College of Education',
+        'Bachelor of Science in Architecture'           => 'SACE',
+        'Bachelor of Science in Civil Engineering'      => 'SACE',
+        'Bachelor of Science in Computer Science'       => 'SACE',
+        'Bachelor of Science in Information Technology' => 'SACE',
+        'Bachelor of Science in Nursing'                => 'SAHS',
+        'Bachelor of Science in Medical Technology'     => 'SAHS',
+        'Bachelor of Science in Psychology'             => 'SAHS',
+        'Bachelor of Science in Accountancy' => 'SABM',
+        'Bachelor of Science in Business Administration - Financial Management' => 'SABM',
+        'Bachelor of Science in Business Administration - Marketing Management' => 'SABM',
+        'Bachelor of Science in Tourism Management' => 'SABM',
+        'ABM'                       => 'SHS',
+        'STEM'                      => 'SHS',
+        'HUMSS'                     => 'SHS',
     ];
 
     public const COURSE_CODE_MAP = [
-        'Bachelor of Science in Computer Science'       => 'BSCS',
-        'Bachelor of Science in Information Technology' => 'BSIT',
-        'Bachelor of Science in Civil Engineering'      => 'BSCE',
-        'Bachelor of Science in Mechanical Engineering' => 'BSME',
-        'Bachelor of Science in Nursing'                => 'BSN',
-        'Bachelor of Science in Accountancy'            => 'BSA',
-        'Bachelor of Science in Psychology'             => 'BSP',
-        'Bachelor of Education'                         => 'BEd',
+        'BS Architecture'           => 'BSArch',
+        'BS Civil Engineering'      => 'BSCE',
+        'BS Computer Science'       => 'BSCS',
+        'BS Information Technology' => 'BSIT',
+        'BS Nursing'                => 'BSN',
+        'BS Medical Technology'     => 'BSMT',
+        'BS Psychology'             => 'BSPsych',
+        'BS Accountancy'            => 'BSA',
+        'BSBA Financial Management' => 'BSBA-FM',
+        'BSBA Marketing Management' => 'BSBA-MM',
+        'BS Tourism Management'     => 'BSTM',
+        'ABM'                       => 'ABM',
+        'STEM'                      => 'STEM',
+        'HUMSS'                     => 'HUMSS',
     ];
 
-    // ── Batch Generation ───────────────────────────────────────────────────
+    // ── Columns ────────────────────────────────────────────────────────────
 
-    public function generateBatches(): int
+    private const PUBLIC_COLS = [
+        'id',
+        'first_name',
+        'last_name',
+        'photo',
+        'student_no',
+        'course',
+        'graduation_year',
+        'section_id',
+        'batch_id',
+    ];
+
+    private const PREMIUM_COLS = [
+        'id',
+        'first_name',
+        'last_name',
+        'middle_name',
+        'nickname',
+        'photo',
+        'student_no',
+        'email',
+        'birthday',
+        'hometown',
+        'course',
+        'graduation_year',
+        'section_id',
+        'batch_id',
+        'honors',
+        'organizations',
+        'achievements',
+        'motto',
+        'student_quote',
+        'ambition',
+        'future_plans',
+        'most_likely_to',
+        'message_to_batchmates',
+        'facebook_url',
+        'instagram_url',
+        'linkedin_url',
+        'github_url',
+    ];
+
+    private function cols(bool $isPremium): array
     {
-        $created = 0;
+        return $isPremium ? self::PREMIUM_COLS : self::PUBLIC_COLS;
+    }
 
-        User::whereNotNull('graduation_year')
-            ->whereNotNull('course')
-            ->where('role', 'student')
-            ->select('course', 'graduation_year')
-            ->distinct()
+    // ── Base query ─────────────────────────────────────────────────────────
+
+    public function baseQuery(bool $isPremium)
+    {
+        return Student::select($this->cols($isPremium))
+            ->with(['section:id,name', 'batch:id,name,graduation_year,department']);
+    }
+
+    // ── Helpers ────────────────────────────────────────────────────────────
+
+    private function coursesForDepartment(string $department): array
+    {
+        return collect(self::DEPARTMENT_MAP)
+            ->filter(fn ($dept) => $dept === $department)
+            ->keys()
+            ->toArray();
+    }
+
+    // ── Discovery: Batchmates ──────────────────────────────────────────────
+
+    public function getBatchmates(User $viewer, ?string $course = null, ?int $year = null): Collection
+    {
+        $course = $course ?? $viewer->student?->course          ?? $viewer->course;
+        $year   = $year   ?? $viewer->student?->graduation_year ?? $viewer->graduation_year;
+
+        return $this->baseQuery($viewer->is_premium)
+            ->when($course, fn ($q) => $q->where('course', $course))
+            ->when($year,   fn ($q) => $q->where('graduation_year', $year))
+            ->orderBy('last_name')
+            ->orderBy('first_name')
             ->get()
-            ->each(function ($group) use (&$created) {
-                $code = self::getCourseCode($group->course);
-                $dept = self::getDepartment($group->course);
-
-                $batch = Batch::firstOrCreate(
-                    ['course' => $group->course, 'graduation_year' => $group->graduation_year],
-                    ['name' => "{$code} Batch {$group->graduation_year}", 'course_code' => $code, 'department' => $dept]
-                );
-
-                if ($batch->wasRecentlyCreated) $created++;
-            });
-
-        return $created;
+            ->map(fn ($s) => $this->formatStudent($s));
     }
 
-    public function assignUsersToBatches(): int
+    // ── Discovery: Sectionmates ────────────────────────────────────────────
+
+    public function getSectionmates(User $viewer): Collection
     {
-        $updated = 0;
-        Batch::all()->each(function (Batch $batch) use (&$updated) {
-            $updated += User::where('course', $batch->course)
-                ->where('graduation_year', $batch->graduation_year)
-                ->where('role', 'student')
-                ->update(['batch_id' => $batch->id]);
-        });
-        return $updated;
-    }
+        $sectionId = $viewer->student?->section_id ?? $viewer->section_id;
 
-    public function generateSections(int $studentsPerSection = 40): int
-    {
-        $created = 0;
-        Batch::with('sections')->get()->each(function (Batch $batch) use ($studentsPerSection, &$created) {
-            if ($batch->sections->isNotEmpty()) return;
-
-            $total    = User::where('batch_id', $batch->id)->count();
-            $numSects = max(1, (int) ceil($total / $studentsPerSection));
-            $letters  = range('A', 'Z');
-
-            for ($i = 0; $i < $numSects; $i++) {
-                Section::firstOrCreate(
-                    ['name' => $letters[$i], 'batch_id' => $batch->id],
-                    ['course' => $batch->course, 'batch_year' => $batch->graduation_year]
-                );
-                $created++;
-            }
-
-            $sectionIds = Section::where('batch_id', $batch->id)->pluck('id')->toArray();
-            User::where('batch_id', $batch->id)->whereNull('section_id')->pluck('id')
-                ->each(fn($uid, $idx) => User::where('id', $uid)->update([
-                    'section_id' => $sectionIds[$idx % count($sectionIds)],
-                ]));
-        });
-        return $created;
-    }
-
-    // ── Discovery: My Batch ────────────────────────────────────────────────
-
-    public function getBatchmates(User $viewer, ?string $course = null, ?int $year = null): array
-    {
-        $isPremium    = $viewer->is_premium;
-        $targetCourse = $course ?? $viewer->course;
-        $targetYear   = $year   ?? $viewer->graduation_year;
-
-        $query = User::where('role', 'student')
-            ->where('id', '!=', $viewer->id)
-            ->where('course', $targetCourse)
-            ->where('graduation_year', $targetYear)
-            ->where('profile_visibility', '!=', 'private');
-
-        if (! $isPremium) {
-            $query->where('profile_visibility', 'public')
-                  ->select(['id', 'name', 'profile_picture', 'course', 'student_id']);
-        } else {
-            $query->whereIn('profile_visibility', ['public', 'connections_only'])
-                  ->select(['id', 'name', 'profile_picture', 'course', 'student_id',
-                             'graduation_year', 'section_id', 'batch', 'motto', 'profile_visibility']);
+        if (! $sectionId) {
+            return collect();
         }
 
-        return $query->with($isPremium ? ['section:id,name'] : [])->orderBy('name')->get()->toArray();
-    }
-
-    // ── Discovery: My Section ──────────────────────────────────────────────
-
-    public function getSectionmates(User $viewer): array
-    {
-        if (! $viewer->section_id) return [];
-
-        $isPremium = $viewer->is_premium;
-
-        $query = User::where('section_id', $viewer->section_id)
-            ->where('id', '!=', $viewer->id)
-            ->where('profile_visibility', '!=', 'private');
-
-        if (! $isPremium) {
-            $query->where('profile_visibility', 'public')
-                  ->select(['id', 'name', 'profile_picture', 'course', 'student_id', 'section_id']);
-        } else {
-            $query->whereIn('profile_visibility', ['public', 'connections_only'])
-                  ->select(['id', 'name', 'profile_picture', 'course', 'student_id',
-                             'section_id', 'graduation_year', 'motto', 'profile_visibility']);
-        }
-
-        return $query->orderBy('name')->get()->toArray();
+        return $this->baseQuery($viewer->is_premium)
+            ->where('section_id', $sectionId)
+            ->orderBy('last_name')
+            ->orderBy('first_name')
+            ->get()
+            ->map(fn ($s) => $this->formatStudent($s));
     }
 
     // ── Discovery: Whole School ────────────────────────────────────────────
 
-    /**
-     * Paginated view of all students across every batch, course, section.
-     * Supports server-side search, course, year, department filters.
-     * Respects subscription and visibility rules.
-     */
-    public function getWholeSchool(
-        User    $viewer,
-        array   $filters  = [],
-        int     $perPage  = 40
-    ): LengthAwarePaginator {
-        $isPremium = $viewer->is_premium;
+    public function getWholeSchool(User $viewer, array $filters = [], int $perPage = 40): LengthAwarePaginator
+    {
+        $query = $this->baseQuery($viewer->is_premium);
 
-        $query = User::where('role', 'student')
-            ->where('id', '!=', $viewer->id)
-            ->where('profile_visibility', '!=', 'private');
-
-        // ── Subscription gate ──────────────────────────────────────────────
-        if (! $isPremium) {
-            // Free tier: public profiles only + limited columns
-            $query->where('profile_visibility', 'public')
-                  ->select(['id', 'name', 'profile_picture', 'course', 'student_id', 'graduation_year']);
-        } else {
-            $query->whereIn('profile_visibility', ['public', 'connections_only'])
-                  ->select(['id', 'name', 'profile_picture', 'course', 'student_id',
-                             'graduation_year', 'section_id', 'batch_id',
-                             'motto', 'profile_visibility'])
-                  ->with(['section:id,name', 'batchRecord:id,name,course_code']);
-        }
-
-        // ── Filters ────────────────────────────────────────────────────────
-
-        // Text search (server-side LIKE — for full-text use Meilisearch)
         if (! empty($filters['search'])) {
-            $term = $filters['search'];
-            $query->where(fn ($q) =>
-                $q->where('name',       'like', "%{$term}%")
-                  ->orWhere('student_id', 'like', "%{$term}%")
+            $term = '%' . $filters['search'] . '%';
+            $query->where(fn ($q) => $q
+                ->where('first_name',   'like', $term)
+                ->orWhere('last_name',  'like', $term)
+                ->orWhere('student_no', 'like', $term)
+                ->orWhereRaw("CONCAT(first_name, ' ', last_name) LIKE ?", [$term])
             );
         }
 
-        // Filter by specific course
-        if (! empty($filters['course'])) {
-            $query->where('course', $filters['course']);
-        }
+        if (! empty($filters['course']))      $query->where('course',          $filters['course']);
+        if (! empty($filters['year']))        $query->where('graduation_year', (int) $filters['year']);
+        if (! empty($filters['section_id']))  $query->where('section_id',      (int) $filters['section_id']);
 
-        // Filter by department (maps to multiple courses)
         if (! empty($filters['department'])) {
-            $courses = collect(self::DEPARTMENT_MAP)
-                ->filter(fn ($d) => $d === $filters['department'])
-                ->keys()->toArray();
+            $courses = $this->coursesForDepartment($filters['department']);
             $query->whereIn('course', $courses);
         }
 
-        // Filter by graduation year
-        if (! empty($filters['year'])) {
-            $query->where('graduation_year', (int) $filters['year']);
-        }
-
-        // Filter by section
-        if (! empty($filters['section_id'])) {
-            $query->where('section_id', (int) $filters['section_id']);
-        }
-
-        return $query->orderBy('course')->orderBy('name')->paginate($perPage);
+        return $query
+            ->orderBy('last_name')
+            ->orderBy('first_name')
+            ->paginate($perPage)
+            ->through(fn ($s) => $this->formatStudent($s));
     }
 
     // ── Discovery: Cross-Program ───────────────────────────────────────────
 
-    /**
-     * Students from programs OTHER than the viewer's own course.
-     * Grouped by course/program for easy browsing.
-     * Supports fuzzy-search via Fuse.js on the client side.
-     * Respects subscription and visibility rules.
-     */
-    public function getCrossProgram(
-        User    $viewer,
-        array   $filters = [],
-        int     $perPage = 40
-    ): LengthAwarePaginator {
-        $isPremium     = $viewer->is_premium;
-        $excludeCourse = $filters['exclude_course'] ?? $viewer->course;
+    public function getCrossProgram(User $viewer, array $filters = [], int $perPage = 40): LengthAwarePaginator
+    {
+        $viewerCourse = $viewer->student?->course ?? $viewer->course;
 
-        $query = User::where('role', 'student')
-            ->where('id', '!=', $viewer->id)
-            ->where('profile_visibility', '!=', 'private');
+        $query = $this->baseQuery($viewer->is_premium)
+            ->when($viewerCourse, fn ($q) => $q->where('course', '!=', $viewerCourse));
 
-        // Exclude viewer's own program (or custom exclusion)
-        if ($excludeCourse) {
-            $query->where('course', '!=', $excludeCourse);
-        }
-
-        // ── Subscription gate ──────────────────────────────────────────────
-        if (! $isPremium) {
-            $query->where('profile_visibility', 'public')
-                  ->select(['id', 'name', 'profile_picture', 'course', 'student_id', 'graduation_year']);
-        } else {
-            $query->whereIn('profile_visibility', ['public', 'connections_only'])
-                  ->select(['id', 'name', 'profile_picture', 'course', 'student_id',
-                             'graduation_year', 'motto', 'profile_visibility']);
-        }
-
-        // ── Filters ────────────────────────────────────────────────────────
-
-        // Department filter
-        if (! empty($filters['department'])) {
-            $courses = collect(self::DEPARTMENT_MAP)
-                ->filter(fn ($d) => $d === $filters['department'])
-                ->keys()->toArray();
-            $query->whereIn('course', $courses);
-        }
-
-        // Specific course filter (within cross-program)
-        if (! empty($filters['course'])) {
-            $query->where('course', $filters['course']);
-        }
-
-        // Graduation year
-        if (! empty($filters['year'])) {
-            $query->where('graduation_year', (int) $filters['year']);
-        }
-
-        // Server-side search fallback (Fuse.js handles client fuzzy)
         if (! empty($filters['search'])) {
-            $term = $filters['search'];
-            $query->where(fn ($q) =>
-                $q->where('name',       'like', "%{$term}%")
-                  ->orWhere('student_id', 'like', "%{$term}%")
+            $term = '%' . $filters['search'] . '%';
+            $query->where(fn ($q) => $q
+                ->where('first_name',   'like', $term)
+                ->orWhere('last_name',  'like', $term)
+                ->orWhere('student_no', 'like', $term)
+                ->orWhereRaw("CONCAT(first_name, ' ', last_name) LIKE ?", [$term])
             );
         }
 
-        return $query->orderBy('course')->orderBy('graduation_year', 'desc')->orderBy('name')
-                     ->paginate($perPage);
+        if (! empty($filters['course']))     $query->where('course',          $filters['course']);
+        if (! empty($filters['year']))       $query->where('graduation_year', (int) $filters['year']);
+
+        if (! empty($filters['department'])) {
+            $courses = $this->coursesForDepartment($filters['department']);
+            $query->whereIn('course', $courses);
+        }
+
+        return $query
+            ->orderBy('course')
+            ->orderBy('graduation_year', 'desc')
+            ->orderBy('last_name')
+            ->orderBy('first_name')
+            ->paginate($perPage)
+            ->through(fn ($s) => $this->formatStudent($s));
     }
 
-    /**
-     * Stats for Cross-Program discovery header.
-     */
+    // ── Discovery: Cross-Program Stats ────────────────────────────────────
+
     public function getCrossProgramStats(User $viewer): array
     {
-        $base = User::where('role', 'student')
-            ->where('id', '!=', $viewer->id)
-            ->where('course', '!=', $viewer->course)
-            ->where('profile_visibility', '!=', 'private');
+        $viewerCourse = $viewer->student?->course ?? $viewer->course;
+
+        $base = Student::when($viewerCourse, fn ($q) => $q->where('course', '!=', $viewerCourse));
 
         return [
-            'total_students' => $base->count(),
-            'total_programs' => (clone $base)->distinct('course')->count('course'),
-            'departments'    => array_unique(array_values(self::DEPARTMENT_MAP)),
+            'total_students' => (clone $base)->count(),
+            'total_programs' => (clone $base)->distinct()->count('course'),
+            'departments'    => (clone $base)
+                ->join('batches', 'students.batch_id', '=', 'batches.id')
+                ->distinct()
+                ->pluck('batches.department')
+                ->filter()
+                ->values(),
         ];
     }
 
-    // ── Existing helpers ───────────────────────────────────────────────────
+    // ── Discovery: By Department ───────────────────────────────────────────
 
     public function getByDepartment(User $viewer, string $department): Collection
     {
-        $isPremium = $viewer->is_premium;
-        $courses   = collect(self::DEPARTMENT_MAP)->filter(fn ($d) => $d === $department)->keys()->toArray();
-
-        $query = User::where('role', 'student')
-            ->where('id', '!=', $viewer->id)
-            ->whereIn('course', $courses)
-            ->where('profile_visibility', '!=', 'private');
-
-        if (! $isPremium) {
-            $query->where('profile_visibility', 'public')
-                  ->select(['id', 'name', 'profile_picture', 'course', 'student_id', 'graduation_year']);
-        } else {
-            $query->whereIn('profile_visibility', ['public', 'connections_only'])
-                  ->select(['id', 'name', 'profile_picture', 'course', 'student_id',
-                             'graduation_year', 'motto', 'profile_visibility']);
-        }
-
-        return $query->orderBy('course')->orderBy('graduation_year')->get()->groupBy('course');
+        return $this->baseQuery($viewer->is_premium)
+            ->whereIn('course', $this->coursesForDepartment($department))
+            ->orderBy('course')
+            ->orderBy('last_name')
+            ->get()
+            ->map(fn ($s) => $this->formatStudent($s))
+            ->groupBy('course');
     }
+
+    // ── Batch Helpers ──────────────────────────────────────────────────────
 
     public function getBatchesByDepartment(): Collection
     {
         return Batch::withCount('students')
             ->with('sections:id,batch_id,name')
-            ->orderBy('department')->orderBy('graduation_year', 'desc')
-            ->get()->groupBy('department');
+            ->orderBy('graduation_year', 'desc')
+            ->get()
+            ->groupBy('department');
     }
 
     public function getBatchStats(Batch $batch): array
     {
         return [
-            'total_students'  => $batch->students()->count(),
-            'public_profiles' => $batch->students()->where('profile_visibility', 'public')->count(),
-            'sections'        => $batch->sections()->withCount('students')->get(['id', 'name']),
+            'total_students' => $batch->students()->count(),
+            'total_sections' => $batch->sections()->count(),
+            'sections'       => $batch->sections()->withCount('students')->get(['id', 'name']),
+            'by_course'      => $batch->students()
+                ->selectRaw('course, COUNT(*) as count')
+                ->groupBy('course')
+                ->pluck('count', 'course'),
         ];
     }
 
-    // ── Static helpers ─────────────────────────────────────────────────────
+    public function getBatchStudents(Batch $batch, bool $isPremium): Collection
+    {
+        return $this->baseQuery($isPremium)
+            ->where('batch_id', $batch->id)
+            ->orderBy('last_name')
+            ->orderBy('first_name')
+            ->get()
+            ->map(fn ($s) => $this->formatStudent($s));
+    }
+
+    // ── Static Helpers ─────────────────────────────────────────────────────
 
     public static function getDepartment(string $course): string
     {
-        return self::DEPARTMENT_MAP[$course] ?? 'General Department';
+        return self::DEPARTMENT_MAP[$course] ?? 'General';
     }
 
     public static function getCourseCode(string $course): string
@@ -358,6 +296,23 @@ class BatchService
 
     public static function getAllDepartments(): array
     {
-        return array_unique(array_values(self::DEPARTMENT_MAP));
+        return collect(self::DEPARTMENT_MAP)->unique()->values()->sort()->values()->toArray();
+    }
+
+    public static function getAllCourses(): array
+    {
+        return array_keys(self::DEPARTMENT_MAP);
+    }
+
+    // ── Formatter ──────────────────────────────────────────────────────────
+
+    private function formatStudent(Student $student): array
+    {
+        $data = $student->toArray();
+
+        $data['name']            = trim("{$student->first_name} {$student->last_name}");
+        $data['profile_picture'] = $student->photo_url ?? $student->photo;
+
+        return $data;
     }
 }

@@ -15,14 +15,10 @@ import ShareModal from '../components/ShareModal';
 import PostCard from '../components/PostCard';
 import PostLightbox from '../components/PostLightbox';
 import MessageModal from '@/components/feedback/MessageModal';
+import { useAppConfig } from '@/features/platform/AppConfigProvider';
 
-const TABS = [
-  { key: 'posts',        icon: 'fas fa-th-large',       label: 'Posts'        },
-  { key: 'tagged',       icon: 'fas fa-tag',             label: 'Tagged'       },
-  { key: 'academic',     icon: 'fas fa-graduation-cap',  label: 'Academic'     },
-  { key: 'achievements', icon: 'fas fa-award',           label: 'Achievements' },
-  { key: 'voicenotes',   icon: 'fas fa-microphone',      label: 'Voice Notes'  },
-];
+// ── Helpers ───────────────────────────────────────────────────────────────────
+const isGraduate = (student) => !!student?.graduation_year;
 
 const getTier = (u) => {
   if (!u) return 'free';
@@ -37,10 +33,42 @@ const TIER_CONFIG = {
   free:     { label: 'Free',     icon: 'fa-user',   cls: 'bg-slate-100 text-slate-500 border border-slate-200'   },
 };
 
+// ── Sub-components ────────────────────────────────────────────────────────────
+function TabCard({ icon, label, action, children }) {
+  return (
+    <div className="bg-white rounded-2xl p-5 shadow-sm border border-slate-100">
+      <div className="flex items-center justify-between mb-4">
+        <h4 className="flex items-center gap-2 text-xs font-black text-[#1d2b4b] uppercase tracking-widest m-0">
+          <i className={`${icon} text-[#fdb813] text-xs`} />
+          {label}
+        </h4>
+        {action}
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function InfoTile({ icon, label, value }) {
+  return (
+    <div className="bg-slate-50 border border-slate-100 rounded-xl p-4">
+      <div className="flex items-center gap-1.5 mb-1.5">
+        <i className={`fas ${icon} text-[#fdb813] text-[9px]`} />
+        <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">{label}</span>
+      </div>
+      <p className="text-sm font-semibold text-[#1d2b4b] m-0 break-words">{value}</p>
+    </div>
+  );
+}
+
+// ── Main component ────────────────────────────────────────────────────────────
 export default function ProfilePage() {
   const { id }             = useParams();
   const { user: authUser } = useAuth();
+  const { isOn }           = useAppConfig();
   const navigate           = useNavigate();
+  const postsEnabled       = isOn('allow_student_posts');
+  const premiumBilling     = isOn('enable_premium_subscription');
 
   const [student,           setStudent]           = useState(null);
   const [loading,           setLoading]           = useState(true);
@@ -58,20 +86,29 @@ export default function ProfilePage() {
   const [voiceNotes,        setVoiceNotes]        = useState([]);
   const [voiceNotesLoading, setVoiceNotesLoading] = useState(false);
 
-  // ── Academic state ────────────────────────────────────────────────────────
   const [academicData,    setAcademicData]    = useState(null);
   const [academicLoading, setAcademicLoading] = useState(false);
-
-  // ── Achievements state ────────────────────────────────────────────────────
-  const [achievements,   setAchievements]   = useState([]);
-  const [achieveLoading, setAchieveLoading] = useState(false);
+  const [achievements,    setAchievements]    = useState([]);
+  const [achieveLoading,  setAchieveLoading]  = useState(false);
 
   const fileRef = useRef();
   const isOwn   = authUser?.id === parseInt(id);
   const userTier   = getTier(authUser);
   const isPremium  = userTier === 'premium' || userTier === 'standard';
-  const isFree     = isOwn && !isPremium;
+  const isFree     = isOwn && premiumBilling && !isPremium;
   const tierConfig = TIER_CONFIG[userTier];
+
+  // Build tabs dynamically — only show Yearbook for graduates
+  const TABS = [
+    { key: 'posts',        icon: 'fas fa-th-large',      label: 'Posts'        },
+    { key: 'tagged',       icon: 'fas fa-tag',            label: 'Tagged'       },
+    ...(student && isGraduate(student)
+      ? [{ key: 'yearbook', icon: 'fas fa-book-open',     label: 'Yearbook'     }]
+      : []),
+    { key: 'academic',     icon: 'fas fa-graduation-cap', label: 'Academic'     },
+    { key: 'achievements', icon: 'fas fa-award',          label: 'Achievements' },
+    { key: 'voicenotes',   icon: 'fas fa-microphone',     label: 'Voice Notes'  },
+  ];
 
   // ── Load student profile ──────────────────────────────────────────────────
   useEffect(() => {
@@ -81,7 +118,6 @@ export default function ProfilePage() {
       .finally(() => setLoading(false));
   }, [id]);
 
-  // ── Load tab data on tab switch ───────────────────────────────────────────
   useEffect(() => { if (activeTab === 'posts')        loadPosts();        }, [activeTab, id]);
   useEffect(() => { if (activeTab === 'voicenotes')   loadVoiceNotes();   }, [activeTab, id]);
   useEffect(() => { if (activeTab === 'achievements') loadAchievements(); }, [activeTab, id]);
@@ -103,9 +139,6 @@ export default function ProfilePage() {
        .finally(() => setVoiceNotesLoading(false));
   };
 
-  // ── Fetch achievements from API ───────────────────────────────────────────
-  // FIX: removed DEFAULT_ACHIEVEMENTS fallback — show empty state when DB has
-  //      no records. Fake ids 1/2/3 were causing the save to silently fail.
   const loadAchievements = () => {
     if (!id) return;
     setAchieveLoading(true);
@@ -116,16 +149,9 @@ export default function ProfilePage() {
           setAchievements(data.map(a => {
             let meta = {};
             try { meta = JSON.parse(a.type || '{}'); } catch {}
-            return {
-              id:    a.id,
-              t:     a.title,
-              s:     a.subtitle ?? '',
-              icon:  meta.icon  ?? 'fa-star',
-              color: meta.color ?? '#fdb813',
-            };
+            return { id: a.id, t: a.title, s: a.subtitle ?? '', icon: meta.icon ?? 'fa-star', color: meta.color ?? '#fdb813' };
           }));
         } else {
-          // Empty array from DB — show the proper empty state, not fake data
           setAchievements([]);
         }
       })
@@ -133,7 +159,6 @@ export default function ProfilePage() {
       .finally(() => setAchieveLoading(false));
   };
 
-  // ── Fetch academic data from student record ───────────────────────────────
   const loadAcademic = () => {
     if (!id) return;
     setAcademicLoading(true);
@@ -192,9 +217,12 @@ export default function ProfilePage() {
     setContextMenu(null);
   };
 
-  const handleOpenUpload = () => isFree ? navigate('/premium') : setShowUpload(true);
+  const handleOpenUpload = () => {
+    if (!postsEnabled) return;
+    if (premiumBilling && isFree) navigate('/premium');
+    else setShowUpload(true);
+  };
 
-  // ── Loading ────────────────────────────────────────────────────────────────
   if (loading) return (
     <div className="min-h-screen flex items-center justify-center bg-[#f4f7fe]">
       <div className="w-8 h-8 rounded-full border-[3px] border-indigo-100 border-t-[#1d2b4b] animate-spin" />
@@ -206,6 +234,8 @@ export default function ProfilePage() {
       Student not found.
     </div>
   );
+
+  const graduate = isGraduate(student);
 
   const avatar = storageUrl(student.profile_picture)
     || `https://ui-avatars.com/api/?name=${encodeURIComponent(student.name)}&background=1d2b4b&color=fdb813&bold=true&size=400`;
@@ -225,7 +255,6 @@ export default function ProfilePage() {
 
       <Navbar />
 
-      {/* Modals */}
       {showUpload  && <ProfileUploadModal onClose={() => setShowUpload(false)} onSuccess={() => { setShowUpload(false); loadPosts(); }} />}
       <ShareModal   isOpen={showShare} onClose={() => setShowShare(false)} student={student} />
       <MessageModal isOpen={showMsg}   onClose={() => setShowMsg(false)}   student={student} authUser={authUser} />
@@ -240,7 +269,6 @@ export default function ProfilePage() {
       )}
       {lightbox && <PostLightbox post={lightbox.post} initialIdx={lightbox.idx} onClose={() => setLightbox(null)} />}
 
-      {/* Toast */}
       {toast && (
         <div className={`fixed top-20 left-1/2 z-[9000] px-5 py-2.5 rounded-xl text-sm font-semibold
                          shadow-xl whitespace-nowrap flex items-center gap-2
@@ -299,7 +327,7 @@ export default function ProfilePage() {
               <div className="flex items-center gap-2 pt-14 sm:pt-16 flex-wrap justify-end">
                 {isOwn ? (
                   <>
-                    {userTier === 'premium' ? (
+                    {premiumBilling && (userTier === 'premium' ? (
                       <Link to="/premium" className="inline-flex items-center gap-1.5 bg-gradient-to-r from-[#fdb813] to-amber-500 text-[#1d2b4b] no-underline px-3 py-2 rounded-xl text-xs font-black shadow-md shadow-amber-200/50 hover:opacity-90 transition">
                         <i className="fas fa-crown text-[10px]" /> Premium Active
                       </Link>
@@ -311,20 +339,20 @@ export default function ProfilePage() {
                       <Link to="/premium" className="inline-flex items-center gap-1.5 bg-gradient-to-r from-[#fdb813] to-amber-500 text-[#1d2b4b] no-underline px-3 py-2 rounded-xl text-xs font-black shadow-md shadow-amber-200/40 hover:opacity-90 transition">
                         <i className="fas fa-crown text-[10px]" /> Go Premium
                       </Link>
-                    )}
-
+                    ))}
                     <Link to="/settings"
                       className="inline-flex items-center gap-1.5 bg-slate-100 hover:bg-slate-200 text-[#1d2b4b] no-underline px-3 py-2 rounded-xl text-xs font-semibold border border-slate-200 transition">
                       <i className="fas fa-pen text-[10px]" /> Edit Profile
                     </Link>
-
-                    <button onClick={handleOpenUpload}
-                      title={isFree ? 'Upgrade to upload' : 'Add post'}
-                      className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold border-none cursor-pointer transition
-                        ${isFree ? 'bg-slate-300 text-slate-500' : 'bg-[#1d2b4b] hover:bg-[#162038] text-white'}`}>
-                      <i className={`fas ${isFree ? 'fa-lock' : 'fa-plus'} text-[10px] text-[#fdb813]`} />
-                      {isFree ? 'Locked' : 'Add Post'}
-                    </button>
+                    {postsEnabled && (
+                      <button onClick={handleOpenUpload}
+                        title={premiumBilling && isFree ? 'Upgrade to upload' : 'Add post'}
+                        className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold border-none cursor-pointer transition
+                          ${premiumBilling && isFree ? 'bg-slate-300 text-slate-500' : 'bg-[#1d2b4b] hover:bg-[#162038] text-white'}`}>
+                        <i className={`fas ${premiumBilling && isFree ? 'fa-lock' : 'fa-plus'} text-[10px] text-[#fdb813]`} />
+                        {premiumBilling && isFree ? 'Locked' : 'Add Post'}
+                      </button>
+                    )}
                   </>
                 ) : (
                   <button onClick={() => setShowMsg(true)}
@@ -332,7 +360,6 @@ export default function ProfilePage() {
                     <i className="fas fa-paper-plane text-[#fdb813] text-xs" /> Message
                   </button>
                 )}
-
                 <button onClick={() => setShowShare(true)}
                   className="w-9 h-9 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-500 cursor-pointer flex items-center justify-center transition text-sm">
                   <i className="fas fa-share-alt" />
@@ -343,7 +370,12 @@ export default function ProfilePage() {
             {/* Name + badges */}
             <div className="flex flex-wrap items-center gap-2 mb-1">
               <h1 className="text-xl font-black text-[#1d2b4b] m-0 leading-none">{student.name}</h1>
-              {student.is_premium && <PremiumBadge size="sm" />}
+              {student.is_premium && isOn('premium_badge_display') && <PremiumBadge size="sm" />}
+              {graduate && (
+                <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full tracking-wide flex items-center gap-1">
+                  <i className="fas fa-graduation-cap text-[8px]" /> GRADUATE {student.graduation_year}
+                </span>
+              )}
               <span className="text-[10px] font-bold text-[#3f51b5] bg-indigo-50 border border-indigo-100 px-2 py-0.5 rounded-full tracking-wide">
                 PIONEER 2026
               </span>
@@ -415,12 +447,23 @@ export default function ProfilePage() {
 
             {/* Location */}
             <div className="flex gap-4 mt-3 flex-wrap">
-              <span className="flex items-center gap-1.5 text-xs text-slate-400">
-                <i className="fas fa-map-marker-alt text-red-400 text-[10px]" /> Lipa City, Batangas
-              </span>
+              {student.hometown && (
+                <span className="flex items-center gap-1.5 text-xs text-slate-400">
+                  <i className="fas fa-map-marker-alt text-red-400 text-[10px]" /> {student.hometown}
+                </span>
+              )}
               <span className="flex items-center gap-1.5 text-xs text-slate-400">
                 <i className="fas fa-university text-[#3f51b5] text-[10px]" /> NU Lipa
               </span>
+              {/* Social quick links */}
+              {(student.facebook_url || student.instagram_url || student.linkedin_url || student.github_url) && (
+                <div className="flex items-center gap-2 ml-auto">
+                  {student.facebook_url  && <a href={student.facebook_url}  target="_blank" rel="noopener noreferrer" className="text-[#1877F2] text-sm hover:opacity-75 transition"><i className="fab fa-facebook" /></a>}
+                  {student.instagram_url && <a href={student.instagram_url} target="_blank" rel="noopener noreferrer" className="text-[#E1306C] text-sm hover:opacity-75 transition"><i className="fab fa-instagram" /></a>}
+                  {student.linkedin_url  && <a href={student.linkedin_url}  target="_blank" rel="noopener noreferrer" className="text-[#0A66C2] text-sm hover:opacity-75 transition"><i className="fab fa-linkedin" /></a>}
+                  {student.github_url    && <a href={student.github_url}    target="_blank" rel="noopener noreferrer" className="text-[#1d2b4b] text-sm hover:opacity-75 transition"><i className="fab fa-github" /></a>}
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -447,9 +490,9 @@ export default function ProfilePage() {
         {/* ── POSTS TAB ── */}
         {activeTab === 'posts' && (
           <div className="flex flex-col gap-3">
-            {isOwn && (
+            {isOwn && postsEnabled && (
               <div
-                onClick={() => !isFree && setShowUpload(true)}
+                onClick={() => (!premiumBilling || !isFree) && setShowUpload(true)}
                 className={`bg-white rounded-2xl px-4 py-3 shadow-sm border flex items-center gap-3 transition
                   ${isFree ? 'border-amber-100 cursor-default' : 'border-slate-100 cursor-pointer hover:shadow-md'}`}
               >
@@ -528,6 +571,137 @@ export default function ProfilePage() {
           </TabCard>
         )}
 
+        {/* ── YEARBOOK TAB — graduates only ── */}
+        {activeTab === 'yearbook' && graduate && (
+          <div className="flex flex-col gap-3">
+
+            {/* Graduate banner */}
+            <div className="bg-gradient-to-r from-emerald-50 to-teal-50 border border-emerald-200 rounded-2xl px-5 py-4 flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-emerald-100 flex items-center justify-center shrink-0">
+                <i className="fas fa-graduation-cap text-emerald-600 text-base" />
+              </div>
+              <div>
+                <p className="text-sm font-black text-emerald-800 m-0">
+                  {student.honors ? `${student.honors} Graduate` : 'Graduate'} · Class of {student.graduation_year}
+                </p>
+                <p className="text-xs text-emerald-600 m-0 mt-0.5">
+                  {student.course} · National University Lipa
+                </p>
+              </div>
+            </div>
+
+            {/* Personal */}
+            {(student.nickname || student.birthday || student.hometown) && (
+              <TabCard icon="fas fa-user" label="Personal">
+                <div className="grid grid-cols-2 gap-3">
+                  {student.nickname && <InfoTile icon="fa-smile"          label="Nickname" value={student.nickname} />}
+                  {student.birthday && (
+                    <InfoTile icon="fa-cake-candles" label="Birthday" value={
+                      new Date(student.birthday).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
+                    } />
+                  )}
+                  {student.hometown && <InfoTile icon="fa-map-marker-alt" label="Hometown" value={student.hometown} />}
+                </div>
+              </TabCard>
+            )}
+
+            {/* Honors & Organizations */}
+            {(student.honors || student.organizations || student.achievements) && (
+              <TabCard icon="fas fa-medal" label="Honors & Organizations">
+                {student.honors && (
+                  <div className="mb-3 pb-3 border-b border-slate-100">
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Honors</p>
+                    <p className="text-sm font-semibold text-[#1d2b4b] m-0">{student.honors}</p>
+                  </div>
+                )}
+                {student.organizations && (
+                  <div className={student.achievements ? 'mb-3 pb-3 border-b border-slate-100' : ''}>
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Organizations</p>
+                    <p className="text-sm text-slate-600 m-0 leading-relaxed">{student.organizations}</p>
+                  </div>
+                )}
+                {student.achievements && (
+                  <div>
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Achievements</p>
+                    <p className="text-sm text-slate-600 m-0 leading-relaxed">{student.achievements}</p>
+                  </div>
+                )}
+              </TabCard>
+            )}
+
+            {/* Yearbook Quotes */}
+            {(student.ambition || student.future_plans || student.fondest_memory || student.most_likely_to) && (
+              <TabCard icon="fas fa-feather-pointed" label="Yearbook Quotes">
+                {[
+                  { label: 'Ambition',       icon: 'fa-rocket',  value: student.ambition       },
+                  { label: 'Future Plans',   icon: 'fa-map',     value: student.future_plans   },
+                  { label: 'Fondest Memory', icon: 'fa-heart',   value: student.fondest_memory },
+                  { label: 'Most Likely To', icon: 'fa-trophy',  value: student.most_likely_to },
+                ].filter(r => r.value).map((row, i, arr) => (
+                  <div key={row.label} className={`pb-3 mb-3 ${i < arr.length - 1 ? 'border-b border-slate-100' : ''}`}>
+                    <div className="flex items-center gap-1.5 mb-1">
+                      <i className={`fas ${row.icon} text-[#fdb813] text-[10px]`} />
+                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider m-0">{row.label}</p>
+                    </div>
+                    <p className="text-sm text-slate-600 italic m-0 leading-relaxed pl-3 border-l-2 border-amber-200">
+                      "{row.value}"
+                    </p>
+                  </div>
+                ))}
+              </TabCard>
+            )}
+
+            {/* Messages */}
+            {(student.message_to_batchmates || student.message_to_parents) && (
+              <TabCard icon="fas fa-envelope-open-text" label="Messages">
+                {student.message_to_batchmates && (
+                  <div className={student.message_to_parents ? 'mb-3 pb-3 border-b border-slate-100' : ''}>
+                    <div className="flex items-center gap-1.5 mb-1.5">
+                      <i className="fas fa-users text-[#fdb813] text-[10px]" />
+                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider m-0">To My Batchmates</p>
+                    </div>
+                    <p className="text-sm text-slate-600 italic m-0 leading-relaxed pl-3 border-l-2 border-indigo-200">
+                      "{student.message_to_batchmates}"
+                    </p>
+                  </div>
+                )}
+                {student.message_to_parents && (
+                  <div>
+                    <div className="flex items-center gap-1.5 mb-1.5">
+                      <i className="fas fa-house-heart text-[#fdb813] text-[10px]" />
+                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider m-0">To My Parents</p>
+                    </div>
+                    <p className="text-sm text-slate-600 italic m-0 leading-relaxed pl-3 border-l-2 border-rose-200">
+                      "{student.message_to_parents}"
+                    </p>
+                  </div>
+                )}
+              </TabCard>
+            )}
+
+            {/* Social Links */}
+            {(student.facebook_url || student.instagram_url || student.linkedin_url || student.github_url) && (
+              <TabCard icon="fas fa-share-nodes" label="Social Links">
+                <div className="flex flex-wrap gap-2">
+                  {[
+                    { url: student.facebook_url,  icon: 'fa-facebook',  label: 'Facebook',  color: '#1877F2' },
+                    { url: student.instagram_url, icon: 'fa-instagram', label: 'Instagram', color: '#E1306C' },
+                    { url: student.linkedin_url,  icon: 'fa-linkedin',  label: 'LinkedIn',  color: '#0A66C2' },
+                    { url: student.github_url,    icon: 'fa-github',    label: 'GitHub',    color: '#1d2b4b' },
+                  ].filter(s => s.url).map(s => (
+                    <a key={s.label} href={s.url} target="_blank" rel="noopener noreferrer"
+                      className="inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-slate-200 bg-slate-50
+                                 hover:bg-white hover:shadow-sm text-sm font-semibold no-underline text-[#1d2b4b] transition">
+                      <i className={`fab ${s.icon} text-base`} style={{ color: s.color }} />
+                      {s.label}
+                    </a>
+                  ))}
+                </div>
+              </TabCard>
+            )}
+          </div>
+        )}
+
         {/* ── ACADEMIC TAB ── */}
         {activeTab === 'academic' && (
           <TabCard icon="fas fa-graduation-cap" label="Academic Info">
@@ -540,9 +714,9 @@ export default function ProfilePage() {
               <>
                 <div className="grid grid-cols-2 gap-3 mb-3">
                   {[
-                    { label: 'Student ID',      value: academicData.student_id      ?? 'N/A', icon: 'fa-id-card'      },
-                    { label: 'Course',          value: academicData.course          ?? 'N/A', icon: 'fa-book'         },
-                    { label: 'Graduation Year', value: academicData.graduation_year ?? 'N/A', icon: 'fa-calendar'     },
+                    { label: 'Student ID',      value: academicData.student_id      ?? 'N/A', icon: 'fa-id-card'       },
+                    { label: 'Course',          value: academicData.course          ?? 'N/A', icon: 'fa-book'          },
+                    { label: 'Graduation Year', value: academicData.graduation_year ?? 'N/A', icon: 'fa-calendar'      },
                     { label: 'Status',          value: 'Enrolled',                            icon: 'fa-circle-check', green: true },
                   ].map(row => (
                     <div key={row.label} className="bg-slate-50 border border-slate-100 rounded-xl p-4">
@@ -556,7 +730,6 @@ export default function ProfilePage() {
                     </div>
                   ))}
                 </div>
-
                 {academicData.batch && (
                   <div className="bg-slate-50 border border-slate-100 rounded-xl p-4 mb-3">
                     <div className="flex items-center gap-1.5 mb-2">
@@ -566,7 +739,6 @@ export default function ProfilePage() {
                     <p className="text-sm font-bold text-[#1d2b4b] m-0">{academicData.batch}</p>
                   </div>
                 )}
-
               </>
             ) : (
               <p className="text-sm text-slate-400 text-center py-8">Could not load academic info.</p>
@@ -669,7 +841,7 @@ export default function ProfilePage() {
                       </div>
                       <p className="text-xs text-slate-400 mb-2">
                         From <strong className="text-[#1d2b4b]">{note.sender?.name ?? 'Anonymous'}</strong>
-                        {' '}·{' '}
+                        {' · '}
                         {new Date(note.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                       </p>
                       <audio controls src={note.audio_url} className="w-full h-8" />
@@ -691,21 +863,6 @@ export default function ProfilePage() {
 
       </main>
       <Footer />
-    </div>
-  );
-}
-
-function TabCard({ icon, label, action, children }) {
-  return (
-    <div className="bg-white rounded-2xl p-5 shadow-sm border border-slate-100">
-      <div className="flex items-center justify-between mb-4">
-        <h4 className="flex items-center gap-2 text-xs font-black text-[#1d2b4b] uppercase tracking-widest m-0">
-          <i className={`${icon} text-[#fdb813] text-xs`} />
-          {label}
-        </h4>
-        {action}
-      </div>
-      {children}
     </div>
   );
 }

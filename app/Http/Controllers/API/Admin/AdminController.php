@@ -6,7 +6,6 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
-use App\Models\AuditLog;
 use App\Models\Setting;
 use Carbon\Carbon;
 
@@ -21,22 +20,46 @@ use Carbon\Carbon;
  */
 class AdminController extends Controller
 {
+    // ─── Role constants ───────────────────────────────────────────────────────
+
+    private const ROLE_STUDENT = 'student';
+    private const ROLE_FACULTY = 'faculty';
+
+    // ─── Subscription constants ───────────────────────────────────────────────
+
+    private const SUBSCRIPTION_STATUS_ACTIVE = 'active';
+
+    // ─── Audit log status ─────────────────────────────────────────────────────
+
+    private const AUDIT_STATUS_FAILED = 'Failed';
+
+    // ─── Upload type constants ────────────────────────────────────────────────
+
+    private const UPLOAD_TYPE_IMAGE = 'image';
+
+    // ─── Query limit constants ────────────────────────────────────────────────
+
+    private const LIMIT_RECENT_ACTIVITY  = 10;
+    private const LIMIT_RECENT_UPLOADS   = 8;
+    private const LIMIT_TRENDING_ALUMNI  = 5;
+    private const ENGAGEMENT_WINDOW_DAYS = 7;
+
     // ─── GET /api/admin/dashboard ─────────────────────────────────────────────
 
     public function dashboard(Request $request): JsonResponse
     {
-        $totalStudents       = DB::table('users')->where('role', 'student')->count();
-        $facultyMembers      = DB::table('users')->where('role', 'faculty')->count();
-        $galleryPhotos       = DB::table('photos')->count();
+        $totalStudents  = DB::table('users')->where('role', self::ROLE_STUDENT)->count();
+        $facultyMembers = DB::table('users')->where('role', self::ROLE_FACULTY)->count();
+        $galleryPhotos  = DB::table('photos')->count();
 
         // System alerts: audit log failures today
         $alertCount = DB::table('audit_logs')
-            ->where('status', 'Failed')
+            ->where('status', self::AUDIT_STATUS_FAILED)
             ->whereDate('created_at', today())
             ->count();
 
         $activeSubscriptions = DB::table('subscriptions')
-            ->where('status', 'active')
+            ->where('status', self::SUBSCRIPTION_STATUS_ACTIVE)
             ->where(fn ($q) =>
                 $q->whereNull('expires_at')
                   ->orWhere('expires_at', '>', now())
@@ -53,13 +76,13 @@ class AdminController extends Controller
             'system_alerts'        => $alertCount,
             'active_subscriptions' => $activeSubscriptions,
             'storage_used_gb'      => $storageUsedGB,
-            'storage_total_gb'     => config('storage.limit_gb', 100),
+            'storage_total_gb'     => config('storage.limit_gb'),
             'ai_processed_today'   => 0,
         ];
 
         // ── Enrollment by Year ────────────────────────────────────────────────
         $enrollmentByYear = DB::table('users')
-            ->where('role', 'student')
+            ->where('role', self::ROLE_STUDENT)
             ->whereNotNull('graduation_year')
             ->selectRaw('graduation_year as year, COUNT(*) as total')
             ->groupBy('graduation_year')
@@ -69,7 +92,7 @@ class AdminController extends Controller
         // ── Recent Activity ───────────────────────────────────────────────────
         $recentActivity = DB::table('audit_logs')
             ->orderByDesc('logged_at')
-            ->limit(10)
+            ->limit(self::LIMIT_RECENT_ACTIVITY)
             ->get()
             ->map(fn ($log) => [
                 'id'      => $log->id,
@@ -86,11 +109,11 @@ class AdminController extends Controller
                 photos.id,
                 SUBSTRING_INDEX(photos.file_path, '/', -1) AS filename,
                 CONCAT(users.first_name, ' ', users.last_name) AS uploader,
-                'image' AS type,
+                ? AS type,
                 photos.created_at
-            ")
+            ", [self::UPLOAD_TYPE_IMAGE])
             ->orderByDesc('photos.created_at')
-            ->limit(8)
+            ->limit(self::LIMIT_RECENT_UPLOADS)
             ->get()
             ->map(fn ($u) => [
                 'id'       => $u->id,
@@ -102,7 +125,7 @@ class AdminController extends Controller
 
         // ── Trending Alumni ───────────────────────────────────────────────────
         $trendingAlumni = DB::table('users')
-            ->where('role', 'student')
+            ->where('role', self::ROLE_STUDENT)
             ->whereNotNull('profile_views')
             ->where('profile_views', '>', 0)
             ->selectRaw("
@@ -113,25 +136,27 @@ class AdminController extends Controller
                 UPPER(CONCAT(LEFT(first_name, 1), LEFT(last_name, 1))) AS avatar_initials
             ")
             ->orderByDesc('profile_views')
-            ->limit(5)
+            ->limit(self::LIMIT_TRENDING_ALUMNI)
             ->get();
 
         // ── Engagement ────────────────────────────────────────────────────────
+        $engagementWindowStart = now()->subDays(self::ENGAGEMENT_WINDOW_DAYS);
+
         $engagement = [
             'weekly_visits' => DB::table('audit_logs')
-                ->where('logged_at', '>=', now()->subDays(7))
+                ->where('logged_at', '>=', $engagementWindowStart)
                 ->count(),
 
             'returning_alumni' => DB::table('personal_access_tokens')
                 ->join('users', 'personal_access_tokens.tokenable_id', '=', 'users.id')
-                ->where('users.role', 'student')
-                ->where('personal_access_tokens.last_used_at', '>=', now()->subDays(7))
+                ->where('users.role', self::ROLE_STUDENT)
+                ->where('personal_access_tokens.last_used_at', '>=', $engagementWindowStart)
                 ->distinct('users.id')
                 ->count('users.id'),
 
             'new_registrations' => DB::table('users')
-                ->where('role', 'student')
-                ->where('created_at', '>=', now()->subDays(7))
+                ->where('role', self::ROLE_STUDENT)
+                ->where('created_at', '>=', $engagementWindowStart)
                 ->count(),
         ];
 
@@ -168,7 +193,7 @@ class AdminController extends Controller
     {
         $deleted = DB::table('users')
             ->where('id', $id)
-            ->where('role', 'student')
+            ->where('role', self::ROLE_STUDENT)
             ->delete();
 
         return $deleted

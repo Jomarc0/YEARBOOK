@@ -17,6 +17,7 @@ class BatchController extends Controller
     public function index(): JsonResponse
     {
         $grouped = $this->batchService->getBatchesByDepartment();
+
         return response()->json([
             'data'        => $grouped,
             'departments' => $grouped->keys()->values(),
@@ -40,27 +41,16 @@ class BatchController extends Controller
         $viewer    = $request->user();
         $isPremium = $viewer->is_premium;
 
-        $query = $batch->students()->where('profile_visibility', '!=', 'private');
-
-        if (! $isPremium) {
-            $query->where('profile_visibility', 'public')
-                  ->select(['id', 'name', 'profile_picture', 'course', 'student_id']);
-        } else {
-            $query->whereIn('profile_visibility', ['public', 'connections_only'])
-                  ->select(['id', 'name', 'profile_picture', 'course', 'student_id',
-                             'graduation_year', 'section_id', 'motto', 'batch', 'profile_visibility'])
-                  ->with('section:id,name');
-        }
+        $students = $this->batchService->getBatchStudents($batch, $isPremium);
 
         return response()->json([
-            'data'       => $query->orderBy('name')->paginate(30),
+            'data'       => $students,
             'is_premium' => $isPremium,
             'batch'      => $batch->only(['id', 'name', 'course', 'graduation_year', 'department']),
         ]);
     }
 
     // ── GET /api/batchmates ────────────────────────────────────────────────
-    // View Mode: Batch Only
 
     public function batchmates(Request $request): JsonResponse
     {
@@ -84,7 +74,6 @@ class BatchController extends Controller
     }
 
     // ── GET /api/discover/sectionmates ─────────────────────────────────────
-    // View Mode: Section Only
 
     public function sectionmates(Request $request): JsonResponse
     {
@@ -101,31 +90,27 @@ class BatchController extends Controller
     }
 
     // ── GET /api/discover/school ───────────────────────────────────────────
-    // View Mode: Whole School — server-side paginated + filtered
 
     public function wholeSchool(Request $request): JsonResponse
     {
-        $viewer  = $request->user();
-        $filters = $request->only(['search', 'course', 'department', 'year', 'section_id']);
-
+        $viewer    = $request->user();
+        $filters   = $request->only(['search', 'course', 'department', 'year', 'section_id']);
         $paginated = $this->batchService->getWholeSchool($viewer, $filters, 40);
 
         return response()->json([
-            'data'        => $paginated,
-            'is_premium'  => $viewer->is_premium,
-            'view_mode'   => 'school',
-            'filters'     => $filters,
+            'data'       => $paginated,
+            'is_premium' => $viewer->is_premium,
+            'view_mode'  => 'school',
+            'filters'    => $filters,
         ]);
     }
 
     // ── GET /api/discover/cross-program ───────────────────────────────────
-    // View Mode: Cross-Program — other courses, Fuse.js on client
 
     public function crossProgram(Request $request): JsonResponse
     {
-        $viewer  = $request->user();
-        $filters = $request->only(['search', 'course', 'department', 'year', 'exclude_course']);
-
+        $viewer    = $request->user();
+        $filters   = $request->only(['search', 'course', 'department', 'year', 'exclude_course']);
         $paginated = $this->batchService->getCrossProgram($viewer, $filters, 40);
         $stats     = $this->batchService->getCrossProgramStats($viewer);
 

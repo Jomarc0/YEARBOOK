@@ -1,14 +1,17 @@
 import { useState } from "react";
 import api from "../services/api";
+import { useAuth } from "../context/AuthContext";
 
-export default function LoginPage({ onLogin }) {
+export default function LoginPage() {
+  const { handleLogin } = useAuth();
+
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
-  const [showPw, setShowPw] = useState(false);
-  const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
+  const [showPw, setShowPw]     = useState(false);
+  const [error, setError]       = useState("");
+  const [loading, setLoading]   = useState(false);
 
-  const logoSrc = "/images/NU_logo.png";
+  const logoSrc     = "/images/NU_logo.png";
   const buildingSrc = "/images/NU-building.jpg";
 
   const handleSubmit = async (e) => {
@@ -18,13 +21,12 @@ export default function LoginPage({ onLogin }) {
     try {
       const res = await api.post("/admin/login", { username, password });
       const { token, admin } = res.data;
-      localStorage.setItem("admin_token", token);
-      localStorage.setItem("admin_user", JSON.stringify(admin));
-      onLogin(admin);
+      handleLogin(admin, token); // ← pass BOTH admin and token to AuthContext
     } catch (err) {
       setError(err.response?.data?.message || "Invalid credentials.");
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   return (
@@ -42,7 +44,6 @@ export default function LoginPage({ onLogin }) {
             <div className="mb-4 grid h-16 w-16 place-items-center overflow-hidden rounded-xl border border-amber-300/60 bg-white shadow-lg">
               <img src={logoSrc} alt="National University Logo" className="h-[86%] w-[86%] object-contain" />
             </div>
-
             <h2 className="mb-2 text-3xl font-extrabold leading-tight md:text-4xl">National University</h2>
             <p className="max-w-sm text-sm leading-relaxed text-blue-100 md:text-base">
               Digital Yearbook Admin Portal

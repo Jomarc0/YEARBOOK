@@ -13,19 +13,20 @@ use Illuminate\Http\Request;
 /**
  * TranscriptController
  * ─────────────────────────────────────────────────────────────
- * Premium-only. Routes gated by 'premium' middleware in api.php.
+ * GET    /api/transcripts                          → index
+ * POST   /api/transcripts                          → store
+ * GET    /api/transcripts/{id}                     → show
+ * DELETE /api/transcripts/{id}                     → destroy
+ * GET    /api/transcripts/{id}/subtitles           → subtitles
+ * POST   /api/transcripts/{id}/notes               → regenerateNotes
  *
- * GET    /api/transcripts                → index   (list + searchable)
- * POST   /api/transcripts               → store   (manual upload)
- * GET    /api/transcripts/{id}          → show
- * DELETE /api/transcripts/{id}          → destroy
- * GET    /api/transcripts/{id}/subtitles → subtitles (SRT / VTT)
- * POST   /api/transcripts/{id}/notes    → regenerate speech notes
- *
- * Visibility rules (index + show):
- *   - User's own manual uploads (any status)
- *   - All auto-generated transcripts with status 'done'
- *     (uploaded by admins from graduation videos, visible to all premium users)
+ * Filter params for index:
+ *   ?graduation_photo_id=  → transcripts for a specific video (new)
+ *   ?album_id=             → transcripts for an album (legacy fallback)
+ *   ?q=                    → full-text search
+ *   ?lang=                 → language filter
+ *   ?status=               → status filter
+ *   ?source=               → source filter
  */
 class TranscriptController extends Controller
 {
@@ -34,7 +35,7 @@ class TranscriptController extends Controller
         private readonly CloudinaryService    $cloudinary,
     ) {}
 
-    // ── List + Searchable ─────────────────────────────────────────────────
+    // ── List ──────────────────────────────────────────────────────────────
 
     public function index(Request $request): JsonResponse
     {
@@ -42,6 +43,17 @@ class TranscriptController extends Controller
 
         $query = Transcript::visibleTo($userId)->latest();
 
+        // ── NEW: filter by specific graduation video ──────────────────────
+        if ($photoId = $request->query('graduation_photo_id')) {
+            $query->byPhoto((int) $photoId);
+        }
+
+        // ── LEGACY: filter by album (for old transcripts without photo id) ─
+        elseif ($albumId = $request->query('album_id')) {
+            $query->byAlbum((int) $albumId);
+        }
+
+        // ── Other filters ─────────────────────────────────────────────────
         if ($search = $request->query('q')) {
             $query->where(function ($q) use ($search) {
                 $q->where('title',            'like', "%{$search}%")
@@ -62,13 +74,14 @@ class TranscriptController extends Controller
     public function store(Request $request): JsonResponse
     {
         $request->validate([
-            'audio' => [
-                'required',
-                'file',
+            'audio'                => [
+                'required', 'file',
                 'mimes:mp3,wav,m4a,ogg,flac,webm,mp4,mpeg,mpga',
                 'max:25600',
             ],
-            'title' => 'required|string|max:255',
+            'title'                => 'required|string|max:255',
+            'album_id'             => 'nullable|integer|exists:albums,id',
+            'graduation_photo_id'  => 'nullable|integer|exists:graduation_photos,id',
         ]);
 
         $uploaded = $this->cloudinary->uploadAudio(
@@ -77,12 +90,14 @@ class TranscriptController extends Controller
         );
 
         $transcript = Transcript::create([
-            'title'       => $request->input('title'),
-            'audio_path'  => $uploaded['secure_url'],
-            'public_id'   => $uploaded['public_id'],
-            'status'      => 'pending',
-            'source'      => 'manual',
-            'uploaded_by' => $request->user()->id,
+            'title'               => $request->input('title'),
+            'audio_path'          => $uploaded['secure_url'],
+            'public_id'           => $uploaded['public_id'],
+            'status'              => 'pending',
+            'source'              => 'manual',
+            'uploaded_by'         => $request->user()->id,
+            'album_id'            => $request->input('album_id'),
+            'graduation_photo_id' => $request->input('graduation_photo_id'),
         ]);
 
         GenerateTranscript::dispatch($transcript);
@@ -105,7 +120,6 @@ class TranscriptController extends Controller
 
     public function destroy(int $id, Request $request): JsonResponse
     {
-        // Users can only delete their own transcripts (not auto-generated ones)
         $transcript = Transcript::where('id', $id)
             ->where('uploaded_by', $request->user()->id)
             ->firstOrFail();
@@ -134,7 +148,7 @@ class TranscriptController extends Controller
             ->where('status', 'done')
             ->firstOrFail();
 
-        $format   = in_array($request->query('format'), ['srt', 'vtt'])
+        $format = in_array($request->query('format'), ['srt', 'vtt'])
             ? $request->query('format') : 'srt';
 
         $content  = $this->transcriptionService->generateSubtitles($transcript, $format);

@@ -38,6 +38,12 @@ api.interceptors.request.use(config => {
 api.interceptors.response.use(
   (res) => res,
   (err) => {
+    if (err.response?.status === 503 && err.response?.data?.code === 'MAINTENANCE') {
+      if (!window.location.pathname.startsWith('/maintenance')) {
+        window.location.href = `${FRONTEND_URL}/maintenance`;
+      }
+      return Promise.reject(err);
+    }
     if (err.response?.status === 401) {
       localStorage.removeItem('auth_token');
       localStorage.removeItem('sb_token');

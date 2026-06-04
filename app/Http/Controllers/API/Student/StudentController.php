@@ -23,6 +23,7 @@ class StudentController extends Controller
     ) {}
 
     // ── List ──────────────────────────────────────────────────────────────────
+
     public function index(Request $request)
     {
         $viewer    = $request->user();
@@ -31,8 +32,9 @@ class StudentController extends Controller
         $key = 'students.api.' . $viewerKey . '.' . md5(serialize($request->only(['section_id', 'course', 'q', 'page'])));
 
         return Cache::remember($key, 300, function () use ($request, $viewer) {
-            return User::with('section')
-                ->when(!$viewer, fn($q) =>
+            return User::with(['section', 'studentRecord'])
+                ->where('role', 'student')
+                ->when(! $viewer, fn($q) =>
                     $q->where('profile_visibility', 'public')
                 )
                 ->when($viewer, fn($q) =>
@@ -41,21 +43,32 @@ class StudentController extends Controller
                               ->orWhere('id', $viewer->id);
                     })
                 )
-                ->when($request->section_id, fn($q) => $q->where('section_id', $request->section_id))
-                ->when($request->course,     fn($q) => $q->where('course', $request->course))
-                ->when($request->q, fn($q) => $q->where(function ($sub) use ($request) {
-                    $sub->where('name', 'like', "%{$request->q}%")
-                        ->orWhere('student_id', 'like', "%{$request->q}%");
-                }))
+                ->when($request->section_id, fn($q) =>
+                    $q->where('section_id', $request->section_id)
+                )
+                // course filter now goes through the joined studentRecord
+                ->when($request->course, fn($q) =>
+                    $q->whereHas('studentRecord', fn($s) => $s->where('course', $request->course))
+                )
+                ->when($request->q, fn($q) =>
+                    $q->where(function ($sub) use ($request) {
+                        $sub->where('name', 'like', "%{$request->q}%")
+                            ->orWhereHas('studentRecord', fn($s) =>
+                                $s->where('student_no', 'like', "%{$request->q}%")
+                            );
+                    })
+                )
                 ->orderBy('name')
                 ->paginate(20);
         });
     }
 
     // ── Show ──────────────────────────────────────────────────────────────────
+
     public function show(Request $request, int $id): JsonResponse
     {
-        $student      = User::with('section')->findOrFail($id);
+        // Always eager-load studentRecord so accessors resolve correctly
+        $student      = User::with(['section', 'studentRecord'])->findOrFail($id);
         $isSubscribed = $request->attributes->get('viewer_is_subscribed', false);
         $isOwner      = $request->user()?->id === $id;
 
@@ -67,15 +80,19 @@ class StudentController extends Controller
         }
 
         if (! $isSubscribed) {
+            // Non-subscribed viewers get minimal public data only
             return response()->json([
                 'id'                   => $student->id,
                 'name'                 => $student->name,
-                'profile_picture'      => $student->profile_picture,
+                'profile_picture'      => $student->profile_picture,   // accessor
                 'is_premium'           => $student->is_premium,
                 'is_subscribed_viewer' => false,
             ]);
         }
 
+        // Subscribed viewer — full profile
+        // toArray() will include all accessor values (course, honors, ambition, etc.)
+        // because they are defined as getXxxAttribute() on the model.
         return response()->json(array_merge(
             $student->toArray(),
             ['is_subscribed_viewer' => true]
@@ -83,24 +100,29 @@ class StudentController extends Controller
     }
 
     // ── Update photo ──────────────────────────────────────────────────────────
+
     public function updatePhoto(Request $request): JsonResponse
     {
         $request->validate(['photo' => 'required|image|mimes:jpeg,png,jpg|max:5120']);
 
         $user = $request->user();
 
-        if ($user->profile_picture_public_id) {
+        // Delete old photo from storage if it exists
+        if ($user->getRawOriginal('profile_picture_public_id') ?? $user->profile_picture_public_id) {
             try {
-                $this->storage->deletePhoto($user->profile_picture_public_id, 'image');
+                $this->storage->deletePhoto(
+                    $user->getRawOriginal('profile_picture_public_id'),
+                    'image'
+                );
             } catch (\Throwable) {}
         }
 
         if (
-            $user->profile_picture &&
-            !str_starts_with($user->profile_picture, 'http') &&
-            Storage::disk('public')->exists($user->profile_picture)
+            $user->getRawOriginal('profile_picture') &&
+            ! str_starts_with($user->getRawOriginal('profile_picture'), 'http') &&
+            Storage::disk('public')->exists($user->getRawOriginal('profile_picture'))
         ) {
-            Storage::disk('public')->delete($user->profile_picture);
+            Storage::disk('public')->delete($user->getRawOriginal('profile_picture'));
         }
 
         $result = $this->storage->uploadPhoto(
@@ -109,12 +131,13 @@ class StudentController extends Controller
             folder: 'profile_pics',
         );
 
+        // Store on users table directly (overrides the student record photo)
         $user->update([
             'profile_picture'           => $result['secure_url'],
             'profile_picture_public_id' => $result['public_id'] ?? null,
         ]);
 
-        ProcessFaceIndexing::dispatch($user->fresh());
+        ProcessFaceIndexing::dispatch($user->fresh()->load('studentRecord'));
 
         AuditLog::record($request, 'API Update Photo', 'Updated profile photo for ' . $user->email);
 
@@ -125,6 +148,8 @@ class StudentController extends Controller
     }
 
     // ── Update bio ────────────────────────────────────────────────────────────
+    // bio stays on users table — it's the user's own quote, not admin-managed
+
     public function updateBio(Request $request): JsonResponse
     {
         $request->validate(['bio' => 'nullable|string|max:255']);
@@ -134,6 +159,7 @@ class StudentController extends Controller
     }
 
     // ── Update password ───────────────────────────────────────────────────────
+
     public function updatePassword(Request $request): JsonResponse
     {
         $request->validate([
@@ -156,6 +182,7 @@ class StudentController extends Controller
     }
 
     // ── Achievements ──────────────────────────────────────────────────────────
+
     public function achievements(Request $request, int $id): JsonResponse
     {
         $isSubscribed = $request->attributes->get('viewer_is_subscribed', false);
@@ -186,6 +213,7 @@ class StudentController extends Controller
     }
 
     // ── Tagged photos (list) ──────────────────────────────────────────────────
+
     public function taggedPhotos(Request $request, int $id): JsonResponse
     {
         $isSubscribed = $request->attributes->get('viewer_is_subscribed', false);
@@ -219,6 +247,7 @@ class StudentController extends Controller
     }
 
     // ── Tagged photos (add) ───────────────────────────────────────────────────
+
     public function addTaggedPhoto(Request $request): JsonResponse
     {
         $request->validate([
@@ -237,7 +266,6 @@ class StudentController extends Controller
             'status'      => 'approved',
         ]);
 
-        // Notify the tagged user via push + email
         $taggedUser = User::find($request->user_id);
         if ($taggedUser) {
             PhotoTaggedNotification::dispatchFor(
@@ -261,6 +289,7 @@ class StudentController extends Controller
     }
 
     // ── Tagged photos (remove) ────────────────────────────────────────────────
+
     public function removeTaggedPhoto(Request $request, int $photoId): JsonResponse
     {
         $photo   = TaggedPhoto::findOrFail($photoId);

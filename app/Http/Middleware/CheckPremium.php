@@ -3,6 +3,7 @@
 namespace App\Http\Middleware;
 
 use App\Models\Subscription;
+use App\Support\PlatformSettings;
 use Closure;
 use Illuminate\Http\Request;
 
@@ -10,6 +11,10 @@ class CheckPremium
 {
     public function handle(Request $request, Closure $next)
     {
+        if (! PlatformSettings::bool('enable_premium_subscription')) {
+            return $next($request);
+        }
+
         $user = $request->user();
 
         if (! $user) {

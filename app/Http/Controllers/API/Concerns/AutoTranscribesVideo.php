@@ -14,16 +14,18 @@ use Illuminate\Support\Facades\Log;
 trait AutoTranscribesVideo
 {
     /**
-     * @param  array   $uploadResult  Needs 'secure_url' + 'public_id'
-     * @param  string  $title
-     * @param  int     $userId
-     * @param  int|null $albumId      Pass the just-created Album's ID to link transcript → album
+     * @param  array    $uploadResult       Needs 'secure_url' + 'public_id'
+     * @param  string   $title
+     * @param  int      $userId
+     * @param  int|null $albumId            Links transcript → album
+     * @param  int|null $graduationPhotoId  Links transcript → specific video/photo
      */
     protected function maybeQueueTranscription(
         array  $uploadResult,
         string $title,
         int    $userId,
-        ?int   $albumId = null,
+        ?int   $albumId           = null,
+        ?int   $graduationPhotoId = null,  // ← NEW
     ): void {
         if (blank(config('services.groq.key'))) {
             return;
@@ -40,11 +42,12 @@ trait AutoTranscribesVideo
         }
 
         AutoTranscribeVideo::dispatch(
-            cloudinaryUrl: $url,
-            publicId:      $publicId,
-            title:         $title,
-            uploadedBy:    $userId,
-            albumId:       $albumId,
+            cloudinaryUrl:      $url,
+            publicId:           $publicId,
+            title:              $title,
+            uploadedBy:         $userId,
+            albumId:            $albumId,
+            graduationPhotoId:  $graduationPhotoId, 
         );
     }
 }

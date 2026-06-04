@@ -3,44 +3,25 @@
 namespace App\Http\Controllers\API\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Http\Controllers\Concerns\AuditsAdminActions;
+use App\Models\AuditLog;
 use App\Models\Batch;
 use App\Models\Section;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
-/**
- * BatchSectionController
- *
- * Hierarchy: Batch → Department → Course → Section → Students
- *
- * Batches represent an entire graduating population for a given year.
- * Departments and Courses are filterable dimensions on Sections.
- * Sections belong to a Batch and carry a department + course.
- *
- * No new tables are required — the existing `sections` table already has
- * `batch_id`, `course`, and `department` columns (add `department` via
- * migration if it is not yet present; see migration note below).
- *
- * --- MIGRATION NOTE (run if `department` column is missing on sections) ---
- * Schema::table('sections', function (Blueprint $table) {
- *     $table->string('department')->nullable()->after('course');
- * });
- * -------------------------------------------------------------------------
- */
 class BatchSectionController extends Controller
 {
+    use AuditsAdminActions;
+
     // ══════════════════════════════════════════════════════════════════════════
     // BATCHES
     // ══════════════════════════════════════════════════════════════════════════
 
-    /**
-     * GET /api/admin/batches
-     * List all batches with optional search / year / department filters.
-     */
+    // GET /api/admin/batches
     public function batchIndex(Request $request): JsonResponse
     {
-        $query = Batch::query()
-            ->withCount(['sections', 'students']);
+        $query = Batch::query()->withCount(['sections', 'students']);
 
         if ($search = $request->get('search')) {
             $query->where(function ($q) use ($search) {
@@ -67,9 +48,7 @@ class BatchSectionController extends Controller
         return response()->json($batches);
     }
 
-    /**
-     * GET /api/admin/batches/{batch}
-     */
+    // GET /api/admin/batches/{batch}
     public function batchShow(Batch $batch): JsonResponse
     {
         $batch->load(['sections.students', 'students']);
@@ -78,12 +57,7 @@ class BatchSectionController extends Controller
         return response()->json(['data' => $batch]);
     }
 
-    /**
-     * GET /api/admin/batches/{batch}/departments
-     *
-     * Returns distinct departments that have sections under this batch.
-     * Used to populate the Department drill-down panel.
-     */
+    // GET /api/admin/batches/{batch}/departments
     public function batchDepartments(Batch $batch): JsonResponse
     {
         $departments = Section::query()
@@ -99,11 +73,7 @@ class BatchSectionController extends Controller
         return response()->json(['data' => $departments]);
     }
 
-    /**
-     * GET /api/admin/batches/{batch}/departments/{department}/courses
-     *
-     * Returns distinct courses within a department for this batch.
-     */
+    // GET /api/admin/batches/{batch}/departments/{department}/courses
     public function batchDepartmentCourses(Batch $batch, string $department): JsonResponse
     {
         $courses = Section::query()
@@ -120,9 +90,7 @@ class BatchSectionController extends Controller
         return response()->json(['data' => $courses]);
     }
 
-    /**
-     * POST /api/admin/batches
-     */
+    // POST /api/admin/batches
     public function batchStore(Request $request): JsonResponse
     {
         $validated = $request->validate([
@@ -136,15 +104,22 @@ class BatchSectionController extends Controller
 
         $batch = Batch::create($validated);
 
+        $this->audit(
+            AuditLog::ACTION_BATCH_CREATED,
+            "Created batch '{$batch->name}' ({$batch->graduation_year}) ID #{$batch->id}.",
+            AuditLog::STATUS_SUCCESS,
+            null,
+            $batch->id,
+            "batch#{$batch->id}",
+        );
+
         return response()->json([
             'message' => 'Batch created successfully.',
             'data'    => $batch,
         ], 201);
     }
 
-    /**
-     * PUT /api/admin/batches/{batch}
-     */
+    // PUT /api/admin/batches/{batch}
     public function batchUpdate(Request $request, Batch $batch): JsonResponse
     {
         $validated = $request->validate([
@@ -158,34 +133,45 @@ class BatchSectionController extends Controller
 
         $batch->update($validated);
 
+        $this->audit(
+            AuditLog::ACTION_BATCH_UPDATED,
+            "Updated batch '{$batch->name}' ID #{$batch->id}. Fields: " . implode(', ', array_keys($validated)),
+            AuditLog::STATUS_SUCCESS,
+            null,
+            $batch->id,
+            "batch#{$batch->id}",
+        );
+
         return response()->json([
             'message' => 'Batch updated successfully.',
             'data'    => $batch->fresh(),
         ]);
     }
 
-    /**
-     * DELETE /api/admin/batches/{batch}
-     */
+    // DELETE /api/admin/batches/{batch}
     public function batchDestroy(Batch $batch): JsonResponse
     {
-        $batch->students()->update(['batch_id' => null]);
-        $batch->sections()->update(['batch_id' => null]);
+        $snapshot = "{$batch->name} ({$batch->graduation_year}) ID #{$batch->id}";
+
         $batch->delete();
 
-        return response()->json(['message' => 'Batch deleted successfully.']);
+        $this->audit(
+            AuditLog::ACTION_BATCH_DELETED,
+            "Moved batch '{$snapshot}' to trash.",
+            AuditLog::STATUS_WARNING,
+            null,
+            $batch->id,
+            "batch#{$batch->id}",
+        );
+
+        return response()->json(['message' => 'Batch moved to trash.']);
     }
 
     // ══════════════════════════════════════════════════════════════════════════
     // SECTIONS
     // ══════════════════════════════════════════════════════════════════════════
 
-    /**
-     * GET /api/admin/sections
-     *
-     * Supports filtering by batch_id, department, and course — enabling
-     * the full Batch → Department → Course → Section drill-down.
-     */
+    // GET /api/admin/sections
     public function sectionIndex(Request $request): JsonResponse
     {
         $query = Section::query()
@@ -194,8 +180,8 @@ class BatchSectionController extends Controller
 
         if ($search = $request->get('search')) {
             $query->where(function ($q) use ($search) {
-                $q->where('name',       'like', "%{$search}%")
-                  ->orWhere('course',   'like', "%{$search}%")
+                $q->where('name',        'like', "%{$search}%")
+                  ->orWhere('course',    'like', "%{$search}%")
                   ->orWhere('department','like', "%{$search}%");
             });
         }
@@ -204,12 +190,10 @@ class BatchSectionController extends Controller
             $query->where('batch_id', $batchId);
         }
 
-        // NEW: filter by department (used in Department → Course → Section drill-down)
         if ($department = $request->get('department')) {
             $query->where('department', $department);
         }
 
-        // NEW: filter by course (used in Course → Section drill-down)
         if ($course = $request->get('course')) {
             $query->where('course', $course);
         }
@@ -227,9 +211,7 @@ class BatchSectionController extends Controller
         return response()->json($sections);
     }
 
-    /**
-     * GET /api/admin/sections/{section}
-     */
+    // GET /api/admin/sections/{section}
     public function sectionShow(Section $section): JsonResponse
     {
         $section->load(['batch', 'adviser', 'students']);
@@ -238,18 +220,13 @@ class BatchSectionController extends Controller
         return response()->json(['data' => $section]);
     }
 
-    /**
-     * POST /api/admin/sections
-     *
-     * `department` field added to associate section with a department
-     * within the batch, enabling the full hierarchy.
-     */
+    // POST /api/admin/sections
     public function sectionStore(Request $request): JsonResponse
     {
         $validated = $request->validate([
             'name'        => 'required|string|max:255',
             'course'      => 'nullable|string|max:255',
-            'department'  => 'nullable|string|max:255',   // NEW
+            'department'  => 'nullable|string|max:255',
             'batch_year'  => 'nullable|integer|min:2000|max:2100',
             'batch_id'    => 'nullable|exists:batches,id',
             'adviser_id'  => 'nullable|exists:faculty,id',
@@ -258,21 +235,28 @@ class BatchSectionController extends Controller
 
         $section = Section::create($validated);
 
+        $this->audit(
+            AuditLog::ACTION_SECTION_CREATED,
+            "Created section '{$section->name}' (batch ID #{$section->batch_id}) ID #{$section->id}.",
+            AuditLog::STATUS_SUCCESS,
+            null,
+            $section->id,
+            "section#{$section->id}",
+        );
+
         return response()->json([
             'message' => 'Section created successfully.',
             'data'    => $section,
         ], 201);
     }
 
-    /**
-     * PUT /api/admin/sections/{section}
-     */
+    // PUT /api/admin/sections/{section}
     public function sectionUpdate(Request $request, Section $section): JsonResponse
     {
         $validated = $request->validate([
             'name'        => 'sometimes|string|max:255',
             'course'      => 'nullable|string|max:255',
-            'department'  => 'nullable|string|max:255',   // NEW
+            'department'  => 'nullable|string|max:255',
             'batch_year'  => 'nullable|integer|min:2000|max:2100',
             'batch_id'    => 'nullable|exists:batches,id',
             'adviser_id'  => 'nullable|exists:faculty,id',
@@ -281,20 +265,37 @@ class BatchSectionController extends Controller
 
         $section->update($validated);
 
+        $this->audit(
+            AuditLog::ACTION_SECTION_UPDATED,
+            "Updated section '{$section->name}' ID #{$section->id}. Fields: " . implode(', ', array_keys($validated)),
+            AuditLog::STATUS_SUCCESS,
+            null,
+            $section->id,
+            "section#{$section->id}",
+        );
+
         return response()->json([
             'message' => 'Section updated successfully.',
             'data'    => $section->fresh(['batch', 'adviser']),
         ]);
     }
 
-    /**
-     * DELETE /api/admin/sections/{section}
-     */
+    // DELETE /api/admin/sections/{section}
     public function sectionDestroy(Section $section): JsonResponse
     {
-        $section->students()->update(['section_id' => null]);
+        $snapshot = "{$section->name} ID #{$section->id}";
+
         $section->delete();
 
-        return response()->json(['message' => 'Section deleted successfully.']);
+        $this->audit(
+            AuditLog::ACTION_SECTION_DELETED,
+            "Moved section '{$snapshot}' to trash.",
+            AuditLog::STATUS_WARNING,
+            null,
+            $section->id,
+            "section#{$section->id}",
+        );
+
+        return response()->json(['message' => 'Section moved to trash.']);
     }
 }

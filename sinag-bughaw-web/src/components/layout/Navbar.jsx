@@ -4,6 +4,7 @@ import { storageUrl }                  from '@/api/client';
 import NotificationBell                from '@/components/feedback/NotificationBell';
 import { useState, useRef, useEffect } from 'react';
 import { messagesApi }                 from '@/api/messaging.api';
+import { useAppConfig }                from '@/features/platform/AppConfigProvider';
 
 // ─── tier helper (shared logic) ───────────────────────────────────────────────
 const getTier = (user) => {
@@ -106,6 +107,7 @@ const getPremiumDropItem = (tier) => {
 // ─── component ────────────────────────────────────────────────────────────────
 export default function Navbar() {
   const { user, logout } = useAuth();
+  const { isOn }         = useAppConfig();
   const location         = useLocation();
   const [dropOpen, setDropOpen]     = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -114,7 +116,15 @@ export default function Navbar() {
 
   const userTier = getTier(user);
 
-  const dropItems = [...BASE_DROP_ITEMS, getPremiumDropItem(userTier)];
+  const navLinks = NAV_LINKS.filter((link) => {
+    if (link.to === '/directory') return isOn('enable_student_directory_search');
+    return true;
+  });
+
+  const dropItems = [
+    ...BASE_DROP_ITEMS,
+    ...(isOn('enable_premium_subscription') ? [getPremiumDropItem(userTier)] : []),
+  ];
 
   const avatarSrc =
     storageUrl(user?.profile_picture) ||
@@ -155,7 +165,7 @@ export default function Navbar() {
 
         {/* ── Desktop nav links ── */}
         <div className="hidden lg:flex items-center gap-0.5">
-          {NAV_LINKS.map(({ to, label }) => (
+          {navLinks.map(({ to, label }) => (
             <Link
               key={to} to={to}
               className={`no-underline text-[13px] px-4 py-1.5 rounded-lg transition-all duration-150 font-medium
@@ -304,7 +314,7 @@ export default function Navbar() {
         <div className="lg:hidden fixed top-16 left-0 right-0 z-[999] bg-[#1d2b4b]/98 backdrop-blur-lg
                         border-b border-white/10 px-4 py-3 shadow-xl">
           <div className="flex flex-col gap-0.5">
-            {NAV_LINKS.map(({ to, label }) => (
+            {navLinks.map(({ to, label }) => (
               <Link
                 key={to} to={to}
                 onClick={() => setMobileOpen(false)}

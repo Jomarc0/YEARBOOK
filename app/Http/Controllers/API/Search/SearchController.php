@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Album;
 use App\Models\Faculty;
 use App\Models\User;
+use App\Support\PlatformSettings;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -39,7 +40,7 @@ class SearchController extends Controller
         $results = [];
 
         if (in_array($type, ['students', 'all'])) {
-            $results['students'] = User::where('role', 'student')
+            $results['students'] = User::whereIn('role', PlatformSettings::directoryRoles())
                 ->where(function ($q) use ($query) {
                     $q->where('name',       'like', "%{$query}%")
                       ->orWhere('student_id', 'like', "%{$query}%")
@@ -81,6 +82,10 @@ class SearchController extends Controller
     // ── Student search — DB-based with Scout fallback ──────────────────────────
     public function students(Request $request): JsonResponse
     {
+        if ($denied = PlatformSettings::featureDisabled('enable_student_directory_search', 'Student directory search')) {
+            return $denied;
+        }
+
         $query       = trim($request->get('q', ''));
         $course      = $request->get('course');
         $courseShort = $request->get('course_short');
@@ -118,7 +123,7 @@ class SearchController extends Controller
             if ($batchYear)   $builder->where('batch_year',   (int) $batchYear);
             if ($section)     $builder->where('section',      $section);
 
-            $builder->where('role', 'student');
+            $builder->whereIn('role', PlatformSettings::directoryRoles());
 
             $paginator = $builder->paginate($perPage);
 
@@ -153,7 +158,7 @@ class SearchController extends Controller
         int     $perPage
     ): JsonResponse {
         $builder = User::with('section')
-            ->where('role', 'student')
+            ->whereIn('role', PlatformSettings::directoryRoles())
             ->when($query !== '', function ($q) use ($query) {
                 $q->where(function ($sub) use ($query) {
                     $sub->where('name',       'like', "%{$query}%")
@@ -195,14 +200,14 @@ class SearchController extends Controller
         try {
             if ($this->scoutAvailable()) {
                 $results = User::search($query)
-                    ->where('role', 'student')
+                    ->whereIn('role', PlatformSettings::directoryRoles())
                     ->take(self::SUGGEST_LIMIT)
                     ->get();
             } else {
                 throw new \RuntimeException('Scout not available');
             }
         } catch (\Throwable) {
-            $results = User::where('role', 'student')
+            $results = User::whereIn('role', PlatformSettings::directoryRoles())
                 ->where(function ($q) use ($query) {
                     $q->where('name',       'like', "%{$query}%")
                       ->orWhere('student_id', 'like', "%{$query}%");
@@ -227,7 +232,7 @@ class SearchController extends Controller
     // ── Filters ────────────────────────────────────────────────────────────────
     public function studentFilters(): JsonResponse
     {
-        $courses = User::where('role', 'student')
+        $courses = User::whereIn('role', PlatformSettings::directoryRoles())
             ->whereNotNull('course')
             ->select('course')
             ->distinct()
@@ -235,7 +240,7 @@ class SearchController extends Controller
             ->pluck('course')
             ->map(fn($c) => ['label' => $this->shortCourse($c), 'value' => $c]);
 
-        $batchYears = User::where('role', 'student')
+        $batchYears = User::whereIn('role', PlatformSettings::directoryRoles())
             ->whereHas('section', fn($q) => $q->whereNotNull('batch_year'))
             ->with('section:id,batch_year')
             ->get()

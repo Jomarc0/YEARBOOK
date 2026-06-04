@@ -4,11 +4,21 @@ import { useAuth } from '@/features/auth/hooks/useAuth';
 import Navbar from '@/components/layout/Navbar';
 import Footer from '@/components/layout/Footer';
 
-function getInitials(name = '') {
-  return name.trim().split(/\s+/).map(w => w[0]?.toUpperCase() || '').slice(0, 2).join('');
+// ── Helper: resolve storage URLs from env ─────────────────────────────────────
+const storageUrl = (path) =>
+  path ? `${import.meta.env.VITE_API_URL}/storage/${path}` : null;
+
+// Build display name from Student model fields (first_name + last_name)
+const fullName = (s) =>
+  `${s.first_name ?? ''} ${s.last_name ?? ''}`.trim() || 'Unknown';
+
+// Initials from first + last name
+function getInitials(s) {
+  const f = s.first_name?.[0]?.toUpperCase() ?? '';
+  const l = s.last_name?.[0]?.toUpperCase()  ?? '';
+  return f + l || '?';
 }
 
-// Visibility badge shown to premium users on each card
 function VisibilityBadge({ visibility }) {
   const map = {
     public:           { label: 'Public',      bg: '#ecfdf5', color: '#059669' },
@@ -24,7 +34,6 @@ function VisibilityBadge({ visibility }) {
   );
 }
 
-// Locked card overlay for free users
 function LockedOverlay() {
   return (
     <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 rounded-2xl"
@@ -47,6 +56,12 @@ export default function SectionDetailPage() {
     error, isPremium, counts,
   } = useSection(id);
 
+  // useSection may return students as a Laravel paginator ({ data: [...] })
+  // or as a plain array — normalise to always be an array.
+  const studentList = Array.isArray(students)
+    ? students
+    : (students?.data ?? []);
+
   // ── Loading ───────────────────────────────────────────────────────────────
   if (loading) return (
     <div className="min-h-screen flex items-center justify-center">
@@ -66,7 +81,7 @@ export default function SectionDetailPage() {
     </div>
   );
 
-  const hiddenCount = counts.total - counts.visible;
+  const hiddenCount = (counts?.total ?? 0) - (counts?.visible ?? studentList.length);
 
   return (
     <div className="min-h-screen flex flex-col"
@@ -96,7 +111,6 @@ export default function SectionDetailPage() {
         borderRadius: '0 0 60px 60px',
         color:        'white',
       }}>
-        {/* Breadcrumb */}
         <Link to="/sections"
           className="inline-flex items-center gap-2 text-sm no-underline mb-6 transition-opacity"
           style={{ color: 'rgba(255,255,255,0.55)' }}
@@ -133,14 +147,14 @@ export default function SectionDetailPage() {
           <div className="text-center rounded-2xl p-5"
             style={{ background: 'rgba(255,255,255,0.1)', minWidth: '130px' }}>
             <p className="font-black m-0" style={{ fontSize: '2.5rem', color: '#fdb813' }}>
-              {counts.total}
+              {counts?.total ?? studentList.length}
             </p>
             <p className="text-xs font-semibold m-0" style={{ opacity: 0.65 }}>
               total students
             </p>
             {!isPremium && hiddenCount > 0 && (
               <p className="text-xs mt-1 m-0" style={{ opacity: 0.5 }}>
-                {counts.visible} visible
+                {counts?.visible ?? studentList.length} visible
               </p>
             )}
           </div>
@@ -178,7 +192,7 @@ export default function SectionDetailPage() {
           style={{ background: 'white', border: '1.5px solid #e2e8f0' }}>
           <i className="fas fa-crown" style={{ color: '#fdb813' }} />
           <p className="text-sm font-semibold m-0" style={{ color: '#1d2b4b' }}>
-            Premium Access · Showing all {counts.visible} visible classmates
+            Premium Access · Showing all {counts?.visible ?? studentList.length} visible classmates
             {hiddenCount > 0 && (
               <span style={{ color: '#94a3b8', fontWeight: 400 }}>
                 {' '}({hiddenCount} private account{hiddenCount !== 1 ? 's' : ''} hidden by their owners)
@@ -192,79 +206,107 @@ export default function SectionDetailPage() {
       <main style={{ padding: '40px 8% 80px', flex: 1 }}>
         <h2 className="font-black mb-6" style={{ fontSize: '1.15rem', color: '#1d2b4b' }}>
           {isPremium ? 'All Classmates' : 'Public Profiles'}
+          <span className="ml-2 text-sm font-semibold" style={{ color: '#94a3b8' }}>
+            ({studentList.length})
+          </span>
         </h2>
 
-        {students.length > 0 ? (
+        {studentList.length > 0 ? (
           <div style={{
             display:             'grid',
             gridTemplateColumns: 'repeat(auto-fill, minmax(190px, 1fr))',
             gap:                 '22px',
           }}>
-            {students.map((student, i) => (
-              <Link key={student.id} to={`/profile/${student.id}`} className="no-underline relative">
-                <div
-                  className="stu-chip bg-white rounded-2xl overflow-hidden"
-                  style={{
-                    border:         '1px solid #e8ecf4',
-                    animationDelay: `${i * 0.04}s`,
-                  }}>
+            {studentList.map((student, i) => {
+              const name  = fullName(student);
+              const photo = storageUrl(student.photo);
 
-                  {/* Photo */}
-                  <div style={{ height: '195px', overflow: 'hidden', background: '#1d2b4b', position: 'relative' }}>
-                    {student.profile_picture ? (
-                      <img
-                        src={`http://127.0.0.1:8000/storage/${student.profile_picture}`}
-                        alt={student.name}
-                        className="w-full h-full object-cover transition-transform duration-500 hover:scale-105"
-                      />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center"
-                        style={{ fontSize: '3rem', fontWeight: 900, color: '#fdb813' }}>
-                        {getInitials(student.name)}
+              return (
+                // FIX: navigate to DiscoveryStudentProfile via /discover/students/:id
+                <Link
+                  key={student.id}
+                  to={`/discover/students/${student.id}`}
+                  className="no-underline relative block"
+                >
+                  <div
+                    className="stu-chip bg-white rounded-2xl overflow-hidden"
+                    style={{
+                      border:         '1px solid #e8ecf4',
+                      animationDelay: `${i * 0.04}s`,
+                    }}>
+
+                    {/* Photo */}
+                    <div style={{
+                      height:   '195px',
+                      overflow: 'hidden',
+                      background: '#1d2b4b',
+                      position: 'relative',
+                    }}>
+                      {photo ? (
+                        <img
+                          src={photo}
+                          alt={name}
+                          className="w-full h-full object-cover transition-transform duration-500 hover:scale-105"
+                          onError={e => { e.target.style.display = 'none'; e.target.nextSibling.style.display = 'flex'; }}
+                        />
+                      ) : null}
+                      {/* Fallback initials — shown when no photo or photo fails to load */}
+                      <div
+                        className="w-full h-full items-center justify-center"
+                        style={{
+                          fontSize:   '3rem',
+                          fontWeight: 900,
+                          color:      '#fdb813',
+                          display:    photo ? 'none' : 'flex',
+                        }}>
+                        {getInitials(student)}
                       </div>
-                    )}
 
-                    {/* Year badge on photo */}
-                    {student.graduation_year && (
-                      <span className="absolute top-2 right-2 text-xs font-bold px-2 py-1 rounded-lg"
-                        style={{ background: 'rgba(0,0,0,0.45)', color: 'white' }}>
-                        '{String(student.graduation_year).slice(-2)}
-                      </span>
-                    )}
-                  </div>
+                      {/* Year badge */}
+                      {student.graduation_year && (
+                        <span className="absolute top-2 right-2 text-xs font-bold px-2 py-1 rounded-lg"
+                          style={{ background: 'rgba(0,0,0,0.45)', color: 'white' }}>
+                          '{String(student.graduation_year).slice(-2)}
+                        </span>
+                      )}
+                    </div>
 
-                  {/* Info */}
-                  <div style={{ padding: '14px 16px 16px' }}>
-                    <h4 className="font-black truncate m-0"
-                      style={{ fontSize: '0.92rem', color: '#1d2b4b', lineHeight: 1.3 }}>
-                      {student.name}
-                    </h4>
-                    <p className="text-xs m-0 mt-1" style={{ color: '#94a3b8' }}>
-                      {student.student_id || 'N/A'}
-                    </p>
+                    {/* Info */}
+                    <div style={{ padding: '14px 16px 16px' }}>
+                      {/* FIX: use first_name + last_name — NOT student.name */}
+                      <h4 className="font-black truncate m-0"
+                        style={{ fontSize: '0.92rem', color: '#1d2b4b', lineHeight: 1.3 }}>
+                        {name}
+                      </h4>
 
-                    {/* Premium-only fields */}
-                    {isPremium && student.email && (
-                      <p className="text-xs mt-2 truncate m-0" style={{ color: '#64748b' }}>
-                        <i className="fas fa-envelope mr-1" style={{ opacity: 0.5 }} />
-                        {student.email}
+                      {/* FIX: use student_no — NOT student_id */}
+                      <p className="text-xs m-0 mt-1" style={{ color: '#94a3b8' }}>
+                        {student.student_no ?? 'N/A'}
                       </p>
-                    )}
-                    {isPremium && student.motto && (
-                      <p className="text-xs italic mt-2 m-0"
-                        style={{ color: '#64748b', lineHeight: 1.4 }}>
-                        "{student.motto}"
-                      </p>
-                    )}
-                    {isPremium && (
-                      <VisibilityBadge visibility={student.profile_visibility} />
-                    )}
-                  </div>
-                </div>
-              </Link>
-            ))}
 
-            {/* Ghost locked cards — show how many are hidden */}
+                      {/* Premium-only fields */}
+                      {isPremium && student.email && (
+                        <p className="text-xs mt-2 truncate m-0" style={{ color: '#64748b' }}>
+                          <i className="fas fa-envelope mr-1" style={{ opacity: 0.5 }} />
+                          {student.email}
+                        </p>
+                      )}
+                      {isPremium && student.motto && (
+                        <p className="text-xs italic mt-2 m-0"
+                          style={{ color: '#64748b', lineHeight: 1.4 }}>
+                          "{student.motto}"
+                        </p>
+                      )}
+                      {isPremium && (
+                        <VisibilityBadge visibility={student.profile_visibility} />
+                      )}
+                    </div>
+                  </div>
+                </Link>
+              );
+            })}
+
+            {/* Ghost locked cards */}
             {!isPremium && hiddenCount > 0 &&
               Array.from({ length: Math.min(hiddenCount, 6) }).map((_, i) => (
                 <div key={`locked-${i}`} className="relative" style={{ minHeight: '280px' }}>
@@ -284,7 +326,7 @@ export default function SectionDetailPage() {
             }
           </div>
         ) : (
-          /* ── Empty State ───────────────────────────────────────────────── */
+          /* ── Empty State ─────────────────────────────────────────────────── */
           <div className="text-center py-24"
             style={{ background: 'white', borderRadius: '24px', boxShadow: '0 4px 20px rgba(0,0,0,0.03)' }}>
             <i className="fas fa-users text-6xl mb-5 block opacity-10" style={{ color: '#1d2b4b' }} />

@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Jobs\Notification\SendOtpEmail;
 use App\Models\Consent;
 use App\Models\OtpVerification;
+use App\Models\Student;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
@@ -13,35 +14,53 @@ use Illuminate\Validation\ValidationException;
 use Laravel\Socialite\Facades\Socialite;
 use Illuminate\Support\Str;
 use App\Services\Notification\PHPMailerService;
+use App\Support\PlatformSettings;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\RateLimiter;
 
 class AuthController extends Controller
 {
-    // ── Register ───────────────────────────────────────────────────────
+    // ── Register ───────────────────────────────────────────────────────────
 
     public function register(Request $request)
     {
+        if (PlatformSettings::bool('maintenance_mode')) {
+            return PlatformSettings::maintenanceResponse();
+        }
+
         $request->validate([
             'first_name'       => 'required|string|max:255',
             'last_name'        => 'required|string|max:255',
             'email'            => 'required|email|unique:users',
             'password'         => 'required|min:8|confirmed',
-            'student_id'       => 'required|unique:users,student_id',
-            'course'           => 'nullable|string|max:255',
+            // student_id here is the student NUMBER string (e.g. "2021-00123")
+            // used only for lookup — not stored in users anymore
+            'student_id'       => 'required|string|max:255',
             'consent_accepted' => 'required|accepted',
         ]);
 
+        // ── Try to find a matching student record ──────────────────────────
+        // Match on student_no + first_name + last_name (case-insensitive)
+        $studentRecord = Student::where('student_no', $request->student_id)
+            ->whereRaw('LOWER(TRIM(first_name)) = ?', [strtolower(trim($request->first_name))])
+            ->whereRaw('LOWER(TRIM(last_name)) = ?',  [strtolower(trim($request->last_name))])
+            ->first();
+
+        // ── Create user — lean, no yearbook data copied ────────────────────
         $user = User::create([
-            'first_name'       => $request->first_name,
-            'last_name'        => $request->last_name,
-            'name'             => $request->first_name . ' ' . $request->last_name,
-            'email'            => $request->email,
-            'password'         => Hash::make($request->password),
-            'student_id'       => $request->student_id,
-            'course'           => $request->course,
-            'consent_accepted' => true,
+            'first_name'        => $request->first_name,
+            'last_name'         => $request->last_name,
+            'name'              => trim($request->first_name . ' ' . $request->last_name),
+            'email'             => $request->email,
+            'password'          => Hash::make($request->password),
+            'student_record_id' => $studentRecord?->id,   // null = browse account
+            // Pull section/batch from student record if matched
+            'section_id'        => $studentRecord?->section_id,
+            'batch_id'          => $studentRecord?->batch_id,
+            'consent_accepted'  => true,
         ]);
 
+        // ── Consent log ───────────────────────────────────────────────────
         Consent::create([
             'user_id'     => $user->id,
             'type'        => 'privacy_policy',
@@ -54,39 +73,109 @@ class AuthController extends Controller
 
         $token = $user->createToken('app-token')->plainTextToken;
 
+        // Load studentRecord so accessors resolve correctly in the response
+        $user->load('studentRecord', 'section');
+
         return response()->json([
-            'user'  => $user,
-            'token' => $token,
+            'user'         => $user,
+            'access_token' => $token,
+            // Tell the frontend whether they were matched as a graduate
+            'is_graduate'  => ! is_null($studentRecord),
         ], 201);
     }
 
-    // ── Login ──────────────────────────────────────────────────────────
+    // ── Login ──────────────────────────────────────────────────────────────
 
     public function login(Request $request)
     {
+        if (PlatformSettings::bool('maintenance_mode')) {
+            return PlatformSettings::maintenanceResponse();
+        }
+
         $request->validate([
             'email'    => 'required|email',
             'password' => 'required',
         ]);
 
+        $key      = 'student_login:' . sha1(strtolower($request->email) . '|' . $request->ip());
+        $maxTries = (int) PlatformSettings::get('max_login_attempts');
+
+        if (RateLimiter::tooManyAttempts($key, $maxTries)) {
+            $seconds = RateLimiter::availableIn($key);
+
+            return response()->json([
+                'message' => "Too many login attempts. Try again in {$seconds} seconds.",
+                'code'    => 'LOGIN_THROTTLED',
+            ], 429);
+        }
+
         $user = User::where('email', $request->email)->first();
 
         if (! $user || ! Hash::check($request->password, $user->password)) {
+            RateLimiter::hit($key, 60 * (int) PlatformSettings::get('session_timeout_minutes'));
+
             throw ValidationException::withMessages([
                 'email' => ['The provided credentials are incorrect.'],
             ]);
         }
 
+        RateLimiter::clear($key);
+
         $token = $user->createToken('app-token')->plainTextToken;
 
         return response()->json([
-            'user'             => $user->load('section'),
+            'user'             => $user->load('studentRecord', 'section'),
             'token'            => $token,
             'requires_consent' => ! $user->consent_accepted,
         ]);
     }
 
-    // ── OTP (login / registration) ─────────────────────────────────────
+    // ── Student lookup (called by RegisterPage before submit) ──────────────
+    // Checks if name + student_no match a student record.
+    // Returns safe preview data only — no sensitive fields.
+
+    public function verifyStudent(Request $request)
+    {
+        $request->validate([
+            'student_no' => 'required|string',
+            'first_name' => 'required|string',
+            'last_name'  => 'required|string',
+        ]);
+
+        $student = Student::where('student_no', $request->student_no)
+            ->whereRaw('LOWER(TRIM(first_name)) = ?', [strtolower(trim($request->first_name))])
+            ->whereRaw('LOWER(TRIM(last_name)) = ?',  [strtolower(trim($request->last_name))])
+            ->first();
+
+        if (! $student) {
+            return response()->json(['found' => false]);
+        }
+
+        // Check if already registered
+        if ($student->hasRegistered()) {
+            return response()->json([
+                'found'   => false,
+                'message' => 'A user account is already linked to this student record.',
+            ]);
+        }
+
+        return response()->json([
+            'found'   => true,
+            'student' => [
+                'student_no'      => $student->student_no,
+                'first_name'      => $student->first_name,
+                'last_name'       => $student->last_name,
+                'course'          => $student->course,
+                'honors'          => $student->honors,
+                'graduation_year' => $student->graduation_year,
+                'photo'           => $student->photo_url,
+                // Pre-fill hints for the form (email from student record if set)
+                'email'           => $student->email,
+            ],
+        ]);
+    }
+
+    // ── OTP ────────────────────────────────────────────────────────────────
 
     public function sendOtp(Request $request)
     {
@@ -134,7 +223,7 @@ class AuthController extends Controller
         return response()->json(['message' => 'Email verified successfully.']);
     }
 
-    // ── Forgot Password ────────────────────────────────────────────────
+    // ── Forgot Password ────────────────────────────────────────────────────
 
     public function forgotPassword(Request $request)
     {
@@ -165,7 +254,6 @@ class AuthController extends Controller
             );
         } catch (\Throwable $e) {
             Log::error('forgotPassword mailer failed: ' . $e->getMessage());
-            // Still return success so OTP step proceeds; email failure shouldn't block the flow
         }
 
         return response()->json(['message' => 'If that email is registered, a reset code has been sent.']);
@@ -189,8 +277,6 @@ class AuthController extends Controller
             return response()->json(['message' => 'Invalid or expired code.'], 422);
         }
 
-        // Issue a short-lived token that authorises the actual password change.
-        // Don't mark used yet — mark it only when the password is saved.
         $resetToken = Str::random(64);
         $record->update(['reset_token' => $resetToken]);
 
@@ -200,9 +286,9 @@ class AuthController extends Controller
     public function resetPassword(Request $request)
     {
         $request->validate([
-            'email'                 => 'required|email',
-            'reset_token'           => 'required|string',
-            'password'              => 'required|min:8|confirmed',
+            'email'       => 'required|email',
+            'reset_token' => 'required|string',
+            'password'    => 'required|min:8|confirmed',
         ]);
 
         $record = OtpVerification::where('email', $request->email)
@@ -222,17 +308,13 @@ class AuthController extends Controller
         }
 
         $user->update(['password' => Hash::make($request->password)]);
-
-        // Consume the record so the token can't be reused
         $record->update(['used' => true, 'reset_token' => null]);
-
-        // Revoke all Sanctum tokens → forces re-login on all devices
         $user->tokens()->delete();
 
         return response()->json(['message' => 'Password reset successfully.']);
     }
 
-    // ── Misc ───────────────────────────────────────────────────────────
+    // ── Misc ───────────────────────────────────────────────────────────────
 
     public function logout(Request $request)
     {
@@ -242,7 +324,7 @@ class AuthController extends Controller
 
     public function me(Request $request)
     {
-        $user = $request->user()->load('section');
+        $user = $request->user()->load('studentRecord', 'section');
         $sub  = \App\Models\Subscription::where('user_id', $user->id)->latest()->first();
 
         return response()->json([

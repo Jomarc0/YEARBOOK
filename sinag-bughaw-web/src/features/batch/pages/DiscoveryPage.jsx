@@ -7,42 +7,53 @@ import { faceApi } from '@/api/gallery.api';
 import FaceSearchButton from '@/components/ui/FaceSearchButton';
 import Navbar from '@/components/layout/Navbar';
 import Footer from '@/components/layout/Footer';
-import { imageUrl, avatarUrl } from '@/utils/imageUrl';
+import { imageUrl } from '@/utils/imageUrl';
 
-// ── Constants ─────────────────────────────────────────────────────────────────
+// ── Constants ──────────────────────────────────────────────────────────────────
 
 const VIEW_MODES = [
-  { key: 'batch',         label: 'My Batch',      icon: 'fa-graduation-cap',  desc: 'Same course & year' },
-  { key: 'section',       label: 'My Section',    icon: 'fa-layer-group',     desc: 'My classmates'      },
-  { key: 'school',        label: 'Whole School',  icon: 'fa-school',          desc: 'All students'       },
-  { key: 'cross_program', label: 'Cross-Program', icon: 'fa-shuffle',         desc: 'Other programs'     },
+  { key: 'batch',         label: 'My Batch',      icon: 'fa-graduation-cap', desc: 'Same course & year' },
+  { key: 'section',       label: 'My Section',    icon: 'fa-layer-group',    desc: 'My classmates'      },
+  { key: 'school',        label: 'Whole School',  icon: 'fa-school',         desc: 'All students'       },
+  { key: 'cross_program', label: 'Cross-Program', icon: 'fa-shuffle',        desc: 'Other programs'     },
 ];
 
-// ── Generate Yearbook Button ──────────────────────────────────────────────────
+// ── Helpers ────────────────────────────────────────────────────────────────────
+
+/**
+ * Resolve display name from a Student model record.
+ * BatchService adds a computed `name` field, but we fall back to
+ * first_name + last_name in case it's missing.
+ */
+function studentName(s) {
+  if (s.name) return s.name;
+  return `${s.first_name ?? ''} ${s.last_name ?? ''}`.trim() || 'Unknown';
+}
+
+/**
+ * Resolve photo URL from a Student model record.
+ * BatchService normalises to profile_picture but we also accept photo / photo_url.
+ */
+function studentPhoto(s) {
+  return s.profile_picture ?? s.photo_url ?? s.photo ?? null;
+}
+
+function getInitials(name = '') {
+  return name.trim().split(/\s+/).map(w => w[0]?.toUpperCase() || '').slice(0, 2).join('');
+}
+
+// ── GenerateYearbookButton ─────────────────────────────────────────────────────
 
 function GenerateYearbookButton({ batchId, label }) {
   const navigate = useNavigate();
   if (!batchId) return null;
-
   return (
     <button
       onClick={() => navigate(`/yearbook/${batchId}`)}
       title={`Open yearbook for Batch ${batchId}`}
-      className="
-        inline-flex items-center gap-2 shrink-0
-        px-4 py-2 rounded-xl border border-amber-400/50
-        text-[0.72rem] font-extrabold tracking-wide whitespace-nowrap
-        bg-amber-400/10 text-amber-400
-        hover:bg-amber-400 hover:text-navy-900 hover:border-amber-400
-        hover:-translate-y-px hover:shadow-[0_6px_20px_rgba(253,184,19,0.3)]
-        transition-all duration-200
-      "
+      className="inline-flex items-center gap-2 shrink-0 px-4 py-2 rounded-xl border border-amber-400/50 text-[0.72rem] font-extrabold tracking-wide whitespace-nowrap bg-amber-400/10 text-amber-400 hover:bg-amber-400 hover:text-[#1d2b4b] hover:border-amber-400 hover:-translate-y-px hover:shadow-[0_6px_20px_rgba(253,184,19,0.3)] transition-all duration-200"
     >
-      <svg
-        width="13" height="13" viewBox="0 0 24 24" fill="none"
-        stroke="currentColor" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round"
-        aria-hidden="true"
-      >
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
         <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>
         <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
       </svg>
@@ -51,7 +62,7 @@ function GenerateYearbookButton({ batchId, label }) {
   );
 }
 
-// ── Shared face search hook ───────────────────────────────────────────────────
+// ── useFaceSearch ──────────────────────────────────────────────────────────────
 
 function useFaceSearch() {
   const [faceSearching, setFaceSearching] = useState(false);
@@ -67,7 +78,10 @@ function useFaceSearch() {
       formData.append('face_image', file);
       const { data } = await faceApi.search(formData);
       const matches  = data.matches ?? [];
-      if (!matches.length) { alert('No matching student found. Ensure the photo shows a clear face.'); return; }
+      if (!matches.length) {
+        alert('No matching student found. Ensure the photo shows a clear face.');
+        return;
+      }
       setFaceMatches(matches);
       setMatchedIds(new Set(matches.map(m => m.user_id)));
     } catch {
@@ -77,12 +91,15 @@ function useFaceSearch() {
     }
   };
 
-  const clearFace = () => { setFaceMatches([]); setMatchedIds(new Set()); };
+  const clearFace = () => {
+    setFaceMatches([]);
+    setMatchedIds(new Set());
+  };
 
   return { faceSearching, faceMatches, matchedIds, handleFaceFile, clearFace };
 }
 
-// ── Face result banner ────────────────────────────────────────────────────────
+// ── FaceResultBanner ───────────────────────────────────────────────────────────
 
 function FaceResultBanner({ matches, onClear }) {
   if (!matches.length) return null;
@@ -93,7 +110,7 @@ function FaceResultBanner({ matches, onClear }) {
           {matches.slice(0, 3).map((m, i) => (
             <img
               key={m.user_id}
-              src={imageUrl(m.profile_picture) || avatarUrl(m.name)}
+              src={imageUrl(m.profile_picture ?? m.photo) || `https://ui-avatars.com/api/?name=${encodeURIComponent(m.name ?? '')}&background=1d2b4b&color=fdb813`}
               alt={m.name}
               className={`w-7 h-7 rounded-lg border-2 border-amber-400 object-cover ${i > 0 ? '-ml-2' : ''}`}
             />
@@ -114,45 +131,63 @@ function FaceResultBanner({ matches, onClear }) {
   );
 }
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
+// ── UpgradeBanner ──────────────────────────────────────────────────────────────
 
-function getInitials(name = '') {
-  return name.trim().split(/\s+/).map(w => w[0]?.toUpperCase() || '').slice(0, 2).join('');
+function UpgradeBanner() {
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-4 rounded-2xl px-6 py-4 mb-6 bg-gradient-to-r from-[#1d2b4b] to-indigo-600 text-white">
+      <div className="flex items-center gap-3">
+        <i className="fas fa-lock text-xl text-amber-400" />
+        <div>
+          <p className="font-extrabold text-sm m-0">Unlock Full Discovery</p>
+          <p className="text-xs m-0 opacity-70">Premium sees all students, full profiles, mottos & contact info.</p>
+        </div>
+      </div>
+      <Link
+        to="/premium"
+        className="no-underline font-bold text-xs px-5 py-3 rounded-xl whitespace-nowrap bg-amber-400 text-[#1d2b4b] hover:bg-amber-300 transition-colors"
+      >
+        Upgrade Now <i className="fas fa-arrow-right ml-1" />
+      </Link>
+    </div>
+  );
 }
 
-// ── Student Card ──────────────────────────────────────────────────────────────
+// ── StudentCard ────────────────────────────────────────────────────────────────
+// Routes to /discover/students/:id which calls the Student model (not User model)
 
 function StudentCard({ student, isPremium, index = 0, isMatched = false, matchSimilarity = null }) {
-  const shortCourse = COURSE_LABELS[student.course] ?? student.course?.split(' ').slice(-2).join(' ') ?? 'Student';
+  const fullName    = studentName(student);
+  const photoSrc    = studentPhoto(student);
+  const studentNum  = student.student_no ?? student.student_id ?? null;
+  const shortCourse = COURSE_LABELS[student.course] ?? student.course ?? 'Student';
 
   return (
     <Link
-      to={`/profile/${student.id}`}
+      to={`/discover/students/${student.id}`}
       className="no-underline group block"
       style={{ animationDelay: `${index * 0.03}s` }}
     >
-      <div
-        className={`
-          bg-white rounded-2xl overflow-hidden transition-all duration-300
-          group-hover:-translate-y-2
-          ${isMatched
-            ? 'border-2 border-amber-400 shadow-[0_8px_28px_rgba(253,184,19,0.2)] group-hover:shadow-[0_16px_40px_rgba(253,184,19,0.28)]'
-            : 'border border-slate-200 shadow-[0_4px_16px_rgba(0,0,0,0.04)] group-hover:shadow-[0_16px_40px_rgba(29,43,75,0.12)]'
-          }
-        `}
-      >
-        {/* Photo area */}
+      <div className={`
+        bg-white rounded-2xl overflow-hidden transition-all duration-300 group-hover:-translate-y-2
+        ${isMatched
+          ? 'border-2 border-amber-400 shadow-[0_8px_28px_rgba(253,184,19,0.2)] group-hover:shadow-[0_16px_40px_rgba(253,184,19,0.28)]'
+          : 'border border-slate-200 shadow-[0_4px_16px_rgba(0,0,0,0.04)] group-hover:shadow-[0_16px_40px_rgba(29,43,75,0.12)]'
+        }
+      `}>
+
+        {/* Photo */}
         <div className="h-[185px] overflow-hidden bg-[#1d2b4b] relative">
-          {student.profile_picture ? (
+          {photoSrc ? (
             <img
-              src={imageUrl(student.profile_picture)}
-              alt={student.name}
+              src={imageUrl(photoSrc)}
+              alt={fullName}
               className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
               onError={e => { e.target.style.display = 'none'; }}
             />
           ) : (
             <div className="w-full h-full flex items-center justify-center text-[2.8rem] font-black text-amber-400">
-              {getInitials(student.name)}
+              {getInitials(fullName)}
             </div>
           )}
 
@@ -170,26 +205,20 @@ function StudentCard({ student, isPremium, index = 0, isMatched = false, matchSi
           )}
         </div>
 
-        {/* Info area */}
+        {/* Info */}
         <div className="px-4 pt-3.5 pb-4">
-          <h4 className="font-black truncate m-0 text-[0.9rem] text-[#1d2b4b]">
-            {student.name}
-          </h4>
+          <h4 className="font-black truncate m-0 text-[0.9rem] text-[#1d2b4b]">{fullName}</h4>
           <span className="inline-block text-xs font-bold mt-1 px-2 py-1 rounded-lg bg-indigo-500/10 text-indigo-600">
             {shortCourse}
           </span>
-          {student.student_id && (
-            <p className="text-xs m-0 mt-1 text-slate-400">{student.student_id}</p>
+          {studentNum && (
+            <p className="text-xs m-0 mt-1 text-slate-400">{studentNum}</p>
           )}
           {isPremium && student.section?.name && (
-            <p className="text-xs font-semibold m-0 mt-1 text-indigo-600">
-              Section {student.section.name}
-            </p>
+            <p className="text-xs font-semibold m-0 mt-1 text-indigo-600">Section {student.section.name}</p>
           )}
           {isPremium && student.motto && (
-            <p className="text-xs italic m-0 mt-2 truncate text-slate-500">
-              "{student.motto}"
-            </p>
+            <p className="text-xs italic m-0 mt-2 truncate text-slate-500">"{student.motto}"</p>
           )}
         </div>
       </div>
@@ -197,9 +226,16 @@ function StudentCard({ student, isPremium, index = 0, isMatched = false, matchSi
   );
 }
 
-// ── Student Grid ──────────────────────────────────────────────────────────────
+// ── StudentGrid ────────────────────────────────────────────────────────────────
 
-function StudentGrid({ students, isPremium, loading, emptyMsg = 'No students found.', matchedIds = new Set(), faceMatches = [] }) {
+function StudentGrid({
+  students,
+  isPremium,
+  loading,
+  emptyMsg = 'No students found.',
+  matchedIds = new Set(),
+  faceMatches = [],
+}) {
   if (loading) return (
     <div className="flex flex-col items-center justify-center py-24 text-slate-400">
       <i className="fas fa-spinner fa-spin text-4xl mb-4 text-indigo-600" />
@@ -207,7 +243,7 @@ function StudentGrid({ students, isPremium, loading, emptyMsg = 'No students fou
     </div>
   );
 
-  if (students.length === 0) return (
+  if (!students.length) return (
     <div className="text-center py-24 bg-white rounded-3xl shadow-[0_4px_20px_rgba(0,0,0,0.03)]">
       <i className="fas fa-users-slash text-6xl mb-5 block opacity-10 text-[#1d2b4b]" />
       <h3 className="font-extrabold text-xl mb-2 text-[#1d2b4b]">No Results</h3>
@@ -221,7 +257,10 @@ function StudentGrid({ students, isPremium, loading, emptyMsg = 'No students fou
         const matchData = faceMatches.find(m => m.user_id === s.id);
         return (
           <StudentCard
-            key={s.id} student={s} isPremium={isPremium} index={i}
+            key={s.id}
+            student={s}
+            isPremium={isPremium}
+            index={i}
             isMatched={matchedIds.has(s.id)}
             matchSimilarity={matchData?.similarity ?? null}
           />
@@ -231,44 +270,20 @@ function StudentGrid({ students, isPremium, loading, emptyMsg = 'No students fou
   );
 }
 
-// ── Upgrade Banner ────────────────────────────────────────────────────────────
-
-function UpgradeBanner() {
-  return (
-    <div className="flex flex-wrap items-center justify-between gap-4 rounded-2xl px-6 py-4 mb-6 bg-gradient-to-r from-[#1d2b4b] to-indigo-600 text-white">
-      <div className="flex items-center gap-3">
-        <i className="fas fa-lock text-xl text-amber-400" />
-        <div>
-          <p className="font-extrabold text-sm m-0">Unlock Full Discovery</p>
-          <p className="text-xs m-0 opacity-70">
-            Premium sees all students, full profiles, mottos & contact info.
-          </p>
-        </div>
-      </div>
-      <Link
-        to="/payment"
-        className="no-underline font-bold text-xs px-5 py-3 rounded-xl whitespace-nowrap bg-amber-400 text-[#1d2b4b] hover:bg-amber-300 transition-colors"
-      >
-        Upgrade Now <i className="fas fa-arrow-right ml-1" />
-      </Link>
-    </div>
-  );
-}
-
-// ── Filters Panel ─────────────────────────────────────────────────────────────
+// ── FiltersPanel ───────────────────────────────────────────────────────────────
 
 function FiltersPanel({ filters, onChange, showCourse = true, showYear = true, showDept = true }) {
-  const selectClass = "text-xs font-bold px-4 py-2 rounded-xl border-none outline-none bg-slate-100 text-slate-500 cursor-pointer";
+  const cls = "text-xs font-bold px-4 py-2 rounded-xl border-none outline-none bg-slate-100 text-slate-500 cursor-pointer hover:bg-slate-200 transition-colors";
 
   return (
-    <div className="flex flex-wrap gap-3 items-center mb-6">
+    <div className="flex flex-wrap gap-3 items-center">
       {showDept && (
         <select
           value={filters.department ?? ''}
           onChange={e => onChange('department', e.target.value || null)}
-          className={selectClass}
+          className={cls}
         >
-          <option value="">All Departments</option>
+          <option value="">All Schools</option>
           {DEPARTMENTS.map(d => <option key={d} value={d}>{d}</option>)}
         </select>
       )}
@@ -276,17 +291,19 @@ function FiltersPanel({ filters, onChange, showCourse = true, showYear = true, s
         <select
           value={filters.course ?? ''}
           onChange={e => onChange('course', e.target.value || null)}
-          className={selectClass}
+          className={cls}
         >
           <option value="">All Programs</option>
-          {COURSES.filter(c => c.value).map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
+          {COURSES.filter(c => c.value).map(c => (
+            <option key={c.value} value={c.value}>{c.label}</option>
+          ))}
         </select>
       )}
       {showYear && (
         <select
           value={filters.year ?? ''}
           onChange={e => onChange('year', e.target.value || null)}
-          className={selectClass}
+          className={cls}
         >
           <option value="">All Years</option>
           {YEAR_OPTIONS.map(y => <option key={y} value={y}>Batch {y}</option>)}
@@ -296,9 +313,9 @@ function FiltersPanel({ filters, onChange, showCourse = true, showYear = true, s
   );
 }
 
-// ── Search Input ──────────────────────────────────────────────────────────────
+// ── SearchInput ────────────────────────────────────────────────────────────────
 
-function SearchInput({ value, onChange, placeholder, hasMatch }) {
+function SearchInput({ value, onChange, placeholder, hasMatch, children }) {
   return (
     <div className="relative flex-1 max-w-[300px]">
       <i className="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-xs text-slate-400 z-[1]" />
@@ -307,71 +324,89 @@ function SearchInput({ value, onChange, placeholder, hasMatch }) {
         onChange={onChange}
         placeholder={placeholder}
         className={`
-          w-full text-sm rounded-xl outline-none
-          pl-8 pr-12 py-2.5 border
-          text-[#1d2b4b] bg-white
+          w-full text-sm rounded-xl outline-none pl-8 pr-12 py-2.5 border text-[#1d2b4b] bg-white
           ${hasMatch ? 'border-amber-400' : 'border-slate-200'}
           focus:border-indigo-400 transition-colors
         `}
       />
+      {children}
     </div>
   );
 }
 
-// ── Result count text ─────────────────────────────────────────────────────────
+// ── ResultCount ────────────────────────────────────────────────────────────────
 
-function ResultCount({ matchedIds, displayed, results, total, label = 'student', extra = null }) {
+function ResultCount({ matchedSize, displayedLength, total, hasQuery, resultsLength, isPremium, suffix = '' }) {
+  if (matchedSize > 0) {
+    return (
+      <p className="text-sm font-semibold mb-4 text-slate-500">
+        <i className="fas fa-brain mr-1 text-amber-400" />
+        {displayedLength} face match{displayedLength !== 1 ? 'es' : ''}
+        {suffix}
+      </p>
+    );
+  }
+  if (hasQuery) {
+    return (
+      <p className="text-sm font-semibold mb-4 text-slate-500">
+        {resultsLength} fuzzy match{resultsLength !== 1 ? 'es' : ''}
+        {suffix}
+      </p>
+    );
+  }
   return (
     <p className="text-sm font-semibold mb-4 text-slate-500">
-      {matchedIds.size > 0
-        ? <><i className="fas fa-brain mr-1 text-amber-400" />{displayed.length} face match{displayed.length !== 1 ? 'es' : ''}</>
-        : total !== undefined
-          ? <>{total?.toLocaleString()} {label}{total !== 1 ? 's' : ''} in the school</>
-          : `${results.length} ${label}${results.length !== 1 ? 's' : ''}`}
-      {extra}
+      {total} {suffix || 'student'}{total !== 1 ? 's' : ''}
+      {!isPremium && <span className="text-slate-400"> · Public profiles only</span>}
     </p>
   );
 }
 
-// ── BatchView ─────────────────────────────────────────────────────────────────
+// ── BatchView ──────────────────────────────────────────────────────────────────
 
 function BatchView({ isPremium, userYear }) {
   const [students, setStudents] = useState([]);
   const [loading,  setLoading]  = useState(true);
   const [filters,  setFilters]  = useState({ course: null, year: null });
+
   const { query, setQuery, results, hasQuery } = useFuseSearch(students, STUDENT_FUSE_KEYS);
   const { faceSearching, faceMatches, matchedIds, handleFaceFile, clearFace } = useFaceSearch();
 
   const load = useCallback(async () => {
     setLoading(true);
-    const params = {};
-    if (filters.course) params.course = filters.course;
-    if (filters.year)   params.year   = filters.year;
-    const { data } = await batchApi.batchmates(params);
-    setStudents(data.data ?? []);
-    setLoading(false);
+    try {
+      const params = {};
+      if (filters.course) params.course = filters.course;
+      if (filters.year)   params.year   = filters.year;
+      const { data } = await batchApi.batchmates(params);
+      setStudents(data.data ?? []);
+    } finally {
+      setLoading(false);
+    }
   }, [filters]);
 
   useEffect(() => { load(); }, [load]);
 
-  const setFilter = (key, val) => { setFilters(f => ({ ...f, [key]: val })); clearFace(); };
+  const setFilter = (key, val) => {
+    setFilters(f => ({ ...f, [key]: val }));
+    clearFace();
+  };
 
   const displayed  = matchedIds.size > 0 ? results.filter(s => matchedIds.has(s.id)) : results;
   const activeYear = filters.year ?? userYear ?? null;
 
   return (
     <div>
+      {/* Toolbar */}
       <div className="flex flex-wrap gap-3 items-center mb-6">
         <SearchInput
           value={query}
           onChange={e => { setQuery(e.target.value); clearFace(); }}
-          placeholder="Fuzzy search by name, ID, motto…"
+          placeholder="Search by name, student no…"
           hasMatch={matchedIds.size > 0}
-        />
-        <div className="relative flex-1 max-w-[300px]">
-          {/* FaceSearchButton sits on top of the search input */}
+        >
           <FaceSearchButton onFile={handleFaceFile} loading={faceSearching} />
-        </div>
+        </SearchInput>
         <FiltersPanel filters={filters} onChange={setFilter} showDept={false} />
         <div className="ml-auto">
           <GenerateYearbookButton
@@ -384,14 +419,15 @@ function BatchView({ isPremium, userYear }) {
       <FaceResultBanner matches={faceMatches} onClear={clearFace} />
       {!isPremium && <UpgradeBanner />}
 
-      <p className="text-sm font-semibold mb-4 text-slate-500">
-        {matchedIds.size > 0
-          ? <><i className="fas fa-brain mr-1 text-amber-400" />{displayed.length} face match{displayed.length !== 1 ? 'es' : ''}</>
-          : hasQuery
-            ? `${results.length} fuzzy match${results.length !== 1 ? 'es' : ''}`
-            : `${students.length} batchmate${students.length !== 1 ? 's' : ''}`}
-        {!isPremium && <span className="text-slate-400"> · Public profiles only</span>}
-      </p>
+      <ResultCount
+        matchedSize={matchedIds.size}
+        displayedLength={displayed.length}
+        total={students.length}
+        hasQuery={hasQuery}
+        resultsLength={results.length}
+        isPremium={isPremium}
+        suffix="batchmate"
+      />
 
       <StudentGrid
         students={displayed}
@@ -405,18 +441,22 @@ function BatchView({ isPremium, userYear }) {
   );
 }
 
-// ── SectionView ───────────────────────────────────────────────────────────────
+// ── SectionView ────────────────────────────────────────────────────────────────
 
 function SectionView({ isPremium }) {
   const [students, setStudents] = useState([]);
   const [loading,  setLoading]  = useState(true);
   const [section,  setSection]  = useState(null);
+
   const { query, setQuery, results, hasQuery } = useFuseSearch(students, STUDENT_FUSE_KEYS);
   const { faceSearching, faceMatches, matchedIds, handleFaceFile, clearFace } = useFaceSearch();
 
   useEffect(() => {
     batchApi.sectionmates()
-      .then(({ data }) => { setStudents(data.data ?? []); setSection(data.section); })
+      .then(({ data }) => {
+        setStudents(data.data ?? []);
+        setSection(data.section ?? null);
+      })
       .finally(() => setLoading(false));
   }, []);
 
@@ -424,39 +464,35 @@ function SectionView({ isPremium }) {
 
   return (
     <div>
+      {/* Toolbar */}
       <div className="flex items-center gap-4 mb-6 flex-wrap">
         {section && (
-          <div className="px-4 py-2 rounded-xl font-bold text-sm bg-indigo-50 text-indigo-600">
+          <div className="px-4 py-2 rounded-xl font-bold text-sm bg-indigo-50 text-indigo-600 shrink-0">
             <i className="fas fa-layer-group mr-2" />Section {section.name}
           </div>
         )}
-        <div className="relative flex-1 max-w-[300px]">
-          <i className="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-xs text-slate-400 z-[1]" />
-          <input
-            value={query}
-            onChange={e => { setQuery(e.target.value); clearFace(); }}
-            placeholder="Fuzzy search classmates…"
-            className={`
-              w-full text-sm rounded-xl outline-none
-              pl-8 pr-12 py-2.5 border bg-white
-              ${matchedIds.size > 0 ? 'border-amber-400' : 'border-slate-200'}
-              focus:border-indigo-400 transition-colors
-            `}
-          />
+        <SearchInput
+          value={query}
+          onChange={e => { setQuery(e.target.value); clearFace(); }}
+          placeholder="Search classmates…"
+          hasMatch={matchedIds.size > 0}
+        >
           <FaceSearchButton onFile={handleFaceFile} loading={faceSearching} />
-        </div>
+        </SearchInput>
       </div>
 
       <FaceResultBanner matches={faceMatches} onClear={clearFace} />
       {!isPremium && <UpgradeBanner />}
 
-      <p className="text-sm font-semibold mb-4 text-slate-500">
-        {matchedIds.size > 0
-          ? <><i className="fas fa-brain mr-1 text-amber-400" />{displayed.length} face match{displayed.length !== 1 ? 'es' : ''}</>
-          : hasQuery
-            ? `${results.length} match${results.length !== 1 ? 'es' : ''}`
-            : `${students.length} classmate${students.length !== 1 ? 's' : ''}`}
-      </p>
+      <ResultCount
+        matchedSize={matchedIds.size}
+        displayedLength={displayed.length}
+        total={students.length}
+        hasQuery={hasQuery}
+        resultsLength={results.length}
+        isPremium={isPremium}
+        suffix="classmate"
+      />
 
       <StudentGrid
         students={displayed}
@@ -470,14 +506,15 @@ function SectionView({ isPremium }) {
   );
 }
 
-// ── SchoolView ────────────────────────────────────────────────────────────────
+// ── SchoolView ─────────────────────────────────────────────────────────────────
 
 function SchoolView({ isPremium }) {
-  const [students,   setStudents]   = useState([]);
-  const [pagination, setPagination] = useState(null);
-  const [loading,    setLoading]    = useState(true);
-  const [filters,    setFilters]    = useState({});
+  const [students,     setStudents]     = useState([]);
+  const [pagination,   setPagination]   = useState(null);
+  const [loading,      setLoading]      = useState(true);
+  const [filters,      setFilters]      = useState({});
   const [serverSearch, setServerSearch] = useState('');
+
   const { faceSearching, faceMatches, matchedIds, handleFaceFile, clearFace } = useFaceSearch();
   const debounceRef = useRef(null);
 
@@ -487,7 +524,9 @@ function SchoolView({ isPremium }) {
       const { data } = await batchApi.wholeSchool(params);
       setStudents(data.data?.data ?? []);
       setPagination(data.data);
-    } finally { setLoading(false); }
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
   useEffect(() => { load(filters); }, [filters]);
@@ -501,28 +540,26 @@ function SchoolView({ isPremium }) {
     }, 400);
   };
 
-  const setFilter = (key, val) => { clearFace(); setFilters(f => ({ ...f, [key]: val || undefined })); };
+  const setFilter = (key, val) => {
+    clearFace();
+    setFilters(f => ({ ...f, [key]: val || undefined }));
+  };
+
   const loadPage  = (page) => load({ ...filters, page });
   const displayed = matchedIds.size > 0 ? students.filter(s => matchedIds.has(s.id)) : students;
 
   return (
     <div>
+      {/* Toolbar */}
       <div className="flex flex-wrap gap-3 items-center mb-4">
-        <div className="relative flex-1 max-w-[300px]">
-          <i className="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-xs text-slate-400 z-[1]" />
-          <input
-            value={serverSearch}
-            onChange={e => handleSearch(e.target.value)}
-            placeholder="Search all students…"
-            className={`
-              w-full text-sm rounded-xl outline-none
-              pl-8 pr-12 py-2.5 border bg-white
-              ${matchedIds.size > 0 ? 'border-amber-400' : 'border-slate-200'}
-              focus:border-indigo-400 transition-colors
-            `}
-          />
+        <SearchInput
+          value={serverSearch}
+          onChange={e => handleSearch(e.target.value)}
+          placeholder="Search all students…"
+          hasMatch={matchedIds.size > 0}
+        >
           <FaceSearchButton onFile={handleFaceFile} loading={faceSearching} />
-        </div>
+        </SearchInput>
         <FiltersPanel filters={filters} onChange={setFilter} />
       </div>
 
@@ -533,7 +570,8 @@ function SchoolView({ isPremium }) {
         <p className="text-sm font-semibold mb-4 text-slate-500">
           {matchedIds.size > 0
             ? <><i className="fas fa-brain mr-1 text-amber-400" />{displayed.length} face match{displayed.length !== 1 ? 'es' : ''} on this page</>
-            : <>{pagination.total?.toLocaleString()} student{pagination.total !== 1 ? 's' : ''} in the school</>}
+            : <>{pagination.total?.toLocaleString()} student{pagination.total !== 1 ? 's' : ''} in the school</>
+          }
           {!isPremium && <span className="text-slate-400"> · Public profiles only</span>}
         </p>
       )}
@@ -547,32 +585,51 @@ function SchoolView({ isPremium }) {
         emptyMsg="No students match your filters."
       />
 
+      {/* Pagination */}
       {!matchedIds.size && pagination && pagination.last_page > 1 && (
         <div className="flex items-center justify-center gap-3 mt-10 flex-wrap">
+          {/* Prev */}
+          <button
+            onClick={() => loadPage(pagination.current_page - 1)}
+            disabled={pagination.current_page === 1}
+            className="w-10 h-10 rounded-xl font-bold text-sm transition-all border border-slate-200 cursor-pointer bg-white text-slate-500 hover:border-indigo-300 hover:text-indigo-600 disabled:opacity-30 disabled:cursor-not-allowed"
+          >
+            <i className="fas fa-chevron-left text-xs" />
+          </button>
+
           {Array.from({ length: Math.min(pagination.last_page, 10) }, (_, i) => i + 1).map(page => (
             <button
               key={page}
               onClick={() => loadPage(page)}
-              className={`
-                w-10 h-10 rounded-xl font-bold text-sm transition-all border border-slate-200 cursor-pointer
+              className={`w-10 h-10 rounded-xl font-bold text-sm transition-all border cursor-pointer
                 ${page === pagination.current_page
-                  ? 'bg-[#1d2b4b] text-white'
-                  : 'bg-white text-slate-500 hover:border-indigo-300 hover:text-indigo-600'}
-              `}
+                  ? 'bg-[#1d2b4b] text-white border-[#1d2b4b]'
+                  : 'bg-white text-slate-500 border-slate-200 hover:border-indigo-300 hover:text-indigo-600'
+                }`}
             >
               {page}
             </button>
           ))}
+
           {pagination.last_page > 10 && (
             <span className="text-sm text-slate-400">… {pagination.last_page} pages</span>
           )}
+
+          {/* Next */}
+          <button
+            onClick={() => loadPage(pagination.current_page + 1)}
+            disabled={pagination.current_page === pagination.last_page}
+            className="w-10 h-10 rounded-xl font-bold text-sm transition-all border border-slate-200 cursor-pointer bg-white text-slate-500 hover:border-indigo-300 hover:text-indigo-600 disabled:opacity-30 disabled:cursor-not-allowed"
+          >
+            <i className="fas fa-chevron-right text-xs" />
+          </button>
         </div>
       )}
     </div>
   );
 }
 
-// ── CrossProgramView ──────────────────────────────────────────────────────────
+// ── CrossProgramView ───────────────────────────────────────────────────────────
 
 function CrossProgramView({ isPremium }) {
   const [allStudents, setAllStudents] = useState([]);
@@ -581,6 +638,7 @@ function CrossProgramView({ isPremium }) {
   const [filters,     setFilters]     = useState({});
   const [hasMore,     setHasMore]     = useState(false);
   const [page,        setPage]        = useState(1);
+
   const { query, setQuery, results, hasQuery } = useFuseSearch(allStudents, CROSS_PROGRAM_FUSE_KEYS);
   const { faceSearching, faceMatches, matchedIds, handleFaceFile, clearFace } = useFaceSearch();
 
@@ -590,12 +648,18 @@ function CrossProgramView({ isPremium }) {
       const { data } = await batchApi.crossProgram(params);
       const newStudents = data.data?.data ?? [];
       setAllStudents(prev => append ? [...prev, ...newStudents] : newStudents);
-      setStats(data.stats);
-      setHasMore(data.data?.current_page < data.data?.last_page);
-    } finally { setLoading(false); }
+      setStats(data.stats ?? null);
+      setHasMore((data.data?.current_page ?? 1) < (data.data?.last_page ?? 1));
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
-  useEffect(() => { setPage(1); setAllStudents([]); load(filters); }, [filters]);
+  useEffect(() => {
+    setPage(1);
+    setAllStudents([]);
+    load(filters);
+  }, [filters]);
 
   const loadMore  = () => { const n = page + 1; setPage(n); load({ ...filters, page: n }, true); };
   const setFilter = (key, val) => { clearFace(); setFilters(f => ({ ...f, [key]: val || undefined })); };
@@ -611,18 +675,19 @@ function CrossProgramView({ isPremium }) {
   const statsItems = [
     { icon: 'fa-users',            val: stats?.total_students?.toLocaleString(), label: 'students from other programs' },
     { icon: 'fa-book',             val: stats?.total_programs,                   label: 'different programs'           },
-    { icon: 'fa-building-columns', val: stats?.departments?.length,              label: 'colleges'                     },
+    { icon: 'fa-building-columns', val: stats?.departments?.length,              label: 'schools'                      },
   ];
 
   return (
     <div>
+      {/* Stats */}
       {stats && (
         <div className="flex flex-wrap gap-4 mb-6">
           {statsItems.map(s => (
-            <div key={s.label} className="flex items-center gap-3 px-5 py-3 rounded-2xl bg-white border border-slate-200">
+            <div key={s.label} className="flex items-center gap-3 px-5 py-3 rounded-2xl bg-white border border-slate-200 shadow-[0_2px_8px_rgba(0,0,0,0.04)]">
               <i className={`fas ${s.icon} text-amber-400 text-[1.1rem]`} />
               <div>
-                <p className="font-black text-lg m-0 text-[#1d2b4b]">{s.val}</p>
+                <p className="font-black text-lg m-0 text-[#1d2b4b]">{s.val ?? '—'}</p>
                 <p className="text-xs m-0 text-slate-400">{s.label}</p>
               </div>
             </div>
@@ -630,33 +695,28 @@ function CrossProgramView({ isPremium }) {
         </div>
       )}
 
+      {/* Toolbar */}
       <div className="flex flex-wrap gap-3 items-center mb-6">
-        <div className="relative flex-1 max-w-[320px]">
-          <i className="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-xs text-slate-400 z-[1]" />
-          <input
-            value={query}
-            onChange={e => { setQuery(e.target.value); clearFace(); }}
-            placeholder="Fuse.js fuzzy search across programs…"
-            className={`
-              w-full text-sm rounded-xl outline-none
-              pl-8 pr-12 py-2.5 border bg-white
-              ${matchedIds.size > 0 ? 'border-amber-400' : 'border-slate-200'}
-              focus:border-indigo-400 transition-colors
-            `}
-          />
+        <SearchInput
+          value={query}
+          onChange={e => { setQuery(e.target.value); clearFace(); }}
+          placeholder="Fuzzy search across programs…"
+          hasMatch={matchedIds.size > 0}
+        >
           {query && !matchedIds.size && (
             <span className="absolute right-11 top-1/2 -translate-y-1/2 text-xs px-2 py-1 rounded-lg font-bold pointer-events-none bg-amber-400 text-[#1d2b4b]">
               Fuse.js
             </span>
           )}
           <FaceSearchButton onFile={handleFaceFile} loading={faceSearching} />
-        </div>
+        </SearchInput>
         <FiltersPanel filters={filters} onChange={setFilter} />
       </div>
 
       <FaceResultBanner matches={faceMatches} onClear={clearFace} />
       {!isPremium && <UpgradeBanner />}
 
+      {/* Content */}
       {loading && allStudents.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-24 text-slate-400">
           <i className="fas fa-spinner fa-spin text-4xl mb-4 text-indigo-600" />
@@ -669,16 +729,18 @@ function CrossProgramView({ isPremium }) {
           <p className="text-sm text-slate-400">
             {matchedIds.size > 0
               ? 'No face matches in other programs.'
-              : hasQuery ? 'No fuzzy matches.' : 'No students from other programs found.'}
+              : hasQuery
+                ? 'No fuzzy matches found.'
+                : 'No students from other programs found.'}
           </p>
         </div>
       ) : (
         <div className="space-y-10">
           {Object.entries(grouped).map(([course, courseStudents]) => (
             <div key={course}>
-              {/* Course group header */}
+              {/* Course header */}
               <div className="flex items-center gap-3 mb-4 flex-wrap">
-                <div className="w-9 h-9 rounded-xl flex items-center justify-center bg-[#1d2b4b] text-amber-400 text-[0.8rem]">
+                <div className="w-9 h-9 rounded-xl flex items-center justify-center bg-[#1d2b4b] text-amber-400 text-[0.8rem] shrink-0">
                   <i className="fas fa-book" />
                 </div>
                 <div className="flex-1">
@@ -691,15 +753,16 @@ function CrossProgramView({ isPremium }) {
                 </div>
               </div>
 
-              <div
-                className="grid gap-[18px]"
-                style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(185px, 1fr))' }}
-              >
+              {/* Student grid for this course */}
+              <div className="grid gap-[18px]" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(185px, 1fr))' }}>
                 {courseStudents.map((s, i) => {
                   const matchData = faceMatches.find(m => m.user_id === s.id);
                   return (
                     <StudentCard
-                      key={s.id} student={s} isPremium={isPremium} index={i}
+                      key={s.id}
+                      student={s}
+                      isPremium={isPremium}
+                      index={i}
                       isMatched={matchedIds.has(s.id)}
                       matchSimilarity={matchData?.similarity ?? null}
                     />
@@ -711,16 +774,18 @@ function CrossProgramView({ isPremium }) {
         </div>
       )}
 
+      {/* Load more */}
       {!matchedIds.size && hasMore && !hasQuery && (
         <div className="text-center mt-10">
           <button
             onClick={loadMore}
             disabled={loading}
-            className="font-bold text-sm px-8 py-3 rounded-xl bg-[#1d2b4b] text-white border-none cursor-pointer transition-opacity disabled:opacity-60 hover:bg-[#253563]"
+            className="inline-flex items-center gap-2 font-bold text-sm px-8 py-3 rounded-xl bg-[#1d2b4b] text-white border-none cursor-pointer transition-all disabled:opacity-60 hover:bg-[#253563] hover:-translate-y-px"
           >
             {loading
-              ? <i className="fas fa-spinner fa-spin mr-2" />
-              : <i className="fas fa-chevron-down mr-2" />}
+              ? <i className="fas fa-spinner fa-spin" />
+              : <i className="fas fa-chevron-down" />
+            }
             Load More
           </button>
         </div>
@@ -729,7 +794,7 @@ function CrossProgramView({ isPremium }) {
   );
 }
 
-// ── Main DiscoveryPage ────────────────────────────────────────────────────────
+// ── DiscoveryPage ──────────────────────────────────────────────────────────────
 
 export default function DiscoveryPage() {
   const { user }                = useAuth();
@@ -741,32 +806,44 @@ export default function DiscoveryPage() {
     <div className="min-h-screen flex flex-col bg-slate-50 font-[Plus_Jakarta_Sans,sans-serif]">
       <Navbar />
 
-      {/* Hero */}
-      <header className="bg-gradient-to-br from-[#1d2b4b] to-indigo-600 px-[8%] pt-[60px] pb-[110px] rounded-b-[60px] text-white text-center">
-        <p className="text-xs font-bold uppercase tracking-widest mb-3 opacity-60">
+      {/* ── Hero ── */}
+      <header className="bg-gradient-to-br from-[#1d2b4b] to-indigo-600 px-[8%] pt-[60px] pb-[110px] rounded-b-[60px] text-white text-center relative overflow-hidden">
+        {/* Decorative */}
+        <div className="absolute top-0 right-0 w-[350px] h-[350px] rounded-full bg-white/[0.03] -translate-y-1/2 translate-x-1/3 pointer-events-none" />
+        <div className="absolute bottom-0 left-0 w-[200px] h-[200px] rounded-full bg-amber-400/5 translate-y-1/2 -translate-x-1/4 pointer-events-none" />
+
+        <p className="text-xs font-bold uppercase tracking-widest mb-3 opacity-60 relative">
           National University Lipa
         </p>
-        <h1 className="font-extrabold mb-3 text-[2.8rem] tracking-tight">
+        <h1 className="font-extrabold mb-3 text-[2.8rem] tracking-tight relative">
           Student <span className="text-amber-400">Discovery</span>
         </h1>
-        <p className="font-light opacity-75 mx-auto text-base max-w-[500px]">
-          Find classmates, explore other programs, and connect with the NU community.
+        <p className="font-light opacity-75 mx-auto text-base max-w-[500px] relative">
+          Find classmates, explore other programs, and connect with the NU Lipa community.
         </p>
-        <div className="flex items-center justify-center gap-3 mt-4 flex-wrap">
-          {isPremium && (
+
+        <div className="flex items-center justify-center gap-3 mt-4 flex-wrap relative">
+          {isPremium ? (
             <span className="inline-flex items-center gap-2 font-bold text-xs px-5 py-2 rounded-full bg-amber-400/15 border border-amber-400/35 text-amber-400">
               <i className="fas fa-crown" /> Premium · Full Access
             </span>
+          ) : (
+            <Link
+              to="/premium"
+              className="no-underline inline-flex items-center gap-2 font-bold text-xs px-5 py-2 rounded-full bg-amber-400/15 border border-amber-400/35 text-amber-400 hover:bg-amber-400/25 transition-colors"
+            >
+              <i className="fas fa-lock" /> Upgrade to Premium
+            </Link>
           )}
           <span className="inline-flex items-center gap-2 font-bold text-xs px-4 py-2 rounded-full bg-white/10 border border-white/15 text-white/60">
-            <i className="fas fa-camera text-amber-400" /> Click the camera icon in any search to find by face
+            <i className="fas fa-camera text-amber-400" /> Camera icon to search by face
           </span>
         </div>
       </header>
 
-      {/* View mode tabs */}
+      {/* ── View mode tabs ── */}
       <div className="flex justify-center -mt-10 relative z-10 px-[8%]">
-        <div className="flex flex-wrap gap-3 justify-center p-2 rounded-2xl bg-white shadow-[0_10px_40px_rgba(0,0,0,0.1)]">
+        <div className="flex flex-wrap gap-2 justify-center p-2 rounded-2xl bg-white shadow-[0_10px_40px_rgba(0,0,0,0.1)]">
           {VIEW_MODES.map(mode => (
             <button
               key={mode.key}
@@ -775,38 +852,38 @@ export default function DiscoveryPage() {
                 flex flex-col items-center gap-1 px-5 py-3 rounded-xl transition-all font-bold text-xs
                 border-none cursor-pointer min-w-[100px]
                 ${viewMode === mode.key
-                  ? 'bg-[#1d2b4b] text-white'
-                  : 'bg-transparent text-slate-500 hover:bg-slate-100'}
+                  ? 'bg-[#1d2b4b] text-white shadow-[0_4px_14px_rgba(29,43,75,0.25)]'
+                  : 'bg-transparent text-slate-500 hover:bg-slate-100'
+                }
               `}
             >
-              <i
-                className={`fas ${mode.icon} text-base ${viewMode === mode.key ? 'text-amber-400' : ''}`}
-              />
+              <i className={`fas ${mode.icon} text-base ${viewMode === mode.key ? 'text-amber-400' : ''}`} />
               {mode.label}
-              <span className="font-normal opacity-70 text-xs">{mode.desc}</span>
+              <span className="font-normal opacity-60 text-[10px]">{mode.desc}</span>
             </button>
           ))}
         </div>
       </div>
 
-      {/* Main content */}
+      {/* ── Main content ── */}
       <main className="px-[8%] pt-10 pb-20 flex-1">
+
+        {/* Section title */}
         <div className="flex items-center gap-3 mb-6">
           <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-[#1d2b4b] text-amber-400">
             <i className={`fas ${activeMode?.icon} text-sm`} />
           </div>
           <div>
-            <h2 className="font-black m-0 text-[1.3rem] text-[#1d2b4b]">
-              {activeMode?.label}
-            </h2>
+            <h2 className="font-black m-0 text-[1.3rem] text-[#1d2b4b]">{activeMode?.label}</h2>
             <p className="text-xs m-0 text-slate-400">{activeMode?.desc}</p>
           </div>
         </div>
 
-        {viewMode === 'batch'         && <BatchView        isPremium={isPremium} userYear={user?.graduation_year} />}
+        {viewMode === 'batch'         && <BatchView        isPremium={isPremium} userYear={user?.graduation_year ?? user?.student?.graduation_year} />}
         {viewMode === 'section'       && <SectionView      isPremium={isPremium} />}
         {viewMode === 'school'        && <SchoolView       isPremium={isPremium} />}
         {viewMode === 'cross_program' && <CrossProgramView isPremium={isPremium} />}
+
       </main>
 
       <Footer />

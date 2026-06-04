@@ -1,21 +1,5 @@
-/**
- * GraduationSpeechesPage.jsx
- * ─────────────────────────────────────────────────────────────────────────────
- * CHANGES FROM ORIGINAL:
- *  - Added `FaceSearchButton` into the existing search bar row (camera icon
- *    sits on the right side of the search input, consistent with GalleryPage).
- *  - Imports: added `galleryApi` (for faceSearch), `FaceSearchButton`,
- *    `imageUrl`, `avatarUrl`.
- *  - New state: `faceSearching`, `faceMatches`.
- *  - New handler: `handleFaceFile` — calls galleryApi.faceSearch and sets
- *    faceMatches. Results appear as cards below the search bar.
- *  - No logic, API calls, routes, transcript, upload, or pagination behavior
- *    changed.
- * ─────────────────────────────────────────────────────────────────────────────
- */
-
 import { useEffect, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import Navbar from '@/components/layout/Navbar';
 import Footer from '@/components/layout/Footer';
 import { transcriptApi } from '@/api/yearbook.api';
@@ -23,45 +7,34 @@ import { galleryApi } from '@/api/gallery.api';
 import FaceSearchButton from '@/components/ui/FaceSearchButton';
 import { imageUrl, avatarUrl } from '@/utils/imageUrl';
 
-// ─── Safe localStorage getter (Edge/Safari Tracking Prevention) ───────────────
-const safeGetToken = () => {
-  try { return localStorage.getItem('token') ?? ''; }
-  catch { return ''; }
-};
-
-// ─────────────────────────────────────────────────────────────────────────────
-// TRANSCRIPT STATUS BADGE
-// ─────────────────────────────────────────────────────────────────────────────
+// ─── Status Badge ─────────────────────────────────────────────────────────────
 function StatusBadge({ status }) {
   const map = {
-    done:       { label: 'Transcribed',  bg: '#dcfce7', color: '#16a34a' },
-    processing: { label: 'Processing…', bg: '#fef9c3', color: '#ca8a04' },
-    pending:    { label: 'Pending',      bg: '#e0e7ff', color: '#3f51b5' },
-    failed:     { label: 'Failed',       bg: '#fee2e2', color: '#dc2626' },
+    done:       { label: 'Transcribed',  cls: 'bg-green-100 text-green-700'  },
+    processing: { label: 'Processing…',  cls: 'bg-yellow-100 text-yellow-700' },
+    pending:    { label: 'Pending',      cls: 'bg-indigo-100 text-indigo-600' },
+    failed:     { label: 'Failed',       cls: 'bg-red-100 text-red-600'       },
   };
   const s = map[status] ?? map.pending;
   return (
-    <span className="text-xs font-bold px-2.5 py-1 rounded-full"
-      style={{ background: s.bg, color: s.color }}>
+    <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${s.cls}`}>
       {s.label}
     </span>
   );
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// TRANSCRIPT DETAIL PANEL (unchanged)
-// ─────────────────────────────────────────────────────────────────────────────
+// ─── Transcript Panel ─────────────────────────────────────────────────────────
 function TranscriptPanel({ transcript, onClose }) {
-  const [tab, setTab] = useState('transcript');
-  const [downloading, setDownloading] = useState(false);
+  const [tab,         setTab] = useState('transcript');
+  const [downloading, setDl]  = useState(false);
 
   if (!transcript) return null;
 
   const downloadSubtitle = async (format) => {
-    setDownloading(true);
+    setDl(true);
     try {
-      const res = await fetch(`/api/transcripts/${transcript.id}/subtitles?format=${format}`, {
-        headers: { Authorization: `Bearer ${safeGetToken()}` },
+      const res  = await fetch(`/api/transcripts/${transcript.id}/subtitles?format=${format}`, {
+        headers: { Authorization: `Bearer ${localStorage.getItem('token') ?? ''}` },
       });
       const blob = await res.blob();
       const url  = URL.createObjectURL(blob);
@@ -70,106 +43,104 @@ function TranscriptPanel({ transcript, onClose }) {
       a.download = `${transcript.title}.${format}`;
       a.click();
       URL.revokeObjectURL(url);
-    } finally {
-      setDownloading(false);
-    }
+    } finally { setDl(false); }
   };
 
   return (
-    <div className="flex flex-col h-full" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-      {/* Panel header */}
-      <div className="flex items-start justify-between p-6 border-b" style={{ borderColor: '#e2e8f0' }}>
+    <div className="flex flex-col h-full">
+      {/* Header */}
+      <div className="flex items-start justify-between p-6 border-b border-slate-100">
         <div className="flex-1 min-w-0 pr-4">
-          <h2 className="font-extrabold text-base leading-tight mb-2" style={{ color: '#1d2b4b' }}>
+          <h2 className="font-extrabold text-base leading-tight mb-2 text-[#1d2b4b]">
             {transcript.title}
           </h2>
           <div className="flex items-center gap-2 flex-wrap">
             <StatusBadge status={transcript.status} />
             {transcript.language && (
-              <span className="text-xs font-bold px-2.5 py-1 rounded-full uppercase"
-                style={{ background: 'rgba(253,184,19,0.12)', color: '#1d2b4b' }}>
+              <span className="text-xs font-bold px-2.5 py-1 rounded-full uppercase bg-[#fdb813]/10 text-[#1d2b4b]">
                 {transcript.language}
               </span>
             )}
           </div>
         </div>
-        <button onClick={onClose}
-          className="flex-shrink-0 w-9 h-9 rounded-full border-none cursor-pointer flex items-center justify-center"
-          style={{ background: '#f1f5f9', color: '#64748b' }}>
+        <button
+          onClick={onClose}
+          className="flex-shrink-0 w-9 h-9 rounded-full bg-slate-100 hover:bg-slate-200
+                     border-none cursor-pointer flex items-center justify-center text-slate-500 transition-colors"
+        >
           <i className="fas fa-times text-sm" />
         </button>
       </div>
 
-      {/* Sub-tabs */}
+      {/* Tabs */}
       {transcript.status === 'done' && (
         <div className="flex gap-2 px-6 pt-4">
           {['transcript', 'notes'].map(t => (
-            <button key={t} onClick={() => setTab(t)}
-              className="text-sm font-bold px-4 py-2 rounded-xl border-none cursor-pointer capitalize transition-all"
-              style={{
-                background: tab === t ? '#1d2b4b' : '#f1f5f9',
-                color:      tab === t ? 'white'   : '#64748b',
-              }}>
+            <button
+              key={t}
+              onClick={() => setTab(t)}
+              className={`text-sm font-bold px-4 py-2 rounded-xl border-none cursor-pointer capitalize transition-colors
+                          ${tab === t
+                            ? 'bg-[#1d2b4b] text-white'
+                            : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}
+            >
               {t === 'transcript' ? 'Full Transcript' : 'AI Notes'}
             </button>
           ))}
         </div>
       )}
 
-      {/* Content */}
+      {/* Body */}
       <div className="flex-1 overflow-y-auto p-6">
         {transcript.status === 'done' ? (
           <>
             {tab === 'transcript' && (
-              <div className="text-sm leading-relaxed" style={{ color: '#334155', whiteSpace: 'pre-wrap' }}>
+              <div className="text-sm leading-relaxed text-slate-700 whitespace-pre-wrap">
                 {transcript.transcript_text || 'No transcript text available.'}
               </div>
             )}
             {tab === 'notes' && (
-              <div className="prose prose-sm max-w-none" style={{ color: '#334155' }}>
-                {transcript.notes
-                  ? <div style={{ whiteSpace: 'pre-wrap', lineHeight: '1.8' }}>{transcript.notes}</div>
-                  : <p style={{ color: '#94a3b8' }}>No AI notes generated yet.</p>
-                }
-              </div>
+              transcript.notes
+                ? <div className="text-sm leading-[1.8] text-slate-700 whitespace-pre-wrap">{transcript.notes}</div>
+                : <p className="text-slate-400">No AI notes generated yet.</p>
             )}
           </>
         ) : transcript.status === 'processing' ? (
           <div className="flex flex-col items-center justify-center py-16 gap-4">
-            <i className="fas fa-spinner fa-spin text-3xl" style={{ color: '#3f51b5' }} />
-            <p className="text-sm font-semibold" style={{ color: '#64748b' }}>
-              Groq Whisper is transcribing this speech…
-            </p>
-            <p className="text-xs" style={{ color: '#94a3b8' }}>This may take a few minutes.</p>
+            <i className="fas fa-spinner fa-spin text-3xl text-indigo-600" />
+            <p className="text-sm font-semibold text-slate-500">Groq Whisper is transcribing this speech…</p>
+            <p className="text-xs text-slate-400">This may take a few minutes.</p>
           </div>
         ) : transcript.status === 'failed' ? (
           <div className="flex flex-col items-center justify-center py-16 gap-4">
-            <i className="fas fa-circle-exclamation text-3xl" style={{ color: '#dc2626' }} />
-            <p className="text-sm font-semibold" style={{ color: '#64748b' }}>Transcription failed.</p>
+            <i className="fas fa-circle-exclamation text-3xl text-red-500" />
+            <p className="text-sm font-semibold text-slate-500">Transcription failed.</p>
           </div>
         ) : (
           <div className="flex flex-col items-center justify-center py-16 gap-4">
-            <i className="fas fa-clock text-3xl" style={{ color: '#94a3b8' }} />
-            <p className="text-sm" style={{ color: '#64748b' }}>Queued for transcription.</p>
+            <i className="fas fa-clock text-3xl text-slate-300" />
+            <p className="text-sm text-slate-500">Queued for transcription.</p>
           </div>
         )}
       </div>
 
       {/* Footer actions */}
       {transcript.status === 'done' && (
-        <div className="p-6 border-t flex gap-3 flex-wrap" style={{ borderColor: '#e2e8f0' }}>
-          <button onClick={() => downloadSubtitle('srt')} disabled={downloading}
-            className="inline-flex items-center gap-2 text-sm font-bold px-4 py-2 rounded-xl border-none cursor-pointer transition-all"
-            style={{ background: '#1d2b4b', color: 'white' }}
-            onMouseEnter={e => e.currentTarget.style.background = '#3f51b5'}
-            onMouseLeave={e => e.currentTarget.style.background = '#1d2b4b'}>
+        <div className="p-6 border-t border-slate-100 flex gap-3 flex-wrap">
+          <button
+            onClick={() => downloadSubtitle('srt')} disabled={downloading}
+            className="inline-flex items-center gap-2 text-sm font-bold px-4 py-2 rounded-xl
+                       border-none cursor-pointer bg-[#1d2b4b] text-white
+                       hover:bg-indigo-700 transition-colors disabled:opacity-50"
+          >
             <i className="fas fa-download" /> SRT
           </button>
-          <button onClick={() => downloadSubtitle('vtt')} disabled={downloading}
-            className="inline-flex items-center gap-2 text-sm font-bold px-4 py-2 rounded-xl border-none cursor-pointer transition-all"
-            style={{ background: 'rgba(253,184,19,0.15)', color: '#1d2b4b' }}
-            onMouseEnter={e => e.currentTarget.style.background = 'rgba(253,184,19,0.3)'}
-            onMouseLeave={e => e.currentTarget.style.background = 'rgba(253,184,19,0.15)'}>
+          <button
+            onClick={() => downloadSubtitle('vtt')} disabled={downloading}
+            className="inline-flex items-center gap-2 text-sm font-bold px-4 py-2 rounded-xl
+                       border-none cursor-pointer bg-[#fdb813]/20 text-[#1d2b4b]
+                       hover:bg-[#fdb813]/35 transition-colors disabled:opacity-50"
+          >
             <i className="fas fa-download" /> VTT
           </button>
         </div>
@@ -178,33 +149,32 @@ function TranscriptPanel({ transcript, onClose }) {
   );
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// SPEECH CARD (unchanged)
-// ─────────────────────────────────────────────────────────────────────────────
+// ─── Speech Card ──────────────────────────────────────────────────────────────
 function SpeechCard({ transcript, active, onClick }) {
   return (
-    <div onClick={onClick}
-      className="rounded-2xl p-4 cursor-pointer transition-all"
-      style={{
-        background:  active ? '#1d2b4b' : 'white',
-        boxShadow:   active ? '0 8px 24px rgba(29,43,75,0.18)' : '0 2px 8px rgba(29,43,75,0.06)',
-        border:      active ? 'none' : '1px solid rgba(0,0,0,0.04)',
-        transform:   active ? 'scale(1.01)' : 'none',
-      }}>
+    <div
+      onClick={onClick}
+      className={`rounded-2xl p-4 cursor-pointer transition-all duration-200 border
+                  ${active
+                    ? 'bg-[#1d2b4b] border-transparent shadow-lg scale-[1.01]'
+                    : 'bg-white border-black/[0.04] shadow-sm hover:shadow-md'}`}
+    >
       <div className="flex items-start gap-3">
-        <div className="flex-shrink-0 w-10 h-10 rounded-xl flex items-center justify-center"
-          style={{ background: active ? 'rgba(253,184,19,0.2)' : 'rgba(29,43,75,0.06)' }}>
-          <i className="fas fa-microphone-lines text-sm" style={{ color: active ? '#fdb813' : '#1d2b4b' }} />
+        <div className={`flex-shrink-0 w-10 h-10 rounded-xl flex items-center justify-center
+                         ${active ? 'bg-[#fdb813]/20' : 'bg-[#1d2b4b]/[0.06]'}`}>
+          <i className={`fas fa-microphone-lines text-sm ${active ? 'text-[#fdb813]' : 'text-[#1d2b4b]'}`} />
         </div>
         <div className="flex-1 min-w-0">
-          <h3 className="font-extrabold text-sm leading-snug truncate mb-1"
-            style={{ color: active ? 'white' : '#1d2b4b' }}>
+          <h3 className={`font-extrabold text-sm leading-snug truncate mb-1
+                          ${active ? 'text-white' : 'text-[#1d2b4b]'}`}>
             {transcript.title}
           </h3>
           <StatusBadge status={transcript.status} />
           {transcript.created_at && (
-            <p className="text-xs mt-1.5" style={{ color: active ? 'rgba(255,255,255,0.5)' : '#94a3b8' }}>
-              {new Date(transcript.created_at).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' })}
+            <p className={`text-xs mt-1.5 ${active ? 'text-white/50' : 'text-slate-400'}`}>
+              {new Date(transcript.created_at).toLocaleDateString('en-PH', {
+                month: 'short', day: 'numeric', year: 'numeric',
+              })}
             </p>
           )}
         </div>
@@ -213,117 +183,16 @@ function SpeechCard({ transcript, active, onClick }) {
   );
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// UPLOAD MODAL (unchanged)
-// ─────────────────────────────────────────────────────────────────────────────
-function UploadModal({ onClose, onSuccess }) {
-  const [file,    setFile]    = useState(null);
-  const [title,   setTitle]   = useState('');
-  const [loading, setLoading] = useState(false);
-  const [error,   setError]   = useState('');
-
-  const handleSubmit = async () => {
-    if (!file || !title.trim()) { setError('Title and audio file are required.'); return; }
-    setLoading(true);
-    setError('');
-    try {
-      const fd = new FormData();
-      fd.append('audio', file);
-      fd.append('title', title);
-      await transcriptApi.store(fd);
-      onSuccess();
-    } catch (e) {
-      setError(e?.response?.data?.message ?? 'Upload failed. Please try again.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  return (
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center px-4"
-      style={{ background: 'rgba(8,12,24,0.7)' }}
-      onClick={onClose}>
-      <div className="bg-white rounded-3xl w-full max-w-md p-8"
-        style={{ boxShadow: '0 32px 80px rgba(0,0,0,0.2)' }}
-        onClick={e => e.stopPropagation()}>
-        <div className="flex items-center justify-between mb-6">
-          <h2 className="font-extrabold text-xl" style={{ color: '#1d2b4b' }}>Upload Speech Audio</h2>
-          <button onClick={onClose}
-            className="w-9 h-9 rounded-full border-none cursor-pointer flex items-center justify-center"
-            style={{ background: '#f1f5f9', color: '#64748b' }}>
-            <i className="fas fa-times" />
-          </button>
-        </div>
-
-        <div className="flex flex-col gap-4">
-          <div>
-            <label className="block text-xs font-bold mb-1.5 uppercase tracking-wide" style={{ color: '#64748b' }}>
-              Speech Title *
-            </label>
-            <input
-              type="text" value={title}
-              onChange={e => setTitle(e.target.value)}
-              placeholder="e.g. Keynote Address — Dr. Santos"
-              className="w-full border rounded-xl px-4 py-3 text-sm outline-none transition-all"
-              style={{ borderColor: '#e2e8f0', color: '#1d2b4b', fontFamily: 'inherit' }}
-              onFocus={e => e.target.style.borderColor = '#3f51b5'}
-              onBlur={e => e.target.style.borderColor = '#e2e8f0'}
-            />
-          </div>
-
-          <div>
-            <label className="block text-xs font-bold mb-1.5 uppercase tracking-wide" style={{ color: '#64748b' }}>
-              Audio File * <span style={{ color: '#94a3b8', fontWeight: 400 }}>(mp3, wav, m4a, ogg, flac, webm — max 25MB)</span>
-            </label>
-            <label className="flex flex-col items-center justify-center gap-3 rounded-2xl cursor-pointer transition-all"
-              style={{ border: '2px dashed #e2e8f0', padding: '28px', background: file ? 'rgba(63,81,181,0.04)' : '#f8fafc' }}
-              onMouseEnter={e => e.currentTarget.style.borderColor = '#3f51b5'}
-              onMouseLeave={e => e.currentTarget.style.borderColor = file ? '#3f51b5' : '#e2e8f0'}>
-              <i className={`fas ${file ? 'fa-file-audio' : 'fa-cloud-arrow-up'} text-3xl`}
-                style={{ color: file ? '#3f51b5' : '#cbd5e1' }} />
-              <span className="text-sm font-semibold" style={{ color: file ? '#3f51b5' : '#94a3b8' }}>
-                {file ? file.name : 'Click or drag to upload'}
-              </span>
-              <input type="file" accept="audio/*" className="hidden"
-                onChange={e => setFile(e.target.files?.[0] ?? null)} />
-            </label>
-          </div>
-
-          {error && (
-            <div className="text-sm font-semibold px-4 py-3 rounded-xl" style={{ background: '#fee2e2', color: '#dc2626' }}>
-              {error}
-            </div>
-          )}
-
-          <button onClick={handleSubmit} disabled={loading}
-            className="w-full flex items-center justify-center gap-2 font-bold text-white py-3 rounded-xl border-none cursor-pointer transition-all text-sm mt-2"
-            style={{ background: loading ? '#94a3b8' : '#1d2b4b' }}
-            onMouseEnter={e => { if (!loading) e.currentTarget.style.background = '#3f51b5'; }}
-            onMouseLeave={e => { if (!loading) e.currentTarget.style.background = '#1d2b4b'; }}>
-            {loading
-              ? <><i className="fas fa-spinner fa-spin" /> Uploading & Queuing…</>
-              : <><i className="fas fa-cloud-arrow-up" /> Upload & Transcribe</>
-            }
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// MAIN PAGE
-// ─────────────────────────────────────────────────────────────────────────────
+// ─── Main Page ────────────────────────────────────────────────────────────────
 export default function GraduationSpeechesPage() {
+  const navigate = useNavigate();
+
   const [transcripts,   setTranscripts]   = useState([]);
   const [loading,       setLoading]       = useState(true);
   const [selected,      setSelected]      = useState(null);
   const [search,        setSearch]        = useState('');
-  const [showUpload,    setShowUpload]    = useState(false);
   const [page,          setPage]          = useState(1);
   const [meta,          setMeta]          = useState(null);
-
-  // ── Face search state ──────────────────────────────────────────────────────
   const [faceSearching, setFaceSearching] = useState(false);
   const [faceMatches,   setFaceMatches]   = useState([]);
 
@@ -332,10 +201,7 @@ export default function GraduationSpeechesPage() {
   const fetchTranscripts = (q = search, p = page) => {
     setLoading(true);
     transcriptApi.list({ q, page: p })
-      .then(({ data }) => {
-        setTranscripts(data.data ?? []);
-        setMeta(data.meta ?? null);
-      })
+      .then(({ data }) => { setTranscripts(data.data ?? []); setMeta(data.meta ?? null); })
       .catch(() => setTranscripts([]))
       .finally(() => setLoading(false));
   };
@@ -345,98 +211,99 @@ export default function GraduationSpeechesPage() {
     return () => clearTimeout(debounceRef.current);
   }, []); // eslint-disable-line
 
-  useEffect(() => {
-    fetchTranscripts(search, page);
-  }, [page]); // eslint-disable-line
+  useEffect(() => { fetchTranscripts(search, page); }, [page]); // eslint-disable-line
 
   const handleSearch = (val) => {
     setSearch(val);
     clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => {
-      setPage(1);
-      fetchTranscripts(val, 1);
-    }, 400);
+    debounceRef.current = setTimeout(() => { setPage(1); fetchTranscripts(val, 1); }, 400);
   };
 
-  // ── Face search handler ────────────────────────────────────────────────────
   const handleFaceFile = async (file) => {
-    setSearching(true);
-    setMatches([]);
+    setFaceSearching(true);
+    setFaceMatches([]);
     try {
       const fd = new FormData();
       fd.append('face_image', file);
       const { data } = await galleryApi.faceSearch(fd);
       const found = data.photos ?? [];
-      setMatches(found);
+      setFaceMatches(found);
       if (!found.length) alert('No matching photos found.');
     } catch {
       alert('Face search failed.');
     } finally {
-      setSearching(false);
+      setFaceSearching(false);
     }
   };
 
-  const handleUploadSuccess = () => {
-    setShowUpload(false);
-    fetchTranscripts(search, 1);
+  const handleBack = (e) => {
+    e.preventDefault();
+    navigate('/gallery', { state: { tab: 'graduation:videos' } });
   };
 
+  const PageBtn = ({ disabled, onClick, icon }) => (
+    <button
+      disabled={disabled}
+      onClick={onClick}
+      className={`w-9 h-9 rounded-xl border-none cursor-pointer flex items-center justify-center
+                  font-bold transition-colors
+                  ${disabled
+                    ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
+                    : 'bg-[#1d2b4b] text-white hover:bg-indigo-700'}`}
+    >
+      <i className={`fas ${icon} text-xs`} />
+    </button>
+  );
+
   return (
-    <div className="min-h-screen flex flex-col" style={{ background: '#f8fafc', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+    <div className="min-h-screen flex flex-col bg-[#f8fafc]" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
       <Navbar />
 
-      {/* Hero */}
-      <header className="text-white"
-        style={{ background: 'linear-gradient(135deg, #1d2b4b 0%, #2a3d66 100%)', padding: '70px 8% 110px', borderRadius: '0 0 60px 60px' }}>
-        <Link to="/graduation"
-          className="inline-flex items-center gap-2 text-white/50 hover:text-white text-sm no-underline mb-6 transition">
-          <i className="fas fa-arrow-left" /> Back to Graduation Hub
-        </Link>
-        <div className="flex items-end justify-between flex-wrap gap-4">
-          <div>
-            <p className="text-xs font-bold uppercase tracking-widest opacity-60 mb-2">Ceremonial Speeches</p>
-            <h1 className="font-extrabold mb-3" style={{ fontSize: '2.5rem', letterSpacing: '-1.5px' }}>
-              Speeches & <span style={{ color: '#fdb813' }}>Transcripts</span>
-            </h1>
-            <p className="text-white/60 text-sm max-w-md leading-relaxed">
-              Listen to graduation speeches, read AI-generated transcripts, and search key moments — powered by Groq Whisper.
-            </p>
-          </div>
-          <button onClick={() => setShowUpload(true)}
-            className="inline-flex items-center gap-2 font-bold text-sm px-5 py-3 rounded-2xl border-none cursor-pointer transition-all"
-            style={{ background: '#fdb813', color: '#1d2b4b' }}
-            onMouseEnter={e => e.currentTarget.style.opacity = '0.9'}
-            onMouseLeave={e => e.currentTarget.style.opacity = '1'}>
-            <i className="fas fa-cloud-arrow-up" /> Upload Speech
-          </button>
-        </div>
+      {/* ── Hero ── */}
+      <header className="bg-gradient-to-br from-[#1d2b4b] to-[#2a3d66] px-[8%] pt-[70px] pb-[110px] rounded-b-[60px] text-white">
+
+        {/* ✅ Back to Gallery — was /graduation */}
+        <a
+          href="/gallery"
+          onClick={handleBack}
+          className="inline-flex items-center gap-2 text-white/50 hover:text-white
+                     text-sm no-underline mb-6 transition-colors cursor-pointer"
+        >
+          <i className="fas fa-arrow-left" /> Back to Gallery
+        </a>
+
+        <p className="text-xs font-bold uppercase tracking-widest text-white/60 mb-2">
+          Ceremonial Speeches
+        </p>
+        <h1 className="text-[2.5rem] font-extrabold tracking-tight mb-3 leading-tight">
+          Speeches &amp; <span className="text-[#fdb813]">Transcripts</span>
+        </h1>
+        <p className="text-white/60 text-sm max-w-md leading-relaxed">
+          Listen to graduation speeches, read AI-generated transcripts, and search key moments — powered by Groq Whisper.
+        </p>
       </header>
 
-      {/* ── Search bar with face search ── */}
-      <div className="mx-auto px-5" style={{ maxWidth: '1100px', width: '100%', marginTop: '-32px' }}>
-        <div className="bg-white rounded-2xl flex items-center gap-3 px-5 relative"
-          style={{ boxShadow: '0 18px 36px rgba(29,43,75,0.1)', height: '56px' }}>
-          <i className="fas fa-search flex-shrink-0" style={{ color: '#94a3b8' }} />
+      {/* ── Floating search bar ── */}
+      <div className="max-w-[1100px] mx-auto px-5 w-full -mt-8">
+        <div className="bg-white rounded-2xl flex items-center gap-3 px-5 shadow-xl shadow-[#1d2b4b]/10 h-14">
+          <i className="fas fa-search flex-shrink-0 text-slate-400" />
           <input
-            type="text" value={search}
+            type="text"
+            value={search}
             onChange={e => handleSearch(e.target.value)}
             placeholder="Search speeches, transcripts, or notes…"
-            className="flex-1 border-none outline-none text-sm bg-transparent"
-            style={{ color: '#1d2b4b', fontFamily: 'inherit' }}
+            className="flex-1 border-none outline-none text-sm bg-transparent text-[#1d2b4b]"
           />
           {search && (
-            <button onClick={() => handleSearch('')}
-              className="border-none bg-transparent cursor-pointer text-sm flex-shrink-0"
-              style={{ color: '#94a3b8' }}>
-              <i className="fas fa-times" />
+            <button
+              onClick={() => handleSearch('')}
+              className="border-none bg-transparent cursor-pointer text-slate-400 hover:text-slate-600 flex-shrink-0"
+            >
+              <i className="fas fa-times text-sm" />
             </button>
           )}
-
-          {/* Divider */}
           <div className="flex-shrink-0 w-px h-6 bg-slate-200" />
-
-          {/* Face search button — inline, not absolute, so it doesn't overlay the text input */}
-          <div className="flex-shrink-0 relative" style={{ width: 36, height: 36 }}>
+          <div className="flex-shrink-0 relative w-9 h-9">
             <FaceSearchButton
               onFile={handleFaceFile}
               loading={faceSearching}
@@ -445,7 +312,7 @@ export default function GraduationSpeechesPage() {
           </div>
         </div>
 
-        {/* Face match results — shown below the search bar */}
+        {/* Face match results */}
         {faceMatches.length > 0 && (
           <div className="mt-3 grid grid-cols-[repeat(auto-fill,minmax(200px,1fr))] gap-2.5">
             {faceMatches.map(m => (
@@ -453,8 +320,7 @@ export default function GraduationSpeechesPage() {
                 key={m.user_id}
                 to={`/profile/${m.user_id}`}
                 className="flex items-center gap-3 bg-white border border-slate-100 rounded-[14px] p-3
-                           no-underline hover:border-[#fdb813] hover:shadow-md transition-all"
-                style={{ boxShadow: '0 2px 8px rgba(29,43,75,0.06)' }}
+                           no-underline hover:border-[#fdb813] hover:shadow-md transition-all shadow-sm"
               >
                 <img
                   src={imageUrl(m.profile_picture) || avatarUrl(m.name)}
@@ -462,9 +328,9 @@ export default function GraduationSpeechesPage() {
                   className="w-11 h-11 rounded-xl object-cover border-2 border-[#fdb813] flex-shrink-0"
                 />
                 <div className="min-w-0">
-                  <p className="m-0 font-bold text-[13px] truncate" style={{ color: '#1d2b4b' }}>{m.name}</p>
-                  <p className="m-0 text-[11px]" style={{ color: '#94a3b8' }}>
-                    <i className="fas fa-brain mr-1" style={{ color: '#fdb813' }} />{m.similarity}% match
+                  <p className="m-0 font-bold text-[13px] text-[#1d2b4b] truncate">{m.name}</p>
+                  <p className="m-0 text-[11px] text-slate-400">
+                    <i className="fas fa-brain mr-1 text-[#fdb813]" />{m.similarity}% match
                   </p>
                 </div>
               </Link>
@@ -473,77 +339,56 @@ export default function GraduationSpeechesPage() {
         )}
       </div>
 
-      {/* Main layout */}
-      <main style={{ maxWidth: '1100px', margin: '0 auto', padding: '32px 20px 100px', width: '100%' }}>
+      {/* ── Main layout ── */}
+      <main className="max-w-[1100px] mx-auto px-5 pt-8 pb-24 w-full">
         {loading ? (
           <div className="flex items-center justify-center py-24">
-            <i className="fas fa-spinner fa-spin text-3xl" style={{ color: '#3f51b5' }} />
+            <i className="fas fa-spinner fa-spin text-3xl text-indigo-600" />
           </div>
         ) : transcripts.length === 0 ? (
-          <div className="text-center py-24 bg-white rounded-3xl"
-            style={{ boxShadow: '0 4px 20px rgba(29,43,75,0.05)' }}>
-            <i className="fas fa-microphone-slash text-6xl mb-5 block" style={{ color: '#e2e8f0' }} />
-            <h3 className="font-extrabold text-lg mb-2" style={{ color: '#1d2b4b' }}>
-              {search ? 'No speeches match your search.' : 'No speeches uploaded yet.'}
+          <div className="text-center py-24 bg-white rounded-3xl shadow-sm border border-slate-100">
+            <i className="fas fa-microphone-slash text-6xl text-slate-200 mb-5 block" />
+            <h3 className="font-extrabold text-lg text-[#1d2b4b] mb-2">
+              {search ? 'No speeches match your search.' : 'No speeches available yet.'}
             </h3>
-            {!search && (
-              <button onClick={() => setShowUpload(true)}
-                className="mt-4 inline-flex items-center gap-2 font-bold text-sm px-5 py-2.5 rounded-xl border-none cursor-pointer"
-                style={{ background: '#1d2b4b', color: 'white' }}>
-                <i className="fas fa-cloud-arrow-up" /> Upload First Speech
-              </button>
-            )}
           </div>
         ) : (
-          <div className="flex gap-6" style={{ alignItems: 'flex-start' }}>
-            {/* Left: speech list */}
-            <div style={{ width: selected ? '340px' : '100%', flexShrink: 0, transition: 'width 0.3s ease' }}>
+          <div className={`flex gap-6 items-start`}>
+            {/* Speech list */}
+            <div
+              className="flex-shrink-0 transition-all duration-300"
+              style={{ width: selected ? '340px' : '100%' }}
+            >
               <div className="flex flex-col gap-3">
                 {transcripts.map(t => (
-                  <SpeechCard key={t.id} transcript={t}
+                  <SpeechCard
+                    key={t.id}
+                    transcript={t}
                     active={selected?.id === t.id}
                     onClick={() => setSelected(selected?.id === t.id ? null : t)}
                   />
                 ))}
               </div>
 
+              {/* Pagination */}
               {meta && meta.last_page > 1 && (
                 <div className="flex items-center justify-center gap-3 mt-8">
-                  <button
-                    disabled={page === 1}
-                    onClick={() => setPage(p => p - 1)}
-                    className="w-9 h-9 rounded-xl border-none cursor-pointer flex items-center justify-center font-bold transition-all"
-                    style={{ background: page === 1 ? '#f1f5f9' : '#1d2b4b', color: page === 1 ? '#94a3b8' : 'white' }}>
-                    <i className="fas fa-chevron-left text-xs" />
-                  </button>
-                  <span className="text-sm font-bold" style={{ color: '#64748b' }}>
-                    {page} / {meta.last_page}
-                  </span>
-                  <button
-                    disabled={page === meta.last_page}
-                    onClick={() => setPage(p => p + 1)}
-                    className="w-9 h-9 rounded-xl border-none cursor-pointer flex items-center justify-center font-bold transition-all"
-                    style={{ background: page === meta.last_page ? '#f1f5f9' : '#1d2b4b', color: page === meta.last_page ? '#94a3b8' : 'white' }}>
-                    <i className="fas fa-chevron-right text-xs" />
-                  </button>
+                  <PageBtn disabled={page === 1}             onClick={() => setPage(p => p - 1)} icon="fa-chevron-left"  />
+                  <span className="text-sm font-bold text-slate-500">{page} / {meta.last_page}</span>
+                  <PageBtn disabled={page === meta.last_page} onClick={() => setPage(p => p + 1)} icon="fa-chevron-right" />
                 </div>
               )}
             </div>
 
-            {/* Right: transcript panel */}
+            {/* Transcript panel */}
             {selected && (
-              <div className="flex-1 bg-white rounded-3xl overflow-hidden"
-                style={{ boxShadow: '0 8px 32px rgba(29,43,75,0.08)', minHeight: '500px', position: 'sticky', top: '24px' }}>
+              <div className="flex-1 bg-white rounded-3xl overflow-hidden shadow-lg shadow-[#1d2b4b]/[0.08] min-h-[500px] sticky top-6">
                 <TranscriptPanel transcript={selected} onClose={() => setSelected(null)} />
               </div>
             )}
           </div>
         )}
       </main>
-
-      {showUpload && (
-        <UploadModal onClose={() => setShowUpload(false)} onSuccess={handleUploadSuccess} />
-      )}
 
       <Footer />
     </div>

@@ -17,6 +17,7 @@ import { useAuth } from '@/features/auth/hooks/useAuth';
 import { searchApi } from '@/api/search.api';
 import { storageUrl } from '@/api/client';
 import Navbar from '@/components/layout/Navbar';
+import { useAppConfig } from '@/features/platform/AppConfigProvider';
 import axios from '@/api/client';
 
 // ─── Tier helper ──────────────────────────────────────────────────────────────
@@ -41,12 +42,25 @@ const CARDS = [
 ];
 
 // ─── Main page component ──────────────────────────────────────────────────────
+const CARD_FEATURES = {
+  '/directory': 'enable_student_directory_search',
+  '/flipbook': ['enable_flipbook_viewer', 'publish_yearbook'],
+};
+
 export default function DashboardPage() {
   const { user, logout } = useAuth();
+  const { isOn } = useAppConfig();
   const navigate = useNavigate();
 
   const userTier  = getTier(user);
   const isPremium = userTier === 'premium' || userTier === 'standard';
+
+  const visibleCards = CARDS.filter((card) => {
+    const rule = CARD_FEATURES[card.to];
+    if (!rule) return true;
+    const keys = Array.isArray(rule) ? rule : [rule];
+    return keys.every((k) => isOn(k));
+  });
 
   const [query,         setQuery]         = useState('');
   const [results,       setResults]       = useState(null);
@@ -168,7 +182,7 @@ export default function DashboardPage() {
             <section>
               <SectionTitle>Quick Access</SectionTitle>
               <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-3 2xl:grid-cols-4 gap-3">
-                {CARDS.map(c => (
+                {visibleCards.map(c => (
                   <Link
                     key={c.to} to={c.to}
                     className="group bg-white rounded-2xl p-4 border border-slate-100 no-underline

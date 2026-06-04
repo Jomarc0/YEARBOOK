@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom';
+import { useAppConfig } from '@/features/platform/AppConfigProvider';
 
 const QUICK_LINKS = [
   { to: '/directory',  label: 'Student Directory' },
@@ -17,6 +18,19 @@ const PLATFORM_LINKS = [
 ];
 
 export default function Footer() {
+  const { isOn } = useAppConfig();
+
+  const quickLinks = QUICK_LINKS.filter((link) => {
+    if (link.to === '/directory') return isOn('enable_student_directory_search');
+    if (link.to === '/flipbook') return isOn('enable_flipbook_viewer') && isOn('publish_yearbook');
+    return true;
+  });
+
+  const platformLinks = PLATFORM_LINKS.filter((link) => {
+    if (link.to === '/premium') return isOn('enable_premium_subscription');
+    return true;
+  });
+
   return (
     <footer className="bg-[#0e1628] text-slate-400 mt-auto">
 
@@ -59,7 +73,7 @@ export default function Footer() {
               Quick Links
             </h4>
             <ul className="list-none p-0 m-0 flex flex-col gap-2">
-              {QUICK_LINKS.map(({ to, label }) => (
+              {quickLinks.map(({ to, label }) => (
                 <li key={to}>
                   <Link
                     to={to}
@@ -78,7 +92,7 @@ export default function Footer() {
               Platform
             </h4>
             <ul className="list-none p-0 m-0 flex flex-col gap-2">
-              {PLATFORM_LINKS.map(({ to, label }) => (
+              {platformLinks.map(({ to, label }) => (
                 <li key={to}>
                   <Link
                     to={to}

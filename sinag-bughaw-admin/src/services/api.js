@@ -1,29 +1,53 @@
+// src/services/api.js
 import axios from "axios";
 
+const BASE_URL = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
+
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL ?? "http://localhost:8000/api",
-  withCredentials: true,
+  baseURL: `${BASE_URL}/api`,       // /api appended once, here
+  withCredentials: true,            // needed for Sanctum CSRF cookie
   headers: {
     "Content-Type": "application/json",
     Accept: "application/json",
   },
 });
 
-api.interceptors.request.use(config => {
-  const token = localStorage.getItem("admin_token");
-  if (token) config.headers.Authorization = `Bearer ${token}`;
-  return config;
-});
+// ─── Request: attach Bearer token if present ─────────────────────────────────
+api.interceptors.request.use(
+  (config) => {
+    const token = localStorage.getItem("admin_token");
+    if (token) config.headers.Authorization = `Bearer ${token}`;
+    return config;
+  },
+  (error) => Promise.reject(error)
+);
 
+// ─── Response: handle errors globally ────────────────────────────────────────
 api.interceptors.response.use(
-  res => res,
-  err => {
-    if (err.response?.status === 401) {
+  (response) => response,
+  (error) => {
+    const status = error.response?.status;
+
+    if (status === 401) {
       localStorage.removeItem("admin_token");
       localStorage.removeItem("admin_user");
-      window.location.reload();
+      // Redirect without reload loop — only if not already on /login
+      if (window.location.pathname !== "/login") {
+        window.location.href = "/login";
+      }
     }
-    return Promise.reject(err);
+
+    if (status === 403) {
+      // Optional: redirect to an unauthorized page
+      // window.location.href = "/unauthorized";
+      console.warn("Forbidden: insufficient permissions.");
+    }
+
+    if (status >= 500) {
+      console.error("Server error:", error.response?.data?.message ?? "Unexpected error");
+    }
+
+    return Promise.reject(error);
   }
 );
 

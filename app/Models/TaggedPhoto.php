@@ -5,13 +5,15 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class TaggedPhoto extends Model
 {
-    use HasFactory;
+    use HasFactory, SoftDeletes;
 
     protected $fillable = [
         'photo_id',
+        'graduation_photo_id', // ← added: FK for GraduationPhoto::taggedPhotos()
         'user_id',
         'uploaded_by',
         'photo_path',
@@ -35,6 +37,11 @@ class TaggedPhoto extends Model
         return $this->belongsTo(Photo::class);
     }
 
+    public function graduationPhoto(): BelongsTo
+    {
+        return $this->belongsTo(GraduationPhoto::class, 'graduation_photo_id');
+    }
+
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
@@ -54,8 +61,6 @@ class TaggedPhoto extends Model
 
     public function getPhotoUrlAttribute(): string
     {
-        // Use Cloudinary URL if photo_path looks like a full URL,
-        // otherwise build a storage URL
         if ($this->photo_path && str_starts_with($this->photo_path, 'http')) {
             return $this->photo_path;
         }

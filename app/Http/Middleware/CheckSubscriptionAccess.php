@@ -3,6 +3,7 @@
 namespace App\Http\Middleware;
 
 use App\Models\Subscription;
+use App\Support\PlatformSettings;
 use Closure;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log; // ← ADD THIS
@@ -11,6 +12,12 @@ class CheckSubscriptionAccess
 {
     public function handle(Request $request, Closure $next)
     {
+        if (! PlatformSettings::bool('enable_premium_subscription')) {
+            $request->attributes->set('viewer_is_subscribed', true);
+
+            return $next($request);
+        }
+
         $user = $request->user();
 
         $isSubscribed = false;

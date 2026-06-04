@@ -3,6 +3,7 @@
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
+use Illuminate\Http\Middleware\HandleCors;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
@@ -13,29 +14,32 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware) {
+
+        // ── CORS must run first — before everything including auth ────────────
+        $middleware->prepend(HandleCors::class);
+
         $middleware->statefulApi();
         $middleware->validateCsrfTokens(except: [
             'api/*',
         ]);
+        $middleware->api(append: [
+            \App\Http\Middleware\CheckMaintenanceMode::class,
+        ]);
         $middleware->alias([
-            'premium'             => \App\Http\Middleware\CheckPremium::class,
-            'consent'             => \App\Http\Middleware\CheckConsent::class,
-            'visibility'          => \App\Http\Middleware\CheckProfileVisibility::class,
-            'content.security'    => \App\Http\Middleware\ContentSecurityMiddleware::class,
-            'subscription.access' => \App\Http\Middleware\CheckSubscriptionAccess::class,
-            'admin.only'          => \App\Http\Middleware\AdminOnly::class, 
+            'premium'              => \App\Http\Middleware\CheckPremium::class,
+            'consent'              => \App\Http\Middleware\CheckConsent::class,
+            'visibility'           => \App\Http\Middleware\CheckProfileVisibility::class,
+            'content.security'     => \App\Http\Middleware\ContentSecurityMiddleware::class,
+            'subscription.access'  => \App\Http\Middleware\CheckSubscriptionAccess::class,
+            'admin.only'           => \App\Http\Middleware\AdminOnly::class,
+            'feature'              => \App\Http\Middleware\EnsureFeatureEnabled::class,
+            'require.super_admin'  => \App\Http\Middleware\RequireSuperAdmin::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions) {
+        // ── AuthenticationException → 401 JSON ────────────────────────────────
         $exceptions->render(function (
             \Illuminate\Auth\AuthenticationException $e,
-            \Illuminate\Http\Request $request
-        ) {
-            return response()->json(['message' => 'Unauthenticated.'], 401);
-        });
-
-        $exceptions->render(function (
-            \Symfony\Component\Routing\Exception\RouteNotFoundException $e,
             \Illuminate\Http\Request $request
         ) {
             if ($request->is('api/*') || $request->expectsJson()) {

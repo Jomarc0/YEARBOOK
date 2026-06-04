@@ -67,23 +67,20 @@ class ProfileController extends Controller
 
     public function uploadMedia(Request $request): JsonResponse
     {
+        $maxKb         = \App\Support\PlatformSettings::uploadMaxKilobytes();
+        $allowedMimes  = \App\Support\PlatformSettings::allowedMimeTypes();
+
         $request->validate([
             'files'             => ['required', 'array', 'min:1', 'max:20'],
             'files.*'           => [
                 'required', 'file',
-                function ($attribute, $value, $fail) {
-                    $mime    = $value->getMimeType();
-                    $allowed = [
-                        'image/jpeg', 'image/png', 'image/webp', 'image/gif',
-                        'image/heic', 'image/heif',
-                        'video/mp4',  'video/quicktime', 'video/mpeg',
-                        'video/x-msvideo', 'video/webm',
-                    ];
-                    if (! in_array($mime, $allowed)) {
-                        $fail("File type [{$mime}] is not supported.");
+                function ($attribute, $value, $fail) use ($allowedMimes) {
+                    $mime = $value->getMimeType();
+                    if (! in_array($mime, $allowedMimes, true)) {
+                        $fail("File type [{$mime}] is not allowed by platform settings.");
                     }
                 },
-                'max:102400',
+                'max:' . $maxKb,
             ],
             'caption'           => ['nullable', 'string', 'max:255'],
             'visibility'        => ['nullable', 'in:public,friends,private'],
@@ -93,19 +90,21 @@ class ProfileController extends Controller
 
         $user = Auth::user();
 
-        // ── Subscription gate ──────────────────────────────────────────────
-        $subscription = \App\Models\Subscription::where('user_id', $user->id)
-            ->where('status', 'active')
-            ->where(fn ($q) => $q->whereNull('expires_at')->orWhere('expires_at', '>', now()))
-            ->latest()
-            ->first();
+        // ── Subscription gate (skipped when premium billing is disabled globally) ──
+        if (\App\Support\PlatformSettings::bool('enable_premium_subscription')) {
+            $subscription = \App\Models\Subscription::where('user_id', $user->id)
+                ->where('status', 'active')
+                ->where(fn ($q) => $q->whereNull('expires_at')->orWhere('expires_at', '>', now()))
+                ->latest()
+                ->first();
 
-        if (! $subscription || $subscription->plan === 'free') {
-            return response()->json([
-                'success' => false,
-                'message' => 'Uploading photos requires a Premium subscription.',
-                'code'    => 'UPGRADE_REQUIRED',
-            ], 403);
+            if (! $subscription || $subscription->plan === 'free') {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Uploading photos requires a Premium subscription.',
+                    'code'    => 'UPGRADE_REQUIRED',
+                ], 403);
+            }
         }
 
         $files      = $request->file('files');

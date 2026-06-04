@@ -1,23 +1,32 @@
+// src/App.jsx
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
-import { useState, useCallback } from "react";
+import { useState, useCallback }                  from "react";
+
+import { AuthProvider, useAuth }                  from "./context/AuthContext";
+import {
+  ProtectedRoute,
+  GuestRoute,
+  SuperAdminRoute,
+}                                                 from "./components/guards/RouteGuards";
 
 import Sidebar        from "./components/layout/Sidebar";
 import Topbar         from "./components/layout/Topbar";
 import ToastContainer from "./components/shared/Toast";
 
 // ── Pages ─────────────────────────────────────────────────────────────────────
-import LoginPage                from "./pages/LoginPage";
-import DashboardPage            from "./pages/DashboardPage";
-import FacultyPage              from "./pages/FacultyPage";
-import SettingsPage             from "./pages/SettingsPage";
-import AnalyticsPage            from "./pages/AnalyticsPage";
-import ArchivesPage             from "./pages/ArchivesPage";
-import BatchManagementPage      from "./pages/BatchManagementPage";
-import GraduationContentPage    from "./pages/GraduationContentPage";
-import MediaModerationPage      from "./pages/MediaModerationPage"; 
-import ReportsPage              from "./pages/ReportsPage";
-import SubscriptionsPage        from "./pages/SubscriptionsPage";
-import UsersPage                from "./pages/UsersPage";
+import LoginPage             from "./pages/LoginPage";
+import DashboardPage         from "./pages/DashboardPage";
+import FacultyPage           from "./pages/FacultyPage";
+import SettingsPage          from "./pages/SettingsPage";
+import AnalyticsPage         from "./pages/AnalyticsPage";
+import BatchManagementPage   from "./pages/BatchManagementPage";
+import GraduationContentPage from "./pages/GraduationContentPage";
+import MediaModerationPage   from "./pages/MediaModerationPage";
+import TrashPage             from "./pages/TrashPage";
+import ReportsPage           from "./pages/ReportsPage";
+import SubscriptionsPage     from "./pages/SubscriptionsPage";
+import UsersPage             from "./pages/UsersPage";
+import AdminManagementPage   from "./pages/AdminManagementPage";
 
 // ── Toast hook ────────────────────────────────────────────────────────────────
 function useToast() {
@@ -31,60 +40,15 @@ function useToast() {
   return { toasts, show, dismiss };
 }
 
-// ── Auth Context (simple) ─────────────────────────────────────────────────────
-import { createContext, useContext } from "react";
-
-const AuthContext = createContext(null);
-function useAuth() { return useContext(AuthContext); }
-
-function AuthProvider({ children }) {
-  const [authed, setAuthed] = useState(false);
-  const handleLogin  = () => setAuthed(true);
-  const handleLogout = () => setAuthed(false);
-  return (
-    <AuthContext.Provider value={{ authed, handleLogin, handleLogout }}>
-      {children}
-    </AuthContext.Provider>
-  );
-}
-
-// ── Route Guards ──────────────────────────────────────────────────────────────
-function ProtectedRoute({ children }) {
-  const { authed } = useAuth();
-  if (!authed) return <Navigate to="/login" replace />;
-  return children;
-}
-
-function GuestRoute({ children }) {
-  const { authed } = useAuth();
-  if (authed) return <Navigate to="/dashboard" replace />;
-  return children;
-}
-
 // ── Authenticated Layout ──────────────────────────────────────────────────────
 function AdminLayout({ children, toasts, onDismiss }) {
   const { handleLogout } = useAuth();
-  const SIDEBAR_WIDTH = 236;
   return (
-    <div style={{
-      minHeight: "100vh",
-      background: "#e9edf4",
-      fontFamily: "Inter, system-ui, sans-serif",
-    }}>
+    <div className="min-h-screen bg-[#e9edf4] flex font-[Inter,system-ui,sans-serif]">
       <Sidebar onLogout={handleLogout} />
-      <div
-        style={{
-          marginLeft: SIDEBAR_WIDTH,
-          minHeight: "100vh",
-          display: "flex",
-          flexDirection: "column",
-          background: "#edf1f8",
-        }}
-      >
+      <div className="flex flex-col flex-1 min-h-screen overflow-hidden ml-[236px]">
         <Topbar />
-        <div style={{ flex: 1, overflowY: "auto", padding: "18px 20px 20px" }}>
-          {children}
-        </div>
+        <div className="flex-1 overflow-y-auto">{children}</div>
       </div>
       <ToastContainer toasts={toasts} onDismiss={onDismiss} />
     </div>
@@ -94,79 +58,65 @@ function AdminLayout({ children, toasts, onDismiss }) {
 // ── Root App ──────────────────────────────────────────────────────────────────
 export default function App() {
   const { toasts, show: showToast, dismiss } = useToast();
-  const pageProps = { showToast };
 
   return (
     <>
       <GlobalStyles />
       <AuthProvider>
         <BrowserRouter>
-          <AppRoutes toasts={toasts} dismiss={dismiss} pageProps={pageProps} />
+          <AppRoutes toasts={toasts} dismiss={dismiss} showToast={showToast} />
         </BrowserRouter>
       </AuthProvider>
     </>
   );
 }
 
-function AppRoutes({ toasts, dismiss, pageProps }) {
+function AppRoutes({ toasts, dismiss, showToast }) {
   const { authed } = useAuth();
+
+  const Layout = ({ children }) => (
+    <AdminLayout toasts={toasts} onDismiss={dismiss}>{children}</AdminLayout>
+  );
+
+  const PP = ({ children }) => (
+    <ProtectedRoute><Layout>{children}</Layout></ProtectedRoute>
+  );
+
+  const SA = ({ children }) => (
+    <SuperAdminRoute><Layout>{children}</Layout></SuperAdminRoute>
+  );
+
+  const pp = { showToast };
 
   return (
     <Routes>
+      {/* Guest */}
+      <Route path="/login" element={
+        <GuestRoute>
+          <LoginPage {...pp} />
+          <ToastContainer toasts={toasts} onDismiss={dismiss} />
+        </GuestRoute>
+      } />
 
-      {/* ── Guest ──────────────────────────────────────────────────────────── */}
-      <Route
-        path="/login"
-        element={
-          <GuestRoute>
-            <LoginPage onLogin={useAuth().handleLogin} />
-            <ToastContainer toasts={toasts} onDismiss={dismiss} />
-          </GuestRoute>
-        }
-      />
+      {/* Any authenticated admin */}
+      <Route path="/dashboard"          element={<PP><DashboardPage         {...pp} /></PP>} />
+      <Route path="/users"              element={<PP><UsersPage              {...pp} /></PP>} />
+      <Route path="/subscriptions"      element={<PP><SubscriptionsPage      {...pp} /></PP>} />
+      <Route path="/faculty"            element={<PP><FacultyPage            {...pp} /></PP>} />
+      <Route path="/media-library"      element={<PP><MediaModerationPage    {...pp} /></PP>} />
+      <Route path="/content-moderation" element={<PP><MediaModerationPage    {...pp} /></PP>} />
+      <Route path="/graduation"         element={<PP><GraduationContentPage  {...pp} isAdmin={true} /></PP>} />
+      <Route path="/batches"            element={<PP><BatchManagementPage    {...pp} /></PP>} />
+      <Route path="/analytics"          element={<PP><AnalyticsPage          {...pp} /></PP>} />
+      <Route path="/trash"              element={<PP><TrashPage              {...pp} /></PP>} />
+      <Route path="/settings"           element={<PP><SettingsPage           {...pp} /></PP>} />
 
-      {/* ── Protected ──────────────────────────────────────────────────────── */}
-      <Route
-        path="/dashboard"
-        element={
-          <ProtectedRoute>
-            <AdminLayout toasts={toasts} onDismiss={dismiss}>
-              <DashboardPage {...pageProps} />
-            </AdminLayout>
-          </ProtectedRoute>
-        }
-      />
+      {/* Super Admin only */}
+      <Route path="/reports"            element={<SA><ReportsPage            {...pp} /></SA>} />
+      <Route path="/admin-management"   element={<SA><AdminManagementPage    {...pp} /></SA>} />
 
-      {/* ── Users ──────────────────────────────────────────────────────────── */}
-      <Route path="/users"           element={<ProtectedRoute><AdminLayout toasts={toasts} onDismiss={dismiss}><UsersPage {...pageProps} /></AdminLayout></ProtectedRoute>} />
-      <Route path="/subscriptions"   element={<ProtectedRoute><AdminLayout toasts={toasts} onDismiss={dismiss}><SubscriptionsPage {...pageProps} /></AdminLayout></ProtectedRoute>} />
-      <Route path="/privacy-consent" element={<Navigate to="/reports" replace />} />
-
-      {/* ── Faculty ────────────────────────────────────────────────────────── */}
-      <Route path="/faculty" element={<ProtectedRoute><AdminLayout toasts={toasts} onDismiss={dismiss}><FacultyPage {...pageProps} /></AdminLayout></ProtectedRoute>} />
-
-      {/* ── Media & Moderation (unified) ───────────────────────────────────── */}
-      {/* Both old URLs still work — they both render MediaModerationPage      */}
-      <Route path="/media-library"      element={<ProtectedRoute><AdminLayout toasts={toasts} onDismiss={dismiss}><MediaModerationPage {...pageProps} /></AdminLayout></ProtectedRoute>} />
-      <Route path="/content-moderation" element={<ProtectedRoute><AdminLayout toasts={toasts} onDismiss={dismiss}><MediaModerationPage {...pageProps} /></AdminLayout></ProtectedRoute>} />
-
-      {/* ── Archives ───────────────────────────────────────────────────────── */}
-      <Route path="/archives" element={<ProtectedRoute><AdminLayout toasts={toasts} onDismiss={dismiss}><ArchivesPage {...pageProps} /></AdminLayout></ProtectedRoute>} />
-
-      {/* ── Yearbook & Graduation ───────────────────────────────────────────── */}
-      <Route path="/graduation" element={<ProtectedRoute><AdminLayout toasts={toasts} onDismiss={dismiss}><GraduationContentPage {...pageProps} isAdmin={true} /></AdminLayout></ProtectedRoute>} />
-      <Route path="/batches"    element={<ProtectedRoute><AdminLayout toasts={toasts} onDismiss={dismiss}><BatchManagementPage {...pageProps} /></AdminLayout></ProtectedRoute>} />
-
-      {/* ── Analytics & Reports ─────────────────────────────────────────────── */}
-      <Route path="/analytics" element={<ProtectedRoute><AdminLayout toasts={toasts} onDismiss={dismiss}><AnalyticsPage {...pageProps} /></AdminLayout></ProtectedRoute>} />
-      <Route path="/reports"   element={<ProtectedRoute><AdminLayout toasts={toasts} onDismiss={dismiss}><ReportsPage {...pageProps} /></AdminLayout></ProtectedRoute>} />
-
-      {/* ── System ──────────────────────────────────────────────────────────── */}
-      <Route path="/settings"   element={<ProtectedRoute><AdminLayout toasts={toasts} onDismiss={dismiss}><SettingsPage {...pageProps} /></AdminLayout></ProtectedRoute>} />
-
-      {/* ── Redirects ───────────────────────────────────────────────────────── */}
+      {/* Redirects */}
       <Route path="/" element={<Navigate to={authed ? "/dashboard" : "/login"} replace />} />
-
     </Routes>
   );
 }

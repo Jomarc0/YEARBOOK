@@ -221,8 +221,10 @@ export default function GalleryShowPage() {
   const fetchingRef = useRef(new Set());
   const masonryRef  = useContentProtection();
 
-  // Replace with real auth context in production
-  const tier = 'free';
+const { user } = useAuth(); 
+const tier = user?.tier === 'premium' || user?.is_premium ? 'premium'
+            : user?.tier === 'standard' ? 'standard'
+            : 'free'
 
   const loadAlbum = useCallback(() => {
     if (!id) return;

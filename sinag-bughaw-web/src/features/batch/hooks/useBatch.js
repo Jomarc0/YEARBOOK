@@ -7,7 +7,7 @@ import { useAuth } from '@/features/auth/hooks/useAuth';
 export function useBatch() {
   const { user } = useAuth();
 
-  // ✅ Derived directly from the auth user object (populated by authApi.me()).
+  // Derived directly from the auth user object (populated by authApi.me()).
   //    Never false while waiting for a separate API response.
   //    user.is_premium is set by AuthController::me() → already in context.
   const isPremium = user?.is_premium === true || user?.tier === 'premium';

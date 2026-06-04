@@ -1,7 +1,14 @@
-export default function Topbar({ admin = { name: "Admin User", role: "Super Admin" } }) {
+import { useAuth } from "../../context/AuthContext";
+
+export default function Topbar() {
+  const { admin, isSuperAdmin } = useAuth(); // ← read from AuthContext directly
+
   const today = new Date().toLocaleDateString("en-PH", {
     weekday: "long", year: "numeric", month: "long", day: "numeric",
   });
+
+  const displayName = admin?.name ?? "Admin";
+  const displayRole = isSuperAdmin ? "Super Admin" : "Admin";
 
   return (
     <div style={{
@@ -43,17 +50,23 @@ export default function Topbar({ admin = { name: "Admin User", role: "Super Admi
         }}>
           <div style={{ textAlign: "right" }}>
             <div style={{ fontSize: "0.9rem", fontWeight: 700, color: "#18253f" }}>
-              {admin.name}
+              {displayName}
             </div>
-            <div style={{ fontSize: "0.7rem", color: "#7d8ca8", textTransform: "uppercase", letterSpacing: "0.09em", fontWeight: 700 }}>
-              {admin.role}
+            <div style={{
+              fontSize: "0.7rem", fontWeight: 700,
+              textTransform: "uppercase", letterSpacing: "0.09em",
+              color: isSuperAdmin ? "#7c3aed" : "#7d8ca8", // purple for super admin
+            }}>
+              {isSuperAdmin ? "★ " : ""}{displayRole}
             </div>
           </div>
           <div style={{
             width: 38, height: 38, borderRadius: 12,
-            background: "linear-gradient(145deg, #edf2ff, #e4ebff)",
-            color: "#2f47c5",
-            border: "1px solid #ccd9fb",
+            background: isSuperAdmin
+              ? "linear-gradient(145deg, #ede9fe, #ddd6fe)"  // purple for super admin
+              : "linear-gradient(145deg, #edf2ff, #e4ebff)", // blue for admin
+            color: isSuperAdmin ? "#6d28d9" : "#2f47c5",
+            border: isSuperAdmin ? "1px solid #c4b5fd" : "1px solid #ccd9fb",
             display: "grid", placeItems: "center", fontSize: 15,
           }}>
             👤

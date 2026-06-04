@@ -9,15 +9,17 @@ use App\Http\Controllers\API\Admin\VoiceNoteAdminController;
 use App\Http\Controllers\API\Admin\AdminAuthController;
 use App\Http\Controllers\API\Admin\AdminController;
 use App\Http\Controllers\API\Admin\UserManagementController;
-use App\Http\Controllers\API\Admin\MediaModerationController;  // ← unified controller
+use App\Http\Controllers\API\Admin\MediaModerationController;  
 use App\Http\Controllers\API\Admin\BatchSectionController;
 use App\Http\Controllers\API\Admin\PrivacyConsentController;
 use App\Http\Controllers\API\Admin\SubscriptionController;
 use App\Http\Controllers\API\Admin\AnalyticsAdminController;
 use App\Http\Controllers\API\Admin\ReportsController;
-use App\Http\Controllers\API\Admin\ArchivesController;
 use App\Http\Controllers\API\Admin\SettingsController;
 use App\Http\Controllers\API\Admin\GraduationContentController;
+use App\Http\Controllers\API\Admin\FacultyAdminController;
+use App\Http\Controllers\API\Admin\TrashController;
+use App\Http\Controllers\API\Admin\SuperAdminController;
 use App\Http\Controllers\API\Admin\StudentController as AdminStudentController;
 use App\Http\Controllers\API\Analytics\AnalyticsController;
 use App\Http\Controllers\API\Auth\ConsentController;
@@ -25,6 +27,7 @@ use App\Http\Controllers\API\Section\BatchController;
 use App\Http\Controllers\API\Faculty\FacultyController;
 use App\Http\Controllers\API\Search\SearchController;
 use App\Http\Controllers\API\Section\SectionController;
+use App\Http\Controllers\API\Section\DiscoveryStudentController;
 use App\Http\Controllers\API\Social\MessageController;
 use App\Http\Controllers\API\Social\NotificationController;
 use App\Http\Controllers\API\Student\ProfileSettingsController;
@@ -38,20 +41,24 @@ use App\Http\Controllers\API\Yearbook\YearbookController;
 use App\Http\Controllers\API\Social\PresenceController;
 use App\Http\Controllers\API\AI\MemoryController;
 use App\Http\Controllers\API\Alumni\AlumniTrackerController;
+use App\Http\Controllers\API\AppConfigController;
 use Illuminate\Support\Facades\Route;
 
 // =========================================================================
 // PUBLIC ROUTES
 // =========================================================================
 
+Route::get('/app-config', [AppConfigController::class, 'show']);
+
 Route::prefix('auth')->group(function () {
-    Route::post('/login',      [AuthController::class, 'login']);
-    Route::post('/register',   [AuthController::class, 'register']);
-    Route::post('/otp/send',   [AuthController::class, 'sendOtp']);
-    Route::post('/otp/verify', [AuthController::class, 'verifyOtp']);
-    Route::post('/forgot-password',  [AuthController::class, 'forgotPassword']);
-    Route::post('/otp/verify-reset', [AuthController::class, 'verifyResetOtp']);
-    Route::post('/reset-password',   [AuthController::class, 'resetPassword']);
+    Route::post('/login',           [AuthController::class, 'login']);
+    Route::post('/register',        [AuthController::class, 'register']);
+    Route::post('/verify-student',  [AuthController::class, 'verifyStudent']); 
+    Route::post('/otp/send',        [AuthController::class, 'sendOtp']);
+    Route::post('/otp/verify',      [AuthController::class, 'verifyOtp']);
+    Route::post('/forgot-password', [AuthController::class, 'forgotPassword']);
+    Route::post('/otp/verify-reset',[AuthController::class, 'verifyResetOtp']);
+    Route::post('/reset-password',  [AuthController::class, 'resetPassword']);
 });
 
 Route::post('/payments/webhook',    [PaymentController::class,     'webhook']);
@@ -94,7 +101,8 @@ Route::middleware(['auth:sanctum', 'throttle:120,1'])->group(function () {
         Route::get('/achievements', [ProfileSettingsController::class, 'getAchievements']);
 
         Route::get('/storage-usage',      [ProfileController::class, 'storageUsage']);
-        Route::post('/upload',            [ProfileController::class, 'uploadMedia']);
+        Route::post('/upload', [ProfileController::class, 'uploadMedia'])
+            ->middleware('feature:allow_student_posts');
         Route::get('/posts/{photoId}',    [ProfileController::class, 'getPost']);
         Route::patch('/posts/{photoId}',  [ProfileController::class, 'updatePost']);
         Route::delete('/posts/{photoId}', [ProfileController::class, 'deletePost']);
@@ -143,6 +151,7 @@ Route::middleware(['auth:sanctum', 'throttle:120,1'])->group(function () {
         Route::get('/school',                  [BatchController::class, 'wholeSchool']);
         Route::get('/cross-program',           [BatchController::class, 'crossProgram']);
         Route::get('/department/{department}', [BatchController::class, 'byDepartment']);
+        Route::get('/students/{id}',           [DiscoveryStudentController::class, 'show']);
     });
 
     // ── Gallery ───────────────────────────────────────────────────────────────
@@ -154,7 +163,7 @@ Route::middleware(['auth:sanctum', 'throttle:120,1'])->group(function () {
     // ── Search ────────────────────────────────────────────────────────────────
     Route::get('/search', [SearchController::class, 'search']);
 
-    Route::prefix('search/students')->group(function () {
+    Route::prefix('search/students')->middleware('feature:enable_student_directory_search')->group(function () {
         Route::get('/suggest', [SearchController::class, 'suggest']);
         Route::get('/filters', [SearchController::class, 'studentFilters']);
         Route::get('/',        [SearchController::class, 'students']);
@@ -227,7 +236,8 @@ Route::middleware(['auth:sanctum', 'throttle:120,1'])->group(function () {
 
     // ── Yearbook ──────────────────────────────────────────────────────────────
     Route::prefix('yearbook')->group(function () {
-        Route::get('/flipbook',              [YearbookController::class,      'flipbookData']);
+        Route::get('/flipbook', [YearbookController::class, 'flipbookData'])
+            ->middleware('feature:enable_flipbook_viewer,publish_yearbook');
         Route::get('/export/{userId}',        [YearbookController::class,      'exportStudentPdf']);
         Route::get('/search',                 [YearbookController::class,      'search']);
         Route::get('/bookmarks/{batchId}',    [YearbookController::class,      'getBookmarks']);
@@ -239,9 +249,11 @@ Route::middleware(['auth:sanctum', 'throttle:120,1'])->group(function () {
 
     // ── Yearbooks (batch-scoped) ──────────────────────────────────────────────
     Route::middleware('content.security')->prefix('yearbooks')->group(function () {
-        Route::get('{batch}',                     [YearbookController::class, 'show'])
+        Route::get('{batch}', [YearbookController::class, 'show'])
+            ->middleware('feature:publish_yearbook')
             ->name('yearbooks.show');
-        Route::get('{batch}/pages',               [YearbookController::class, 'pages'])
+        Route::get('{batch}/pages', [YearbookController::class, 'pages'])
+            ->middleware('feature:enable_flipbook_viewer,publish_yearbook')
             ->name('yearbooks.pages');
         Route::get('{batch}/galleries',           [GalleryController::class,  'index'])
             ->name('yearbooks.galleries.index');
@@ -257,7 +269,8 @@ Route::middleware(['auth:sanctum', 'throttle:120,1'])->group(function () {
 
     // ── Payments ──────────────────────────────────────────────────────────────
     Route::prefix('payments')->group(function () {
-        Route::post('/create-intent', [PaymentController::class, 'createIntent']);
+        Route::post('/create-intent', [PaymentController::class, 'createIntent'])
+            ->middleware('feature:enable_premium_subscription');
         Route::get('/history',        [PaymentController::class, 'history']);
         Route::get('/status',         [PaymentController::class, 'subscriptionStatus']);
     });
@@ -303,6 +316,12 @@ Route::middleware(['auth:sanctum', 'throttle:120,1'])->group(function () {
             ->name('alumni.yearbook-entry');
     });
 
+    Route::prefix('graduation')->group(function () {
+        Route::get('/',              [GraduationController::class, 'index']);
+        Route::get('/{id}',          [GraduationController::class, 'show']);
+        Route::get('/{id}/photos',   [GraduationController::class, 'photos']);
+    });
+
     // =========================================================================
     // PREMIUM-ONLY ROUTES
     // =========================================================================
@@ -311,7 +330,7 @@ Route::middleware(['auth:sanctum', 'throttle:120,1'])->group(function () {
         Route::get('/yearbook/certificate', [YearbookController::class, 'exportCertificate']);
 
         Route::get('yearbooks/{batch}/download', [YearbookController::class, 'download'])
-            ->middleware(['throttle:5,1', 'content.security'])
+            ->middleware(['throttle:5,1', 'content.security', 'feature:enable_yearbook_pdf_download,publish_yearbook'])
             ->name('yearbooks.download');
 
         Route::post('yearbooks/{batch}/generate', [YearbookController::class, 'generate'])
@@ -356,20 +375,16 @@ Route::middleware(['auth:sanctum', 'admin.only'])
     Route::delete('/students/{id}', [AdminController::class,   'deleteStudent']);
 
     // ── Faculty CRUD ──────────────────────────────────────────────────────────
-    Route::get('/faculty',         [FacultyController::class, 'index']);
-    Route::post('/faculty',        [FacultyController::class, 'store']);
-    Route::put('/faculty/{id}',    [FacultyController::class, 'update']);
-    Route::delete('/faculty/{id}', [FacultyController::class, 'destroy']);
+    Route::get('/faculty',         [FacultyAdminController::class, 'index']);
+    Route::post('/faculty',        [FacultyAdminController::class, 'store']);
+    Route::put('/faculty/{id}',    [FacultyAdminController::class, 'update']);
+    Route::delete('/faculty/{id}', [FacultyAdminController::class, 'destroy']);
 
     // ── Gallery & Media ───────────────────────────────────────────────────────
     Route::get('/gallery',             [GalleryController::class, 'index']);
     Route::post('/gallery',            [GalleryController::class, 'store']);
     Route::delete('/gallery/{id}',     [GalleryController::class, 'destroy']);
     Route::delete('/media/photo/{id}', [MediaController::class,   'deletePhoto']);
-
-    // ── Settings ──────────────────────────────────────────────────────────────
-    Route::get('/settings',  [AdminController::class, 'getSettings']);
-    Route::post('/settings', [AdminController::class, 'saveSettings']);
 
     // ── Batches & Sections ────────────────────────────────────────────────────
     Route::get('/batches',         [BatchController::class,   'index']);
@@ -400,28 +415,23 @@ Route::middleware(['auth:sanctum', 'admin.only'])
         Route::get('counts', [MediaModerationController::class, 'counts']);
 
         // ── Bulk actions ──────────────────────────────────────────────────────
-        // Must be before {type}/{id} wildcard routes
         Route::post('bulk-approve', [MediaModerationController::class, 'bulkApprove']);
         Route::post('bulk-reject',  [MediaModerationController::class, 'bulkReject']);
 
         // ── Status history ────────────────────────────────────────────────────
-        // Must be before {type}/{id} wildcard routes
         Route::get('history/{type}/{id}', [MediaModerationController::class, 'statusHistory']);
 
         // ── Album-level actions ───────────────────────────────────────────────
-        // Prefix "photo/album" is literal — must come before generic {type}/{id}
         Route::post('photo/album/{albumId}/approve', [MediaModerationController::class, 'approveAlbum']);
         Route::post('photo/album/{albumId}/reject',  [MediaModerationController::class, 'rejectAlbum']);
         Route::post('photo/album/{albumId}/revert',  [MediaModerationController::class, 'revertAlbum']);
 
         // ── Photo-level actions ───────────────────────────────────────────────
-        // Prefix "photo" is literal — must come before generic {type}/{id}
         Route::post('photo/{id}/approve', [MediaModerationController::class, 'approvePhoto']);
         Route::post('photo/{id}/reject',  [MediaModerationController::class, 'rejectPhoto']);
         Route::post('photo/{id}/revert',  [MediaModerationController::class, 'revertPhoto']);
 
         // ── Generic item actions (video / voice / reported) ───────────────────
-        // Wildcard {type} — must come LAST in this group
         Route::get( '{type}/{id}',         [MediaModerationController::class, 'show']);
         Route::post('{type}/{id}/approve', [MediaModerationController::class, 'approveItem']);
         Route::post('{type}/{id}/reject',  [MediaModerationController::class, 'rejectItem']);
@@ -442,7 +452,6 @@ Route::middleware(['auth:sanctum', 'admin.only'])
         Route::put('/{batch}',    [BatchSectionController::class, 'batchUpdate']);
         Route::delete('/{batch}', [BatchSectionController::class, 'batchDestroy']);
 
-        // Hierarchy drill-down
         Route::get('/{batch}/departments',                        [BatchSectionController::class, 'batchDepartments']);
         Route::get('/{batch}/departments/{department}/courses',   [BatchSectionController::class, 'batchDepartmentCourses']);
     });
@@ -471,7 +480,6 @@ Route::middleware(['auth:sanctum', 'admin.only'])
         Route::put('/albums/{id}',    [MediaModerationController::class, 'updateAlbum']);
         Route::delete('/albums/{id}', [MediaModerationController::class, 'destroyAlbum']);
 
-        // ✅ NEW — Album drill-down: fetch all photos inside a specific album
         // Must be declared BEFORE the generic /photos route to avoid conflicts
         Route::get('/albums/{id}/photos', [MediaModerationController::class, 'albumPhotos']);
 
@@ -501,7 +509,6 @@ Route::middleware(['auth:sanctum', 'admin.only'])
         Route::get('/{album}', [$gc, 'show']);
         Route::post('/',       [$gc, 'uploadContent']);
 
-        // Upload routes — one per content type
         Route::post('/photos',      [$gc, 'uploadPhotos']);
         Route::post('/toga',        fn ($r) => app($gc)->uploadPhotos($r, 'toga'));
         Route::post('/highlights',  fn ($r) => app($gc)->uploadPhotos($r, 'highlights'));
@@ -514,7 +521,6 @@ Route::middleware(['auth:sanctum', 'admin.only'])
         Route::post('/messages',    [$gc, 'uploadMessage']);
         Route::post('/archive',     [$gc, 'uploadArchive']);
 
-        // Album management
         Route::put('/{album}',          [$gc, 'update']);
         Route::delete('/{album}',       [$gc, 'destroy']);
         Route::post('/{album}/publish', [$gc, 'publish']);
@@ -553,23 +559,14 @@ Route::middleware(['auth:sanctum', 'admin.only'])
         Route::get('/presence',      [AnalyticsAdminController::class, 'presence']);
     });
 
-    // ── Reports & Audit Logs ──────────────────────────────────────────────────
-    Route::prefix('reports')->group(function () {
-        Route::get('/stats',         [ReportsController::class, 'stats']);
-        Route::get('/audit-logs',    [ReportsController::class, 'auditLogs']); 
-        Route::get('/upload-logs',   [ReportsController::class, 'uploadLogs']);
-        Route::get('/login-history', [ReportsController::class, 'loginHistory']);
-        Route::get('/ai-logs',       [ReportsController::class, 'aiLogs']);
-    });
-
-    // ── Archives ──────────────────────────────────────────────────────────────
-    Route::prefix('archives')->group(function () {
-        Route::get('/stats',                    [ArchivesController::class, 'stats']);
-        Route::get('/',                         [ArchivesController::class, 'index']);
-        Route::post('/{yearbook}/publish',      [ArchivesController::class, 'publish']);
-        Route::post('/{yearbook}/unpublish',    [ArchivesController::class, 'unpublish']);
-        Route::post('/{yearbook}/generate-pdf', [ArchivesController::class, 'generatePdf']);
-        Route::delete('/{yearbook}',            [ArchivesController::class, 'destroy']);
+    // ── Trash (unified bin) ───────────────────────────────────────────────────
+    Route::prefix('trash')->group(function () {
+        Route::get('/',              [TrashController::class, 'index']);
+        Route::get('/counts',        [TrashController::class, 'counts']);
+        Route::post('/bulk-restore', [TrashController::class, 'bulkRestore']);
+        Route::delete('/bulk-force', [TrashController::class, 'bulkForce']);
+        Route::post('/{type}/{id}/restore',  [TrashController::class, 'restore']);
+        Route::delete('/{type}/{id}',        [TrashController::class, 'forceDelete']);
     });
 
     // ── Settings ──────────────────────────────────────────────────────────────
@@ -578,5 +575,31 @@ Route::middleware(['auth:sanctum', 'admin.only'])
         Route::post('/',                   [SettingsController::class, 'save']);
         Route::delete('/clear-audit-logs', [SettingsController::class, 'clearAuditLogs']);
         Route::post('/reset',              [SettingsController::class, 'reset']);
+        Route::post('/archive-batch',      [SettingsController::class, 'archiveBatch']);
     });
 });
+
+// =========================================================================
+// SUPER ADMIN ROUTES — Stacked: auth:sanctum → admin.only → require.super_admin
+// =========================================================================
+
+Route::middleware(['auth:sanctum', 'admin.only', 'require.super_admin'])
+    ->prefix('admin')
+    ->group(function () {
+
+        // ── Admin Account Management ──────────────────────────────────────────
+        Route::get   ('/admins',                    [SuperAdminController::class, 'index']);
+        Route::post  ('/admins',                    [SuperAdminController::class, 'store']);
+        Route::put   ('/admins/{id}',               [SuperAdminController::class, 'update']);
+        Route::delete('/admins/{id}',               [SuperAdminController::class, 'destroy']);
+        Route::patch ('/admins/{id}/toggle-status', [SuperAdminController::class, 'toggleStatus']);
+
+        // ── Reports & Audit Logs (Super Admin only) ───────────────────────────
+        Route::prefix('reports')->group(function () {
+            Route::get('/stats',         [ReportsController::class, 'stats']);
+            Route::get('/audit-logs',    [ReportsController::class, 'auditLogs']);
+            Route::get('/upload-logs',   [ReportsController::class, 'uploadLogs']);
+            Route::get('/login-history', [ReportsController::class, 'loginHistory']);
+            Route::get('/ai-logs',       [ReportsController::class, 'aiLogs']);
+        });
+    });

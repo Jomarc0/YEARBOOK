@@ -7,9 +7,12 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class GraduationPhoto extends Model implements AnalyzablePhoto
 {
+    use SoftDeletes;
+
     protected $fillable = [
         'graduation_album_id',
         'file_path',
@@ -93,9 +96,9 @@ class GraduationPhoto extends Model implements AnalyzablePhoto
 
     public function markAiError(string $message): bool
     {
-        $meta             = $this->ai_metadata ?? [];
-        $meta['status']   = 'error';
-        $meta['error']    = $message;
+        $meta                = $this->ai_metadata ?? [];
+        $meta['status']      = 'error';
+        $meta['error']       = $message;
         $meta['analyzed_at'] = now()->toIso8601String();
 
         return $this->update(['ai_metadata' => $meta]);

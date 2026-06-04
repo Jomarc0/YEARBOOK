@@ -6,10 +6,11 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Yearbook extends Model
 {
-    use HasFactory;
+    use HasFactory, SoftDeletes;
 
     protected $fillable = [
         'batch_id',
@@ -39,9 +40,17 @@ class Yearbook extends Model
     }
 
     /**
-     * Photos directly tied to this yearbook.
-     * Albums are NOT tied to yearbooks (no yearbook_id FK on albums).
-     * Albums are standalone — queried separately by type/category.
+     * Photos associated with this yearbook.
+     *
+     * NOTE: Requires a `yearbook_id` (unsignedBigInteger, nullable, foreign)
+     * column on the `photos` table. Add via migration if not present:
+     *
+     *   Schema::table('photos', function (Blueprint $table) {
+     *       $table->foreignId('yearbook_id')->nullable()->constrained()->nullOnDelete()->after('album_id');
+     *   });
+     *
+     * Also add 'yearbook_id' to Photo::$fillable.
+     * Remove this relationship entirely if Yearbook→Photo linking is not needed.
      */
     public function photos(): HasMany
     {

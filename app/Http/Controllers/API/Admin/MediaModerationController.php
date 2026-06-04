@@ -31,6 +31,10 @@ use Carbon\Carbon;
  *   - post_media:  photo_id IS NOT NULL AND resource_type = 'video'
  *   - voice_notes: all (user-to-user only, admin just moderates)
  *   - tagged_photos: all
+ *
+ * SOFT-DELETE POLICY:
+ *   All destroy methods call ->delete() (soft). No Cloudinary assets are purged here.
+ *   Assets are purged only on permanent deletion via TrashController@forceDelete.
  */
 class MediaModerationController extends Controller
 {
@@ -141,9 +145,6 @@ class MediaModerationController extends Controller
             : $this->genericQueue($request, $type, $status);
     }
 
-    /**
-     * Photos tab: albums grouped with their status-filtered, user-uploaded photos.
-     */
     private function albumQueue(Request $request, string $status): JsonResponse
     {
         $albums = Album::with([
@@ -195,9 +196,6 @@ class MediaModerationController extends Controller
         return response()->json($albums);
     }
 
-    /**
-     * Generic flat queue for video, voice, tagged, reported.
-     */
     private function genericQueue(Request $request, string $type, string $status): JsonResponse
     {
         $config    = $this->resolveType($type);
@@ -266,7 +264,6 @@ class MediaModerationController extends Controller
 
     // =========================================================================
     // MODERATION — Show single item
-    // GET /api/admin/moderation/{type}/{id}
     // =========================================================================
 
     public function show(string $type, int $id): JsonResponse
@@ -396,7 +393,6 @@ class MediaModerationController extends Controller
     // MODERATION — Album approve / reject / revert
     // =========================================================================
 
-    /** POST /api/admin/moderation/photo/album/{albumId}/approve */
     public function approveAlbum(int $albumId): JsonResponse
     {
         Album::findOrFail($albumId);
@@ -419,7 +415,6 @@ class MediaModerationController extends Controller
         return response()->json(['message' => "All photos in album #{$albumId} approved."]);
     }
 
-    /** POST /api/admin/moderation/photo/album/{albumId}/reject   { reason } */
     public function rejectAlbum(Request $request, int $albumId): JsonResponse
     {
         $request->validate(['reason' => 'required|string|max:255']);
@@ -444,7 +439,6 @@ class MediaModerationController extends Controller
         return response()->json(['message' => "All photos in album #{$albumId} rejected."]);
     }
 
-    /** POST /api/admin/moderation/photo/album/{albumId}/revert   { status, note? } */
     public function revertAlbum(Request $request, int $albumId): JsonResponse
     {
         $request->validate([
@@ -501,7 +495,6 @@ class MediaModerationController extends Controller
     // MODERATION — Single photo approve / reject / revert
     // =========================================================================
 
-    /** POST /api/admin/moderation/photo/{id}/approve */
     public function approvePhoto(int $id): JsonResponse
     {
         $photo = Photo::findOrFail($id);
@@ -521,7 +514,6 @@ class MediaModerationController extends Controller
         return response()->json(['message' => "Photo #{$id} approved."]);
     }
 
-    /** POST /api/admin/moderation/photo/{id}/reject   { reason } */
     public function rejectPhoto(Request $request, int $id): JsonResponse
     {
         $request->validate(['reason' => 'required|string|max:255']);
@@ -547,7 +539,6 @@ class MediaModerationController extends Controller
         return response()->json(['message' => "Photo #{$id} rejected."]);
     }
 
-    /** POST /api/admin/moderation/photo/{id}/revert   { status, note? } */
     public function revertPhoto(Request $request, int $id): JsonResponse
     {
         $request->validate([
@@ -594,10 +585,9 @@ class MediaModerationController extends Controller
     }
 
     // =========================================================================
-    // MODERATION — Generic item approve / reject / revert (video / voice / reported)
+    // MODERATION — Generic item approve / reject / revert
     // =========================================================================
 
-    /** POST /api/admin/moderation/{type}/{id}/approve */
     public function approveItem(string $type, int $id): JsonResponse
     {
         $config = $this->resolveType($type);
@@ -622,7 +612,6 @@ class MediaModerationController extends Controller
         return response()->json(['message' => ucfirst($type) . " #{$id} approved."]);
     }
 
-    /** POST /api/admin/moderation/{type}/{id}/reject   { reason } */
     public function rejectItem(Request $request, string $type, int $id): JsonResponse
     {
         $request->validate(['reason' => 'required|string|max:255']);
@@ -649,7 +638,6 @@ class MediaModerationController extends Controller
         return response()->json(['message' => ucfirst($type) . " #{$id} rejected."]);
     }
 
-    /** POST /api/admin/moderation/{type}/{id}/revert   { status, note? } */
     public function revertItem(Request $request, string $type, int $id): JsonResponse
     {
         $request->validate([
@@ -698,7 +686,6 @@ class MediaModerationController extends Controller
     // MODERATION — Bulk approve / reject
     // =========================================================================
 
-    /** POST /api/admin/moderation/bulk-approve   { type, ids[] } */
     public function bulkApprove(Request $request): JsonResponse
     {
         $request->validate([
@@ -743,7 +730,6 @@ class MediaModerationController extends Controller
         return response()->json(['message' => count($request->ids) . ' items approved.']);
     }
 
-    /** POST /api/admin/moderation/bulk-reject   { type, ids[], reason } */
     public function bulkReject(Request $request): JsonResponse
     {
         $request->validate([
@@ -791,7 +777,6 @@ class MediaModerationController extends Controller
 
     // =========================================================================
     // MODERATION — Status history
-    // GET /api/admin/moderation/history/{type}/{id}
     // =========================================================================
 
     public function statusHistory(string $type, int $id): JsonResponse
@@ -807,13 +792,10 @@ class MediaModerationController extends Controller
             $fromStatus = null;
             $toStatus   = null;
 
-            // Parse revert logs: "Admin reverted type #id: from→to"
             if (preg_match('/(\w+)→(\w+)/', $row->details ?? '', $m)) {
                 $fromStatus = $m[1];
                 $toStatus   = $m[2];
-            }
-            // Parse approve/reject logs: "Admin approved/rejected type #id"
-            elseif (preg_match('/Admin (\w+) \w+ #\d+/', $row->details ?? '', $m)) {
+            } elseif (preg_match('/Admin (\w+) \w+ #\d+/', $row->details ?? '', $m)) {
                 $toStatus = in_array($m[1], ['approved', 'rejected', 'reverted'])
                     ? $m[1] : null;
             }
@@ -846,8 +828,7 @@ class MediaModerationController extends Controller
     }
 
     // =========================================================================
-    // MEDIA LIBRARY — Stats (user content only)
-    // GET /api/admin/media/stats
+    // MEDIA LIBRARY — Stats
     // =========================================================================
 
     public function mediaStats(): JsonResponse
@@ -870,10 +851,9 @@ class MediaModerationController extends Controller
     }
 
     // =========================================================================
-    // MEDIA LIBRARY — Albums CRUD (user albums only)
+    // MEDIA LIBRARY — Albums
     // =========================================================================
 
-    /** GET /api/admin/media/albums */
     public function mediaAlbums(Request $request): JsonResponse
     {
         $query = Album::query()
@@ -906,13 +886,6 @@ class MediaModerationController extends Controller
         return response()->json($items);
     }
 
-    /**
-     * GET /api/admin/media/albums/{id}/photos
-     * ─────────────────────────────────────────
-     * Returns all photos inside a specific album for the Media Library drill-down.
-     * Shows ALL photos regardless of status (unlike the moderation queue which
-     * filters by status). Includes URL resolution and human timestamps.
-     */
     public function albumPhotos(Request $request, int $id): JsonResponse
     {
         $album = Album::whereNotNull('user_id')
@@ -924,12 +897,10 @@ class MediaModerationController extends Controller
             ->with('user:id,first_name,last_name')
             ->orderBy('created_at', 'desc');
 
-        // Optional status filter (e.g. ?status=approved)
         if ($request->filled('status')) {
             $query->where('status', $request->status);
         }
 
-        // Optional visibility filter (e.g. ?visibility=public)
         if ($request->filled('visibility')) {
             $query->where('visibility', $request->visibility);
         }
@@ -956,7 +927,6 @@ class MediaModerationController extends Controller
         return response()->json($photos);
     }
 
-    /** POST /api/admin/media/albums */
     public function storeAlbum(Request $request): JsonResponse
     {
         $data = $request->validate([
@@ -973,7 +943,6 @@ class MediaModerationController extends Controller
         return response()->json($album, 201);
     }
 
-    /** PUT /api/admin/media/albums/{id} */
     public function updateAlbum(Request $request, int $id): JsonResponse
     {
         $album = Album::findOrFail($id);
@@ -991,21 +960,23 @@ class MediaModerationController extends Controller
         return response()->json(['message' => 'Album updated.']);
     }
 
-    /** DELETE /api/admin/media/albums/{id} */
+    /**
+     * Soft-delete an album.
+     * Photos inside the album are NOT cascade-deleted.
+     * Cloudinary assets are NOT purged here — deferred to TrashController@forceDelete.
+     */
     public function destroyAlbum(int $id): JsonResponse
     {
         $album = Album::findOrFail($id);
-        Photo::where('album_id', $id)->delete();
-        $album->delete();
+        $album->delete(); // soft delete
 
-        return response()->json(['message' => 'Album deleted.']);
+        return response()->json(['message' => 'Album moved to trash.']);
     }
 
     // =========================================================================
-    // MEDIA LIBRARY — Photos (user-uploaded only)
+    // MEDIA LIBRARY — Photos
     // =========================================================================
 
-    /** GET /api/admin/media/photos */
     public function mediaPhotos(Request $request): JsonResponse
     {
         $query = Photo::query()
@@ -1038,19 +1009,21 @@ class MediaModerationController extends Controller
         return response()->json($items);
     }
 
-    /** DELETE /api/admin/media/photos/{id} */
+    /**
+     * Soft-delete a photo.
+     * Cloudinary asset NOT purged — deferred to TrashController@forceDelete.
+     */
     public function destroyPhoto(int $id): JsonResponse
     {
-        Photo::findOrFail($id)->delete();
+        Photo::findOrFail($id)->delete(); // soft delete
 
-        return response()->json(['message' => 'Photo deleted.']);
+        return response()->json(['message' => 'Photo moved to trash.']);
     }
 
     // =========================================================================
-    // MEDIA LIBRARY — Videos (user post_media only, NO graduation albums)
+    // MEDIA LIBRARY — Videos
     // =========================================================================
 
-    /** GET /api/admin/media/videos */
     public function mediaVideos(Request $request): JsonResponse
     {
         $query = PostMedia::where('resource_type', 'video')
@@ -1082,19 +1055,21 @@ class MediaModerationController extends Controller
         return response()->json($items);
     }
 
-    /** DELETE /api/admin/media/videos/{id} */
+    /**
+     * Soft-delete a video (PostMedia record).
+     * Cloudinary asset NOT purged — deferred to TrashController@forceDelete.
+     */
     public function destroyVideo(int $id): JsonResponse
     {
-        PostMedia::findOrFail($id)->delete();
+        PostMedia::findOrFail($id)->delete(); // soft delete
 
-        return response()->json(['message' => 'Video deleted.']);
+        return response()->json(['message' => 'Video moved to trash.']);
     }
 
     // =========================================================================
     // MEDIA LIBRARY — Voice Notes
     // =========================================================================
 
-    /** GET /api/admin/media/voice-notes */
     public function mediaVoiceNotes(Request $request): JsonResponse
     {
         $query = VoiceNote::query()
@@ -1127,19 +1102,21 @@ class MediaModerationController extends Controller
         return response()->json($items);
     }
 
-    /** DELETE /api/admin/media/voice-notes/{id} */
+    /**
+     * Soft-delete a voice note.
+     * Cloudinary audio asset NOT purged — deferred to TrashController@forceDelete.
+     */
     public function destroyVoiceNote(int $id): JsonResponse
     {
-        VoiceNote::findOrFail($id)->delete();
+        VoiceNote::findOrFail($id)->delete(); // soft delete
 
-        return response()->json(['message' => 'Voice note deleted.']);
+        return response()->json(['message' => 'Voice note moved to trash.']);
     }
 
     // =========================================================================
     // MEDIA LIBRARY — Tagged Photos
     // =========================================================================
 
-    /** GET /api/admin/media/tagged-photos */
     public function mediaTaggedPhotos(Request $request): JsonResponse
     {
         $query = TaggedPhoto::query()
@@ -1173,21 +1150,21 @@ class MediaModerationController extends Controller
         return response()->json($items);
     }
 
-    /** DELETE /api/admin/media/tagged-photos/{id} */
+    /**
+     * Soft-delete a tagged photo record.
+     * No Cloudinary asset to purge (photo_path is not a public_id).
+     */
     public function destroyTaggedPhoto(int $id): JsonResponse
     {
-        TaggedPhoto::findOrFail($id)->delete();
+        TaggedPhoto::findOrFail($id)->delete(); // soft delete
 
-        return response()->json(['message' => 'Tagged photo deleted.']);
+        return response()->json(['message' => 'Tagged photo moved to trash.']);
     }
 
     // =========================================================================
     // PRIVATE HELPERS
     // =========================================================================
 
-    /**
-     * Resolve a storage path or Cloudinary URL to a full public URL.
-     */
     private function resolveUrl(?string $path): ?string
     {
         if (! $path) return null;
@@ -1197,9 +1174,6 @@ class MediaModerationController extends Controller
             : asset('storage/' . $path);
     }
 
-    /**
-     * Type → model/column config map.
-     */
     private function resolveType(string $type): array
     {
         $adminId = auth('sanctum')->id();
@@ -1259,9 +1233,6 @@ class MediaModerationController extends Controller
         };
     }
 
-    /**
-     * Write a standard action (approve / reject) to audit_logs.
-     */
     private function log(string $type, int $id, string $action, ?string $reason = null): void
     {
         try {
@@ -1277,9 +1248,6 @@ class MediaModerationController extends Controller
         }
     }
 
-    /**
-     * Write a revert action to audit_logs.
-     */
     private function logRevert(
         string  $type,
         int     $id,

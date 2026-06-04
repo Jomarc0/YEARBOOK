@@ -14,8 +14,8 @@ use Illuminate\Support\Facades\Log;
  * AutoTranscribeVideo
  * ─────────────────────────────────────────────────────────────
  * Fired after any graduation video/audio upload.
- * Creates a Transcript record (source = 'auto', linked to the Album)
- * and chains into the existing GenerateTranscript job.
+ * Creates a Transcript record (source = 'auto', linked to the Album
+ * AND the specific GraduationPhoto) and chains into GenerateTranscript.
  *
  * Idempotent: skips if a Transcript for this public_id already exists.
  */
@@ -31,7 +31,8 @@ class AutoTranscribeVideo implements ShouldQueue
         public readonly string $publicId,
         public readonly string $title,
         public readonly int    $uploadedBy,
-        public readonly ?int   $albumId = null,   // FK → albums.id
+        public readonly ?int   $albumId           = null,  
+        public readonly ?int   $graduationPhotoId = null,  
     ) {}
 
     public function handle(): void
@@ -42,17 +43,19 @@ class AutoTranscribeVideo implements ShouldQueue
         }
 
         $transcript = Transcript::create([
-            'title'       => $this->title,
-            'audio_path'  => $this->cloudinaryUrl,
-            'public_id'   => $this->publicId,
-            'status'      => 'pending',
-            'source'      => 'auto',            // visible to all premium users via visibleTo() scope
-            'album_id'    => $this->albumId,    // links transcript back to its graduation video
-            'uploaded_by' => $this->uploadedBy,
+            'title'               => $this->title,
+            'audio_path'          => $this->cloudinaryUrl,
+            'public_id'           => $this->publicId,
+            'status'              => 'pending',
+            'source'              => 'auto',
+            'album_id'            => $this->albumId,
+            'graduation_photo_id' => $this->graduationPhotoId,  
+            'uploaded_by'         => $this->uploadedBy,
         ]);
 
         Log::info("AutoTranscribeVideo: created Transcript #{$transcript->id} for [{$this->publicId}].", [
-            'album_id' => $this->albumId,
+            'album_id'            => $this->albumId,
+            'graduation_photo_id' => $this->graduationPhotoId,
         ]);
 
         GenerateTranscript::dispatch($transcript);

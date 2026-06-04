@@ -5,30 +5,144 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
+use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Sanctum\HasApiTokens;
 use Laravel\Scout\Searchable;
-use Illuminate\Database\Eloquent\Relations\HasOne;
 use App\Models\Achievement;
 
 class User extends Authenticatable
 {
-    use HasFactory, Notifiable, HasApiTokens, Searchable;
+    use HasFactory, Notifiable, HasApiTokens, Searchable, SoftDeletes;
+
+    // ── Department / Course constants (unchanged — still needed for display) ──
+
+    public const DEPARTMENT_COURSES = [
+        'SACE' => [
+            'Bachelor of Science in Architecture',
+            'Bachelor of Science in Civil Engineering',
+            'Bachelor of Science in Computer Science',
+            'Bachelor of Science in Information Technology',
+            'Bachelor of Multimedia Arts',
+        ],
+        'SAHS' => [
+            'Bachelor of Science in Nursing',
+            'Bachelor of Science in Medical Technology',
+            'Bachelor of Science in Psychology',
+        ],
+        'SABM' => [
+            'Bachelor of Science in Accountancy',
+            'Bachelor of Science in Business Administration - Financial Management',
+            'Bachelor of Science in Business Administration - Marketing Management',
+            'Bachelor of Science in Tourism Management',
+        ],
+        'SGS' => [
+            'Master in Management',
+        ],
+        'SHS' => [
+            'ABM',
+            'STEM',
+            'HUMSS',
+        ],
+    ];
+
+    public const COURSE_SHORT = [
+        'Bachelor of Science in Architecture'                                    => 'BSArch',
+        'Bachelor of Science in Civil Engineering'                               => 'BSCE',
+        'Bachelor of Science in Computer Science'                                => 'BSCS',
+        'Bachelor of Science in Information Technology'                          => 'BSIT',
+        'Bachelor of Multimedia Arts'                                            => 'BMA',
+        'Bachelor of Science in Nursing'                                         => 'BSN',
+        'Bachelor of Science in Medical Technology'                              => 'BSMT',
+        'Bachelor of Science in Psychology'                                      => 'BSPsy',
+        'Bachelor of Science in Accountancy'                                     => 'BSA',
+        'Bachelor of Science in Business Administration - Financial Management'  => 'BSBA-FM',
+        'Bachelor of Science in Business Administration - Marketing Management'  => 'BSBA-MM',
+        'Bachelor of Science in Tourism Management'                              => 'BSTM',
+        'Master in Management'                                                   => 'MM',
+        'ABM'                                                                    => 'ABM',
+        'STEM'                                                                   => 'STEM',
+        'HUMSS'                                                                  => 'HUMSS',
+    ];
+
+    public static function getDepartment(string $course): ?string
+    {
+        foreach (self::DEPARTMENT_COURSES as $dept => $courses) {
+            if (in_array($course, $courses, true)) {
+                return $dept;
+            }
+        }
+        return null;
+    }
+
+    // ── Fillable ───────────────────────────────────────────────────────────
+    // Only auth + account fields. All yearbook data lives in students table.
 
     protected $fillable = [
-        'first_name', 'last_name', 'name',
-        'email', 'password',
-        'role', 'student_id',
-        'course', 'batch', 'graduation_year', 'section_id', 'batch_id',  // ← added batch_id
-        'bio', 'avatar', 'profile_picture',
-        'motto', 'profile_visibility', 'profile_views',
-        'email_verified', 'consent_accepted',
-        'google_id', 'google_token',
+        // ── Identity ──────────────────────────────────────────────────────
+        'first_name',
+        'last_name',
+        'name',
+
+        // ── Auth ──────────────────────────────────────────────────────────
+        'email',
+        'password',
+        'role',
+
+        // ── Link to yearbook record ────────────────────────────────────────
+        'student_record_id',
+
+        // ── Section / Batch ───────────────────────────────────────────────
+        'section_id',
+        'batch_id',
+
+        // ── Profile (user-owned, not yearbook data) ────────────────────────
+        'avatar',
+        'bio',
+        'profile_visibility',
+        'profile_views',
+        'profile_picture',
+        'profile_picture_public_id',
+
+        // ── Consent / Verification ────────────────────────────────────────
+        'email_verified',
+        'consent_accepted',
+
+        // ── SSO ───────────────────────────────────────────────────────────
+        'google_id',
+        'google_token',
+        'fcm_token',
     ];
 
     protected $hidden = ['password', 'remember_token', 'google_token'];
 
+    protected $appends = [
+        'student_id',
+        'course',
+        'graduation_year',
+        'batch',
+        'nickname',
+        'birthday',
+        'hometown',
+        'honors',
+        'organizations',
+        'motto',
+        'ambition',
+        'future_plans',
+        'fondest_memory',
+        'most_likely_to',
+        'message_to_batchmates',
+        'message_to_parents',
+        'facebook_url',
+        'instagram_url',
+        'linkedin_url',
+        'github_url',
+        'profile_picture',
+        'department',
+        'is_premium',
+    ];
     protected function casts(): array
     {
         return [
@@ -37,18 +151,25 @@ class User extends Authenticatable
             'email_verified'    => 'boolean',
             'consent_accepted'  => 'boolean',
             'profile_views'     => 'integer',
-            'graduation_year'   => 'integer',
         ];
     }
 
     // ── Relationships ──────────────────────────────────────────────────────
+
+    /**
+     * The linked yearbook/student record managed by admin.
+     * Null = browse account (no yearbook match).
+     */
+    public function studentRecord(): BelongsTo
+    {
+        return $this->belongsTo(Student::class, 'student_record_id');
+    }
 
     public function section(): BelongsTo
     {
         return $this->belongsTo(Section::class);
     }
 
-    /** The graduation batch this student belongs to. */
     public function batchRecord(): BelongsTo
     {
         return $this->belongsTo(Batch::class, 'batch_id');
@@ -59,47 +180,189 @@ class User extends Authenticatable
         return $this->hasMany(Consent::class);
     }
 
-    /** All subscriptions (active and historical). */
     public function subscriptions(): HasMany
     {
         return $this->hasMany(Subscription::class);
     }
-    
+
     public function achievements(): HasMany
     {
         return $this->hasMany(Achievement::class);
     }
 
-    /** Convenience: the current active, non-expired subscription. */
-    public function activeSubscription()
+    public function careerProfile(): HasOne
     {
-        return $this->subscriptions()
-            ->where('status', 'active')
-            ->where(fn ($q) => $q->whereNull('expires_at')->orWhere('expires_at', '>', now()))
-            ->latest()
-            ->first();
+        return $this->hasOne(CareerProfile::class);
     }
 
-    /** Photos uploaded by this user. */
     public function photos(): HasMany
     {
         return $this->hasMany(Photo::class);
     }
 
-    /** Tagged photos where this user is tagged. */
     public function taggedPhotos(): HasMany
     {
         return $this->hasMany(TaggedPhoto::class);
     }
 
-    // ── Accessors ──────────────────────────────────────────────────────────
+    // ── Convenience helpers ────────────────────────────────────────────────
+
+    /**
+     * Whether this user is linked to an admin-managed student record.
+     */
+    public function isLinkedToStudent(): bool
+    {
+        return ! is_null($this->student_record_id);
+    }
+
+    public function activeSubscription(): ?Subscription
+    {
+        return $this->subscriptions()
+            ->where('status', 'active')
+            ->where(fn($q) => $q->whereNull('expires_at')->orWhere('expires_at', '>', now()))
+            ->latest()
+            ->first();
+    }
+
+    // ── Accessors — proxy to studentRecord (single source of truth) ───────
+    // These let existing code like $user->course, $user->ambition, etc.
+    // keep working without any changes to controllers or frontend.
+
+    public function getStudentIdAttribute(): ?string
+    {
+        return $this->studentRecord?->student_no;
+    }
+
+    public function getCourseAttribute(): ?string
+    {
+        return $this->studentRecord?->course;
+    }
+
+    public function getGraduationYearAttribute(): ?int
+    {
+        return $this->studentRecord?->graduation_year;
+    }
+
+    public function getBatchAttribute(): ?string
+    {
+        return $this->studentRecord?->graduation_year
+            ? (string) $this->studentRecord->graduation_year
+            : null;
+    }
+
+    public function getNicknameAttribute(): ?string
+    {
+        return $this->studentRecord?->nickname;
+    }
+
+    public function getBirthdayAttribute(): ?string
+    {
+        return $this->studentRecord?->birthday;
+    }
+
+    public function getHometownAttribute(): ?string
+    {
+        return $this->studentRecord?->hometown;
+    }
+
+    public function getHonorsAttribute(): ?string
+    {
+        return $this->studentRecord?->honors;
+    }
+
+    public function getOrganizationsAttribute(): ?string
+    {
+        return $this->studentRecord?->organizations;
+    }
+
+    public function getAchievementsTextAttribute(): ?string
+    {
+        // Named 'achievements_text' to avoid conflict with achievements() HasMany
+        return $this->studentRecord?->achievements;
+    }
+
+    public function getMottoAttribute(): ?string
+    {
+        return $this->studentRecord?->motto;
+    }
+
+    public function getAmbitionAttribute(): ?string
+    {
+        return $this->studentRecord?->ambition;
+    }
+
+    public function getFuturePlansAttribute(): ?string
+    {
+        return $this->studentRecord?->future_plans;
+    }
+
+    public function getFondestMemoryAttribute(): ?string
+    {
+        return $this->studentRecord?->fondest_memory;
+    }
+
+    public function getMostLikelyToAttribute(): ?string
+    {
+        return $this->studentRecord?->most_likely_to;
+    }
+
+    public function getMessageToBatchmatesAttribute(): ?string
+    {
+        return $this->studentRecord?->message_to_batchmates;
+    }
+
+    public function getMessageToParentsAttribute(): ?string
+    {
+        return $this->studentRecord?->message_to_parents;
+    }
+
+    public function getFacebookUrlAttribute(): ?string
+    {
+        return $this->studentRecord?->facebook_url;
+    }
+
+    public function getInstagramUrlAttribute(): ?string
+    {
+        return $this->studentRecord?->instagram_url;
+    }
+
+    public function getLinkedinUrlAttribute(): ?string
+    {
+        return $this->studentRecord?->linkedin_url;
+    }
+
+    public function getGithubUrlAttribute(): ?string
+    {
+        return $this->studentRecord?->github_url;
+    }
+
+    public function getProfilePictureAttribute(): ?string
+    {
+        // User's own uploaded photo takes priority; fall back to student record photo
+        return $this->attributes['profile_picture']
+            ?? $this->studentRecord?->photo
+            ?? null;
+    }
+
+    public function getProfilePicturePublicIdAttribute(): ?string
+    {
+        return $this->attributes['profile_picture_public_id']
+            ?? $this->studentRecord?->photo_public_id
+            ?? null;
+    }
+
+    // ── Other accessors ────────────────────────────────────────────────────
 
     public function getFullNameAttribute(): string
     {
         return "{$this->first_name} {$this->last_name}";
     }
 
-    /** True if user has an active premium subscription. */
+    public function getDepartmentAttribute(): ?string
+    {
+        return self::getDepartment($this->course ?? '');
+    }
+
     public function getIsPremiumAttribute(): bool
     {
         $sub = $this->activeSubscription();
@@ -110,47 +373,40 @@ class User extends Authenticatable
     {
         return ! is_null($this->google_id);
     }
-    
-    public function careerProfile(): HasOne
-    {
-        return $this->hasOne(CareerProfile::class);
-    }
 
     // ── Meilisearch ────────────────────────────────────────────────────────
 
-    public function searchableAs(): string { return 'users'; }
+    public function searchableAs(): string
+    {
+        return 'users';
+    }
 
     public function toSearchableArray(): array
     {
-        $shortMap = [
-            'Bachelor of Science in Computer Science'       => 'BSCS',
-            'Bachelor of Science in Information Technology' => 'BSIT',
-            'Bachelor of Science in Civil Engineering'      => 'BSCE',
-            'Bachelor of Science in Mechanical Engineering' => 'BSME',
-            'Bachelor of Science in Nursing'                => 'Nursing',
-            'Bachelor of Science in Accountancy'            => 'Accountancy',
-            'Bachelor of Science in Psychology'             => 'Psychology',
-            'Bachelor of Education'                         => 'Education',
-        ];
+        // Load studentRecord if not already loaded
+        $this->loadMissing('studentRecord');
 
         return [
             'id'              => $this->id,
             'name'            => $this->name,
-            'student_id'      => $this->student_id,
+            'student_id'      => $this->student_id,          // via accessor → student_no
             'email'           => $this->email,
-            'course'          => $this->course,
-            'course_short'    => $shortMap[$this->course] ?? $this->course,
+            'course'          => $this->course,               // via accessor
+            'course_short'    => self::COURSE_SHORT[$this->course ?? ''] ?? $this->course,
             'section'         => $this->section?->name,
-            'batch'           => $this->batch,
-            'batch_id'        => $this->batch_id,                                                          // ← added
-            'department'      => \App\Services\Student\BatchService::getDepartment($this->course ?? ''),   // ← added
-            'graduation_year' => $this->graduation_year,
-            'profile_picture' => $this->profile_picture,
+            'batch'           => $this->batch,                // via accessor
+            'batch_id'        => $this->batch_id,
+            'department'      => self::getDepartment($this->course ?? ''),
+            'graduation_year' => $this->graduation_year,      // via accessor
+            'profile_picture' => $this->profile_picture,      // via accessor
             'avatar'          => $this->avatar,
             'role'            => $this->role ?? 'student',
             'created_at'      => $this->created_at?->timestamp,
         ];
     }
 
-    public function shouldBeSearchable(): bool { return $this->role === 'student'; }
+    public function shouldBeSearchable(): bool
+    {
+        return $this->role === 'student';
+    }
 }
