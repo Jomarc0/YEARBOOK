@@ -4,6 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { FontAwesome } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
+import * as Linking from 'expo-linking';
 import * as WebBrowser from 'expo-web-browser';
 import * as Haptics from 'expo-haptics';
 import { createPaymentIntent, getErrorMessage, getPaymentHistory, getSubscriptionStatus } from '../../lib/api';
@@ -87,15 +88,24 @@ export default function PaymentScreen() {
     try {
       setPaying(true);
       setError('');
-      const payload = await createPaymentIntent(selectedPlan.key);
+      const successUrl = Linking.createURL('/payment/success', { queryParams: { tier: tierKey } });
+      const cancelUrl = Linking.createURL('/payment/cancel');
+      const payload = await createPaymentIntent(selectedPlan.key, {
+        success_url: successUrl,
+        cancel_url: cancelUrl,
+      });
       const checkoutUrl = payload?.checkout_url;
 
       if (!checkoutUrl) throw new Error('No checkout URL returned by the server.');
 
-      const result = await WebBrowser.openBrowserAsync(checkoutUrl);
+      const result = await WebBrowser.openAuthSessionAsync(checkoutUrl, Linking.createURL('/payment'));
       const nextStatus = await loadStatus();
 
-      if (nextStatus?.is_active) {
+      if (result.type === 'success' && result.url?.includes('/payment/success')) {
+        router.push({ pathname: '/payment/success', params: { tier: nextStatus?.tier || tierKey } } as any);
+      } else if (result.type === 'success' && result.url?.includes('/payment/cancel')) {
+        router.push('/payment/cancel' as any);
+      } else if (nextStatus?.is_active) {
         router.push({ pathname: '/payment/success', params: { tier: nextStatus?.tier || tierKey } } as any);
       } else if (result.type === 'cancel') {
         router.push('/payment/cancel' as any);

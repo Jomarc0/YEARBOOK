@@ -23,7 +23,9 @@ class PaymentController extends Controller
     public function createIntent(Request $request)
     {
         $request->validate([
-            'plan' => 'required|in:standard_monthly,standard_yearly,premium_monthly,premium_yearly',
+            'plan'        => 'required|in:standard_monthly,standard_yearly,premium_monthly,premium_yearly',
+            'success_url' => 'nullable|string|max:2048',
+            'cancel_url'  => 'nullable|string|max:2048',
         ]);
 
         $planKey = $request->plan;
@@ -34,6 +36,8 @@ class PaymentController extends Controller
             plan:      $planKey,
             userId:    $request->user()->id,
             userEmail: $request->user()->email,
+            successUrl: $request->input('success_url'),
+            cancelUrl:  $request->input('cancel_url'),
         );
 
         Log::info('PayMongo response', $result);

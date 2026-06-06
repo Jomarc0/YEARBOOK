@@ -456,6 +456,11 @@ export default function HomeScreen() {
                 <Text style={styles.sideValueGold}>View</Text>
                 <Text style={styles.sideCopyNavy}>Engagement stats</Text>
               </TouchableOpacity>
+              <TouchableOpacity style={styles.sideCard} onPress={() => router.push('/alumni' as any)}>
+                <Text style={styles.sideKicker}>Alumni</Text>
+                <Text style={styles.sideValue}>Track</Text>
+                <Text style={styles.sideCopy}>Careers & yearbook links</Text>
+              </TouchableOpacity>
             </View>
 
             {batchmates.length ? (

@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import {
   ScrollView,
   StyleSheet,
@@ -11,6 +11,7 @@ import { FontAwesome } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { useRouter } from "expo-router";
 import { colors } from "./webTheme";
+import { getMessagesUnreadCount, getNotifications, unwrap } from "../lib/api";
 
 const VISIBLE_TABS = ["home", "directory", "faculty", "gallery", "sections", "discovery", "analytics"];
 const TAB_ICONS: Record<string, any> = {
@@ -30,6 +31,58 @@ export const CustomTabBar = ({
 }: BottomTabBarProps) => {
   const router = useRouter();
   const visibleRoutes = state.routes.filter((route) => VISIBLE_TABS.includes(route.name));
+  const [unreadMessages, setUnreadMessages] = useState(0);
+  const [unreadNotifications, setUnreadNotifications] = useState(0);
+
+  useEffect(() => {
+    let active = true;
+
+    const loadBadges = async () => {
+      try {
+        const [messagePayload, notificationPayload] = await Promise.allSettled([
+          getMessagesUnreadCount(),
+          getNotifications(),
+        ]);
+
+        if (!active) return;
+
+        if (messagePayload.status === "fulfilled") {
+          const data = unwrap(messagePayload.value);
+          setUnreadMessages(Number(data?.count ?? data?.unread_count ?? data ?? 0) || 0);
+        }
+
+        if (notificationPayload.status === "fulfilled") {
+          const data = unwrap(notificationPayload.value);
+          const list = Array.isArray(data) ? data : data?.data || [];
+          setUnreadNotifications(
+            list.filter((item: any) => !item?.read_at && item?.read !== true && item?.is_read !== true).length
+          );
+        }
+      } catch {
+        if (active) {
+          setUnreadMessages(0);
+          setUnreadNotifications(0);
+        }
+      }
+    };
+
+    loadBadges();
+    const timer = setInterval(loadBadges, 45000);
+
+    return () => {
+      active = false;
+      clearInterval(timer);
+    };
+  }, []);
+
+  const renderBadge = (count: number) => {
+    if (!count) return null;
+    return (
+      <View style={styles.badge}>
+        <Text style={styles.badgeText}>{count > 9 ? "9+" : count}</Text>
+      </View>
+    );
+  };
 
   return (
     <View style={styles.tabBarContainer}>
@@ -93,6 +146,7 @@ export const CustomTabBar = ({
           activeOpacity={0.86}
         >
           <FontAwesome name="bell" size={15} color="rgba(255,255,255,0.7)" />
+          {renderBadge(unreadNotifications)}
         </TouchableOpacity>
         <TouchableOpacity
           style={styles.actionButton}
@@ -103,6 +157,7 @@ export const CustomTabBar = ({
           activeOpacity={0.86}
         >
           <FontAwesome name="commenting" size={15} color="rgba(255,255,255,0.7)" />
+          {renderBadge(unreadMessages)}
         </TouchableOpacity>
       </View>
     </View>
@@ -163,5 +218,24 @@ const styles = StyleSheet.create({
     borderRadius: 19,
     alignItems: "center",
     justifyContent: "center",
+  },
+  badge: {
+    position: "absolute",
+    right: 4,
+    top: 3,
+    minWidth: 16,
+    height: 16,
+    borderRadius: 8,
+    paddingHorizontal: 4,
+    backgroundColor: colors.gold,
+    borderWidth: 2,
+    borderColor: colors.navy,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  badgeText: {
+    color: colors.navy,
+    fontSize: 8,
+    fontWeight: "900",
   },
 });

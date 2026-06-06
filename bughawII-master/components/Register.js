@@ -2,10 +2,12 @@ import React, { useMemo, useState } from 'react';
 import { Alert, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
+import * as Linking from 'expo-linking';
+import * as WebBrowser from 'expo-web-browser';
 import { Stack, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { FontAwesome } from '@expo/vector-icons';
-import { acceptConsent, getErrorMessage, register, sendOtp, verifyOtp, verifyStudent } from '../lib/api';
+import { acceptConsent, fetchCurrentUser, getErrorMessage, register, saveToken, sendOtp, STORAGE_BASE_URL, verifyOtp, verifyStudent } from '../lib/api';
 
 const SCHOOLS = [
   { key: 'SACE', courses: ['Bachelor of Science in Architecture', 'Bachelor of Science in Civil Engineering', 'Bachelor of Science in Computer Science', 'Bachelor of Science in Information Technology', 'Bachelor of Multimedia Arts'] },
@@ -127,6 +129,40 @@ export default function Register() {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (error) {
       Alert.alert('Registration failed', getErrorMessage(error, 'Please try again.'));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleGoogleSignup = async () => {
+    if (!consentChecked) {
+      Alert.alert('Privacy consent required', 'Please accept the Privacy Policy before continuing with Google.');
+      return;
+    }
+
+    try {
+      setLoading(true);
+      const redirectUri = Linking.createURL('/sso/callback');
+      const authUrl = `${STORAGE_BASE_URL}/auth/google/redirect?client=mobile&redirect_uri=${encodeURIComponent(redirectUri)}`;
+      const result = await WebBrowser.openAuthSessionAsync(authUrl, redirectUri);
+
+      if (result.type !== 'success' || !result.url) return;
+
+      const parsed = Linking.parse(result.url);
+      const token = parsed.queryParams?.token;
+      const error = parsed.queryParams?.error;
+
+      if (error || !token || Array.isArray(token)) {
+        throw new Error('Google sign-up failed. Please try again.');
+      }
+
+      await saveToken(token);
+      await fetchCurrentUser();
+      await acceptConsent('1.0').catch(() => {});
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      router.replace('/(tabs)/home');
+    } catch (error) {
+      Alert.alert('Google sign-up failed', getErrorMessage(error, 'Unable to continue with Google.'));
     } finally {
       setLoading(false);
     }
@@ -263,6 +299,17 @@ export default function Register() {
               <TouchableOpacity style={styles.button} onPress={handleRegister} disabled={loading}>
                 <Text style={styles.buttonText}>{loading ? 'Creating Account...' : 'Create My Account'}</Text>
               </TouchableOpacity>
+
+              <View style={styles.dividerRow}>
+                <View style={styles.dividerLine} />
+                <Text style={styles.dividerText}>or sign up with</Text>
+                <View style={styles.dividerLine} />
+              </View>
+
+              <TouchableOpacity style={styles.googleButton} onPress={handleGoogleSignup} disabled={loading}>
+                <FontAwesome name="google" size={17} color="#3f51b5" />
+                <Text style={styles.googleButtonText}>Sign up with Google</Text>
+              </TouchableOpacity>
             </View>
           )}
 
@@ -311,6 +358,11 @@ const styles = StyleSheet.create({
   checkText: { flex: 1, marginLeft: 10, color: '#1C1C1E', fontSize: 13, lineHeight: 19 },
   button: { minHeight: 58, backgroundColor: '#1d2b4b', borderRadius: 16, justifyContent: 'center', alignItems: 'center', marginTop: 14 },
   buttonText: { fontSize: 16, fontWeight: '900', color: '#FFFFFF' },
+  dividerRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginVertical: 16 },
+  dividerLine: { flex: 1, height: 1, backgroundColor: '#e2e8f0' },
+  dividerText: { color: '#94a3b8', fontSize: 12, fontWeight: '800' },
+  googleButton: { minHeight: 54, borderRadius: 16, borderWidth: 1, borderColor: '#e2e8f0', backgroundColor: '#ffffff', alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 10 },
+  googleButtonText: { color: '#1d2b4b', fontSize: 14, fontWeight: '900' },
   secondaryButton: { minHeight: 54, backgroundColor: '#FFFFFF', borderRadius: 16, justifyContent: 'center', alignItems: 'center', marginTop: 12, borderWidth: 1, borderColor: '#1d2b4b' },
   secondaryButtonText: { color: '#1d2b4b', fontWeight: 'bold' },
   footer: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginTop: 32 },

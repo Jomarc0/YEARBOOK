@@ -1,10 +1,10 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Alert, FlatList, RefreshControl, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, FlatList, RefreshControl, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { useRouter } from 'expo-router';
 import { FontAwesome } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
-import { generateYearbook, getBatches, getErrorMessage, getSections, unwrap } from '../../lib/api';
+import { getBatches, getErrorMessage, getSections, unwrap } from '../../lib/api';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import FilterDropdown from '../../components/FilterDropdown';
 
@@ -54,7 +54,6 @@ export default function SectionsScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
-  const [generatingId, setGeneratingId] = useState<any>(null);
 
   const loadData = useCallback(async () => {
     try {
@@ -93,21 +92,6 @@ export default function SectionsScreen() {
       return byCourse && (!q || text.includes(q));
     });
   }, [activeCourse, batches, query]);
-
-  const handleGenerate = async (batch: any) => {
-    const id = batchId(batch);
-    if (!id) return;
-    try {
-      setGeneratingId(id);
-      const response = await generateYearbook(id);
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      Alert.alert('Generate Yearbook', response?.message || `Yearbook ${batchYear(batch)} generation queued.`);
-    } catch (requestError: any) {
-      Alert.alert('Generate failed', getErrorMessage(requestError, 'Unable to generate this yearbook. Admin access may be required.'));
-    } finally {
-      setGeneratingId(null);
-    }
-  };
 
   const renderSection = ({ item }: { item: any }) => (
     <TouchableOpacity
@@ -192,14 +176,6 @@ export default function SectionsScreen() {
         >
           <FontAwesome name="eye" size={12} color="#1d2b4b" />
           <Text style={styles.viewYearbookText}>View Yearbook</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.generateButton}
-          onPress={() => handleGenerate(item)}
-          disabled={generatingId === id}
-        >
-          {generatingId === id ? <ActivityIndicator color="#fdb813" size="small" /> : <FontAwesome name="book" size={12} color="#fdb813" />}
-          <Text style={styles.generateText}>{generatingId === id ? 'Generating...' : `Generate Yearbook · ${batchYear(item)}`}</Text>
         </TouchableOpacity>
       </View>
     );

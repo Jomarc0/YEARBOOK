@@ -8,7 +8,6 @@ import { StatusBar } from 'expo-status-bar';
 import { useRouter } from 'expo-router';
 import {
   fetchCurrentUser,
-  generateYearbook,
   getBatchmates,
   getBatches,
   getCurrentUser,
@@ -16,6 +15,7 @@ import {
   getDiscoverySchool,
   getDiscoverySectionmates,
   getErrorMessage,
+  getSearchFilters,
   imageUrl,
   paginationMeta,
   searchFace,
@@ -97,6 +97,8 @@ export default function DiscoveryScreen() {
   const [query, setQuery] = useState('');
   const [course, setCourse] = useState('');
   const [year, setYear] = useState('');
+  const [courseFilters, setCourseFilters] = useState(COURSE_FILTERS);
+  const [yearFilters, setYearFilters] = useState(years);
   const [students, setStudents] = useState<any[]>([]);
   const [matchedIds, setMatchedIds] = useState<Set<string | number>>(new Set());
   const [user, setUser] = useState<any>(null);
@@ -106,7 +108,7 @@ export default function DiscoveryScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [faceSearching, setFaceSearching] = useState(false);
-  const [generating, setGenerating] = useState(false);
+  const [openingYearbook, setOpeningYearbook] = useState(false);
   const [error, setError] = useState('');
 
   const currentMode = useMemo(() => MODE_CONFIG.find((item) => item.key === mode) || MODE_CONFIG[0], [mode]);
@@ -180,6 +182,33 @@ export default function DiscoveryScreen() {
   }, [loadCurrentUser]);
 
   useEffect(() => {
+    getSearchFilters()
+      .then((payload) => {
+        const courses = Array.isArray(payload?.courses) ? payload.courses : payload?.data?.courses || [];
+        const batchYears = Array.isArray(payload?.batch_years) ? payload.batch_years : payload?.data?.batch_years || [];
+
+        if (courses.length) {
+          setCourseFilters([
+            { key: 'all', label: 'All Programs', value: '' },
+            ...courses.map((item: any, index: number) => ({
+              key: String(item?.value || item?.label || index),
+              label: item?.label || item?.value || 'Program',
+              value: item?.value || item?.label || '',
+            })),
+          ]);
+        }
+
+        if (batchYears.length) {
+          setYearFilters(batchYears.map((item: any) => String(item)));
+        }
+      })
+      .catch(() => {
+        setCourseFilters(COURSE_FILTERS);
+        setYearFilters(years);
+      });
+  }, []);
+
+  useEffect(() => {
     const timer = setTimeout(() => loadStudents(1), 300);
     return () => clearTimeout(timer);
   }, [loadStudents]);
@@ -222,25 +251,23 @@ export default function DiscoveryScreen() {
     }
   };
 
-  const handleGenerateYearbook = async () => {
+  const handleOpenYearbook = async () => {
     try {
-      setGenerating(true);
+      setOpeningYearbook(true);
       const payload = await getBatches({ year: year || undefined, course: course || undefined });
       const batches = flattenBatches(payload) as any[];
       const target = batches.find((batch) => String(batch?.year || batch?.batch_year || batch?.graduation_year || batch?.name) === String(year))
         || batches[0];
 
       if (!target?.id) {
-        Alert.alert('Batch not found', 'Select a batch year with an available yearbook batch.');
+        Alert.alert('Yearbook not found', 'Select a batch year with an available yearbook.');
         return;
       }
-
-      const response = await generateYearbook(target.id);
-      Alert.alert('Yearbook request sent', response?.message || `Generate Yearbook · Batch ${year || target?.year || target?.name}`);
+      router.push({ pathname: '/yearbook', params: { batchId: String(target.id) } } as any);
     } catch (requestError: any) {
-      Alert.alert('Generate yearbook failed', getErrorMessage(requestError, 'Unable to generate this yearbook.'));
+      Alert.alert('Yearbook unavailable', getErrorMessage(requestError, 'Unable to open this yearbook.'));
     } finally {
-      setGenerating(false);
+      setOpeningYearbook(false);
     }
   };
 
@@ -308,7 +335,7 @@ export default function DiscoveryScreen() {
         <FilterDropdown
           label="Program"
           icon="graduation-cap"
-          options={COURSE_FILTERS.map((item) => ({
+          options={courseFilters.map((item) => ({
             label: item.label,
             value: item.value,
             icon: item.value ? 'graduation-cap' : 'users',
@@ -324,7 +351,7 @@ export default function DiscoveryScreen() {
           icon="calendar"
           options={[
             { label: 'All Years', value: '', icon: 'calendar' },
-            ...years.map((item) => ({ label: item, value: item, icon: 'calendar' })),
+            ...yearFilters.map((item) => ({ label: item, value: item, icon: 'calendar' })),
           ]}
           value={year}
           onChange={(value) => {
@@ -335,9 +362,9 @@ export default function DiscoveryScreen() {
       </View>
 
       {mode === 'batch' && (
-        <TouchableOpacity style={styles.generateButton} onPress={handleGenerateYearbook} disabled={generating}>
-          {generating ? <ActivityIndicator color="#fdb813" size="small" /> : <FontAwesome name="book" size={14} color="#fdb813" />}
-          <Text style={styles.generateText}>Generate Yearbook · Batch {year || '2026'}</Text>
+        <TouchableOpacity style={styles.generateButton} onPress={handleOpenYearbook} disabled={openingYearbook}>
+          {openingYearbook ? <ActivityIndicator color="#fdb813" size="small" /> : <FontAwesome name="book" size={14} color="#fdb813" />}
+          <Text style={styles.generateText}>Open Yearbook - Batch {year || '2026'}</Text>
         </TouchableOpacity>
       )}
 

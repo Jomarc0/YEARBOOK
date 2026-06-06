@@ -6,9 +6,12 @@ use App\Http\Controllers\Controller;
 use App\Models\Batch;
 use App\Models\Faculty;
 use App\Models\Section;
+use App\Models\Subscription;
+use App\Models\User;
 use App\Support\PlatformSettings;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
+use Laravel\Sanctum\PersonalAccessToken;
 use Illuminate\Support\Facades\Storage;
 
 class YearbookPdfController extends Controller
@@ -124,6 +127,34 @@ class YearbookPdfController extends Controller
         return $request->query('preview') === '1'
             ? $pdf->stream($filename)
             : $pdf->download($filename);
+    }
+
+    public function mobileExport(Request $request, int $batchId)
+    {
+        $token = $request->query('token');
+
+        if (! $token) {
+            abort(401, 'Missing token.');
+        }
+
+        $accessToken = PersonalAccessToken::findToken($token);
+        $user = $accessToken?->tokenable;
+
+        if (! $user instanceof User) {
+            abort(401, 'Invalid token.');
+        }
+
+        if (PlatformSettings::bool('enable_premium_subscription')) {
+            $subscription = Subscription::where('user_id', $user->id)->latest()->first();
+
+            if (! $subscription?->isPremium()) {
+                abort(402, 'A premium subscription is required to access this feature.');
+            }
+        }
+
+        $request->setUserResolver(fn () => $user);
+
+        return $this->export($request, $batchId);
     }
 
     public function flipbookData(Request $request, int $batchId)

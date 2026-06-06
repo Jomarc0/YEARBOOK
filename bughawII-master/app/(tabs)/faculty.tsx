@@ -17,6 +17,7 @@ const memberPhoto = (member: any) => imageUrl(member?.image_url || member?.photo
 export default function FacultyScreen() {
   const [groups, setGroups] = useState<any[]>([]);
   const [query, setQuery] = useState('');
+  const [activeDept, setActiveDept] = useState('All Departments');
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
@@ -37,14 +38,18 @@ export default function FacultyScreen() {
           faculty: group.faculty || group.members || group.items || (group.name ? [] : [group]),
         }))
         : Object.entries(data || {}).map(([name, faculty]) => ({ name, faculty: Array.isArray(faculty) ? faculty : [] }));
-      setGroups(normalized.filter((group) => group.faculty.length));
+      const nextGroups = normalized.filter((group) => group.faculty.length);
+      setGroups(nextGroups);
+      if (activeDept !== 'All Departments' && !nextGroups.some((group) => group.name === activeDept)) {
+        setActiveDept('All Departments');
+      }
     } catch (requestError: any) {
       setError(getErrorMessage(requestError, 'Unable to load faculty records.'));
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [query, refreshing]);
+  }, [activeDept, query, refreshing]);
 
   useEffect(() => {
     const timer = setTimeout(loadFaculty, 300);
@@ -52,7 +57,17 @@ export default function FacultyScreen() {
   }, [loadFaculty]);
 
   const totalFaculty = useMemo(() => groups.reduce((total, group) => total + group.faculty.length, 0), [groups]);
-  const filteredGroups = useMemo(() => groups, [groups]);
+  const filteredGroups = useMemo(() => (
+    activeDept === 'All Departments'
+      ? groups
+      : groups.filter((group) => group.name === activeDept)
+  ), [activeDept, groups]);
+
+  const selectDepartment = (name: string) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setActiveDept(name);
+    setQuery('');
+  };
 
   const toggleModal = (visible: boolean, member: any = null) => {
     if (visible) {
@@ -111,13 +126,40 @@ export default function FacultyScreen() {
 
         <View style={styles.searchContainer}>
           <FontAwesome name="search" size={18} color="#C7C7CC" style={styles.searchIcon} />
-          <TextInput style={styles.searchInput} placeholder="Search faculty..." placeholderTextColor="#C7C7CC" value={query} onChangeText={setQuery} />
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Search faculty..."
+            placeholderTextColor="#C7C7CC"
+            value={query}
+            onChangeText={(value) => {
+              setQuery(value);
+              setActiveDept('All Departments');
+            }}
+          />
           {query ? (
             <TouchableOpacity onPress={() => setQuery('')} style={styles.clearButton}>
               <FontAwesome name="times" size={13} color="#94a3b8" />
             </TouchableOpacity>
           ) : null}
         </View>
+
+        {!loading && !query && groups.length > 1 ? (
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.deptTabs}>
+            {['All Departments', ...groups.map((group) => group.name)].map((name) => {
+              const active = activeDept === name;
+              const count = name === 'All Departments'
+                ? totalFaculty
+                : groups.find((group) => group.name === name)?.faculty.length || 0;
+              return (
+                <TouchableOpacity key={name} style={[styles.deptTab, active && styles.deptTabActive]} onPress={() => selectDepartment(name)}>
+                  <View style={[styles.deptDot, active && styles.deptDotActive]} />
+                  <Text style={[styles.deptTabText, active && styles.deptTabTextActive]}>{name}</Text>
+                  <Text style={[styles.deptTabCount, active && styles.deptTabCountActive]}>({count})</Text>
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+        ) : null}
 
         {loading ? <ActivityIndicator color="#1d2b4b" /> : null}
         {!loading && error ? <Text style={styles.emptyText}>{error}</Text> : null}
@@ -225,6 +267,15 @@ const styles = StyleSheet.create({
   searchIcon: { marginRight: 12 },
   searchInput: { flex: 1, fontSize: 16, color: '#000000' },
   clearButton: { width: 32, height: 32, borderRadius: 10, backgroundColor: '#f1f5f9', alignItems: 'center', justifyContent: 'center' },
+  deptTabs: { paddingHorizontal: 24, gap: 8, paddingBottom: 20 },
+  deptTab: { minHeight: 40, borderRadius: 999, borderWidth: 1, borderColor: '#e2e8f0', backgroundColor: '#ffffff', paddingHorizontal: 13, flexDirection: 'row', alignItems: 'center', gap: 6 },
+  deptTabActive: { backgroundColor: '#fdb813', borderColor: '#fdb813' },
+  deptDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#fdb813' },
+  deptDotActive: { backgroundColor: '#1d2b4b' },
+  deptTabText: { color: '#64748b', fontSize: 12, fontWeight: '900' },
+  deptTabTextActive: { color: '#1d2b4b' },
+  deptTabCount: { color: '#94a3b8', fontSize: 11, fontWeight: '800' },
+  deptTabCountActive: { color: 'rgba(29,43,75,0.65)' },
   emptyText: { color: '#8E8E93', fontSize: 14, textAlign: 'center', padding: 24 },
   section: { marginBottom: 40 },
   deptHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 20, paddingHorizontal: 24 },

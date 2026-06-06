@@ -25,7 +25,9 @@ class PayMongoService
         string $plan,
         int    $userId,
         string $userEmail,
-        string $currency = 'PHP'
+        string $currency = 'PHP',
+        ?string $successUrl = null,
+        ?string $cancelUrl = null
     ): array {
         $frontendUrl = env('FRONTEND_URL', 'http://localhost:5173'); // ← frontend, not APP_URL
 
@@ -45,8 +47,8 @@ class PayMongoService
                             'user_id' => $userId,
                             'plan'    => $plan,
                         ],
-                        'success_url' => $frontendUrl . '/payment/success',
-                        'cancel_url'  => $frontendUrl . '/payment/cancel',
+                        'success_url' => $successUrl ?: $frontendUrl . '/payment/success',
+                        'cancel_url'  => $cancelUrl ?: $frontendUrl . '/payment/cancel',
                         'description' => 'Sinag-Bughaw Premium Access',
                     ],
                 ],

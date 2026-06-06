@@ -7,7 +7,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import * as ImagePicker from 'expo-image-picker';
 import { createAudioPlayer, RecordingPresets, requestRecordingPermissionsAsync, setAudioModeAsync, useAudioRecorder, useAudioRecorderState } from 'expo-audio';
-import { faceSearch, getErrorMessage, getStudent, getStudentAchievements, getStudents, getVoiceNotesForProfile, imageUrl, paginationMeta, sendVoiceNote, unwrap } from '../../lib/api';
+import { faceSearch, getErrorMessage, getSearchFilters, getStudent, getStudentAchievements, getStudentSuggestions, getStudents, getVoiceNotesForProfile, imageUrl, paginationMeta, sendVoiceNote, unwrap } from '../../lib/api';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import FilterDropdown from '../../components/FilterDropdown';
 
@@ -60,8 +60,14 @@ export default function DirectoryScreen() {
   const router = useRouter();
   const { filter, q } = useLocalSearchParams();
   const [students, setStudents] = useState<any[]>([]);
+  const [courseFilters, setCourseFilters] = useState(COURSE_FILTERS);
+  const [batchFilters, setBatchFilters] = useState([{ label: 'All Years', value: 'All Years' }]);
   const [activeFilter, setActiveFilter] = useState('All Programs');
+  const [activeBatchYear, setActiveBatchYear] = useState('All Years');
   const [query, setQuery] = useState(typeof q === 'string' ? q : '');
+  const [suggestions, setSuggestions] = useState<any[]>([]);
+  const [suggestLoading, setSuggestLoading] = useState(false);
+  const [showSuggestions, setShowSuggestions] = useState(false);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [lastPage, setLastPage] = useState(1);
@@ -84,6 +90,7 @@ export default function DirectoryScreen() {
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(height)).current;
   const audioPlayerRef = useRef<any>(null);
+  const suggestionTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
   const recorderState = useAudioRecorderState(recorder, 300);
 
@@ -96,6 +103,60 @@ export default function DirectoryScreen() {
     setMatchedIds(new Set());
   };
 
+  useEffect(() => {
+    let mounted = true;
+
+    getSearchFilters()
+      .then((payload) => {
+        if (!mounted) return;
+
+        const courses = Array.isArray(payload?.courses) ? payload.courses : payload?.data?.courses || [];
+        const batchYears = Array.isArray(payload?.batch_years) ? payload.batch_years : payload?.data?.batch_years || [];
+
+        if (courses.length) {
+          setCourseFilters([
+            { label: 'All Programs', value: 'All Programs' },
+            ...courses.map((item: any) => ({
+              label: item?.label || getCourseShort(item?.value || item, 'Program'),
+              value: item?.value || item,
+            })),
+          ]);
+        }
+
+        if (batchYears.length) {
+          setBatchFilters([
+            { label: 'All Years', value: 'All Years' },
+            ...batchYears.map((year: any) => ({ label: String(year), value: String(year) })),
+          ]);
+        }
+      })
+      .catch(() => {
+        setCourseFilters(COURSE_FILTERS);
+        setBatchFilters([{ label: 'All Years', value: 'All Years' }]);
+      });
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  const loadSuggestions = useCallback(async (text: string) => {
+    if (text.trim().length < 2) {
+      setSuggestions([]);
+      return;
+    }
+
+    try {
+      setSuggestLoading(true);
+      const payload = await getStudentSuggestions({ q: text.trim() });
+      setSuggestions(Array.isArray(payload?.suggestions) ? payload.suggestions : []);
+    } catch {
+      setSuggestions([]);
+    } finally {
+      setSuggestLoading(false);
+    }
+  }, []);
+
   const loadStudents = useCallback(async (nextPage = 1, append = false) => {
     try {
       if (append) setLoadingMore(true);
@@ -105,6 +166,7 @@ export default function DirectoryScreen() {
       const params: any = { page: nextPage, per_page: 20 };
       if (query.trim()) params.q = query.trim();
       if (activeFilter !== 'All Programs') params.course = activeFilter;
+      if (activeBatchYear !== 'All Years') params.batch_year = activeBatchYear;
 
       const payload = await getStudents(params);
       const data = unwrap(payload);
@@ -123,7 +185,7 @@ export default function DirectoryScreen() {
       setRefreshing(false);
       setLoadingMore(false);
     }
-  }, [activeFilter, query, refreshing]);
+  }, [activeBatchYear, activeFilter, query, refreshing]);
 
   useEffect(() => {
     const timer = setTimeout(() => loadStudents(1), 350);
@@ -142,6 +204,8 @@ export default function DirectoryScreen() {
     try {
       setFaceSearching(true);
       clearFaceResults();
+      setSuggestions([]);
+      setShowSuggestions(false);
       const asset = result.assets[0];
       const form = new FormData();
       form.append('face_image', {
@@ -299,7 +363,7 @@ export default function DirectoryScreen() {
     player.play();
   };
 
-  const selectedFilterLabel = useMemo(() => COURSE_FILTERS.find((item) => item.value === activeFilter)?.label || activeFilter, [activeFilter]);
+  const selectedFilterLabel = useMemo(() => courseFilters.find((item) => item.value === activeFilter)?.label || activeFilter, [activeFilter, courseFilters]);
   const isFaceMode = faceMatches.length > 0;
 
   const renderStudent = ({ item, index }: { item: any; index: number }) => {
@@ -374,14 +438,52 @@ export default function DirectoryScreen() {
                       value={query}
                       onChangeText={(value) => {
                         setQuery(value);
+                        setShowSuggestions(true);
                         clearFaceResults();
+                        if (suggestionTimer.current) clearTimeout(suggestionTimer.current);
+                        suggestionTimer.current = setTimeout(() => loadSuggestions(value), 150);
                       }}
+                      onFocus={() => setShowSuggestions(true)}
                     />
                     <TouchableOpacity style={styles.cameraButton} onPress={handleFaceSearch} disabled={faceSearching}>
                       {faceSearching ? <ActivityIndicator color="#fdb813" size="small" /> : <FontAwesome name="camera" size={15} color="#fdb813" />}
                     </TouchableOpacity>
                   </View>
                 </View>
+                {showSuggestions && suggestions.length ? (
+                  <View style={styles.suggestionBox}>
+                    {suggestions.map((item) => (
+                      <TouchableOpacity
+                        key={String(item.id)}
+                        style={styles.suggestionRow}
+                        onPress={() => {
+                          setQuery(item.name || '');
+                          setSuggestions([]);
+                          setShowSuggestions(false);
+                          clearFaceResults();
+                        }}
+                      >
+                        {item.profile_picture ? (
+                          <Image source={imageUrl(item.profile_picture)} style={styles.suggestionAvatar} contentFit="cover" />
+                        ) : (
+                          <View style={styles.suggestionInitials}>
+                            <Text style={styles.suggestionInitialsText}>{getInitials(item.name)}</Text>
+                          </View>
+                        )}
+                        <View style={{ flex: 1, minWidth: 0 }}>
+                          <Text style={styles.suggestionName} numberOfLines={1}>{item.name}</Text>
+                          <Text style={styles.suggestionMeta} numberOfLines={1}>{item.student_id || 'Student'} - {item.course_short || 'Program'}</Text>
+                        </View>
+                        <FontAwesome name="chevron-right" size={12} color="#94a3b8" />
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                ) : suggestLoading ? (
+                  <View style={styles.suggestionLoading}>
+                    <ActivityIndicator color="#fdb813" size="small" />
+                    <Text style={styles.suggestionLoadingText}>Finding students...</Text>
+                  </View>
+                ) : null}
                 {isFaceMode ? (
                   <View style={styles.faceBanner}>
                     <Text style={styles.faceBannerText}>{faceMatches.length} face match{faceMatches.length > 1 ? 'es' : ''} found</Text>
@@ -397,7 +499,7 @@ export default function DirectoryScreen() {
               <FilterDropdown
                 label="Program"
                 icon="graduation-cap"
-                options={COURSE_FILTERS.map((item) => ({
+                options={courseFilters.map((item) => ({
                   ...item,
                   icon: item.value === 'All Programs' ? 'users' : 'graduation-cap',
                 }))}
@@ -407,13 +509,26 @@ export default function DirectoryScreen() {
                   setActiveFilter(value);
                 }}
               />
+              <FilterDropdown
+                label="Batch Year"
+                icon="calendar"
+                options={batchFilters.map((item) => ({
+                  ...item,
+                  icon: item.value === 'All Years' ? 'calendar' : 'graduation-cap',
+                }))}
+                value={activeBatchYear}
+                onChange={(value) => {
+                  clearFaceResults();
+                  setActiveBatchYear(value);
+                }}
+              />
             </View>
 
             {!loading ? (
               <Text style={styles.resultCount}>
                 {isFaceMode ? 'Showing ' : query ? 'Found ' : 'Showing '}
                 <Text style={styles.resultStrong}>{isFaceMode ? faceMatches.length : total}</Text>
-                {isFaceMode ? ' face matches' : query ? ` results for "${query}"` : ` students${activeFilter !== 'All Programs' ? ` in ${selectedFilterLabel}` : ''}`}
+                {isFaceMode ? ' face matches' : query ? ` results for "${query}"` : ` students${activeFilter !== 'All Programs' ? ` in ${selectedFilterLabel}` : ''}${activeBatchYear !== 'All Years' ? ` from ${activeBatchYear}` : ''}`}
               </Text>
             ) : null}
 
@@ -595,7 +710,16 @@ const styles = StyleSheet.create({
   faceBanner: { marginTop: 10, paddingHorizontal: 12, paddingVertical: 9, borderRadius: 12, borderWidth: 1, borderColor: 'rgba(253,184,19,0.4)', backgroundColor: 'rgba(253,184,19,0.12)', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', width: '100%' },
   faceBannerText: { color: '#fdb813', fontSize: 12, fontWeight: '800' },
   clearFaceText: { color: '#ffffff', fontSize: 12, fontWeight: '800' },
-  filtersWrap: { paddingTop: 22, paddingHorizontal: 18, paddingBottom: 4 },
+  suggestionBox: { width: '100%', marginTop: 10, borderRadius: 16, overflow: 'hidden', backgroundColor: '#ffffff', borderWidth: 1, borderColor: 'rgba(255,255,255,0.55)' },
+  suggestionRow: { minHeight: 56, flexDirection: 'row', alignItems: 'center', gap: 11, paddingHorizontal: 12, borderBottomWidth: 1, borderBottomColor: '#eef2f7' },
+  suggestionAvatar: { width: 38, height: 38, borderRadius: 12, backgroundColor: '#eef2ff' },
+  suggestionInitials: { width: 38, height: 38, borderRadius: 12, backgroundColor: '#1d2b4b', alignItems: 'center', justifyContent: 'center' },
+  suggestionInitialsText: { color: '#fdb813', fontSize: 12, fontWeight: '900' },
+  suggestionName: { color: '#1d2b4b', fontSize: 13, fontWeight: '900' },
+  suggestionMeta: { color: '#8fa0bf', fontSize: 11, marginTop: 2 },
+  suggestionLoading: { marginTop: 10, alignSelf: 'stretch', borderRadius: 14, backgroundColor: 'rgba(255,255,255,0.1)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.18)', paddingVertical: 10, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 8 },
+  suggestionLoadingText: { color: 'rgba(255,255,255,0.76)', fontSize: 12, fontWeight: '800' },
+  filtersWrap: { paddingTop: 22, paddingHorizontal: 18, paddingBottom: 4, gap: 10 },
   filterContent: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 8 },
   filterPill: { paddingHorizontal: 16, paddingVertical: 10, borderRadius: 16, backgroundColor: '#ffffff', borderWidth: 1, borderColor: '#e2e8f0', shadowColor: '#0f172a', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 6, elevation: 1 },
   activeFilterPill: { backgroundColor: '#3f51b5', borderColor: '#3f51b5' },

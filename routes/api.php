@@ -77,6 +77,10 @@ Route::prefix('faculty')->group(function () {
 
 Route::get('/albums-with-photos', [MediaModerationController::class, 'allAlbumsWithPhotos']);
 
+Route::get('/yearbook/export/mobile-pdf/{batchId}', [YearbookPdfController::class, 'mobileExport'])
+    ->middleware(['throttle:60,1', 'content.security', 'feature:enable_yearbook_pdf_download'])
+    ->name('yearbook.export.mobile-pdf');
+
 // =========================================================================
 // PROTECTED ROUTES  (auth:sanctum + throttle 120 req/min)
 // =========================================================================

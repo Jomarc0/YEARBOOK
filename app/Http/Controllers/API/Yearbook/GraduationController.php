@@ -29,10 +29,10 @@ class GraduationController extends Controller
                     'photos' => fn ($q) => $q->images()->orderBy('sort_order')->limit(4),
                 ])
                 ->when(
-                    // Only eager-load video files for video-based tabs
-                    in_array($category, ['videos', 'mass']),
+                    // Non-photo tabs can contain videos, audio, PDFs, or other uploaded files.
+                    $category !== 'photos',
                     fn ($q) => $q->with([
-                        'mediaFiles' => fn ($q) => $q->videos()->orderBy('sort_order'),
+                        'mediaFiles' => fn ($q) => $q->orderBy('sort_order'),
                     ])
                 )
                 ->withCount('photos')
@@ -60,6 +60,7 @@ class GraduationController extends Controller
             $album = GraduationAlbum::published()
                 ->with([
                     'photos' => fn ($q) => $q->orderBy('sort_order'),
+                    'mediaFiles' => fn ($q) => $q->orderBy('sort_order'),
                     'batch',
                 ])
                 ->findOrFail($id);

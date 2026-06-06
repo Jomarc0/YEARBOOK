@@ -2,10 +2,22 @@ import axios from "axios";
 import Constants from "expo-constants";
 import * as SecureStore from "expo-secure-store";
 
+const configuredApiUrl = Constants.expoConfig?.extra?.apiUrl || process.env.EXPO_PUBLIC_API_URL;
+
+const inferApiUrlFromExpoHost = () => {
+  const hostUri =
+    Constants.expoConfig?.hostUri ||
+    Constants.manifest2?.extra?.expoClient?.hostUri ||
+    Constants.manifest?.debuggerHost;
+
+  const host = typeof hostUri === "string" ? hostUri.split(":")[0] : "";
+  return host ? `http://${host}:8000/api` : "http://127.0.0.1:8000/api";
+};
+
 export const API_BASE_URL =
-  Constants.expoConfig?.extra?.apiUrl ||
-  process.env.EXPO_PUBLIC_API_URL ||
-  "http://127.0.0.1:8000/api";
+  configuredApiUrl && configuredApiUrl !== "auto"
+    ? configuredApiUrl
+    : inferApiUrlFromExpoHost();
 
 export const STORAGE_BASE_URL = API_BASE_URL.replace(/\/api\/?$/, "");
 
@@ -292,6 +304,11 @@ export const getStudents = async (params = {}) => {
   return response.data;
 };
 
+export const getStudentSuggestions = async (params = {}) => {
+  const response = await api.get("/search/students/suggest", { params });
+  return response.data;
+};
+
 export const getStudent = async (id) => {
   const response = await api.get(`/students/${id}`);
   return response.data;
@@ -484,13 +501,23 @@ export const getYearbookBookmarks = async (batchId) => {
 };
 
 export const addYearbookBookmark = async (payload) => {
-  const response = await api.post("/yearbook/bookmark", payload);
+  const response = await api.post("/yearbook/bookmark", {
+    batchId: payload.batchId ?? payload.batch_id,
+    pageIndex: payload.pageIndex ?? payload.page_index,
+    label: payload.label,
+  });
   return response.data;
 };
 
 export const generateYearbook = async (batchId) => {
   const response = await api.post(`/yearbooks/${batchId}/generate`);
   return response.data;
+};
+
+export const getMobileYearbookPdfUrl = async (batchId) => {
+  const token = await getToken();
+  if (!token) throw new Error("Please sign in again to open the PDF.");
+  return `${API_BASE_URL}/yearbook/export/mobile-pdf/${batchId}?token=${encodeURIComponent(token)}&stream=1`;
 };
 
 export const getAlumni = async (params = {}) => {
@@ -510,6 +537,11 @@ export const getAlumniMe = async () => {
 
 export const updateAlumniCareer = async (payload) => {
   const response = await api.post("/alumni/career", payload);
+  return response.data;
+};
+
+export const getAlumniYearbookEntry = async (id) => {
+  const response = await api.get(`/alumni/${id}/yearbook-entry`);
   return response.data;
 };
 
@@ -533,8 +565,26 @@ export const markMessageRead = async (id) => {
   return response.data;
 };
 
+export const sendTypingStatus = async (receiverId, isTyping) => {
+  const response = await api.post("/messages/typing", {
+    receiver_id: receiverId,
+    is_typing: isTyping,
+  });
+  return response.data;
+};
+
 export const sendMessage = async (receiverId, body) => {
   const response = await api.post("/messages", { receiver_id: receiverId, body });
+  return response.data;
+};
+
+export const updatePresence = async (isOnline) => {
+  const response = await api.post("/presence", { is_online: isOnline });
+  return response.data;
+};
+
+export const getPresenceBulk = async (userIds = []) => {
+  const response = await api.post("/presence/bulk", { user_ids: userIds });
   return response.data;
 };
 
@@ -580,8 +630,8 @@ export const getDiscoveryCrossProgram = async (params = {}) => {
   return response.data;
 };
 
-export const createPaymentIntent = async (plan) => {
-  const response = await api.post("/payments/create-intent", { plan });
+export const createPaymentIntent = async (plan, redirectUrls = {}) => {
+  const response = await api.post("/payments/create-intent", { plan, ...redirectUrls });
   return response.data;
 };
 

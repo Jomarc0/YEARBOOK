@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Alert, FlatList, Modal, RefreshControl, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, FlatList, Modal, RefreshControl, ScrollView, Share, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { FontAwesome } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
@@ -9,6 +9,7 @@ import {
   deleteTranscript,
   getErrorMessage,
   getTranscript,
+  getTranscriptSubtitles,
   getTranscripts,
   paginationMeta,
   regenerateTranscriptNotes,
@@ -148,6 +149,33 @@ export default function TranscriptsScreen() {
     }
   };
 
+  const shareTranscriptText = async () => {
+    const text = transcriptText(selected);
+    if (!text) {
+      Alert.alert('Transcript unavailable', 'There is no transcript text to share yet.');
+      return;
+    }
+
+    await Share.share({
+      title: selected?.title || 'Transcript',
+      message: text,
+    });
+  };
+
+  const shareSubtitles = async (format: 'srt' | 'vtt') => {
+    if (!selected?.id) return;
+
+    try {
+      const subtitles = await getTranscriptSubtitles(selected.id, format);
+      await Share.share({
+        title: `${selected?.title || 'Transcript'} ${format.toUpperCase()}`,
+        message: String(subtitles || ''),
+      });
+    } catch (requestError: any) {
+      Alert.alert('Subtitle unavailable', getErrorMessage(requestError, `Unable to load ${format.toUpperCase()} subtitles.`));
+    }
+  };
+
   const confirmDelete = (item = selected) => {
     if (!item?.id) return;
     Alert.alert('Delete transcript?', 'This removes the transcript and its uploaded audio.', [
@@ -247,6 +275,11 @@ export default function TranscriptsScreen() {
           <ScrollView contentContainerStyle={styles.detailContent}>
             <StatusBadge status={selected?.status} />
             <Text style={styles.titleLarge}>{selected?.title || selected?.filename || 'Transcript'}</Text>
+            <View style={styles.metaPills}>
+              {selected?.language ? <MetaPill icon="globe" text={String(selected.language).toUpperCase()} /> : null}
+              {selected?.duration_formatted ? <MetaPill icon="clock-o" text={selected.duration_formatted} /> : null}
+              {selected?.word_count ? <MetaPill icon="align-left" text={`${Number(selected.word_count).toLocaleString()} words`} /> : null}
+            </View>
             <View style={styles.segmented}>
               {(['transcript', 'notes'] as const).map((tab) => (
                 <TouchableOpacity key={tab} style={[styles.segment, detailTab === tab && styles.segmentActive]} onPress={() => setDetailTab(tab)}>
@@ -255,7 +288,25 @@ export default function TranscriptsScreen() {
               ))}
             </View>
             {detailTab === 'transcript' ? (
-              <Text style={styles.body}>{transcriptText(selected) || transcriptFallback(selected?.status)}</Text>
+              <>
+                <Text style={styles.body}>{transcriptText(selected) || transcriptFallback(selected?.status)}</Text>
+                {selected?.status === 'done' ? (
+                  <View style={styles.actionGrid}>
+                    <TouchableOpacity style={styles.actionChip} onPress={shareTranscriptText}>
+                      <FontAwesome name="copy" size={12} color="#fdb813" />
+                      <Text style={styles.actionChipText}>Share Text</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={styles.actionChip} onPress={() => shareSubtitles('srt')}>
+                      <FontAwesome name="download" size={12} color="#fdb813" />
+                      <Text style={styles.actionChipText}>SRT</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={styles.actionChip} onPress={() => shareSubtitles('vtt')}>
+                      <FontAwesome name="file-text-o" size={12} color="#fdb813" />
+                      <Text style={styles.actionChipText}>VTT</Text>
+                    </TouchableOpacity>
+                  </View>
+                ) : null}
+              </>
             ) : (
               <>
                 <Text style={styles.body}>{notesText(selected) || 'No AI notes are available yet.'}</Text>
@@ -287,6 +338,15 @@ function StatusBadge({ status }: { status?: string }) {
     <View style={[styles.statusBadge, { backgroundColor: config.bg }]}>
       <FontAwesome name={config.icon as any} size={11} color={config.color} />
       <Text style={[styles.statusText, { color: config.color }]}>{config.label}</Text>
+    </View>
+  );
+}
+
+function MetaPill({ icon, text }: { icon: any; text: string }) {
+  return (
+    <View style={styles.metaPill}>
+      <FontAwesome name={icon} size={10} color="#fdb813" />
+      <Text style={styles.metaPillText}>{text}</Text>
     </View>
   );
 }
@@ -342,6 +402,9 @@ const styles = StyleSheet.create({
   detailTitle: { color: '#1d2b4b', fontWeight: '900', fontSize: 18 },
   detailContent: { padding: 20, paddingBottom: 38 },
   titleLarge: { color: '#1d2b4b', fontSize: 24, fontWeight: '900', marginTop: 12, marginBottom: 16 },
+  metaPills: { flexDirection: 'row', flexWrap: 'wrap', gap: 7, marginTop: -8, marginBottom: 16 },
+  metaPill: { flexDirection: 'row', alignItems: 'center', gap: 6, borderRadius: 999, backgroundColor: '#ffffff', borderWidth: 1, borderColor: '#e2e8f0', paddingHorizontal: 10, paddingVertical: 6 },
+  metaPillText: { color: '#64748b', fontSize: 10, fontWeight: '900' },
   segmented: { flexDirection: 'row', backgroundColor: '#e9eef8', borderRadius: 15, padding: 4, marginBottom: 16 },
   segment: { flex: 1, minHeight: 42, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
   segmentActive: { backgroundColor: '#1d2b4b' },
@@ -350,6 +413,9 @@ const styles = StyleSheet.create({
   body: { color: '#475569', fontSize: 15, lineHeight: 24, backgroundColor: '#ffffff', borderRadius: 18, borderWidth: 1, borderColor: '#e2e8f0', padding: 16 },
   notesButton: { height: 46, borderRadius: 14, backgroundColor: '#1d2b4b', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 14 },
   notesButtonText: { color: '#ffffff', fontSize: 13, fontWeight: '900' },
+  actionGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 9, marginTop: 12 },
+  actionChip: { minHeight: 42, borderRadius: 13, backgroundColor: '#1d2b4b', paddingHorizontal: 13, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7 },
+  actionChipText: { color: '#ffffff', fontSize: 12, fontWeight: '900' },
   uploadBody: { padding: 20 },
   inputLabel: { color: '#94a3b8', fontSize: 10, fontWeight: '900', letterSpacing: 1, marginBottom: 7 },
   input: { minHeight: 48, borderRadius: 14, borderWidth: 1, borderColor: '#e2e8f0', backgroundColor: '#ffffff', color: '#1d2b4b', paddingHorizontal: 14, fontSize: 14, marginBottom: 14 },

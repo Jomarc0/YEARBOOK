@@ -1,11 +1,11 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, FlatList, Modal, RefreshControl, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, FlatList, Linking, Modal, RefreshControl, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
 import { FontAwesome } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import { useLocalSearchParams } from 'expo-router';
-import { addYearbookBookmark, getErrorMessage, getYearbookBatches, getYearbookBookmarks, getYearbookPages, imageUrl, searchYearbook, unwrap } from '../lib/api';
+import { addYearbookBookmark, getErrorMessage, getMobileYearbookPdfUrl, getYearbookBatches, getYearbookBookmarks, getYearbookPages, imageUrl, searchYearbook, unwrap } from '../lib/api';
 
 const batchId = (item: any) => item?.id || item?.batch_id;
 const batchTitle = (item: any) => item?.title || item?.name || `Batch ${item?.year || ''}`.trim();
@@ -77,21 +77,42 @@ export default function YearbookScreen() {
       setSearchResults([]);
       return;
     }
-    const payload = await searchYearbook(batchId(selectedBatch), query.trim());
-    const data = unwrap(payload);
-    setSearchResults(Array.isArray(data) ? data : []);
+    try {
+      const payload = await searchYearbook(batchId(selectedBatch), query.trim());
+      const data = unwrap(payload);
+      setSearchResults(Array.isArray(data) ? data : []);
+    } catch (requestError: any) {
+      Alert.alert('Search failed', getErrorMessage(requestError, 'Unable to search this yearbook.'));
+    }
   };
 
   const bookmarkPage = async (page: any, index: number) => {
     if (!selectedBatch) return;
-    await addYearbookBookmark({
-      batch_id: batchId(selectedBatch),
-      page_index: page?.pageIndex ?? page?.index ?? index,
-      label: page?.label || page?.title || `Page ${index + 1}`,
-    });
-    const payload = await getYearbookBookmarks(batchId(selectedBatch));
-    const data = unwrap(payload);
-    setBookmarks(Array.isArray(data) ? data : []);
+    try {
+      await addYearbookBookmark({
+        batch_id: batchId(selectedBatch),
+        page_index: page?.pageIndex ?? page?.index ?? index,
+        label: page?.label || page?.title || `Page ${index + 1}`,
+      });
+      const payload = await getYearbookBookmarks(batchId(selectedBatch));
+      const data = unwrap(payload);
+      setBookmarks(Array.isArray(data) ? data : []);
+      Alert.alert('Bookmarked', 'This page was added to your yearbook bookmarks.');
+    } catch (requestError: any) {
+      Alert.alert('Bookmark failed', getErrorMessage(requestError, 'Unable to bookmark this page.'));
+    }
+  };
+
+  const openYearbookPdf = async () => {
+    const id = batchId(selectedBatch);
+    if (!id) return;
+
+    try {
+      const url = await getMobileYearbookPdfUrl(id);
+      await Linking.openURL(url);
+    } catch (requestError: any) {
+      Alert.alert('PDF unavailable', getErrorMessage(requestError, 'Unable to open this yearbook PDF. Premium access may be required.'));
+    }
   };
 
   const visiblePages = useMemo(() => searchResults.length ? searchResults : pages, [pages, searchResults]);
@@ -136,6 +157,10 @@ export default function YearbookScreen() {
               <FontAwesome name="search" size={16} color="#FFFFFF" />
             </TouchableOpacity>
           </View>
+          <TouchableOpacity style={styles.pdfButton} onPress={openYearbookPdf}>
+            <FontAwesome name="file-pdf-o" size={14} color="#fdb813" />
+            <Text style={styles.pdfButtonText}>Open Premium PDF</Text>
+          </TouchableOpacity>
           <FlatList
             data={visiblePages}
             keyExtractor={(item, index) => String(item?.id || item?.pageIndex || index)}
@@ -177,6 +202,8 @@ const styles = StyleSheet.create({
   searchRow: { flexDirection: 'row', padding: 16, backgroundColor: '#FFFFFF' },
   searchInput: { flex: 1, backgroundColor: '#f4f7fe', borderRadius: 14, paddingHorizontal: 14, marginRight: 10 },
   searchButton: { width: 46, height: 46, borderRadius: 23, backgroundColor: '#1d2b4b', justifyContent: 'center', alignItems: 'center' },
+  pdfButton: { marginHorizontal: 20, marginBottom: 4, minHeight: 46, borderRadius: 14, backgroundColor: '#1d2b4b', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 9 },
+  pdfButtonText: { color: '#ffffff', fontSize: 13, fontWeight: '900' },
   pageCard: { backgroundColor: '#FFFFFF', borderRadius: 18, padding: 18, marginBottom: 14, elevation: 2 },
   pageNumber: { color: '#8E8E93', fontSize: 11, fontWeight: 'bold', letterSpacing: 1 },
   pageTitle: { color: '#1C1C1E', fontSize: 18, fontWeight: 'bold', marginTop: 6 },

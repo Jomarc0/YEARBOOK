@@ -18,6 +18,7 @@ import {
   getStudent,
   getStudentAchievements,
   getStudentPosts,
+  getAlumniMe,
   getVoiceNotesInbox,
   imageUrl,
   updatePassword,
@@ -30,6 +31,7 @@ import {
   updateProfilePhoto,
   updateProfilePost,
   updateProfileVisibility,
+  updateAlumniCareer,
   uploadProfileMedia,
   uploadTaggedPhoto,
   unwrap,
@@ -126,6 +128,11 @@ export default function ProfileScreen() {
     course: '',
     graduation_year: '',
     batch: '',
+    job_title: '',
+    company: '',
+    location: '',
+    field: '',
+    career_bio: '',
   });
   const [achievementForm, setAchievementForm] = useState<any[]>([]);
   const [passwordForm, setPasswordForm] = useState({ current_password: '', password: '', password_confirmation: '' });
@@ -147,6 +154,11 @@ export default function ProfileScreen() {
       course: course(nextUser) === 'Pioneer Student' ? '' : course(nextUser),
       graduation_year: graduationYear(nextUser) ? String(graduationYear(nextUser)) : '',
       batch: nextUser?.batch || safeStudent(nextUser)?.batch || '',
+      job_title: nextUser?.career?.job_title || nextUser?.careerProfile?.job_title || '',
+      company: nextUser?.career?.company || nextUser?.careerProfile?.company || '',
+      location: nextUser?.career?.location || nextUser?.careerProfile?.location || '',
+      field: nextUser?.career?.field || nextUser?.careerProfile?.field || '',
+      career_bio: nextUser?.career?.bio || nextUser?.careerProfile?.bio || '',
     });
     setAchievementForm(nextAchievements.map(normalizeAchievement));
   }, []);
@@ -163,11 +175,12 @@ export default function ProfileScreen() {
       const profilePayload = userId ? await getStudent(userId).catch(() => fresh) : fresh;
       const profile = unwrap(profilePayload) || fresh || cached;
 
-      const [postsResult, achievementsResult, taggedResult, voiceResult] = await Promise.allSettled([
+      const [postsResult, achievementsResult, taggedResult, voiceResult, alumniResult] = await Promise.allSettled([
         userId ? getStudentPosts(userId) : Promise.resolve([]),
         userId ? getStudentAchievements(userId) : Promise.resolve([]),
         userId ? getTaggedPhotos(userId) : Promise.resolve([]),
         getVoiceNotesInbox(),
+        getAlumniMe(),
       ]);
 
       const nextPosts = postsResult.status === 'fulfilled' ? listFromPayload(postsResult.value) : [];
@@ -175,12 +188,15 @@ export default function ProfileScreen() {
       const nextTagged = taggedResult.status === 'fulfilled' ? listFromPayload(taggedResult.value) : [];
       const nextVoice = voiceResult.status === 'fulfilled' ? listFromPayload(voiceResult.value) : [];
 
-      setUser(profile);
+      const alumniProfile = alumniResult.status === 'fulfilled' ? unwrap(alumniResult.value) : null;
+      const mergedProfile = alumniProfile ? { ...profile, career: alumniProfile.career } : profile;
+
+      setUser(mergedProfile);
       setPosts(nextPosts);
       setTaggedPhotos(nextTagged);
       setAchievements(nextAchievements);
       setVoiceNotes(nextVoice);
-      hydrateForms(profile, nextAchievements);
+      hydrateForms(mergedProfile, nextAchievements);
     } catch (requestError: any) {
       setError(getErrorMessage(requestError, 'Unable to load your profile.'));
     } finally {
@@ -456,6 +472,13 @@ export default function ProfileScreen() {
           graduation_year: form.graduation_year ? Number(form.graduation_year) : null,
           batch: form.batch || null,
         }),
+        updateAlumniCareer({
+          job_title: form.job_title || null,
+          company: form.company || null,
+          location: form.location || null,
+          field: form.field || null,
+          bio: form.career_bio || null,
+        }),
         updateProfileAchievements(achievementForm.map((item) => ({
           id: item.id,
           title: item.title,
@@ -668,6 +691,10 @@ export default function ProfileScreen() {
           <InfoRow icon="book" label="Course" value={course(user)} />
           <InfoRow icon="calendar" label="Graduation Year" value={graduationYear(user) || 'Not set'} />
           <InfoRow icon="users" label="Batch" value={user?.batch || safeStudent(user)?.batch || 'Not set'} />
+          <InfoRow icon="briefcase" label="Career" value={user?.career?.job_title || 'Not set'} />
+          <InfoRow icon="building" label="Company" value={user?.career?.company || 'Not set'} />
+          <InfoRow icon="map-marker" label="Location" value={user?.career?.location || 'Not set'} />
+          <InfoRow icon="tag" label="Field" value={user?.career?.field || 'Not set'} />
         </View>
       );
     }
@@ -1057,6 +1084,13 @@ function SettingsModal(props: any) {
               <TextInput style={styles.input} value={form.course} onChangeText={(nextCourse) => setForm((current: any) => ({ ...current, course: nextCourse }))} placeholder="Course" />
               <TextInput style={styles.input} value={form.graduation_year} onChangeText={(graduation_year) => setForm((current: any) => ({ ...current, graduation_year }))} placeholder="Graduation year" keyboardType="numeric" />
               <TextInput style={styles.input} value={form.batch} onChangeText={(batch) => setForm((current: any) => ({ ...current, batch }))} placeholder="Batch" />
+
+              <Text style={styles.inputLabel}>ALUMNI CAREER</Text>
+              <TextInput style={styles.input} value={form.job_title} onChangeText={(job_title) => setForm((current: any) => ({ ...current, job_title }))} placeholder="Job title" />
+              <TextInput style={styles.input} value={form.company} onChangeText={(company) => setForm((current: any) => ({ ...current, company }))} placeholder="Company" />
+              <TextInput style={styles.input} value={form.location} onChangeText={(location) => setForm((current: any) => ({ ...current, location }))} placeholder="Location" />
+              <TextInput style={styles.input} value={form.field} onChangeText={(field) => setForm((current: any) => ({ ...current, field }))} placeholder="Career field" />
+              <TextInput style={[styles.input, styles.textArea]} value={form.career_bio} onChangeText={(career_bio) => setForm((current: any) => ({ ...current, career_bio }))} multiline placeholder="Short career bio..." />
 
               <View style={styles.modalSectionHeader}>
                 <Text style={styles.inputLabel}>ACHIEVEMENTS</Text>
