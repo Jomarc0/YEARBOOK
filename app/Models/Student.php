@@ -94,4 +94,9 @@ class Student extends Model
     {
         return $this->userAccount()->exists();
     }
+
+    public function user(): \Illuminate\Database\Eloquent\Relations\HasOne
+    {
+        return $this->hasOne(\App\Models\User::class, 'student_record_id', 'id');
+    }
 }

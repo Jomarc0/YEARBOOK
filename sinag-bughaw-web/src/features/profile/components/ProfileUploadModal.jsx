@@ -6,7 +6,7 @@ import TagPeopleSearch from './TagPeopleSearch';
 
 const VIS_OPTS = [
   { value: 'public',  icon: 'fa-globe',        label: 'Public'  },
-  { value: 'friends', icon: 'fa-user-friends',  label: 'Friends' },
+  { value: 'batchmates', icon: 'fa-users',      label: 'Batchmates' },
   { value: 'private', icon: 'fa-lock',          label: 'Only Me' },
 ];
 
@@ -96,7 +96,9 @@ export default function ProfileUploadModal({ onClose, onSuccess }) {
       setDone(true);
       setTimeout(() => { onSuccess?.(); }, 900);
     } catch (err) {
-      const msg = err.response?.data?.message || 'Upload failed.';
+      const validationErrors = err.response?.data?.errors;
+      const firstError = validationErrors ? Object.values(validationErrors).flat()[0] : null;
+      const msg = firstError || err.response?.data?.message || 'Upload failed.';
       setErrors(() => { const e = {}; files.forEach(f => { e[f.id] = msg; }); return e; });
     } finally { setUploading(false); }
   };
@@ -121,14 +123,14 @@ export default function ProfileUploadModal({ onClose, onSuccess }) {
 
       {/* Modal */}
       <div
-        className="fixed top-1/2 left-1/2 z-[1101] w-full max-w-[520px] bg-white rounded-2xl
+        className="fixed left-1/2 top-1/2 z-[1101] w-[calc(100%-2rem)] max-w-[480px] -translate-x-1/2 -translate-y-1/2 bg-white rounded-2xl
                    shadow-2xl overflow-hidden"
         style={{ animation: done ? 'successPop 0.3s ease' : 'modalSlide 0.25s cubic-bezier(0.34,1.3,0.64,1)' }}
       >
         {/* Header */}
-        <div className="bg-gradient-to-r from-[#111827] to-[#1e2d4f] px-5 py-4 flex items-center justify-between">
+        <div className="bg-gradient-to-r from-[#111827] to-[#1e2d4f] px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-[#fdb813]/15 border border-[#fdb813]/25 flex items-center justify-center">
+            <div className="w-8 h-8 rounded-lg bg-[#fdb813]/15 border border-[#fdb813]/25 flex items-center justify-center">
               <i className="fas fa-images text-[#fdb813] text-sm" />
             </div>
             <div>
@@ -151,7 +153,7 @@ export default function ProfileUploadModal({ onClose, onSuccess }) {
         </div>
 
         {/* Body */}
-        <div className="p-5 max-h-[82vh] overflow-y-auto">
+        <div className="p-4 max-h-[78vh] overflow-y-auto">
 
           {/* ── FREE GATE ── */}
           {!canUpload ? (
@@ -220,9 +222,9 @@ export default function ProfileUploadModal({ onClose, onSuccess }) {
                     handleFilePick({ target: { files: e.dataTransfer.files, value: '' }, preventDefault: () => {} });
                   }}
                   className="border-2 border-dashed border-slate-200 hover:border-[#1d2b4b] hover:bg-slate-50
-                             rounded-2xl p-10 text-center cursor-pointer transition-all mb-4"
+                             rounded-2xl px-5 py-8 text-center cursor-pointer transition-all mb-4"
                 >
-                  <div className="w-14 h-14 rounded-2xl bg-[#1d2b4b] flex items-center justify-center mx-auto mb-4">
+                  <div className="w-12 h-12 rounded-xl bg-[#1d2b4b] flex items-center justify-center mx-auto mb-3">
                     <i className="fas fa-cloud-arrow-up text-[#fdb813] text-xl" />
                   </div>
                   <p className="text-sm font-bold text-[#0f172a] mb-1">Click or drag to upload</p>

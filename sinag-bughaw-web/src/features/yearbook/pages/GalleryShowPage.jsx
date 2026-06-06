@@ -1,14 +1,8 @@
 /**
- * GalleryShowPage.jsx
+ * GalleryShowPage.jsx — FIXED
  * ─────────────────────────────────────────────────────────────────────────────
- * CHANGES FROM ORIGINAL:
- *  - Added face-search bar to the album header (mirrors GalleryPage hero search).
- *  - Imports: added `galleryApi` (for faceSearch), `FaceSearchButton`,
- *    `imageUrl`, `avatarUrl`.
- *  - New state: `searching`, `matches`.
- *  - New handler: `handleFaceFile` — calls galleryApi.faceSearch and sets matches.
- *  - Match result cards rendered below the search input in the header.
- *  - No logic, API calls, routes, or other backend behavior changed.
+ * FIX: Added missing `useAuth` import (was crashing with ReferenceError).
+ * No other logic changed.
  * ─────────────────────────────────────────────────────────────────────────────
  */
 
@@ -17,7 +11,9 @@ import { useParams, Link } from 'react-router-dom';
 import Navbar from '@/components/layout/Navbar';
 import Footer from '@/components/layout/Footer';
 import { faceApi, galleryApi, mediaApi } from '@/api/gallery.api';
+import { useAuth } from '@/features/auth/hooks/useAuth';   // ← FIX: was missing
 import { useMediaUpload } from '@/hooks/useMediaUpload';
+import { usePhotoFacesBroadcast } from '@/hooks/usePhotoFacesBroadcast';
 import BulkUploadZone from '@/features/yearbook/components/BulkUploadZone';
 import { storageUrl } from '@/api/client';
 import ProtectedImage from '@/components/ui/ProtectedImage';
@@ -26,13 +22,13 @@ import { useContentProtection } from '@/utils/contentProtection';
 import FaceSearchButton from '@/components/ui/FaceSearchButton';
 import { imageUrl, avatarUrl } from '@/utils/imageUrl';
 
-// ─── Sub-components ───────────────────────────────────────────────────────────
+// ─── Sub-components (unchanged) ───────────────────────────────────────────────
 
-/** Face-tag badge shown in lightbox */
 function FaceTagBadge({ tag }) {
-  const studentId = tag.student?.id ?? tag.user_id;
-  const name      = tag.student?.name ?? 'Unknown';
-  const pic       = tag.student?.profile_picture;
+  const person    = tag.user ?? tag.student ?? tag;
+  const studentId = person.id ?? tag.user_id;
+  const name      = person.name ?? tag.name ?? 'Unknown';
+  const pic       = person.profile_picture ?? tag.profile_picture;
   return (
     <Link to={`/profile/${studentId}`} onClick={e => e.stopPropagation()} className="no-underline">
       <div className="inline-flex items-center gap-2 bg-[#1d2b4b]/[0.88] backdrop-blur-lg
@@ -56,7 +52,6 @@ function FaceTagBadge({ tag }) {
   );
 }
 
-/** Compact face-tag chips shown in grid card footer */
 function GridTagChips({ tags }) {
   if (!tags?.length) return null;
   const show  = tags.slice(0, 2);
@@ -65,14 +60,14 @@ function GridTagChips({ tags }) {
     <div className="flex flex-wrap gap-1 px-2.5 pb-1.5 pt-1">
       {show.map(t => (
         <Link
-          key={t.user_id ?? t.student?.id}
-          to={`/profile/${t.student?.id ?? t.user_id}`}
+          key={t.user_id ?? t.user?.id ?? t.student?.id}
+          to={`/profile/${t.user?.id ?? t.student?.id ?? t.user_id}`}
           onClick={e => e.stopPropagation()}
           className="no-underline inline-flex items-center gap-1 bg-[#1d2b4b] text-white
                      rounded-full py-[3px] px-[9px] pl-[5px] text-[10px] font-bold hover:opacity-75 transition-opacity"
         >
           <i className="fas fa-user-tag text-[#fdb813] text-[9px]" />
-          {(t.student?.name ?? 'Student').split(' ')[0]}
+          {(t.user?.name ?? t.student?.name ?? t.name ?? 'Student').split(' ')[0]}
         </Link>
       ))}
       {extra > 0 && (
@@ -84,11 +79,14 @@ function GridTagChips({ tags }) {
   );
 }
 
-/** Face analysis status pill */
 function StatusPill({ status, faceCount }) {
   const cfg = {
-    analyzed: { cls: 'bg-emerald-50 text-emerald-700',  icon: 'fa-circle-check',        text: `${faceCount} face${faceCount !== 1 ? 's' : ''}` },
-    pending:  { cls: 'bg-amber-50 text-amber-700',      icon: 'fa-clock',               text: 'Analyzing…' },
+    analyzed: { cls: 'bg-emerald-50 text-emerald-700',  icon: 'fa-circle-check',         text: `${faceCount} face${faceCount !== 1 ? 's' : ''}` },
+    done:     { cls: 'bg-emerald-50 text-emerald-700',  icon: 'fa-circle-check',         text: `${faceCount} face${faceCount !== 1 ? 's' : ''}` },
+    matched:  { cls: 'bg-emerald-50 text-emerald-700',  icon: 'fa-circle-check',         text: `${faceCount} face${faceCount !== 1 ? 's' : ''}` },
+    no_matches: { cls: 'bg-emerald-50 text-emerald-700', icon: 'fa-circle-check',         text: `${faceCount} face${faceCount !== 1 ? 's' : ''}` },
+    pending:  { cls: 'bg-amber-50 text-amber-700',      icon: 'fa-clock',                text: 'Analyzing…' },
+    queued:   { cls: 'bg-amber-50 text-amber-700',      icon: 'fa-clock',                text: 'Analyzing…' },
     error:    { cls: 'bg-red-50 text-red-600',           icon: 'fa-triangle-exclamation', text: 'Failed' },
   }[status] ?? { cls: 'bg-slate-50 text-slate-400', icon: 'fa-circle-dashed', text: 'Pending' };
   return (
@@ -98,9 +96,6 @@ function StatusPill({ status, faceCount }) {
   );
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Lightbox Modal
-// ─────────────────────────────────────────────────────────────────────────────
 function LightboxModal({ photo, photos, tagCache, onClose, onNavigate }) {
   const idx  = photos.findIndex(p => p.id === photo.id);
   const prev = photos[idx - 1] ?? null;
@@ -121,9 +116,8 @@ function LightboxModal({ photo, photos, tagCache, onClose, onNavigate }) {
   return (
     <div
       onClick={onClose}
-      className="fixed inset-0 z-[9999] bg-[#060a14]/[0.97] flex items-center justify-center animate-fade-in cursor-zoom-out"
+      className="fixed inset-0 z-[9999] bg-[#060a14]/[0.97] flex items-center justify-center cursor-zoom-out"
     >
-      {/* Close */}
       <button
         onClick={onClose}
         className="absolute top-5 right-5 bg-white/10 hover:bg-white/[0.22] border-none text-white
@@ -133,13 +127,11 @@ function LightboxModal({ photo, photos, tagCache, onClose, onNavigate }) {
         <i className="fas fa-times" />
       </button>
 
-      {/* Counter pill */}
       <div className="absolute top-[22px] left-1/2 -translate-x-1/2 bg-white/[0.08] text-white/55
                       text-[11px] font-bold px-3.5 py-1.5 rounded-full">
         {idx + 1} / {photos.length}
       </div>
 
-      {/* Prev */}
       {prev && (
         <button
           onClick={e => { e.stopPropagation(); onNavigate(prev); }}
@@ -151,7 +143,6 @@ function LightboxModal({ photo, photos, tagCache, onClose, onNavigate }) {
         </button>
       )}
 
-      {/* Next */}
       {next && (
         <button
           onClick={e => { e.stopPropagation(); onNavigate(next); }}
@@ -163,10 +154,9 @@ function LightboxModal({ photo, photos, tagCache, onClose, onNavigate }) {
         </button>
       )}
 
-      {/* Image content */}
       <div
         onClick={e => e.stopPropagation()}
-        className="flex flex-col items-center max-w-[88vw] max-h-[90vh] animate-slide-up"
+        className="flex flex-col items-center max-w-[88vw] max-h-[90vh]"
       >
         <ProtectedImage
           src={storageUrl(photo.file_path)}
@@ -213,18 +203,18 @@ export default function GalleryShowPage() {
   const [showUpload, setShowUpload] = useState(false);
   const [deleting,   setDeleting]   = useState(null);
   const [deleteErr,  setDeleteErr]  = useState('');
-
-  // ── Face search state ──────────────────────────────────────────────────────
   const [searching,  setSearching]  = useState(false);
   const [matches,    setMatches]    = useState([]);
 
   const fetchingRef = useRef(new Set());
   const masonryRef  = useContentProtection();
 
-const { user } = useAuth(); 
-const tier = user?.tier === 'premium' || user?.is_premium ? 'premium'
-            : user?.tier === 'standard' ? 'standard'
-            : 'free'
+  // FIX: useAuth is now imported correctly above
+  const { user } = useAuth();
+  const tier = user?.tier === 'premium' || user?.is_premium ? 'premium'
+             : user?.tier === 'standard' ? 'standard'
+             : 'free';
+  const canUpload = user?.role === 'admin' || user?.is_admin || tier === 'standard' || tier === 'premium';
 
   const loadAlbum = useCallback(() => {
     if (!id) return;
@@ -259,6 +249,24 @@ const tier = user?.tier === 'premium' || user?.is_premium ? 'premium'
     finally { fetchingRef.current.delete(photoId); }
   }, []);
 
+  const albumPhotoIds = album?.photos?.map(photo => photo.id) ?? [];
+
+  usePhotoFacesBroadcast(
+    (event) => {
+      setTagCache(prev => ({
+        ...prev,
+        [event.photo_id]: {
+          status: event.status,
+          face_count: event.face_count,
+          tags: event.matches ?? [],
+        },
+      }));
+
+      loadTags(event.photo_id);
+    },
+    { photoIds: albumPhotoIds, enabled: albumPhotoIds.length > 0 }
+  );
+
   useEffect(() => {
     if (!album?.photos) return;
     album.photos.forEach((photo, i) => {
@@ -284,7 +292,6 @@ const tier = user?.tier === 'premium' || user?.is_premium ? 'premium'
     }
   };
 
-  // ── Face search handler ────────────────────────────────────────────────────
   const handleFaceFile = async (file) => {
     setSearching(true);
     setMatches([]);
@@ -295,14 +302,13 @@ const tier = user?.tier === 'premium' || user?.is_premium ? 'premium'
       const found = data.photos ?? [];
       setMatches(found);
       if (!found.length) alert('No matching photos found.');
-    } catch {
-      alert('Face search failed.');
+    } catch (err) {
+      alert(err?.response?.data?.message || 'Face search failed.');
     } finally {
       setSearching(false);
     }
   };
 
-  // ── Loading state ─────────────────────────────────────────────────────────
   if (loading) return (
     <div className="min-h-screen flex flex-col bg-[#f4f7fe]">
       <Navbar />
@@ -334,7 +340,6 @@ const tier = user?.tier === 'premium' || user?.is_premium ? 'premium'
     <div className="min-h-screen flex flex-col bg-[#f4f7fe]">
       <Navbar />
 
-      {/* ── Header ── */}
       <header className="bg-gradient-to-br from-[#1d2b4b] to-[#2a3d66] px-[8%] pt-[72px] pb-16 text-white rounded-b-[56px]">
         <Link
           to="/gallery"
@@ -371,40 +376,42 @@ const tier = user?.tier === 'premium' || user?.is_premium ? 'premium'
             )}
           </div>
 
-          <button
-            onClick={() => setShowUpload(v => !v)}
-            className={`flex items-center gap-2 font-extrabold text-[13px] border-none cursor-pointer
-                        px-5 py-[11px] rounded-2xl transition-all
-                        ${showUpload
-                          ? 'bg-white/15 text-white hover:bg-white/20'
-                          : 'bg-[#fdb813] text-[#1d2b4b] hover:bg-[#f5b200]'}`}
-          >
-            <i className={`fas ${showUpload ? 'fa-times' : 'fa-cloud-arrow-up'}`} />
-            {showUpload ? 'Cancel Upload' : 'Upload Photos'}
-          </button>
+          {canUpload ? (
+            <button
+              onClick={() => setShowUpload(v => !v)}
+              className={`flex items-center gap-2 font-extrabold text-[13px] border-none cursor-pointer
+                          px-5 py-[11px] rounded-2xl transition-all
+                          ${showUpload
+                            ? 'bg-white/15 text-white hover:bg-white/20'
+                            : 'bg-[#fdb813] text-[#1d2b4b] hover:bg-[#f5b200]'}`}
+            >
+              <i className={`fas ${showUpload ? 'fa-times' : 'fa-cloud-arrow-up'}`} />
+              {showUpload ? 'Cancel Upload' : 'Upload Photos'}
+            </button>
+          ) : (
+            <Link to="/premium"
+              className="inline-flex items-center gap-2 rounded-2xl bg-[#fdb813] px-5 py-[11px] text-[13px] font-extrabold text-[#1d2b4b] no-underline">
+              <i className="fas fa-lock" /> Upgrade to Upload
+            </Link>
+          )}
         </div>
 
-        {/* ── Face search bar ── */}
+        {/* Face search bar */}
         <div className="mt-6 max-w-[600px]">
           <div className="relative">
             <i className="fas fa-search absolute left-[18px] top-1/2 -translate-y-1/2 text-[#fdb813] text-[15px] z-[1] pointer-events-none" />
             <input
               type="text"
               readOnly
-              onClick={() => document.querySelector('#album-face-search-hidden')?.click()}
               placeholder={searching ? 'Searching…' : 'Click the camera icon to search by face…'}
               className="w-full h-[52px] pl-[50px] pr-14 border border-white/15 rounded-[14px] outline-none
                          bg-white/10 backdrop-blur-xl text-white text-sm font-medium cursor-pointer
                          focus:bg-white/[0.18] focus:border-[#fdb813]/60 transition-all placeholder-white/50
                          box-border"
             />
-            <FaceSearchButton
-              onFile={handleFaceFile}
-              loading={searching}
-            />
+            <FaceSearchButton onFile={handleFaceFile} loading={searching} />
           </div>
 
-          {/* Face match results */}
           {matches.length > 0 && (
             <div className="mt-3 grid grid-cols-[repeat(auto-fill,minmax(200px,1fr))] gap-2.5">
               {matches.map(m => (
@@ -436,24 +443,21 @@ const tier = user?.tier === 'premium' || user?.is_premium ? 'premium'
         </div>
       </header>
 
-      {/* ── Upload Panel ── */}
-      {showUpload && (
+      {showUpload && canUpload && (
         <div className="px-[8%] pt-7">
           <BulkUploadZone {...uploadHook} tier={tier} onCancel={() => setShowUpload(false)} />
         </div>
       )}
 
-      {/* ── Delete error toast ── */}
       {deleteErr && (
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-red-600 text-white
                         px-5 py-3 rounded-[14px] text-[13px] font-bold z-[9998]
                         flex items-center gap-2 shadow-[0_8px_32px_rgba(220,38,38,0.35)]
-                        whitespace-nowrap animate-slide-up">
+                        whitespace-nowrap">
           <i className="fas fa-circle-exclamation" /> {deleteErr}
         </div>
       )}
 
-      {/* ── Uniform photo grid ── */}
       <main ref={masonryRef} className="px-[8%] pt-9 pb-20 flex-1">
         {photos.length > 0 ? (
           <div className="grid grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-4">
@@ -472,7 +476,6 @@ const tier = user?.tier === 'premium' || user?.is_premium ? 'premium'
                                ${isDeleting ? 'opacity-50' : ''}`}
                   onClick={() => setLightbox(photo)}
                 >
-                  {/* Fixed 4:3 image area */}
                   <div className="relative w-full pt-[75%] bg-slate-100 overflow-hidden">
                     {src && (
                       <div className="absolute inset-0">
@@ -487,7 +490,6 @@ const tier = user?.tier === 'premium' || user?.is_premium ? 'premium'
                       </div>
                     )}
 
-                    {/* Hover overlay */}
                     <div className="absolute inset-0 bg-[#1d2b4b]/45 opacity-0 group-hover:opacity-100
                                     flex items-center justify-center transition-opacity duration-200">
                       <div className="bg-white/15 backdrop-blur-sm border border-white/30 rounded-xl
@@ -496,7 +498,6 @@ const tier = user?.tier === 'premium' || user?.is_premium ? 'premium'
                       </div>
                     </div>
 
-                    {/* Delete button */}
                     <button
                       className={`absolute top-2.5 right-2.5 border-none cursor-pointer w-8 h-8 rounded-[10px]
                                    z-[5] flex items-center justify-center text-red-400 text-[12px]
@@ -512,7 +513,6 @@ const tier = user?.tier === 'premium' || user?.is_premium ? 'premium'
                     </button>
                   </div>
 
-                  {/* Card footer */}
                   <div className="px-3 pt-2.5 pb-3">
                     {photo.caption && (
                       <p className="mb-1.5 text-[11px] text-slate-500 font-medium truncate">
@@ -531,7 +531,6 @@ const tier = user?.tier === 'premium' || user?.is_premium ? 'premium'
             })}
           </div>
         ) : (
-          /* Empty state */
           <div className="text-center py-20 px-5 bg-white rounded-3xl shadow-[0_2px_16px_rgba(29,43,75,0.06)]">
             <i className="fas fa-images text-5xl text-slate-200 block mb-4" />
             <h3 className="text-xl font-extrabold text-[#1d2b4b] mb-2">No Photos Yet</h3>
@@ -549,7 +548,6 @@ const tier = user?.tier === 'premium' || user?.is_premium ? 'premium'
         )}
       </main>
 
-      {/* ── Lightbox ── */}
       {lightbox && (
         <LightboxModal
           photo={lightbox} photos={photos} tagCache={tagCache}

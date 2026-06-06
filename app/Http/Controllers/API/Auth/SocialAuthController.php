@@ -18,8 +18,18 @@ class SocialAuthController extends Controller
         return rtrim(config('app.frontend_url', 'http://localhost:5173'), '/');
     }
 
-    public function redirectToGoogle()
+    public function redirectToGoogle(Request $request)
     {
+        $redirectUri = $request->query('redirect_uri');
+
+        if (is_string($redirectUri) && preg_match('/^(capstoneapp:\/\/|exp:\/\/|http:\/\/localhost|http:\/\/127\.0\.0\.1)/', $redirectUri)) {
+            session(['google_oauth_redirect_uri' => $redirectUri]);
+        } elseif ($request->query('client') === 'mobile') {
+            session(['google_oauth_redirect_uri' => 'capstoneapp://sso/callback']);
+        } else {
+            session()->forget('google_oauth_redirect_uri');
+        }
+
         return Socialite::driver('google')->redirect();
     }
 
@@ -109,6 +119,13 @@ class SocialAuthController extends Controller
         $token = $user->createToken('google-sso')->plainTextToken;
 
         // ── 6. Send token to React via URL param ──────────────────────────────
+        $mobileRedirect = session()->pull('google_oauth_redirect_uri');
+
+        if ($mobileRedirect) {
+            $separator = str_contains($mobileRedirect, '?') ? '&' : '?';
+            return redirect("{$mobileRedirect}{$separator}token={$token}");
+        }
+
         return redirect("{$frontend}/sso/callback?token={$token}");
     }
 }

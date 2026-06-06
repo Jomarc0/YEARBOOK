@@ -12,10 +12,12 @@ import ControlBar             from '../controls/ControlBar';
 import ThumbnailSidebar       from '../sidebar/ThumbnailSidebar';
 import SearchPanel            from '../sidebar/SearchPanel';
 import BookmarkPanel          from '../sidebar/BookmarkPanel';
+import { PAGE_W, PAGE_H }      from '../pages/pageStyles';
+import { useFlipbookAlumniLink } from '../../../../hooks/useFlipbookAlumniLink';
 
 const GOLD       = '#fdb813';
 const NAVY       = '#1d2b4b';
-const ZOOM_STEPS = [0.75, 1, 1.15, 1.3];
+const ZOOM_STEPS = [0.8, 1, 1.15, 1.3];
 
 export default function FlipbookViewer({
   pages         = [],
@@ -23,12 +25,14 @@ export default function FlipbookViewer({
   toc           = [],
   bookmarks     = [],
   searchResults = null,
-  batchId,                    // ← NEW: needed for alumni deep-link
+  batchId,
   onSearch,
   onAddBookmark,
   onRemoveBookmark,
   onDownload,
   currentUser,
+  pdfReady,
+  isPremium,
 }) {
   const navigate = useNavigate();
   const bookRef  = useRef(null);
@@ -41,7 +45,6 @@ export default function FlipbookViewer({
   const [sidebarTab,   setSidebarTab]   = useState(null);
   const [isAnimating,  setIsAnimating]  = useState(false);
 
-  // ── Alumni deep-link ──────────────────────────────────────────────────────
   const { alumniData, loading: alumniLoading, lookup, clear } =
     useFlipbookAlumniLink();
 
@@ -49,18 +52,14 @@ export default function FlipbookViewer({
   const totalSpreads  = Math.ceil(pages.length / 2);
   const zoom          = ZOOM_STEPS[zoomIndex];
 
-  // ── Flipbook event handlers ───────────────────────────────────────────────
-
   const handleFlip = useCallback((e) => {
     setCurrentPage(e.data);
-    clear(); // dismiss alumni popup on every page turn
+    clear();
   }, [clear]);
 
   const handleInit      = useCallback((e) => setTotalPages(e.object.getPageCount()), []);
   const handleFlipStart = useCallback(() => setIsAnimating(true),  []);
   const handleFlipEnd   = useCallback(() => setIsAnimating(false), []);
-
-  // ── Navigation ────────────────────────────────────────────────────────────
 
   const flipNext = useCallback(() => {
     if (!isAnimating) bookRef.current?.pageFlip().flipNext();
@@ -79,33 +78,6 @@ export default function FlipbookViewer({
     goToPage(spreadIndex * 2);
   }, [goToPage]);
 
-  // ── Keyboard navigation ───────────────────────────────────────────────────
-
-  useEffect(() => {
-    const handler = (e) => {
-      if (e.target.tagName === 'INPUT') return;
-      switch (e.key) {
-        case 'ArrowRight': case 'ArrowDown':  flipNext();             break;
-        case 'ArrowLeft':  case 'ArrowUp':    flipPrev();             break;
-        case 'Home':  goToPage(0);                                    break;
-        case 'End':   goToPage(pages.length - 1);                     break;
-        case 'f': case 'F': toggleFullscreen();                       break;
-        case 'Escape': clear();                                       break;
-        default: break;
-      }
-    };
-    window.addEventListener('keydown', handler);
-    return () => window.removeEventListener('keydown', handler);
-  }, [flipNext, flipPrev, goToPage, pages.length, clear]);
-
-  // ── Zoom ──────────────────────────────────────────────────────────────────
-
-  const zoomIn    = () => setZoomIndex((i) => Math.min(i + 1, ZOOM_STEPS.length - 1));
-  const zoomOut   = () => setZoomIndex((i) => Math.max(i - 1, 0));
-  const zoomReset = () => setZoomIndex(1);
-
-  // ── Fullscreen ────────────────────────────────────────────────────────────
-
   const toggleFullscreen = useCallback(() => {
     if (!document.fullscreenElement) {
       wrapRef.current?.requestFullscreen?.()
@@ -117,18 +89,35 @@ export default function FlipbookViewer({
   }, []);
 
   useEffect(() => {
+    const handler = (e) => {
+      if (e.target.tagName === 'INPUT') return;
+      switch (e.key) {
+        case 'ArrowRight': case 'ArrowDown':  flipNext();         break;
+        case 'ArrowLeft':  case 'ArrowUp':    flipPrev();         break;
+        case 'Home':  goToPage(0);                                break;
+        case 'End':   goToPage(pages.length - 1);                 break;
+        case 'f': case 'F': toggleFullscreen();                   break;
+        case 'Escape': clear();                                   break;
+        default: break;
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [flipNext, flipPrev, goToPage, pages.length, clear, toggleFullscreen]);
+
+  useEffect(() => {
     const handler = () => setFullscreen(!!document.fullscreenElement);
     document.addEventListener('fullscreenchange', handler);
     return () => document.removeEventListener('fullscreenchange', handler);
   }, []);
 
-  // ── Search jump ───────────────────────────────────────────────────────────
+  const zoomIn    = () => setZoomIndex((i) => Math.min(i + 1, ZOOM_STEPS.length - 1));
+  const zoomOut   = () => setZoomIndex((i) => Math.max(i - 1, 0));
+  const zoomReset = () => setZoomIndex(1);
 
   const handleSearchJump = useCallback((pageIndex) => {
     goToPage(pageIndex);
   }, [goToPage]);
-
-  // ── Bookmark current page ─────────────────────────────────────────────────
 
   const handleBookmarkCurrent = useCallback(() => {
     const page  = pages[currentPage];
@@ -138,25 +127,17 @@ export default function FlipbookViewer({
 
   const isCurrentBookmarked = bookmarks.some((b) => b.pageIndex === currentPage);
 
-  // ── Sidebar toggle ────────────────────────────────────────────────────────
-
   const toggleSidebar = (tab) =>
     setSidebarTab((cur) => (cur === tab ? null : tab));
 
-  // ── Alumni deep-link handlers ─────────────────────────────────────────────
+  // Portrait click -> discovery student profile page.
+  const handlePortraitClick = useCallback((studentId) => {
+    navigate(`/discover/students/${studentId}`);
+  }, [navigate]);
 
-  // Called by YearbookPageRenderer when a student portrait is clicked
-  const handlePortraitClick = useCallback((pageIndex) => {
-    if (!batchId) return;
-    lookup(batchId, pageIndex);
-  }, [batchId, lookup]);
-
-  // Navigate to alumni tracker when popup button is clicked
   const handleViewInTracker = useCallback(() => {
     if (alumniData?.tracker_url) navigate(alumniData.tracker_url);
   }, [alumniData, navigate]);
-
-  // ── Render ────────────────────────────────────────────────────────────────
 
   if (!pages.length) return null;
 
@@ -177,12 +158,10 @@ export default function FlipbookViewer({
         .alumni-popup { animation: fadeInUp 0.25s ease both; }
       `}</style>
 
-      {/* Main layout: sidebar + book */}
-      <div className="flex w-full justify-center items-start gap-4 px-4 py-6">
+      <div className="flex w-full justify-center items-start gap-6 px-6 py-5 overflow-x-auto">
 
-        {/* Left sidebar */}
         {sidebarTab && (
-          <aside className="w-64 flex-shrink-0 sticky top-6 max-h-[80vh] overflow-y-auto rounded-xl bg-white/5 border border-white/10 backdrop-blur-sm">
+          <aside className="w-72 flex-shrink-0 sticky top-5 max-h-[78vh] overflow-y-auto rounded-xl bg-white/5 border border-white/10 backdrop-blur-sm">
             {sidebarTab === 'toc' && (
               <ThumbnailSidebar
                 toc={toc}
@@ -207,17 +186,15 @@ export default function FlipbookViewer({
           </aside>
         )}
 
-        {/* Book stage */}
         <div
           className="flex-shrink-0 relative"
           style={{
             transform:       `scale(${zoom})`,
             transformOrigin: 'top center',
             transition:      'transform 0.3s ease',
-            marginBottom:    zoom > 1 ? `${(zoom - 1) * 420}px` : 0,
+            marginBottom:    zoom > 1 ? `${(zoom - 1) * PAGE_H}px` : 0,
           }}
         >
-          {/* Page-corner click zones */}
           <button
             onClick={flipPrev}
             disabled={currentPage === 0}
@@ -241,13 +218,13 @@ export default function FlipbookViewer({
 
           <HTMLFlipBook
             ref={bookRef}
-            width={340}
-            height={460}
+            width={PAGE_W}
+            height={PAGE_H}
             size="fixed"
-            minWidth={260}
-            maxWidth={340}
-            minHeight={360}
-            maxHeight={460}
+            minWidth={PAGE_W}
+            maxWidth={PAGE_W}
+            minHeight={PAGE_H}
+            maxHeight={PAGE_H}
             showCover={true}
             flippingTime={700}
             useMouseEvents={true}
@@ -268,9 +245,8 @@ export default function FlipbookViewer({
                 page={page}
                 pageIndex={idx}
                 onNavigate={goToPage}
-                // ↓ Only student pages get the portrait click handler
                 onPortraitClick={
-                  page.type === 'student-grid' || page.type === 'student-quotes'
+                  page.type === 'student-grid' || page.type === 'student-profile'
                     ? handlePortraitClick
                     : undefined
                 }
@@ -280,7 +256,6 @@ export default function FlipbookViewer({
         </div>
       </div>
 
-      {/* Control bar */}
       <ControlBar
         currentPage={currentPage}
         totalPages={pages.length}
@@ -292,6 +267,9 @@ export default function FlipbookViewer({
         fullscreen={fullscreen}
         sidebarTab={sidebarTab}
         isBookmarked={isCurrentBookmarked}
+        batchId={batchId}
+        pdfReady={pdfReady}
+        isPremium={isPremium}
         onPrev={flipPrev}
         onNext={flipNext}
         onZoomIn={zoomIn}
@@ -305,182 +283,80 @@ export default function FlipbookViewer({
         onDownload={() => onDownload?.(currentUser?.id)}
       />
 
-      {/* ── Alumni Deep-Link Popup ──────────────────────────────────────────── */}
       {(alumniLoading || alumniData) && (
         <div
           className="alumni-popup"
           style={{
-            position:     'fixed',
-            bottom:       32,
-            right:        32,
-            zIndex:       9999,
-            width:        290,
-            background:   '#fff',
-            borderRadius: 20,
-            boxShadow:    '0 8px 40px rgba(29,43,75,0.18)',
-            border:       '1px solid #f1f5f9',
-            overflow:     'hidden',
-            fontFamily:   "'Plus Jakarta Sans', sans-serif",
+            position: 'fixed', bottom: 32, right: 32, zIndex: 9999,
+            width: 290, background: '#fff', borderRadius: 20,
+            boxShadow: '0 8px 40px rgba(29,43,75,0.18)',
+            border: '1px solid #f1f5f9', overflow: 'hidden',
+            fontFamily: "'Plus Jakarta Sans', sans-serif",
           }}
         >
-          {/* Top accent bar */}
           <div style={{ height: 4, background: `linear-gradient(90deg, ${NAVY}, ${GOLD})` }} />
-
           <div style={{ padding: '16px 18px' }}>
-
-            {/* Header */}
-            <div style={{
-              display: 'flex', alignItems: 'center',
-              justifyContent: 'space-between', marginBottom: 14,
-            }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                 <i className="fas fa-users-line" style={{ color: GOLD, fontSize: 12 }} />
-                <span style={{
-                  fontSize: '0.62rem', fontWeight: 800,
-                  textTransform: 'uppercase', letterSpacing: '0.12em',
-                  color: '#94a3b8',
-                }}>
+                <span style={{ fontSize: '0.62rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.12em', color: '#94a3b8' }}>
                   Alumni Profile
                 </span>
               </div>
-              <button
-                onClick={clear}
-                aria-label="Close"
-                style={{
-                  background: 'none', border: 'none', cursor: 'pointer',
-                  color: '#cbd5e1', fontSize: 14, lineHeight: 1,
-                  padding: '2px 4px', borderRadius: 6,
-                }}
-              >
+              <button onClick={clear} aria-label="Close" style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#cbd5e1', fontSize: 14, lineHeight: 1, padding: '2px 4px', borderRadius: 6 }}>
                 <i className="fas fa-times" />
               </button>
             </div>
 
-            {/* Loading */}
             {alumniLoading && (
-              <div style={{
-                display: 'flex', alignItems: 'center',
-                gap: 10, padding: '10px 0',
-              }}>
-                <i className="fas fa-spinner fa-spin"
-                   style={{ color: NAVY, fontSize: 16, flexShrink: 0 }} />
-                <span style={{ fontSize: '0.78rem', color: '#64748b' }}>
-                  Looking up alumni…
-                </span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 0' }}>
+                <i className="fas fa-spinner fa-spin" style={{ color: NAVY, fontSize: 16, flexShrink: 0 }} />
+                <span style={{ fontSize: '0.78rem', color: '#64748b' }}>Looking up alumni…</span>
               </div>
             )}
 
-            {/* Alumni data */}
             {!alumniLoading && alumniData && (
               <>
-                {/* Name */}
-                <p style={{
-                  margin: '0 0 6px',
-                  fontWeight: 800, fontSize: '1rem', color: NAVY,
-                }}>
+                <p style={{ margin: '0 0 6px', fontWeight: 800, fontSize: '1rem', color: NAVY }}>
                   {alumniData.name}
                 </p>
-
-                {/* Batch badge */}
-                <div style={{
-                  display: 'inline-flex', alignItems: 'center', gap: 4,
-                  background: 'rgba(253,184,19,0.1)',
-                  border: '1px solid rgba(253,184,19,0.25)',
-                  borderRadius: 20, padding: '3px 9px', marginBottom: 12,
-                }}>
-                  <i className="fas fa-graduation-cap"
-                     style={{ color: GOLD, fontSize: 9 }} />
-                  <span style={{
-                    fontSize: '0.62rem', fontWeight: 800, color: '#92590e',
-                  }}>
+                <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: 'rgba(253,184,19,0.1)', border: '1px solid rgba(253,184,19,0.25)', borderRadius: 20, padding: '3px 9px', marginBottom: 12 }}>
+                  <i className="fas fa-graduation-cap" style={{ color: GOLD, fontSize: 9 }} />
+                  <span style={{ fontSize: '0.62rem', fontWeight: 800, color: '#92590e' }}>
                     Batch {alumniData.batch_year}
                   </span>
                 </div>
-
-                {/* Career */}
                 {alumniData.career?.job_title ? (
-                  <div style={{
-                    background: '#f8fafc', borderRadius: 10,
-                    padding: '10px 12px', marginBottom: 14,
-                    display: 'flex', gap: 10, alignItems: 'flex-start',
-                  }}>
-                    <i className="fas fa-briefcase"
-                       style={{ color: NAVY, fontSize: 11, marginTop: 3, flexShrink: 0 }} />
+                  <div style={{ background: '#f8fafc', borderRadius: 10, padding: '10px 12px', marginBottom: 14, display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+                    <i className="fas fa-briefcase" style={{ color: NAVY, fontSize: 11, marginTop: 3, flexShrink: 0 }} />
                     <div>
-                      <p style={{
-                        margin: 0, fontSize: '0.78rem',
-                        fontWeight: 700, color: NAVY,
-                      }}>
-                        {alumniData.career.job_title}
-                      </p>
-                      {alumniData.career.company && (
-                        <p style={{ margin: '2px 0 0', fontSize: '0.68rem', color: '#64748b' }}>
-                          {alumniData.career.company}
-                        </p>
-                      )}
-                      {alumniData.career.location && (
-                        <p style={{ margin: '3px 0 0', fontSize: '0.65rem', color: '#94a3b8' }}>
-                          <i className="fas fa-location-dot" style={{ marginRight: 4 }} />
-                          {alumniData.career.location}
-                        </p>
-                      )}
+                      <p style={{ margin: 0, fontSize: '0.78rem', fontWeight: 700, color: NAVY }}>{alumniData.career.job_title}</p>
+                      {alumniData.career.company && <p style={{ margin: '2px 0 0', fontSize: '0.68rem', color: '#64748b' }}>{alumniData.career.company}</p>}
+                      {alumniData.career.location && <p style={{ margin: '3px 0 0', fontSize: '0.65rem', color: '#94a3b8' }}><i className="fas fa-location-dot" style={{ marginRight: 4 }} />{alumniData.career.location}</p>}
                       {alumniData.career.field && (
-                        <div style={{
-                          display: 'inline-flex', alignItems: 'center', gap: 4,
-                          background: 'rgba(63,81,181,0.08)',
-                          borderRadius: 6, padding: '2px 7px', marginTop: 5,
-                        }}>
-                          <i className="fas fa-tag"
-                             style={{ color: '#3f51b5', fontSize: 8 }} />
-                          <span style={{
-                            fontSize: '0.6rem', fontWeight: 700, color: '#3f51b5',
-                          }}>
-                            {alumniData.career.field}
-                          </span>
+                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: 'rgba(63,81,181,0.08)', borderRadius: 6, padding: '2px 7px', marginTop: 5 }}>
+                          <i className="fas fa-tag" style={{ color: '#3f51b5', fontSize: 8 }} />
+                          <span style={{ fontSize: '0.6rem', fontWeight: 700, color: '#3f51b5' }}>{alumniData.career.field}</span>
                         </div>
                       )}
                     </div>
                   </div>
                 ) : (
-                  <p style={{
-                    fontSize: '0.72rem', color: '#94a3b8',
-                    marginBottom: 14, fontStyle: 'italic',
-                  }}>
-                    No career info on file yet.
-                  </p>
+                  <p style={{ fontSize: '0.72rem', color: '#94a3b8', marginBottom: 14, fontStyle: 'italic' }}>No career info on file yet.</p>
                 )}
-
-                {/* Actions */}
                 <div style={{ display: 'flex', gap: 8 }}>
-                  {/* View in Alumni Tracker */}
                   <button
                     onClick={handleViewInTracker}
-                    style={{
-                      flex: 1, height: 38, borderRadius: 12,
-                      border: 'none', background: NAVY, color: '#fff',
-                      fontSize: '0.72rem', fontWeight: 700, cursor: 'pointer',
-                      display: 'flex', alignItems: 'center',
-                      justifyContent: 'center', gap: 6,
-                      transition: 'background 0.2s',
-                    }}
+                    style={{ flex: 1, height: 38, borderRadius: 12, border: 'none', background: NAVY, color: '#fff', fontSize: '0.72rem', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, transition: 'background 0.2s' }}
                     onMouseEnter={e => e.currentTarget.style.background = '#3f51b5'}
                     onMouseLeave={e => e.currentTarget.style.background = NAVY}
                   >
-                    <i className="fas fa-users-line"
-                       style={{ color: GOLD, fontSize: 10 }} />
+                    <i className="fas fa-users-line" style={{ color: GOLD, fontSize: 10 }} />
                     Alumni Tracker
                   </button>
-
-                  {/* Dismiss */}
                   <button
                     onClick={clear}
-                    style={{
-                      height: 38, padding: '0 14px', borderRadius: 12,
-                      border: '1.5px solid #e2e8f0', background: '#fff',
-                      color: '#94a3b8', fontSize: '0.72rem',
-                      fontWeight: 600, cursor: 'pointer',
-                      transition: 'all 0.15s',
-                    }}
+                    style={{ height: 38, padding: '0 14px', borderRadius: 12, border: '1.5px solid #e2e8f0', background: '#fff', color: '#94a3b8', fontSize: '0.72rem', fontWeight: 600, cursor: 'pointer', transition: 'all 0.15s' }}
                     onMouseEnter={e => e.currentTarget.style.borderColor = '#cbd5e1'}
                     onMouseLeave={e => e.currentTarget.style.borderColor = '#e2e8f0'}
                   >
@@ -490,14 +366,9 @@ export default function FlipbookViewer({
               </>
             )}
 
-            {/* No alumni linked to this page */}
             {!alumniLoading && !alumniData && (
-              <div style={{
-                textAlign: 'center', padding: '8px 0 4px',
-                color: '#94a3b8', fontSize: '0.75rem',
-              }}>
-                <i className="fas fa-user-slash"
-                   style={{ fontSize: 20, display: 'block', marginBottom: 8 }} />
+              <div style={{ textAlign: 'center', padding: '8px 0 4px', color: '#94a3b8', fontSize: '0.75rem' }}>
+                <i className="fas fa-user-slash" style={{ fontSize: 20, display: 'block', marginBottom: 8 }} />
                 No alumni profile linked to this page.
               </div>
             )}
@@ -508,8 +379,6 @@ export default function FlipbookViewer({
   );
 }
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
-
 function pageLabel(page, idx) {
   if (!page) return `Page ${idx + 1}`;
   const labels = {
@@ -518,7 +387,7 @@ function pageLabel(page, idx) {
     toc:              'Table of Contents',
     'section-header': page.section?.name ?? 'Section',
     'student-grid':   `${page.section?.name ?? 'Students'} — portraits`,
-    'student-quotes': `${page.section?.name ?? 'Students'} — quotes`,
+    'student-profile': `${page.student?.name ?? page.section?.name ?? 'Student'} — profile`,
     gallery:          page.gallery?.name ?? 'Gallery',
     faculty:          'Faculty',
     stats:            'Batch at a Glance',

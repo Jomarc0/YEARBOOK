@@ -16,6 +16,7 @@ import PostCard from '../components/PostCard';
 import PostLightbox from '../components/PostLightbox';
 import MessageModal from '@/components/feedback/MessageModal';
 import { useAppConfig } from '@/features/platform/AppConfigProvider';
+import { getCourseShort } from '@/utils/courseShort';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 const isGraduate = (student) => !!student?.graduation_year;
@@ -170,6 +171,7 @@ export default function ProfilePage() {
           graduation_year: data.graduation_year ?? null,
           batch:           data.batch           ?? null,
           year_level:      data.year_level      ?? null,
+          status:          data.status          ?? data.academic_status ?? null,
           is_premium:      data.is_premium      ?? false,
           tier:            getTier(data),
         });
@@ -240,7 +242,7 @@ export default function ProfilePage() {
   const avatar = storageUrl(student.profile_picture)
     || `https://ui-avatars.com/api/?name=${encodeURIComponent(student.name)}&background=1d2b4b&color=fdb813&bold=true&size=400`;
 
-  const courseShort = student.course?.match(/\b[A-Z]/g)?.join('') ?? 'Student';
+  const courseShort = student.course_short || getCourseShort(student.course);
 
   return (
     <div className="min-h-screen bg-[#f4f7fe] flex flex-col font-sans">
@@ -714,10 +716,15 @@ export default function ProfilePage() {
               <>
                 <div className="grid grid-cols-2 gap-3 mb-3">
                   {[
-                    { label: 'Student ID',      value: academicData.student_id      ?? 'N/A', icon: 'fa-id-card'       },
-                    { label: 'Course',          value: academicData.course          ?? 'N/A', icon: 'fa-book'          },
-                    { label: 'Graduation Year', value: academicData.graduation_year ?? 'N/A', icon: 'fa-calendar'      },
-                    { label: 'Status',          value: 'Enrolled',                            icon: 'fa-circle-check', green: true },
+                    { label: 'Course',     value: academicData.course ?? 'N/A', icon: 'fa-book' },
+                    { label: 'Year Level', value: academicData.year_level ?? 'N/A', icon: 'fa-layer-group' },
+                    {
+                      label: 'Status',
+                      value: academicData.status ?? (academicData.graduation_year ? 'Graduated' : 'N/A'),
+                      icon: academicData.graduation_year ? 'fa-graduation-cap' : 'fa-circle-check',
+                      green: academicData.status || academicData.graduation_year,
+                    },
+                    { label: 'Batch', value: academicData.batch ?? academicData.graduation_year ?? 'N/A', icon: 'fa-users' },
                   ].map(row => (
                     <div key={row.label} className="bg-slate-50 border border-slate-100 rounded-xl p-4">
                       <div className="flex items-center gap-1.5 mb-2">
@@ -730,15 +737,6 @@ export default function ProfilePage() {
                     </div>
                   ))}
                 </div>
-                {academicData.batch && (
-                  <div className="bg-slate-50 border border-slate-100 rounded-xl p-4 mb-3">
-                    <div className="flex items-center gap-1.5 mb-2">
-                      <i className="fas fa-users text-[#fdb813] text-[9px]" />
-                      <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Batch</span>
-                    </div>
-                    <p className="text-sm font-bold text-[#1d2b4b] m-0">{academicData.batch}</p>
-                  </div>
-                )}
               </>
             ) : (
               <p className="text-sm text-slate-400 text-center py-8">Could not load academic info.</p>

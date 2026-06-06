@@ -2,6 +2,8 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -9,24 +11,30 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Album extends Model
 {
-    use SoftDeletes;
+    use HasFactory, SoftDeletes;
+
+    protected $table = 'albums';
 
     protected $fillable = [
-        'user_id', 'batch_id', 'title', 'description',
-        'cover_image', 'event_date', 'type', 'category',
-        'media_url', 'cloudinary_public_id', 'status', 'published_at',
-        'approved_at', 'approved_by',
-        'rejected_at', 'rejected_by',
-        'rejection_reason', // ← added: set by MediaModerationController::rejectAlbum()
-        'cover_url',
+        'title',
+        'description',
+        'type',
+        'category',
+        'event_date',
+        'cover_photo_url',
+        'media_url',
+        'is_published',
+        'sort_order',
+        'user_id',
     ];
 
     protected $casts = [
         'event_date'   => 'date',
-        'published_at' => 'datetime',
+        'is_published' => 'boolean',
+        'sort_order'   => 'integer',
     ];
 
-    // ── Relationships ──────────────────────────────────────────────────────
+    // ─── Relationships ────────────────────────────────────────────────────────
 
     public function user(): BelongsTo
     {
@@ -35,38 +43,36 @@ class Album extends Model
 
     public function photos(): HasMany
     {
-        return $this->hasMany(Photo::class);
+        return $this->hasMany(Gallery::class)
+                    ->where('status', 'approved')
+                    ->where('visibility', 'public')
+                    ->orderBy('sort_order');
     }
 
-    public function batch(): BelongsTo
+    public function galleries(): HasMany
     {
-        return $this->belongsTo(Batch::class);
+        return $this->hasMany(Gallery::class)->orderBy('sort_order');
     }
 
-    // ── Accessors ──────────────────────────────────────────────────────────
+    // ─── Scopes ───────────────────────────────────────────────────────────────
 
-    public function getCoverPhotoUrlAttribute(): ?string
+    public function scopePublished(Builder $query): Builder
     {
-        if ($this->cover_image) {
-            return $this->cover_image;
-        }
-        return $this->photos()->latest()->value('file_path');
+        return $query->where('is_published', true);
     }
 
-    public function getPhotoCountAttribute(): int
+    public function scopeGeneral(Builder $query): Builder
     {
-        return $this->photos_count ?? $this->photos()->count();
+        return $query->where('type', 'general');
     }
 
-    // ── Scopes ─────────────────────────────────────────────────────────────
-
-    public function scopeGraduation($query)
+    public function scopeGraduation(Builder $query): Builder
     {
         return $query->where('type', 'graduation');
     }
 
-    public function scopeGeneral($query)
+    public function scopeOfCategory(Builder $query, string $category): Builder
     {
-        return $query->where('type', 'general');
+        return $query->where('category', $category);
     }
 }

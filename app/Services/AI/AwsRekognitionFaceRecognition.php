@@ -3,6 +3,7 @@
 namespace App\Services\AI;
 
 use App\Contracts\FaceRecognition;
+use App\Models\Student;
 use App\Models\User;
 use Aws\Exception\AwsException;
 use Aws\Rekognition\RekognitionClient;
@@ -173,7 +174,7 @@ class AwsRekognitionFaceRecognition implements FaceRecognition
         $limitations = [];
 
         if (count($faces) > 0) {
-            $searchResult = $this->searchBytes($bytes, 3);
+            $searchResult = $this->searchBytes($bytes, 20);
             $matches      = $searchResult['matches'];
 
             if (count($faces) > 1) {
@@ -213,6 +214,68 @@ class AwsRekognitionFaceRecognition implements FaceRecognition
     }
 
     // ── searchPhotosByFace ────────────────────────────────────────────────
+
+    public function searchIndexedFaces(
+        UploadedFile $file,
+        int $maxMatches = 20,
+        ?float $threshold = null
+    ): array {
+        if (! $this->isEnabled()) {
+            return ['status' => 'disabled', 'matches' => [], 'message' => 'Face recognition is not configured.'];
+        }
+
+        $this->ensureCollectionExists();
+
+        $bytes = file_get_contents($file->getRealPath()) ?: '';
+        if ($bytes === '') {
+            throw new InvalidArgumentException('The uploaded image could not be read.');
+        }
+
+        $threshold = $threshold ?? (float) ($this->config['threshold'] ?? 75);
+
+        try {
+            $result = $this->client()->searchFacesByImage([
+                'CollectionId'       => $this->collectionId(),
+                'Image'              => ['Bytes' => $bytes],
+                'FaceMatchThreshold' => $threshold,
+                'MaxFaces'           => $maxMatches,
+                'QualityFilter'      => 'AUTO',
+            ]);
+        } catch (AwsException $e) {
+            $message = $e->getAwsErrorMessage() ?: $e->getMessage();
+
+            return [
+                'status'  => str_contains(strtolower($message), 'no face') ? 'no_face' : 'error',
+                'matches' => [],
+                'message' => $message,
+            ];
+        }
+
+        $matches = collect($result['FaceMatches'] ?? [])
+            ->map(function (array $match) {
+                $externalImageId = (string) data_get($match, 'Face.ExternalImageId');
+                $user            = $this->resolveUserFromExternalImageId($externalImageId);
+
+                return [
+                    'user_id'           => $user?->id,
+                    'name'              => $this->faceSubjectName($user),
+                    'student_id'        => $this->faceSubjectStudentNo($user),
+                    'course'            => $this->faceSubjectCourse($user),
+                    'profile_picture'   => $this->faceSubjectProfilePicture($user),
+                    'similarity'        => round((float) ($match['Similarity'] ?? 0), 2),
+                    'confidence'        => round((float) data_get($match, 'Face.Confidence', 0), 2),
+                    'external_image_id' => $externalImageId,
+                ];
+            })
+            ->values()
+            ->all();
+
+        return [
+            'status'  => count($matches) > 0 ? 'matched' : 'no_matches',
+            'matches' => $matches,
+            'message' => count($matches) > 0 ? null : 'No matching indexed faces were found.',
+        ];
+    }
 
     public function searchPhotosByFace(
         UploadedFile $file,
@@ -396,10 +459,10 @@ class AwsRekognitionFaceRecognition implements FaceRecognition
 
                 return [
                     'user_id'           => $user?->id,
-                    'name'              => $user?->name ?? 'Unknown student',
-                    'student_id'        => $user?->student_id,
-                    'course'            => $user?->course,
-                    'profile_picture'   => $user?->profile_picture,
+                    'name'              => $this->faceSubjectName($user) ?? 'Unknown student',
+                    'student_id'        => $this->faceSubjectStudentNo($user),
+                    'course'            => $this->faceSubjectCourse($user),
+                    'profile_picture'   => $this->faceSubjectProfilePicture($user),
                     'similarity'        => round((float) ($match['Similarity'] ?? 0), 2),
                     'confidence'        => round((float) data_get($match, 'Face.Confidence', 0), 2),
                     'external_image_id' => $externalImageId,
@@ -416,13 +479,47 @@ class AwsRekognitionFaceRecognition implements FaceRecognition
         ];
     }
 
-    private function resolveUserFromExternalImageId(?string $externalImageId): ?User
+    private function resolveUserFromExternalImageId(?string $externalImageId): User|Student|null
     {
         if (! is_string($externalImageId) || ! str_starts_with($externalImageId, 'student:')) {
             return null;
         }
 
-        return User::find((int) substr($externalImageId, strlen('student:')));
+        $id = (int) substr($externalImageId, strlen('student:'));
+
+        return Student::find($id) ?? User::find($id);
+    }
+
+    private function faceSubjectName(User|Student|null $subject): ?string
+    {
+        if (! $subject) return null;
+
+        if ($subject instanceof Student) {
+            return trim("{$subject->first_name} {$subject->last_name}") ?: null;
+        }
+
+        return $subject->name;
+    }
+
+    private function faceSubjectStudentNo(User|Student|null $subject): ?string
+    {
+        return $subject instanceof Student
+            ? $subject->student_no
+            : $subject?->student_id;
+    }
+
+    private function faceSubjectCourse(User|Student|null $subject): ?string
+    {
+        return $subject instanceof Student
+            ? $subject->course
+            : $subject?->course;
+    }
+
+    private function faceSubjectProfilePicture(User|Student|null $subject): ?string
+    {
+        return $subject instanceof Student
+            ? $subject->photo_url
+            : $subject?->profile_picture;
     }
 
     private function resolveImageBytes(string $path): ?string

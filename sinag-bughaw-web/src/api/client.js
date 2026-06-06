@@ -49,9 +49,6 @@ api.interceptors.response.use(
       localStorage.removeItem('sb_token');
       window.location.href = `${FRONTEND_URL}/login`;
     }
-    if (err.response?.status === 402) {
-      window.location.href = `${FRONTEND_URL}/premium`;
-    }
     return Promise.reject(err);
   }
 );

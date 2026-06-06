@@ -32,7 +32,7 @@ class GraduationAlbum extends Model
     ];
 
     // =========================================================================
-    // RELATIONSHIPS
+    // Relationships — all with explicit FK 'graduation_album_id' to match GraduationPhoto
     // =========================================================================
 
     public function user(): BelongsTo
@@ -46,37 +46,35 @@ class GraduationAlbum extends Model
     }
 
     /**
-     * All media files (images, videos, audio, documents) in this album.
+     * All media files in this album.
+     * FK: graduation_album_id (GraduationPhoto.graduation_album_id → graduation_albums.id)
      */
     public function photos(): HasMany
     {
-        return $this->hasMany(GraduationPhoto::class)->orderBy('sort_order');
+        return $this->hasMany(GraduationPhoto::class, 'graduation_album_id')->orderBy('sort_order');
     }
 
-    /**
-     * Only video files in this album.
-     * Used for eager-loading in GraduationController::index()
-     * so the Videos / Baccalaureate tabs show every individual video file.
-     */
+    public function mediaFiles(): HasMany
+    {
+        return $this->hasMany(GraduationPhoto::class, 'graduation_album_id')->orderBy('sort_order');
+    }
+
     public function videos(): HasMany
     {
-        return $this->hasMany(GraduationPhoto::class)
+        return $this->hasMany(GraduationPhoto::class, 'graduation_album_id')
             ->where('resource_type', 'video')
             ->orderBy('sort_order');
     }
 
-    /**
-     * Only audio files in this album (e.g. Grad Song tab).
-     */
     public function audios(): HasMany
     {
-        return $this->hasMany(GraduationPhoto::class)
+        return $this->hasMany(GraduationPhoto::class, 'graduation_album_id')
             ->where('resource_type', 'audio')
             ->orderBy('sort_order');
     }
 
     // =========================================================================
-    // SCOPES
+    // Scopes
     // =========================================================================
 
     public function scopePublished(Builder $query): Builder
@@ -105,14 +103,12 @@ class GraduationAlbum extends Model
     }
 
     // =========================================================================
-    // ACCESSORS
+    // Accessors
     // =========================================================================
 
     public function getCoverPhotoUrlAttribute(): ?string
     {
-        if ($this->cover_image) {
-            return $this->cover_image;
-        }
+        if ($this->cover_image) return $this->cover_image;
 
         $first = $this->photos()
             ->where('resource_type', 'image')
@@ -123,39 +119,20 @@ class GraduationAlbum extends Model
     }
 
     // =========================================================================
-    // HELPERS
+    // Helpers
     // =========================================================================
 
-    public function isPublished(): bool
-    {
-        return $this->status === 'published';
-    }
-
-    public function isDraft(): bool
-    {
-        return $this->status === 'draft';
-    }
-
-    public function isArchived(): bool
-    {
-        return $this->status === 'archived';
-    }
+    public function isPublished(): bool { return $this->status === 'published'; }
+    public function isDraft(): bool     { return $this->status === 'draft'; }
+    public function isArchived(): bool  { return $this->status === 'archived'; }
 
     public function publish(): bool
     {
-        return $this->update([
-            'status'       => 'published',
-            'published_at' => now(),
-        ]);
+        return $this->update(['status' => 'published', 'published_at' => now()]);
     }
 
     public function archive(): bool
     {
         return $this->update(['status' => 'archived']);
-    }
-
-    public function mediaFiles(): HasMany
-    {
-        return $this->hasMany(GraduationPhoto::class)->orderBy('sort_order');
     }
 }

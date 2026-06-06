@@ -9,8 +9,12 @@ class Authenticate extends Middleware
 {
     protected function redirectTo(Request $request): ?string
     {
-        // API requests (axios sends Accept: application/json) get a
-        // clean 401 JSON response instead of a redirect to /login
-        return $request->expectsJson() ? null : '/login';
+        // Pure API project — never redirect, always return 401 JSON
+        if ($request->is('api/*') || $request->expectsJson()) {
+            return null;
+        }
+
+        // SPA catch-all — React handles the /login route on the frontend
+        return '/login';
     }
 }

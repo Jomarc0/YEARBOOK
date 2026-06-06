@@ -7,7 +7,7 @@ use App\Models\User;
 
 class PageResolverService
 {
-    private const PREAMBLE = 4; // cover + dedication + toc×2
+    private const PREAMBLE = 10; // cover, dedication, toc x2, welcome x3, overview, stats, achievements
 
     /**
      * Returns the page index where a student appears in their batch yearbook.
@@ -15,7 +15,9 @@ class PageResolverService
     public function getPageIndex(int $userId, int $batchId): int
     {
         $batch = Batch::with(['sections.students' => function ($q) {
-            $q->select('id', 'name', 'section_id')->orderBy('name');
+            $q->select('id', 'first_name', 'last_name', 'section_id')
+                ->orderBy('last_name')
+                ->orderBy('first_name');
         }])->findOrFail($batchId);
 
         $cursor = self::PREAMBLE;
@@ -44,7 +46,9 @@ class PageResolverService
         }
 
         $batch = Batch::with(['sections.students' => function ($q) {
-            $q->select('id', 'name', 'section_id')->orderBy('name');
+            $q->select('id', 'first_name', 'last_name', 'section_id')
+                ->orderBy('last_name')
+                ->orderBy('first_name');
         }])->find($batchId);
 
         if (!$batch) {

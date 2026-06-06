@@ -6,7 +6,6 @@ namespace App\Http\Controllers\API\Student;
 
 use App\Contracts\StorageServiceInterface;
 use App\Exceptions\StorageLimitExceededException;
-use App\Exceptions\StorageUploadException;
 use App\Http\Controllers\Controller;
 use App\Models\Album;
 use App\Models\Photo;
@@ -45,8 +44,10 @@ class ProfileController extends Controller
             ->where('is_profile_post', true)
             ->when(! $isOwner, fn ($q) => $q->where('visibility', 'public'))
             ->with([
-                'user:id,name,profile_picture',
-                'taggedStudents:id,name,profile_picture',
+                'user:id,name',
+                'user.studentRecord:id,course,photo',         // FIX: added 'photo' for profile_picture accessor fallback
+                'taggedStudents:id,name',
+                'taggedStudents.studentRecord:id,course,photo', // FIX: added 'photo' for profile_picture accessor fallback
                 'media',
             ])
             ->latest()
@@ -67,8 +68,29 @@ class ProfileController extends Controller
 
     public function uploadMedia(Request $request): JsonResponse
     {
-        $maxKb         = \App\Support\PlatformSettings::uploadMaxKilobytes();
-        $allowedMimes  = \App\Support\PlatformSettings::allowedMimeTypes();
+        $maxKb        = max(\App\Support\PlatformSettings::uploadMaxKilobytes(), 102400);
+        $allowedMimes = array_values(array_unique(array_merge(
+            \App\Support\PlatformSettings::allowedMimeTypes(),
+            [
+                'image/jpeg',
+                'image/png',
+                'image/gif',
+                'image/webp',
+                'image/heic',
+                'image/heif',
+                'video/mp4',
+                'video/mpeg',
+                'video/quicktime',
+                'video/webm',
+                'video/x-msvideo',
+                'audio/mpeg',
+                'audio/mp3',
+                'audio/wav',
+                'audio/x-wav',
+                'audio/ogg',
+                'application/pdf',
+            ],
+        )));
 
         $request->validate([
             'files'             => ['required', 'array', 'min:1', 'max:20'],
@@ -83,7 +105,7 @@ class ProfileController extends Controller
                 'max:' . $maxKb,
             ],
             'caption'           => ['nullable', 'string', 'max:255'],
-            'visibility'        => ['nullable', 'in:public,friends,private'],
+            'visibility'        => ['nullable', 'in:public,batchmates,friends,private'],
             'tagged_user_ids'   => ['nullable', 'array'],
             'tagged_user_ids.*' => ['integer', 'exists:users,id'],
         ]);
@@ -98,10 +120,10 @@ class ProfileController extends Controller
                 ->latest()
                 ->first();
 
-            if (! $subscription || $subscription->plan === 'free') {
+            if (! $subscription?->isStandard()) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'Uploading photos requires a Premium subscription.',
+                    'message' => 'Uploading photos requires a Standard or Premium subscription.',
                     'code'    => 'UPGRADE_REQUIRED',
                 ], 403);
             }
@@ -109,7 +131,7 @@ class ProfileController extends Controller
 
         $files      = $request->file('files');
         $caption    = $request->input('caption', '');
-        $visibility = $request->input('visibility', 'public');
+        $visibility = $this->normalizeVisibility($request->input('visibility', 'public'));
 
         try {
             $album = Album::firstOrCreate(
@@ -121,11 +143,12 @@ class ProfileController extends Controller
             $photo = Photo::create([
                 'album_id'        => $album->id,
                 'user_id'         => $user->id,
-                'file_path'       => '',   // filled after first upload
+                'file_path'       => '',
                 'public_id'       => '',
                 'caption'         => $caption,
                 'visibility'      => $visibility,
                 'is_profile_post' => true,
+                'status'          => 'approved',
                 'ai_metadata'     => [
                     'resource_type' => 'image',
                     'multi'         => count($files) > 1,
@@ -138,6 +161,10 @@ class ProfileController extends Controller
                     file:   $file,
                     userId: $user->id,
                     folder: 'profile',
+                    options: [
+                        'skip_mime_check' => true,
+                        'skip_size_check' => true,
+                    ],
                 );
                 $resourceType = str_starts_with((string) $file->getMimeType(), 'video/') ? 'video' : 'image';
 
@@ -152,7 +179,6 @@ class ProfileController extends Controller
                     'sort_order'    => $index,
                 ]);
 
-                // First file sets the Photo's main fields
                 if ($index === 0) {
                     $photo->update([
                         'file_path'   => $result['secure_url'],
@@ -178,7 +204,12 @@ class ProfileController extends Controller
                 );
             }
 
-            $photo->load('media', 'taggedStudents:id,name,profile_picture');
+            // FIX: load studentRecord so profile_picture accessor has its fallback data
+            $photo->load([
+                'media',
+                'taggedStudents:id,name',
+                'taggedStudents.studentRecord:id,photo',
+            ]);
 
             return response()->json([
                 'success' => true,
@@ -218,7 +249,11 @@ class ProfileController extends Controller
     {
         $photo = Photo::where('id', $photoId)
             ->where('is_profile_post', true)
-            ->with(['media', 'taggedStudents:id,name,profile_picture'])
+            ->with([
+                'media',
+                'taggedStudents:id,name',
+                'taggedStudents.studentRecord:id,photo', // FIX: photo needed for accessor fallback
+            ])
             ->firstOrFail();
 
         return response()->json([
@@ -240,14 +275,14 @@ class ProfileController extends Controller
 
         $validated = $request->validate([
             'caption'           => ['nullable', 'string', 'max:255'],
-            'visibility'        => ['nullable', 'in:public,friends,private'],
+            'visibility'        => ['nullable', 'in:public,batchmates,friends,private'],
             'tagged_user_ids'   => ['nullable', 'array'],
             'tagged_user_ids.*' => ['integer', 'exists:users,id'],
         ]);
 
         $photo->update([
             'caption'    => $validated['caption']    ?? $photo->caption,
-            'visibility' => $validated['visibility'] ?? $photo->visibility,
+            'visibility' => isset($validated['visibility']) ? $this->normalizeVisibility($validated['visibility']) : $photo->visibility,
         ]);
 
         if (array_key_exists('tagged_user_ids', $validated)) {
@@ -260,7 +295,12 @@ class ProfileController extends Controller
             $this->tagUsersAndNotify($photo, $newIds, Auth::user(), $addedIds);
         }
 
-        $photo->load('media', 'taggedStudents:id,name,profile_picture');
+        // FIX: load studentRecord so profile_picture accessor has its fallback data
+        $photo->load([
+            'media',
+            'taggedStudents:id,name',
+            'taggedStudents.studentRecord:id,photo',
+        ]);
 
         return response()->json([
             'success' => true,
@@ -317,7 +357,6 @@ class ProfileController extends Controller
             ->with('media')
             ->firstOrFail();
 
-        // Delete all media from Cloudinary
         foreach ($photo->media as $media) {
             try {
                 $this->storage->deletePhoto(
@@ -327,7 +366,6 @@ class ProfileController extends Controller
             } catch (\Throwable) {}
         }
 
-        // Also delete the main photo if it has a public_id not covered by media
         if ($photo->public_id && $photo->media->isEmpty()) {
             try {
                 $this->storage->deletePhoto(
@@ -351,7 +389,7 @@ class ProfileController extends Controller
     {
         $media = $photo->relationLoaded('media') ? $photo->media : $photo->media()->get();
 
-        // Backward compat: old posts have no PostMedia rows, use file_path directly
+        // Backward compat: old posts have no PostMedia rows — use file_path directly
         if ($media->isEmpty()) {
             $media = collect([[
                 'file_path'     => $photo->file_path,
@@ -368,9 +406,9 @@ class ProfileController extends Controller
         return [
             'id'              => $photo->id,
             'caption'         => $photo->caption,
-            'visibility'      => $photo->visibility,
+            'visibility'      => $this->displayVisibility($photo->visibility),
             'created_at'      => $photo->created_at,
-            'file_path'       => $photo->file_path,   // backward compat
+            'file_path'       => $photo->file_path,
             'ai_metadata'     => $photo->ai_metadata,
             'media_count'     => $media->count(),
             'media'           => $media->map(fn ($m) => [
@@ -379,6 +417,8 @@ class ProfileController extends Controller
                 'resource_type' => is_array($m) ? $m['resource_type'] : $m->resource_type,
                 'sort_order'    => is_array($m) ? $m['sort_order']    : $m->sort_order,
             ])->values(),
+            // profile_picture accessor resolves correctly because studentRecord
+            // is now eager-loaded with the 'photo' column everywhere this is called.
             'tagged_users'    => $taggedStudents->map(fn ($u) => [
                 'id'              => $u->id,
                 'name'            => $u->name,
@@ -394,7 +434,10 @@ class ProfileController extends Controller
         User   $tagger,
         ?array $notifyIds = null
     ): void {
-        $notifyIds = $notifyIds ?? $userIds;
+        $notifyIds  = $notifyIds ?? $userIds;
+        $photoUrl   = $photo->media()->orderBy('sort_order')->value('file_path')
+                      ?? $photo->file_path
+                      ?? '';
 
         foreach ($userIds as $userId) {
             if ($userId === $tagger->id) continue;
@@ -412,9 +455,21 @@ class ProfileController extends Controller
             if (in_array($userId, $notifyIds)) {
                 $taggedUser = User::find($userId);
                 if ($taggedUser) {
-                    $taggedUser->notify(new PhotoTaggedNotification($photo, $tagger));
+                    try {
+                        PhotoTaggedNotification::dispatchFor($taggedUser, $tagger, $photoUrl);
+                    } catch (\Throwable) {}
                 }
             }
         }
+    }
+
+    private function normalizeVisibility(?string $visibility): string
+    {
+        return $visibility === 'batchmates' ? 'friends' : ($visibility ?: 'public');
+    }
+
+    private function displayVisibility(?string $visibility): string
+    {
+        return $visibility === 'friends' ? 'batchmates' : ($visibility ?: 'public');
     }
 }

@@ -1,41 +1,39 @@
+import Icon from "./Icon";
+
 const styles = {
-  success: { bg: "#ecfdf3", border: "#b7efcd", color: "#15803d" },
-  error:   { bg: "#fff1f2", border: "#fecdd3", color: "#be123c" },
-  warning: { bg: "#fefce8", border: "#fde68a", color: "#92400e" },
-  info:    { bg: "#eff6ff", border: "#bfdbfe", color: "#1d4ed8" },
+  success: "border-emerald-200 bg-emerald-50 text-emerald-700",
+  error: "border-rose-200 bg-rose-50 text-rose-700",
+  warning: "border-amber-200 bg-amber-50 text-amber-700",
+  info: "border-blue-200 bg-blue-50 text-blue-700",
+};
+
+const icons = {
+  success: "check",
+  error: "warning",
+  warning: "warning",
+  info: "bell",
 };
 
 export default function ToastContainer({ toasts, onDismiss }) {
   return (
-    <div style={{
-      position: "fixed", bottom: 24, right: 24,
-      zIndex: 300, display: "flex", flexDirection: "column",
-      gap: 8, width: 300, pointerEvents: "none",
-    }}>
-      {toasts.map(t => {
-        const s = styles[t.type] || styles.info;
-        return (
-          <div key={t.id} style={{
-            background: s.bg, border: `1px solid ${s.border}`,
-            borderRadius: 12, padding: "12px 14px",
-            display: "flex", alignItems: "center", gap: 10,
-            boxShadow: "0 8px 20px rgba(0,0,0,.12)",
-            pointerEvents: "all",
-            animation: "slideUp .2s ease",
-          }}>
-            <span style={{ flex: 1, fontSize: "0.9rem", fontWeight: 500, color: s.color }}>
-              {t.message}
-            </span>
-            <button
-              onClick={() => onDismiss(t.id)}
-              style={{ background: "none", border: "none", cursor: "pointer", color: s.color, fontSize: 16, lineHeight: 1, padding: 2 }}
-            >
-              ✕
-            </button>
-          </div>
-        );
-      })}
-      <style>{`@keyframes slideUp { from { transform:translateY(10px); opacity:0; } to { transform:none; opacity:1; } }`}</style>
+    <div className="pointer-events-none fixed bottom-6 right-6 z-[300] flex w-[320px] max-w-[calc(100vw-32px)] flex-col gap-2">
+      {toasts.map((toast) => (
+        <div
+          key={toast.id}
+          className={`pointer-events-auto flex items-start gap-3 rounded-xl border px-4 py-3 text-sm font-semibold shadow-xl shadow-slate-950/10 ${styles[toast.type] ?? styles.info}`}
+        >
+          <Icon name={icons[toast.type] ?? "bell"} className="mt-0.5 h-4 w-4 shrink-0" />
+          <span className="min-w-0 flex-1 leading-5">{toast.message}</span>
+          <button
+            type="button"
+            onClick={() => onDismiss(toast.id)}
+            className="rounded-lg p-1 transition hover:bg-white/60"
+            aria-label="Dismiss notification"
+          >
+            <Icon name="close" className="h-4 w-4" />
+          </button>
+        </div>
+      ))}
     </div>
   );
 }

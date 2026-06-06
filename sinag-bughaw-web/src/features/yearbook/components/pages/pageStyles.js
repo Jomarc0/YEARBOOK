@@ -13,17 +13,22 @@ export const DARK    = '#1a1a2e';
 export const DARKER  = '#12121f';
 export const CREAM   = '#fffdf8';
 export const OFFWHITE = '#f7f3ec';
+export const INK = '#20243a';
+export const MUTED = '#7e796d';
+export const BLUE = '#203a73';
+export const MAROON = '#6d2634';
+export const SAGE = '#687765';
 export const RULE    = 'rgba(255,255,255,.1)';
 
-export const PAGE_W = 340;
-export const PAGE_H = 460;
+export const PAGE_W = 560;
+export const PAGE_H = 420;
 
 /** Base style shared by every page leaf */
 export const pageBase = (bg = CREAM, extra = {}) => ({
   width:      '100%',
   height:     '100%',
   background: bg,
-  padding:    '26px 22px',
+  padding:    '30px 26px',
   display:    'flex',
   flexDirection: 'column',
   position:   'relative',
@@ -65,6 +70,32 @@ export const divider = {
   background: '#ece5d4',
   margin:     '10px 0',
 };
+
+export const editorialTitle = (size = 26, color = DARK) => ({
+  fontFamily: 'Cormorant Garamond, Georgia, serif',
+  fontSize: size,
+  lineHeight: 1.08,
+  color,
+  fontWeight: 700,
+});
+
+export const smallCaps = (color = GOLD) => ({
+  fontSize: 8,
+  letterSpacing: '0.18em',
+  textTransform: 'uppercase',
+  color,
+  fontWeight: 700,
+});
+
+export const bodyCopy = {
+  fontSize: 10.5,
+  lineHeight: 1.75,
+  color: '#5f5a50',
+};
+
+export function textOr(value, fallback = '') {
+  return value == null || value === '' ? fallback : value;
+}
 
 /** Avatar palette — deterministic from student_id */
 const PALETTE = [

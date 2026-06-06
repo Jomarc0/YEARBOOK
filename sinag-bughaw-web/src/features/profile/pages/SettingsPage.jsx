@@ -7,14 +7,8 @@ import Footer from '@/components/layout/Footer';
 
 const VISIBILITY_OPTS = [
   { v: 'public',      icon: 'fa-globe',          label: 'Public',      desc: 'Anyone can view your profile'         },
-  { v: 'alumni_only', icon: 'fa-graduation-cap', label: 'Alumni Only', desc: 'Only logged-in users can view'        },
+  { v: 'batchmates',  icon: 'fa-users',          label: 'Batchmates',  desc: 'Only students in your batch can view' },
   { v: 'private',     icon: 'fa-lock',           label: 'Private',     desc: 'Only you can view your profile'       },
-];
-
-const PRIVACY_TOGGLES = [
-  { label: 'Show profile in directory', desc: 'Your profile appears in the student directory.' },
-  { label: 'Allow photo tagging',       desc: 'Other students can tag you in photos.'          },
-  { label: 'Show academic info',        desc: 'Course and graduation year visible to others.'  },
 ];
 
 const ACHIEVEMENT_ICON_OPTIONS = [
@@ -43,17 +37,18 @@ const NAV_SECTIONS = [
   { id: 'academic',     icon: 'fa-graduation-cap',label: 'Academic'     },
   { id: 'achievements', icon: 'fa-award',         label: 'Achievements' },
   { id: 'password',     icon: 'fa-lock',          label: 'Password'     },
-  { id: 'privacy',      icon: 'fa-shield-alt',    label: 'Privacy'      },
 ];
 
 export default function SettingsPage() {
   const { user } = useAuth();
 
   // ── Visibility ────────────────────────────────────────────────────────────
-  const [visibility, setVis] = useState(user?.profile_visibility ?? 'public');
+  const [visibility, setVis] = useState(user?.profile_visibility === 'alumni_only' ? 'batchmates' : (user?.profile_visibility ?? 'public'));
+  const [visibilitySaving, setVisibilitySaving] = useState(false);
 
   // ── Motto ─────────────────────────────────────────────────────────────────
   const [motto, setMotto] = useState(user?.motto ?? '');
+  const [mottoSaving, setMottoSaving] = useState(false);
 
   // ── Password ──────────────────────────────────────────────────────────────
   const [loading,     setLoading]     = useState(false);
@@ -120,13 +115,27 @@ export default function SettingsPage() {
 
   // ── Handlers ──────────────────────────────────────────────────────────────
   const saveVisibility = async () => {
-    await profileSettingsApi.updateVisibility(visibility);
-    showToast('Visibility saved!');
+    setVisibilitySaving(true);
+    try {
+      await profileSettingsApi.updateVisibility(visibility);
+      showToast('Visibility saved!');
+    } catch {
+      showToast('Failed to save visibility.', 'error');
+    } finally {
+      setVisibilitySaving(false);
+    }
   };
 
   const saveMotto = async () => {
-    await profileSettingsApi.updateMotto(motto);
-    showToast('Motto saved!');
+    setMottoSaving(true);
+    try {
+      await profileSettingsApi.updateMotto(motto);
+      showToast('Motto saved!');
+    } catch {
+      showToast('Failed to save motto.', 'error');
+    } finally {
+      setMottoSaving(false);
+    }
   };
 
   const validatePw = () => {
@@ -157,7 +166,16 @@ export default function SettingsPage() {
   const saveAcademic = async () => {
     setAcademicSaving(true);
     try {
-      await studentsApi.updateAcademic(academicForm);
+      const res = await studentsApi.updateAcademic(academicForm);
+      const updated = res.data?.user;
+      if (updated) {
+        setAcademicForm({
+          student_id:      updated.student_id      ?? '',
+          course:          updated.course          ?? '',
+          graduation_year: updated.graduation_year ?? '',
+          batch:           updated.batch           ?? '',
+        });
+      }
       showToast('Academic info updated!');
     } catch {
       showToast('Failed to update academic info.', 'error');
@@ -292,7 +310,7 @@ export default function SettingsPage() {
                 </button>
               ))}
             </div>
-            <SaveButton onClick={saveVisibility} label="Save Visibility" />
+            <SaveButton onClick={saveVisibility} loading={visibilitySaving} label="Save Visibility" loadingLabel="Saving..." />
           </Section>
 
           {/* ── 2. Personal Motto ── */}
@@ -311,7 +329,7 @@ export default function SettingsPage() {
             <div className="flex items-center justify-between mb-4">
               <span className="text-[11px] text-slate-400">{motto.length}/255 characters</span>
             </div>
-            <SaveButton onClick={saveMotto} label="Save Motto" />
+            <SaveButton onClick={saveMotto} loading={mottoSaving} label="Save Motto" loadingLabel="Saving..." />
           </Section>
 
           {/* ── 3. Academic Info ── */}
@@ -584,30 +602,6 @@ export default function SettingsPage() {
             </form>
           </Section>
 
-          {/* ── 6. Privacy Controls ── */}
-          <Section id="privacy" icon="fa-shield-alt" iconBg="bg-emerald-50" iconColor="text-emerald-600"
-            title="Privacy Controls" desc="Control who can see your profile information">
-            <div className="space-y-2">
-              {PRIVACY_TOGGLES.map(({ label, desc }) => (
-                <div key={label}
-                  className="flex items-start justify-between gap-4 px-4 py-4 rounded-xl bg-slate-50 border border-slate-100">
-                  <div>
-                    <p className="text-sm font-semibold text-[#1d2b4b] m-0">{label}</p>
-                    <p className="text-xs text-slate-400 mt-0.5 m-0">{desc}</p>
-                  </div>
-                  <label className="relative inline-flex items-center cursor-pointer shrink-0 mt-0.5">
-                    <input type="checkbox" defaultChecked className="sr-only peer" />
-                    <div className="w-10 h-5 bg-slate-200 peer-checked:bg-[#3f51b5] rounded-full transition-colors
-                                    peer-focus:ring-2 peer-focus:ring-[#3f51b5]/20" />
-                    <div className="absolute left-0.5 top-0.5 w-4 h-4 bg-white rounded-full shadow-sm
-                                    transition-all peer-checked:translate-x-5" />
-                  </label>
-                </div>
-              ))}
-            </div>
-            <p className="text-[11px] text-slate-300 text-center mt-3 m-0">Settings sync on next page load.</p>
-          </Section>
-
           {/* ── Data Privacy Notice ── */}
           <div className="bg-indigo-50 border border-indigo-100 rounded-2xl px-5 py-4 flex items-start gap-3">
             <i className="fas fa-shield-alt text-[#3f51b5] mt-0.5 shrink-0" />
@@ -648,12 +642,13 @@ function Section({ id, icon, iconBg, iconColor, title, desc, children }) {
 }
 
 // ── Save button ────────────────────────────────────────────────────────────────
-function SaveButton({ onClick, label }) {
+function SaveButton({ onClick, label, loading = false, loadingLabel = 'Saving...' }) {
   return (
-    <button onClick={onClick}
+    <button onClick={onClick} disabled={loading}
       className="w-full py-3.5 rounded-xl bg-[#1d2b4b] hover:bg-[#162038] text-white font-bold text-sm
-                 border-none cursor-pointer transition-colors">
-      {label}
+                 border-none cursor-pointer transition-colors disabled:opacity-60 disabled:cursor-not-allowed
+                 flex items-center justify-center gap-2">
+      {loading ? <><i className="fas fa-spinner animate-spin" /> {loadingLabel}</> : label}
     </button>
   );
 }

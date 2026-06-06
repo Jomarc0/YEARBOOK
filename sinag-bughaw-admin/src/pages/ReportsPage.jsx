@@ -15,6 +15,24 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import api from "../services/api";
 
+const ICONS = {
+  activity: <path d="M4 12h4l2-6 4 12 2-6h4" />,
+  upload: <><path d="M12 16V4" /><path d="m7 9 5-5 5 5" /><path d="M5 20h14" /></>,
+  login: <><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4" /><path d="m10 17 5-5-5-5" /><path d="M15 12H3" /></>,
+  check: <><path d="M20 6 9 17l-5-5" /><path d="M4 4h16v16H4z" /></>,
+  x: <><path d="m15 9-6 6" /><path d="m9 9 6 6" /><path d="M4 4h16v16H4z" /></>,
+  consent: <><path d="M8 3h8l4 4v14H4V3h4z" /><path d="M14 3v5h5" /><path d="m8 14 2 2 5-5" /></>,
+  shield: <path d="M12 3 5 6v5c0 5 3.5 8 7 10 3.5-2 7-5 7-10V6l-7-3z" />,
+};
+
+function Icon({ name, className = "h-6 w-6" }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden="true">
+      {ICONS[name] ?? ICONS.activity}
+    </svg>
+  );
+}
+
 // ─── Shared UI primitives ─────────────────────────────────────────────────────
 
 /** Animated skeleton loader */
@@ -253,7 +271,7 @@ function AuditLogsTab() {
                   key={l.id}
                   className="hover:bg-indigo-50/40 transition-colors"
                 >
-                  <Td><span className="font-bold text-slate-800">{l.user_name ?? "system"}</span></Td>
+                  <Td><span className="font-bold text-slate-800">{l.user_name?.trim() || "system"}</span></Td>
                   <Td><Badge label={l.action ?? "—"} variant="primary" /></Td>
                   <Td className="max-w-[260px]">
                     <span className="block text-xs text-slate-400 truncate">{l.details ?? "—"}</span>
@@ -512,8 +530,8 @@ function ConsentLogsTab() {
 function StatCard({ icon, label, value, loading, colorClass = "text-indigo-600", bgClass = "bg-indigo-50" }) {
   return (
     <div className="bg-white border border-slate-200 rounded-2xl px-5 py-4 flex items-center gap-4 shadow-sm">
-      <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-xl flex-shrink-0 ${bgClass}`}>
-        {icon}
+      <div className={`w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 ${bgClass} ${colorClass}`}>
+        <Icon name={icon} />
       </div>
       <div>
         <p className="text-xs text-slate-400 mb-1">{label}</p>
@@ -565,43 +583,43 @@ export default function ReportsPage() {
       {/* Stat cards */}
       <div className="grid grid-cols-[repeat(auto-fit,minmax(200px,1fr))] gap-4 mb-6">
         <StatCard
-          icon="AUD" label="Total Audit Events"
+          icon="activity" label="Total Audit Events"
           value={stats?.total_audit ?? 0}
           loading={statsLoading}
           colorClass="text-indigo-600" bgClass="bg-indigo-50"
         />
         <StatCard
-          icon="UPL" label="Total Uploads"
+          icon="upload" label="Total Uploads"
           value={stats?.total_uploads ?? 0}
           loading={statsLoading}
           colorClass="text-green-600" bgClass="bg-green-50"
         />
         <StatCard
-          icon="LOG" label="Logins Today"
+          icon="login" label="Logins Today"
           value={stats?.logins_today ?? 0}
           loading={statsLoading}
           colorClass="text-amber-600" bgClass="bg-amber-50"
         />
         <StatCard
-          icon="CPA" label="Consent Approved"
+          icon="check" label="Consent Approved"
           value={privacyStats?.privacy_accepted ?? 0}
           loading={statsLoading}
           colorClass="text-emerald-600" bgClass="bg-emerald-50"
         />
         <StatCard
-          icon="CDN" label="Consent Declined"
+          icon="x" label="Consent Declined"
           value={privacyStats?.declined ?? 0}
           loading={statsLoading}
           colorClass="text-red-600" bgClass="bg-red-50"
         />
         <StatCard
-          icon="TCS" label="Total Consents"
+          icon="consent" label="Total Consents"
           value={privacyStats?.total_consents ?? 0}
           loading={statsLoading}
           colorClass="text-indigo-600" bgClass="bg-indigo-50"
         />
         <StatCard
-          icon="PAT" label="Privacy Audit Today"
+          icon="shield" label="Privacy Audit Today"
           value={privacyStats?.audit_today ?? 0}
           loading={statsLoading}
           colorClass="text-cyan-600" bgClass="bg-cyan-50"

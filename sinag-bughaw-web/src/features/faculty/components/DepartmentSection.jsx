@@ -1,45 +1,39 @@
 import FacultyCard from './FacultyCard';
 
 export default function DepartmentSection({ department, isOnly = false }) {
-  const { name, code, color, description, faculty } = department;
-  const accent = color ?? '#fdb813';
+  const { name, code, description, faculty } = department;
 
   return (
-    <section className="dept-section">
+    <section className="mb-10">
       {/* Department heading — skip if only one dept visible */}
       {!isOnly && (
-        <header className="dept-header">
-          <div className="dept-bar" style={{ background: accent }} />
-          <div className="dept-meta">
-            <div className="dept-title-row">
-              <h2 className="dept-name">{name}</h2>
+        <header className="mb-5 flex items-start gap-4 border-b border-slate-200 pb-4">
+          <div className="mt-1 h-10 w-1 rounded-full bg-[#fdb813]" />
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <h2 className="m-0 text-xl font-black text-[#1d2b4b]">{name}</h2>
               {code && (
-                <span
-                  className="dept-code"
-                  style={{ background: `${accent}1a`, color: accent }}
-                >
+                <span className="rounded-full bg-[#fdb813]/10 px-2.5 py-1 text-[10px] font-black uppercase tracking-widest text-[#b77905]">
                   {code}
                 </span>
               )}
-              <span className="dept-count">
+              <span className="ml-auto text-xs font-bold text-slate-400">
                 {faculty.length} {faculty.length === 1 ? 'member' : 'members'}
               </span>
             </div>
             {description && (
-              <p className="dept-desc">{description}</p>
+              <p className="m-0 mt-1 text-sm text-slate-500">{description}</p>
             )}
           </div>
         </header>
       )}
 
       {/* Grid */}
-      <div className="faculty-grid">
-        {faculty.map((f, i) => (
+      <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+        {faculty.map((f) => (
           <FacultyCard
             key={f.id}
             faculty={f}
-            accentColor={accent}
-            index={i}
           />
         ))}
       </div>

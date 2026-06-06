@@ -1,52 +1,38 @@
-// src/components/guards/RouteGuards.jsx
 import { Navigate } from "react-router-dom";
-import { useAuth }  from "../../context/AuthContext";
+import { useAuth } from "../../context/AuthContext";
+import Icon from "../shared/Icon";
 
-/** Unauthenticated → /login */
 export function ProtectedRoute({ children }) {
   const { authed } = useAuth();
   if (!authed) return <Navigate to="/login" replace />;
   return children;
 }
 
-/** Authenticated → /dashboard */
 export function GuestRoute({ children }) {
   const { authed } = useAuth();
   if (authed) return <Navigate to="/dashboard" replace />;
   return children;
 }
 
-/**
- * Super-admin-only route.
- * • Not logged in  → /login
- * • Logged in, not super admin  → inline 403 page
- */
 export function SuperAdminRoute({ children }) {
   const { authed, isSuperAdmin } = useAuth();
-  if (!authed)       return <Navigate to="/login" replace />;
+  if (!authed) return <Navigate to="/login" replace />;
   if (!isSuperAdmin) return <ForbiddenPage />;
   return children;
 }
 
 function ForbiddenPage() {
   return (
-    <div style={{
-      display: "flex", flexDirection: "column",
-      alignItems: "center", justifyContent: "center",
-      minHeight: "60vh", textAlign: "center", padding: "0 24px",
-    }}>
-      <div style={{
-        width: 56, height: 56, borderRadius: "50%",
-        background: "rgba(255,100,100,.12)",
-        display: "flex", alignItems: "center", justifyContent: "center",
-        fontSize: 26, marginBottom: 16,
-      }}>🔒</div>
-      <h2 style={{ fontSize: "1.1rem", fontWeight: 700, color: "#1e2a4a", marginBottom: 8 }}>
-        Access Denied
-      </h2>
-      <p style={{ fontSize: "0.88rem", color: "#6378a5", maxWidth: 300 }}>
-        This section is restricted to Super Administrators only.
-      </p>
+    <div className="grid min-h-[60vh] place-items-center px-6 text-center">
+      <div>
+        <div className="mx-auto mb-4 grid h-14 w-14 place-items-center rounded-2xl bg-rose-50 text-rose-600">
+          <Icon name="lock" className="h-6 w-6" />
+        </div>
+        <h2 className="text-lg font-black text-slate-900">Access Denied</h2>
+        <p className="mx-auto mt-2 max-w-sm text-sm leading-6 text-slate-500">
+          This section is restricted to Super Administrators only.
+        </p>
+      </div>
     </div>
   );
 }

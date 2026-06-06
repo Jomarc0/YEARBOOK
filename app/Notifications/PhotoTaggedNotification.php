@@ -2,11 +2,12 @@
 
 namespace App\Notifications;
 
-use App\Jobs\Notification\SendTaggedEmail;
 use App\Jobs\SendPushNotification;
 use App\Models\User;
+use App\Services\Notification\PHPMailerService;
 use Illuminate\Bus\Queueable;
 use Illuminate\Notifications\Notification;
+use Illuminate\Support\Facades\Log;
 
 class PhotoTaggedNotification extends Notification
 {
@@ -63,14 +64,21 @@ class PhotoTaggedNotification extends Notification
 
         // 2. Email notification (only if the user has an email)
         if ($tagged->email) {
-            SendTaggedEmail::dispatch(
-                email:       $tagged->email,
-                name:        $tagged->name ?? $tagged->email,
-                taggedBy:    $taggerName,
-                photoUrl:    $photoUrl,
-                actionUrl:   $actionUrl,
-                actionLabel: 'View Photo',
+            $sent = app(PHPMailerService::class)->sendTaggedNotification(
+                $tagged->email,
+                $tagged->name ?? $tagged->email,
+                $taggerName,
+                $photoUrl,
+                $actionUrl,
+                'View Photo',
             );
+
+            if (! $sent) {
+                Log::warning('Tagged photo email failed.', [
+                    'tagged_user_id' => $tagged->id,
+                    'email' => $tagged->email,
+                ]);
+            }
         }
     }
 }

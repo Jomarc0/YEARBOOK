@@ -1,48 +1,63 @@
 <?php
-/**
- * yearbook_routes.php
- * routes/yearbook.php   ← include this in routes/api.php
- *
- * Add to routes/api.php:
- *   Route::middleware('auth:sanctum')->group(function () {
- *       require __DIR__ . '/yearbook.php';
- *   });
- *
- * All routes are auth-guarded via the outer middleware group.
- */
 
-use App\Http\Controllers\API\Yearbook\YearbookController;
 use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\API\Yearbook\YearbookController;
+use App\Http\Controllers\API\Yearbook\GalleryController;
+use App\Http\Controllers\API\Yearbook\MediaController;
+use App\Http\Controllers\API\Yearbook\AnnouncementController;
+use App\Http\Controllers\API\Yearbook\GraduationController;
+use App\Http\Controllers\API\Yearbook\YearbookPdfController;
 
-Route::prefix('yearbook')->group(function () {
+/*
+|--------------------------------------------------------------------------
+| Yearbook Routes
+|--------------------------------------------------------------------------
+|
+| These routes handle the digital yearbook system, including flipbook
+| generation, gallery management, and PDF export.
+|
+*/
 
-    // ── Existing endpoints (keep exactly as-is) ─────────────────────────────
-    Route::get('/flipbook',                    [YearbookController::class, 'flipbookData']);
-    Route::get('/export/{userId}',             [YearbookController::class, 'exportStudentPdf']);
-    Route::get('/certificate',                 [YearbookController::class, 'exportCertificate']);
+Route::middleware(['auth:sanctum', 'check.consent'])->group(function () {
 
-    // ── New endpoints ───────────────────────────────────────────────────────
+    // ── Core Yearbook ──────────────────────────────────────────────────
+    Route::prefix('yearbook')->name('yearbook.')->group(function () {
 
-    // Yearbook metadata (cover config, school name, year)
-    Route::get('/meta/{batch}',                [YearbookController::class, 'meta']);
+        Route::get('/', [YearbookController::class, 'index'])->name('index');
+        Route::get('/batches', [YearbookController::class, 'batches'])->name('batches');
 
-    // Table of contents semantic entries
-    Route::get('/toc/{batch}',                 [YearbookController::class, 'tableOfContents']);
+        // ── Flipbook data endpoint (React PageFlip) ─────────────────
+        Route::get('/flipbook/{batchId}', [YearbookPdfController::class, 'flipbookData'])
+            ->name('flipbook.data');
 
-    // Section data with student lists
-    Route::get('/sections/{batch}',            [YearbookController::class, 'sectionPages']);
+        // ── PDF Export ──────────────────────────────────────────────
+        Route::get('/export/pdf/{batchId}', [YearbookPdfController::class, 'export'])
+            ->name('export.pdf');
 
-    // Gallery spreads
-    Route::get('/galleries/{batch}',           [YearbookController::class, 'galleryPages']);
+        // ── Gallery ─────────────────────────────────────────────────
+        Route::prefix('gallery')->name('gallery.')->group(function () {
+            Route::get('/', [GalleryController::class, 'index'])->name('index');
+            Route::get('/{album}', [GalleryController::class, 'show'])->name('show');
+            Route::post('/', [GalleryController::class, 'store'])->name('store');
+            Route::delete('/{album}', [GalleryController::class, 'destroy'])->name('destroy');
+        });
 
-    // Faculty page data
-    Route::get('/faculty/{batch}',             [YearbookController::class, 'facultyPage']);
+        // ── Media ───────────────────────────────────────────────────
+        Route::prefix('media')->name('media.')->group(function () {
+            Route::post('/upload', [MediaController::class, 'upload'])->name('upload');
+            Route::post('/bulk-upload', [MediaController::class, 'bulkUpload'])->name('bulk-upload');
+            Route::delete('/{media}', [MediaController::class, 'destroy'])->name('destroy');
+        });
 
-    // Full-text search (?batchId=&q=)
-    Route::get('/search',                      [YearbookController::class, 'search']);
+        // ── Graduation ──────────────────────────────────────────────
+        Route::prefix('graduation')->name('graduation.')->group(function () {
+            Route::get('/', [GraduationController::class, 'index'])->name('index');
+            Route::get('/archive', [GraduationController::class, 'archive'])->name('archive');
+            Route::get('/speeches', [GraduationController::class, 'speeches'])->name('speeches');
+            Route::post('/', [GraduationController::class, 'store'])->name('store');
+        });
 
-    // Bookmarks
-    Route::get('/bookmarks/{batchId}',         [YearbookController::class, 'getBookmarks']);
-    Route::post('/bookmark',                   [YearbookController::class, 'addBookmark']);
-    Route::delete('/bookmark/{bookmark}',      [YearbookController::class, 'removeBookmark']);
+        // ── Announcements ───────────────────────────────────────────
+        Route::get('/announcements', [AnnouncementController::class, 'index'])->name('announcements.index');
+    });
 });

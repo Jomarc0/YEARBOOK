@@ -102,4 +102,20 @@ class GraduationController extends Controller
             return response()->json(['message' => 'Failed to load photos.'], 500);
         }
     }
+
+    public function destroy(int $id): JsonResponse
+    {
+        try {
+            GraduationAlbum::findOrFail($id)->delete();
+
+            return response()->json(['message' => 'Graduation album moved to trash.']);
+        } catch (Throwable $e) {
+            Log::error('[Graduation] destroy failed', [
+                'id'      => $id,
+                'message' => $e->getMessage(),
+            ]);
+
+            return response()->json(['message' => 'Failed to delete graduation album.'], 500);
+        }
+    }
 }

@@ -70,9 +70,9 @@ class Subscription extends Model
         }
 
         return match (true) {
-            $this->plan === 'premium' && $this->tier === 'premium'  => 'premium',
-            $this->plan === 'premium' && $this->tier === 'standard' => 'premium_standard',
-            default                                                   => 'free',
+            $this->tier === 'premium'  => 'premium',
+            $this->tier === 'standard' => 'premium_standard',
+            default                    => 'free',
         };
     }
 

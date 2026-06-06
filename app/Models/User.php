@@ -105,6 +105,11 @@ class User extends Authenticatable
         'profile_views',
         'profile_picture',
         'profile_picture_public_id',
+        'student_id',
+        'course',
+        'graduation_year',
+        'batch',
+        'motto',
 
         // ── Consent / Verification ────────────────────────────────────────
         'email_verified',
@@ -142,6 +147,8 @@ class User extends Authenticatable
         'profile_picture',
         'department',
         'is_premium',
+        'posts_count',
+        'tagged_count',
     ];
     protected function casts(): array
     {
@@ -230,24 +237,35 @@ class User extends Authenticatable
 
     public function getStudentIdAttribute(): ?string
     {
-        return $this->studentRecord?->student_no;
+        return $this->studentRecord?->student_no
+            ?? $this->attributes['student_id']
+            ?? null;
     }
 
     public function getCourseAttribute(): ?string
     {
-        return $this->studentRecord?->course;
+        return $this->studentRecord?->course
+            ?? $this->attributes['course']
+            ?? null;
     }
 
     public function getGraduationYearAttribute(): ?int
     {
-        return $this->studentRecord?->graduation_year;
+        $year = $this->studentRecord?->graduation_year
+            ?? $this->attributes['graduation_year']
+            ?? null;
+
+        return $year ? (int) $year : null;
     }
 
     public function getBatchAttribute(): ?string
     {
-        return $this->studentRecord?->graduation_year
-            ? (string) $this->studentRecord->graduation_year
-            : null;
+        if ($this->studentRecord?->graduation_year) {
+            return (string) $this->studentRecord->graduation_year;
+        }
+
+        return $this->attributes['batch']
+            ?? ($this->attributes['graduation_year'] ?? null);
     }
 
     public function getNicknameAttribute(): ?string
@@ -283,7 +301,9 @@ class User extends Authenticatable
 
     public function getMottoAttribute(): ?string
     {
-        return $this->studentRecord?->motto;
+        return $this->studentRecord?->motto
+            ?? $this->attributes['motto']
+            ?? null;
     }
 
     public function getAmbitionAttribute(): ?string
@@ -366,7 +386,7 @@ class User extends Authenticatable
     public function getIsPremiumAttribute(): bool
     {
         $sub = $this->activeSubscription();
-        return $sub !== null && $sub->plan === 'premium';
+        return $sub?->isPremium() ?? false;
     }
 
     public function isSsoUser(): bool
@@ -408,5 +428,19 @@ class User extends Authenticatable
     public function shouldBeSearchable(): bool
     {
         return $this->role === 'student';
+    }
+
+    public function getPostsCountAttribute(): int
+    {
+        return \App\Models\Photo::where('user_id', $this->id)
+            ->where('status', 'approved')
+            ->count();
+    }
+
+    public function getTaggedCountAttribute(): int
+    {
+        return \App\Models\TaggedPhoto::where('user_id', $this->id)
+            ->where('status', 'approved')
+            ->count();
     }
 }

@@ -1,83 +1,32 @@
-/**
- * SectionHeader.jsx
- * src/features/yearbook/components/pages/SectionHeader.jsx
- */
 import React from 'react';
-import { pageBase, GOLD, DARK, DARKER } from './pageStyles';
+import { DarkImageLayer, GoldFrame, GoldRule, EditorialPage } from '../editorial/EditorialPrimitives';
+import { YEARBOOK_ASSETS } from '../../theme/yearbookTheme';
 
 export default function SectionHeader({ page }) {
   const { section = {}, side } = page;
-
-  if (side === 'right') {
-    return (
-      <div style={{ ...pageBase(DARKER, { alignItems: 'center', justifyContent: 'center' }) }}>
-        <div
-          aria-hidden="true"
-          style={{
-            position: 'absolute', top: '50%', left: '50%',
-            transform: 'translate(-50%,-50%)',
-            fontFamily: 'Cormorant Garamond, Georgia, serif',
-            fontSize: 120, color: 'rgba(255,255,255,.03)',
-            userSelect: 'none', lineHeight: 1,
-          }}
-        >
-          {section.name?.slice(0, 2).toUpperCase()}
-        </div>
-        <div style={{ textAlign: 'center', position: 'relative', zIndex: 1 }}>
-          <div style={{ fontSize: 9, letterSpacing: '0.22em', textTransform: 'uppercase', color: GOLD, marginBottom: 10 }}>
-            Section
-          </div>
-          <div style={{ fontFamily: 'Cormorant Garamond, Georgia, serif', fontSize: 32, color: '#fff', lineHeight: 1.2 }}>
-            {section.name}
-          </div>
-          {section.adviser && (
-            <div style={{ fontSize: 10, color: 'rgba(255,255,255,.35)', marginTop: 12 }}>
-              Adviser: {section.adviser}
-            </div>
-          )}
-          {section.studentCount != null && (
-            <div style={{ fontSize: 9, color: 'rgba(255,255,255,.22)', marginTop: 6, letterSpacing: '0.1em' }}>
-              {section.studentCount} students
-            </div>
-          )}
-        </div>
-      </div>
-    );
-  }
+  const code = (section.name || 'Section').slice(0, 8).toUpperCase();
 
   return (
-    <div style={{ ...pageBase(DARK, { justifyContent: 'flex-end' }) }}>
-      <div aria-hidden="true" style={{
-        position: 'absolute', top: 20, right: 20,
-        fontFamily: 'Cormorant Garamond, Georgia, serif',
-        fontSize: 100, color: 'rgba(255,255,255,.03)', lineHeight: 1, userSelect: 'none',
-      }}>
-        {section.name?.slice(0, 2).toUpperCase()}
+    <EditorialPage tone="dark" className={`items-center justify-center p-10 ${side === 'left' ? 'text-left' : 'text-center'}`}>
+      <DarkImageLayer src={YEARBOOK_ASSETS.building} opacity="opacity-35" />
+      <GoldFrame subtle />
+      <div className="pointer-events-none absolute inset-x-0 top-16 text-center font-serif text-[126px] font-bold uppercase leading-none tracking-[-0.06em] text-white/[0.035]">
+        {code}
       </div>
-
-      <div style={{ fontSize: 8, letterSpacing: '0.22em', textTransform: 'uppercase', color: GOLD, marginBottom: 8 }}>
-        Class of {section.year ?? '2025'}
+      <div className="relative z-10 flex flex-col items-center">
+        <p className="font-sans text-[9px] font-black uppercase tracking-[0.32em] text-[#e4c36a]">Section</p>
+        <h1 className="mt-3 font-serif text-[68px] font-bold leading-none text-[#e4c36a]">{section.name || 'Class Section'}</h1>
+        <p className="mt-4 font-sans text-[9px] font-black uppercase tracking-[0.24em] text-white/70">
+          {section.studentCount ?? 0} Graduates
+        </p>
+        <GoldRule className="mt-8" />
+        <p className="mt-7 max-w-[24rem] text-center font-serif text-[19px] italic leading-8 text-white/88">
+          “Dream. Build. Lead. Inspire the future.”
+        </p>
+        {section.adviser ? (
+          <p className="mt-8 font-sans text-[8px] uppercase tracking-[0.18em] text-white/45">Adviser: {section.adviser}</p>
+        ) : null}
       </div>
-      <div style={{
-        fontFamily: 'Cormorant Garamond, Georgia, serif',
-        fontSize: 44, color: '#fff', lineHeight: 1.1, marginBottom: 16,
-      }}>
-        {section.name}
-      </div>
-      {section.strand && (
-        <div style={{
-          display: 'inline-flex', alignItems: 'center',
-          padding: '4px 12px', borderRadius: 20,
-          border: `0.5px solid ${GOLD}`, color: GOLD,
-          fontSize: 9, letterSpacing: '0.15em', textTransform: 'uppercase',
-        }}>
-          {section.strand}
-        </div>
-      )}
-      <div style={{ height: 0.5, background: 'rgba(255,255,255,.12)', marginTop: 'auto', marginBottom: 14 }} />
-      <div style={{ fontSize: 9, color: 'rgba(255,255,255,.25)', letterSpacing: '0.15em', textTransform: 'uppercase' }}>
-        {section.studentCount != null ? `${section.studentCount} students` : ''}
-      </div>
-    </div>
+    </EditorialPage>
   );
 }

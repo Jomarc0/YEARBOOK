@@ -138,24 +138,15 @@ export default function BulkUploadZone({
     : 'image/jpeg,image/png,image/webp,image/gif';
 
   return (
-    <div
-      className="bg-white rounded-3xl overflow-hidden"
-      style={{ boxShadow: '0 18px 36px rgba(29,43,75,0.08)', border: '1px solid rgba(0,0,0,0.04)' }}
-    >
+    <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-lg shadow-[#1d2b4b]/5">
       {/* ── Header ── */}
-      <div
-        className="flex items-center justify-between px-6 py-4"
-        style={{ borderBottom: '1px solid #f1f5f9' }}
-      >
+      <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
         <div className="flex items-center gap-3">
-          <div
-            className="w-9 h-9 rounded-xl flex items-center justify-center"
-            style={{ background: 'rgba(29,43,75,0.06)' }}
-          >
-            <i className="fas fa-cloud-arrow-up" style={{ color: '#1d2b4b' }} />
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#1d2b4b]/5">
+            <i className="fas fa-cloud-arrow-up text-[#1d2b4b]" />
           </div>
           <div>
-            <h3 className="font-extrabold text-base m-0" style={{ color: '#1d2b4b' }}>
+            <h3 className="m-0 text-sm font-extrabold text-[#1d2b4b]">
               Upload Media
             </h3>
             <p className="text-xs m-0" style={{ color: '#94a3b8' }}>
@@ -180,7 +171,7 @@ export default function BulkUploadZone({
         )}
       </div>
 
-      <div className="p-6 flex flex-col gap-4">
+      <div className="p-4 flex flex-col gap-4">
 
         {/* ── Drop Zone ── */}
         <div
@@ -191,7 +182,7 @@ export default function BulkUploadZone({
           onKeyDown={e => e.key === 'Enter' && inputRef.current?.click()}
           className="relative flex flex-col items-center justify-center text-center cursor-pointer rounded-2xl transition-all duration-200 select-none"
           style={{
-            padding: '40px 24px',
+            padding: '28px 20px',
             border:  `2px dashed ${isDragging ? '#1d2b4b' : '#dbe3f0'}`,
             background: isDragging ? 'rgba(29,43,75,0.04)' : '#f8fafc',
           }}

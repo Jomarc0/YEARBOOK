@@ -51,7 +51,8 @@ class Photo extends Model implements AnalyzablePhoto
     public function taggedStudents(): BelongsToMany
     {
         return $this->belongsToMany(User::class, 'tagged_photos', 'photo_id', 'user_id')
-                    ->withPivot(['similarity', 'confidence', 'source', 'tagged_by'])
+                    ->wherePivot('status', 'approved')
+                    ->withPivot(['similarity', 'confidence', 'source', 'tagged_by', 'status'])
                     ->withTimestamps();
     }
 

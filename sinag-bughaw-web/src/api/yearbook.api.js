@@ -1,5 +1,15 @@
 import api from './client';
 
+export const getYearbookBatches = () =>
+  api.get('/batches').then((res) => {
+    const raw = res.data?.data ?? res.data ?? [];
+    const batches = Array.isArray(raw)
+      ? raw
+      : Object.values(raw).flatMap((group) => Array.isArray(group) ? group : []);
+
+    return { ...res, data: batches };
+  });
+
 // ─────────────────────────────────────────────────────────────────────────────
 // YEARBOOK
 // ─────────────────────────────────────────────────────────────────────────────
@@ -66,6 +76,9 @@ export const yearbookApi = {
   download: (batchId) =>
     api.get(`/yearbooks/${batchId}/download`, { responseType: 'blob' }),
 
+  exportBatchPdf: (batchId) =>
+    api.get(`/yearbook/export/pdf/${batchId}`, { responseType: 'blob' }),
+
   /**
    * POST /api/yearbooks/:batchId/generate → queue PDF generation (admin)
    * Maps to: YearbookController@generate
@@ -112,7 +125,7 @@ export const galleryApi = {
   /** GET /api/gallery/:albumId */
   show: (albumId) => api.get(`/gallery/${albumId}`),
 
-  /** POST /api/gallery/face-search (premium) */
+  /** POST /api/gallery/face-search */
   faceSearch: (formData) =>
     api.post('/gallery/face-search', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },

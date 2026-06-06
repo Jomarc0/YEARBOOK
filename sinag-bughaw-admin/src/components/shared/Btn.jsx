@@ -1,39 +1,38 @@
-import { T } from "../../tokens/design";
+import Icon from "./Icon";
 
 const variants = {
-  primary:   { background: "#4254c5", color: "#fff",     border: "1px solid #4254c5", boxShadow: "0 8px 16px rgba(66,84,197,.2)" },
-  secondary: { background: "#fff",     color: "#4f5e7b", border: `1px solid ${T.border}` },
-  danger:    { background: "#fff5f5",  color: "#b91c1c", border: "1px solid #fecaca" },
-  success:   { background: "#f0fdf4",  color: "#15803d", border: "1px solid #b7efcd" },
+  primary: "border-indigo-600 bg-indigo-600 text-white shadow-lg shadow-indigo-600/20 hover:bg-indigo-700",
+  secondary: "border-slate-200 bg-white text-slate-700 hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-700",
+  danger: "border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100",
+  success: "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100",
+  ghost: "border-transparent bg-transparent text-slate-600 hover:bg-slate-100 hover:text-slate-900",
 };
 
-export default function Btn({ children, variant = "primary", icon, onClick, disabled, type = "button", full = false }) {
-  const s = variants[variant] || variants.secondary;
+export default function Btn({
+  children,
+  variant = "primary",
+  icon,
+  onClick,
+  disabled,
+  type = "button",
+  full = false,
+  className = "",
+}) {
   return (
     <button
       type={type}
       disabled={disabled}
       onClick={onClick}
-      style={{
-        height: 44,
-        borderRadius: 12,
-        padding: "0 18px",
-        display: "inline-flex",
-        alignItems: "center",
-        gap: 8,
-        fontSize: "0.93rem",
-        fontWeight: 700,
-        cursor: disabled ? "not-allowed" : "pointer",
-        opacity: disabled ? 0.5 : 1,
-        width: full ? "100%" : "auto",
-        justifyContent: full ? "center" : "flex-start",
-        transition: "all 0.15s",
-        whiteSpace: "nowrap",
-        fontFamily: "Inter, sans-serif",
-        ...s,
-      }}
+      className={[
+        "inline-flex h-11 items-center justify-center gap-2 rounded-xl border px-4 text-sm font-extrabold transition",
+        "focus:outline-none focus:ring-4 focus:ring-indigo-500/15",
+        disabled ? "cursor-not-allowed opacity-50" : "cursor-pointer",
+        full ? "w-full" : "w-auto",
+        variants[variant] ?? variants.secondary,
+        className,
+      ].join(" ")}
     >
-      {icon && <span style={{ fontSize: 14 }}>{icon}</span>}
+      {icon && (typeof icon === "string" ? <Icon name={icon} className="h-4 w-4" /> : icon)}
       {children}
     </button>
   );

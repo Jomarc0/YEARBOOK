@@ -1,10 +1,12 @@
 /**
  * GraduationContentPage.jsx
  * Fixes:
+ *  - ContentCard action row: all buttons in one consistent row, no orphaned delete
+ *  - Icon-only buttons are uniform 30×30
  *  - AlbumDetailModal fetches from correct endpoint + shows all file types
  *  - All content types support multiple files per album
  *  - Videos/audio/PDF render correctly in detail modal and card strip
- *  - Face search integrated into detail modal for photo/toga/highlights albums
+ *  - Face search integrated into detail modal for photo albums
  *  - Detail modal reloads after "+ Add More Files"
  *  - Transcript badge shown on cards that have transcripts
  *  - AddFilesModal: uses filesRef so upload() never reads stale closure
@@ -12,6 +14,8 @@
 
 import { useEffect, useState, useCallback, useRef } from "react";
 import api from "../services/api";
+import { usePhotoFacesBroadcast } from "../hooks/usePhotoFacesBroadcast";
+import Icon from "../components/shared/Icon";
 
 // ─── Design Tokens ────────────────────────────────────────────────────────────
 const T = {
@@ -34,23 +38,18 @@ const T = {
   shadowLg:  "0 8px 40px rgba(66,84,197,.18)",
 };
 
-// ─── All content types — ALL support multiple files ───────────────────────────
+// ─── All content types ────────────────────────────────────────────────────────
 const CONTENT_TYPES = [
   { key: "photos",      label: "Photos",       icon: "PHO", accept: "image/*",              multiple: true },
   { key: "videos",      label: "Videos",       icon: "VID", accept: "video/*",              multiple: true },
   { key: "program",     label: "Program",      icon: "PDF", accept: ".pdf",                 multiple: true },
-  { key: "archive",     label: "Archive",      icon: "ARC", accept: "image/*,video/*,.pdf", multiple: true },
-  { key: "toga",        label: "Toga Gallery", icon: "TOG", accept: "image/*",              multiple: true },
   { key: "invitations", label: "Invitations",  icon: "INV", accept: ".pdf,image/*",         multiple: true },
   { key: "songs",       label: "Grad Song",    icon: "AUD", accept: "audio/*,video/*",      multiple: true },
   { key: "mass",        label: "Mass",         icon: "MAS", accept: "video/*",              multiple: true },
   { key: "speeches",    label: "Speeches",     icon: "SPK", accept: "video/*,audio/*",      multiple: true },
-  { key: "messages",    label: "Messages",     icon: "MSG", accept: ".pdf,image/*",         multiple: true },
-  { key: "highlights",  label: "Highlights",   icon: "HIL", accept: "video/*,image/*",      multiple: true },
 ];
 
-// Face recognition enabled for these categories
-const FACE_TYPES = ["photos", "toga", "highlights", "archive"];
+const FACE_TYPES = ["photos"];
 
 const inputBase = {
   width: "100%", padding: "9px 12px", borderRadius: 10,
@@ -58,6 +57,20 @@ const inputBase = {
   color: T.text, fontFamily: "inherit", outline: "none",
   boxSizing: "border-box", background: "#fafbff",
 };
+
+// ─── Icon button helper ───────────────────────────────────────────────────────
+const iconBtn = (color, bg, borderColor) => ({
+  width: 30, height: 30, flexShrink: 0,
+  display: "flex", alignItems: "center", justifyContent: "center",
+  borderRadius: 8,
+  border: `1px solid ${borderColor ?? T.border}`,
+  background: bg ?? "none",
+  color,
+  fontSize: "0.82rem",
+  cursor: "pointer",
+  fontFamily: "inherit",
+  lineHeight: 1,
+});
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 const Skeleton = ({ w = "100%", h = 14, radius = 6, style = {} }) => (
@@ -81,8 +94,8 @@ function detectFileType(photo) {
 function StatusBadge({ status }) {
   const map = {
     published: { tone: "bg-emerald-50 text-emerald-700", label: "published" },
-    draft: { tone: "bg-slate-100 text-slate-600", label: "draft" },
-    archived: { tone: "bg-amber-50 text-amber-700", label: "archived" },
+    draft:     { tone: "bg-slate-100 text-slate-600",    label: "draft"     },
+    archived:  { tone: "bg-amber-50 text-amber-700",     label: "archived"  },
   };
   const cfg = map[status] ?? map.draft;
   return (
@@ -148,8 +161,8 @@ function ModalFooter({ children }) {
 function Btn({ variant = "primary", children, style = {}, ...props }) {
   const v = {
     primary: "border-transparent bg-indigo-600 text-white hover:bg-indigo-700",
-    ghost: "border-slate-200 bg-white text-slate-600 hover:bg-slate-50",
-    danger: "border-transparent bg-red-500 text-white hover:bg-red-600",
+    ghost:   "border-slate-200 bg-white text-slate-600 hover:bg-slate-50",
+    danger:  "border-transparent bg-red-500 text-white hover:bg-red-600",
     success: "border-transparent bg-emerald-600 text-white hover:bg-emerald-700",
   };
   return (
@@ -220,7 +233,11 @@ function ConfirmModal({ open, title, message, confirmLabel = "Confirm", confirmB
           <div style={{ fontSize: "0.86rem", color: T.muted, marginBottom: 20, lineHeight: 1.65 }}>{message}</div>
           <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
             <Btn variant="ghost" onClick={onCancel} disabled={loading}>Cancel</Btn>
-            <button onClick={onConfirm} disabled={loading} style={{ padding: "9px 20px", borderRadius: 10, border: "none", background: confirmBg, color: "#fff", fontWeight: 700, cursor: loading ? "not-allowed" : "pointer", opacity: loading ? 0.6 : 1, fontFamily: "inherit", fontSize: "0.88rem" }}>
+            <button
+              onClick={onConfirm}
+              disabled={loading}
+              style={{ padding: "9px 20px", borderRadius: 10, border: "none", background: confirmBg, color: "#fff", fontWeight: 700, cursor: loading ? "not-allowed" : "pointer", opacity: loading ? 0.6 : 1, fontFamily: "inherit", fontSize: "0.88rem" }}
+            >
               {loading ? "Processing…" : confirmLabel}
             </button>
           </div>
@@ -230,11 +247,10 @@ function ConfirmModal({ open, title, message, confirmLabel = "Confirm", confirmB
   );
 }
 
-// ─── File Thumbnail (used inside AlbumDetailModal) ────────────────────────────
+// ─── File Thumbnail ───────────────────────────────────────────────────────────
 function FileThumb({ photo, idx, onLightbox }) {
   const type = detectFileType(photo);
   const url  = photo.file_path;
-
   const base = { width: "100%", aspectRatio: "4/3", borderRadius: 10, display: "block", background: "#1a2540" };
 
   if (type === "image") return (
@@ -278,7 +294,6 @@ function FileThumb({ photo, idx, onLightbox }) {
 
 // ═════════════════════════════════════════════════════════════════════════════
 // ALBUM DETAIL MODAL
-// Shows ALL files in the album. Supports face search for photo-type albums.
 // ═════════════════════════════════════════════════════════════════════════════
 function AlbumDetailModal({ open, albumId, album: albumProp, contentType, isAdmin, onClose, onAddFiles, onRefresh, toast }) {
   const [photos,        setPhotos]        = useState([]);
@@ -287,6 +302,7 @@ function AlbumDetailModal({ open, albumId, album: albumProp, contentType, isAdmi
   const [lightbox,      setLightbox]      = useState(null);
   const [faceSearching, setFaceSearching] = useState(false);
   const [faceMatches,   setFaceMatches]   = useState([]);
+  const [facePhotoIds,  setFacePhotoIds]  = useState([]);
   const faceRef = useRef(null);
 
   const cfg           = CONTENT_TYPES.find(c => c.key === contentType) ?? CONTENT_TYPES[0];
@@ -309,19 +325,37 @@ function AlbumDetailModal({ open, albumId, album: albumProp, contentType, isAdmi
   useEffect(() => {
     loadAlbum();
     setFaceMatches([]);
+    setFacePhotoIds([]);
   }, [loadAlbum]);
 
-  // Face search handler
+  const photoIds = photos.map(p => p.id).filter(Boolean);
+
+  usePhotoFacesBroadcast(
+    (event) => {
+      setPhotos(prev =>
+        prev.map(photo =>
+          photo.id === event.photo_id
+            ? { ...photo, ai_metadata: { ...(photo.ai_metadata ?? {}), status: event.status, face_count: event.face_count, matches: event.matches ?? [] } }
+            : photo
+        )
+      );
+    },
+    { photoIds, enabled: open && photoIds.length > 0 }
+  );
+
   const handleFaceSearch = async (file) => {
     setFaceSearching(true);
     setFaceMatches([]);
+    setFacePhotoIds([]);
     try {
       const fd = new FormData();
       fd.append("face_image", file);
       const res = await api.post("/face/search", fd, { headers: { "Content-Type": "multipart/form-data" } });
-      const matches = res.data?.matches ?? [];
+      const matches        = res.data?.matches ?? [];
+      const matchedPhotoIds = (res.data?.photos ?? []).map(p => p.graduation_photo_id ?? p.photo_id).filter(Boolean);
       setFaceMatches(matches);
-      if (!matches.length) toast("No matching faces found.", "error");
+      setFacePhotoIds(matchedPhotoIds);
+      if (!matches.length && !matchedPhotoIds.length) toast("No matching faces found.", "error");
     } catch {
       toast("Face search failed.", "error");
     } finally {
@@ -331,12 +365,10 @@ function AlbumDetailModal({ open, albumId, album: albumProp, contentType, isAdmi
 
   if (!open) return null;
 
-  // Filter photos by face match if matches are present
-  const displayPhotos = faceMatches.length > 0
+  const displayPhotos = faceMatches.length > 0 || facePhotoIds.length > 0
     ? photos.filter(p => {
-        const meta     = p.ai_metadata ?? {};
-        const matchIds = (meta.matches ?? []).map(m => m.user_id);
-        return faceMatches.some(m => matchIds.includes(m.user_id));
+        const matchIds = (p.ai_metadata?.matches ?? []).map(m => m.user_id);
+        return facePhotoIds.includes(p.id) || faceMatches.some(m => matchIds.includes(m.user_id));
       })
     : photos;
 
@@ -350,13 +382,15 @@ function AlbumDetailModal({ open, albumId, album: albumProp, contentType, isAdmi
             onClose={onClose}
           />
           <ModalBody>
-            {/* ── Face search bar (photos/toga/highlights/archive only) ── */}
+            {/* Face search bar */}
             {hasFace && (
               <div style={{ marginBottom: 16 }}>
                 <div style={{ display: "flex", gap: 8, alignItems: "center", padding: "10px 14px", background: T.primaryBg, borderRadius: 12, border: `1px solid #c7d2fe` }}>
                   <span style={{ fontSize: "1.1rem" }}>🔍</span>
                   <div style={{ flex: 1, fontSize: "0.82rem", color: T.muted }}>
-                    {faceSearching ? "Searching faces…" : faceMatches.length > 0 ? `Showing ${displayPhotos.length} matched photo(s) — ` : "Search by face to find a student in this album"}
+                    {faceSearching ? "Searching faces…" : faceMatches.length > 0
+                      ? `Showing ${displayPhotos.length} matched photo(s) — `
+                      : "Search by face to find a student in this album"}
                     {faceMatches.length > 0 && (
                       <button onClick={() => setFaceMatches([])} style={{ background: "none", border: "none", color: T.primary, cursor: "pointer", fontWeight: 700, fontSize: "0.82rem", padding: 0 }}>
                         Clear filter
@@ -370,23 +404,15 @@ function AlbumDetailModal({ open, albumId, album: albumProp, contentType, isAdmi
                     style={{ display: "none" }}
                     onChange={e => { if (e.target.files[0]) handleFaceSearch(e.target.files[0]); e.target.value = ""; }}
                   />
-                  <Btn
-                    onClick={() => faceRef.current?.click()}
-                    disabled={faceSearching}
-                    style={{ padding: "6px 14px", fontSize: "0.78rem" }}
-                  >
+                  <Btn onClick={() => faceRef.current?.click()} disabled={faceSearching} style={{ padding: "6px 14px", fontSize: "0.78rem" }}>
                     {faceSearching ? "⟳ Searching…" : "📸 Upload Face"}
                   </Btn>
                 </div>
-
-                {/* Face match result pills */}
                 {faceMatches.length > 0 && (
                   <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8 }}>
                     {faceMatches.map((m, i) => (
                       <div key={i} style={{ display: "flex", alignItems: "center", gap: 6, padding: "4px 10px", background: T.successBg, borderRadius: 999, border: `1px solid #86efac` }}>
-                        <span style={{ fontSize: "0.75rem", fontWeight: 700, color: T.success }}>
-                          {m.name ?? m.user_name ?? `User ${m.user_id}`}
-                        </span>
+                        <span style={{ fontSize: "0.75rem", fontWeight: 700, color: T.success }}>{m.name ?? m.user_name ?? `User ${m.user_id}`}</span>
                         <span style={{ fontSize: "0.7rem", color: T.muted }}>{m.similarity ?? m.confidence}%</span>
                       </div>
                     ))}
@@ -395,7 +421,7 @@ function AlbumDetailModal({ open, albumId, album: albumProp, contentType, isAdmi
               </div>
             )}
 
-            {/* ── Transcript viewer link ── */}
+            {/* Transcript link */}
             {hasTranscript && (
               <div style={{ marginBottom: 14, padding: "10px 14px", background: "#fefce8", borderRadius: 10, border: "1px solid #fde68a", display: "flex", alignItems: "center", gap: 8 }}>
                 <span>📝</span>
@@ -407,23 +433,19 @@ function AlbumDetailModal({ open, albumId, album: albumProp, contentType, isAdmi
               </div>
             )}
 
-            {/* ── File grid ── */}
+            {/* File grid */}
             {loading ? (
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))", gap: 12 }}>
                 {Array.from({ length: 8 }).map((_, i) => <Skeleton key={i} w="100%" h={120} radius={10} />)}
               </div>
             ) : displayPhotos.length === 0 ? (
               <div style={{ textAlign: "center", padding: "40px 20px", color: T.muted }}>
-                <div style={{ fontSize: "2.5rem", marginBottom: 10 }}>
-                  {faceMatches.length > 0 ? "🔍" : "📂"}
-                </div>
+                <div style={{ fontSize: "2.5rem", marginBottom: 10 }}>{faceMatches.length > 0 ? "🔍" : "📂"}</div>
                 <div style={{ fontWeight: 700, color: T.text, marginBottom: 6 }}>
                   {faceMatches.length > 0 ? "No matching photos found" : "No files yet"}
                 </div>
                 <div style={{ fontSize: "0.84rem" }}>
-                  {faceMatches.length > 0
-                    ? "Try a different photo or clear the face filter."
-                    : 'Use "+ Add More Files" to upload files to this album.'}
+                  {faceMatches.length > 0 ? "Try a different photo or clear the face filter." : 'Use "+ Add More Files" to upload files to this album.'}
                 </div>
               </div>
             ) : (
@@ -431,11 +453,11 @@ function AlbumDetailModal({ open, albumId, album: albumProp, contentType, isAdmi
                 {displayPhotos.map((photo, idx) => (
                   <div key={photo.id ?? idx}>
                     <FileThumb photo={photo} idx={idx} onLightbox={setLightbox} />
-                    {/* AI analysis status badge */}
                     {photo.ai_metadata?.status && photo.ai_metadata.status !== "done" && (
                       <div style={{ marginTop: 4, fontSize: "0.65rem", color: T.muted, textAlign: "center" }}>
                         {photo.ai_metadata.status === "pending"  ? "⏳ AI pending"  :
                          photo.ai_metadata.status === "queued"   ? "🔄 Analyzing…"  :
+                         photo.ai_metadata.status === "error"    ? "❌ AI failed"   :
                          photo.ai_metadata.status === "failed"   ? "❌ AI failed"   : ""}
                       </div>
                     )}
@@ -476,7 +498,7 @@ function AlbumDetailModal({ open, albumId, album: albumProp, contentType, isAdmi
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
-// FILE DROP ZONE (shared by AlbumUploadModal and AddFilesModal)
+// FILE DROP ZONE
 // ═════════════════════════════════════════════════════════════════════════════
 function FileDropZone({ cfg, files, setFiles, uploading, progress }) {
   const fileRef = useRef(null);
@@ -503,9 +525,7 @@ function FileDropZone({ cfg, files, setFiles, uploading, progress }) {
         <div style={{ fontWeight: 700, fontSize: "0.9rem", color: T.text, marginBottom: 4 }}>
           {files.length > 0 ? `${files.length} file(s) selected — drop more to add` : "Drag & drop or click to browse"}
         </div>
-        <div style={{ fontSize: "0.75rem", color: T.muted }}>
-          {cfg.accept} · Multiple files supported
-        </div>
+        <div style={{ fontSize: "0.75rem", color: T.muted }}>{cfg.accept} · Multiple files supported</div>
         <input
           ref={fileRef}
           type="file"
@@ -547,7 +567,7 @@ function FileDropZone({ cfg, files, setFiles, uploading, progress }) {
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
-// ALBUM UPLOAD MODAL (two-step: create album → upload files)
+// ALBUM UPLOAD MODAL (two-step)
 // ═════════════════════════════════════════════════════════════════════════════
 function AlbumUploadModal({ open, contentType, batches, onClose, onDone, toast }) {
   const cfg = CONTENT_TYPES.find(c => c.key === contentType) ?? CONTENT_TYPES[0];
@@ -561,7 +581,6 @@ function AlbumUploadModal({ open, contentType, batches, onClose, onDone, toast }
   const [uploading, setUploading] = useState(false);
   const [progress,  setProgress]  = useState([]);
 
-  // Keep a ref so doUpload always sees the latest files (avoids stale closure)
   const filesRef = useRef([]);
   useEffect(() => { filesRef.current = files; }, [files]);
 
@@ -600,9 +619,7 @@ function AlbumUploadModal({ open, contentType, batches, onClose, onDone, toast }
     const fd = new FormData();
     currentFiles.forEach(f => fd.append("files[]", f));
     try {
-      await api.post(`/admin/graduation/albums/${album.id}/upload`, fd, {
-        headers: { "Content-Type": "multipart/form-data" },
-      });
+      await api.post(`/admin/graduation/albums/${album.id}/upload`, fd, { headers: { "Content-Type": "multipart/form-data" } });
       setProgress(currentFiles.map(f => ({ name: f.name, status: "done" })));
       toast(`${currentFiles.length} file(s) uploaded to "${album.title}".`);
       setFiles([]);
@@ -617,7 +634,7 @@ function AlbumUploadModal({ open, contentType, batches, onClose, onDone, toast }
     <Overlay onClose={onClose}>
       <ModalCard width={580}>
         <ModalHeader
-          title={`${cfg.icon} New ${cfg.label.replace(/^.+?\s/, "")} Album`}
+          title={`${cfg.icon} New ${cfg.label} Album`}
           subtitle={step === 1 ? "Step 1 of 2 — Set up your album" : `Step 2 of 2 — Upload files to "${album?.title}"`}
           onClose={onClose}
         />
@@ -628,7 +645,7 @@ function AlbumUploadModal({ open, contentType, batches, onClose, onDone, toast }
             <>
               <Field label="Album Title" required error={errors.title}>
                 <input value={form.title} onChange={e => set("title", e.target.value)}
-                  placeholder={`e.g. Graduation ${cfg.label.replace(/^.+?\s/, "")} 2025`}
+                  placeholder={`e.g. Graduation ${cfg.label} 2025`}
                   style={{ ...inputBase, borderColor: errors.title ? T.danger : T.border }} />
               </Field>
               <Field label="Description">
@@ -657,7 +674,6 @@ function AlbumUploadModal({ open, contentType, batches, onClose, onDone, toast }
 
           {step === 2 && (
             <>
-              {/* Album info strip */}
               <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 18, padding: "10px 14px", background: T.primaryBg, borderRadius: 12, border: "1px solid #c7d2fe" }}>
                 <span style={{ fontSize: "0.72rem", fontWeight: 800, color: T.primary }}>{cfg.icon}</span>
                 <div style={{ flex: 1, minWidth: 0 }}>
@@ -761,7 +777,7 @@ function EditModal({ open, item, batches, onSave, onCancel, loading }) {
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
-// ADD FILES MODAL — fixed with filesRef to prevent stale closure on upload
+// ADD FILES MODAL
 // ═════════════════════════════════════════════════════════════════════════════
 function AddFilesModal({ open, album, contentType, onClose, onDone, toast }) {
   const cfg = CONTENT_TYPES.find(c => c.key === contentType) ?? CONTENT_TYPES[0];
@@ -770,7 +786,6 @@ function AddFilesModal({ open, album, contentType, onClose, onDone, toast }) {
   const [uploading, setUploading] = useState(false);
   const [progress,  setProgress]  = useState([]);
 
-  // ✅ Ref mirrors state so upload() always reads the latest list
   const filesRef = useRef([]);
   useEffect(() => { filesRef.current = files; }, [files]);
 
@@ -781,19 +796,14 @@ function AddFilesModal({ open, album, contentType, onClose, onDone, toast }) {
   if (!open || !album) return null;
 
   const upload = async () => {
-    const currentFiles = filesRef.current; // ← always fresh, never stale
-    if (!currentFiles.length) {
-      toast("Please select at least one file.", "error");
-      return;
-    }
+    const currentFiles = filesRef.current;
+    if (!currentFiles.length) { toast("Please select at least one file.", "error"); return; }
     setUploading(true);
     setProgress(currentFiles.map(f => ({ name: f.name, status: "uploading" })));
     const fd = new FormData();
     currentFiles.forEach(f => fd.append("files[]", f));
     try {
-      await api.post(`/admin/graduation/albums/${album.id}/upload`, fd, {
-        headers: { "Content-Type": "multipart/form-data" },
-      });
+      await api.post(`/admin/graduation/albums/${album.id}/upload`, fd, { headers: { "Content-Type": "multipart/form-data" } });
       setProgress(currentFiles.map(f => ({ name: f.name, status: "done" })));
       toast(`${currentFiles.length} file(s) added to "${album.title}".`);
       setTimeout(() => { onDone(); onClose(); }, 600);
@@ -820,14 +830,7 @@ function AddFilesModal({ open, album, contentType, onClose, onDone, toast }) {
           onClose={onClose}
         />
         <ModalBody>
-          <FileDropZone
-            cfg={cfg}
-            files={files}
-            setFiles={setFiles}
-            uploading={uploading}
-            progress={progress}
-          />
-          {/* File count confirmation */}
+          <FileDropZone cfg={cfg} files={files} setFiles={setFiles} uploading={uploading} progress={progress} />
           {files.length > 0 && (
             <div style={{ fontSize: "0.78rem", color: T.primary, fontWeight: 600, marginTop: 4, marginBottom: 4 }}>
               ✓ {files.length} file(s) ready to upload
@@ -862,9 +865,7 @@ function Pagination({ meta, onPage }) {
         ].map((b, i) => (
           <button key={i} onClick={() => !b.disabled && onPage(b.page)}
             className={`rounded-lg border px-3 py-1.5 text-sm font-semibold transition ${
-              b.active
-                ? "border-indigo-600 bg-indigo-600 text-white"
-                : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+              b.active ? "border-indigo-600 bg-indigo-600 text-white" : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
             } ${b.disabled ? "cursor-default opacity-40" : ""}`}>
             {b.label}
           </button>
@@ -897,73 +898,113 @@ function StatsRow({ stats, contentType }) {
 
 // ─── Content Card ─────────────────────────────────────────────────────────────
 function ContentCard({ item, isAdmin, onViewFiles, onEdit, onDelete, onPublish, onArchive, onAddFiles }) {
-  const typeEmoji = { photos:"🖼", videos:"🎬", program:"📄", archive:"📦", toga:"🎓", invitations:"✉️", songs:"🎵", mass:"⛪", speeches:"🎤", messages:"💬", highlights:"✨" };
+  const typeEmoji = {
+    photos: "🖼", videos: "🎬", program: "📄", archive: "📦",
+    toga: "🎓", invitations: "✉️", songs: "🎵", mass: "⛪",
+    speeches: "🎤", messages: "💬", highlights: "✨",
+  };
 
   const photos    = item.photos ?? [];
   const firstImg  = photos.find(p => detectFileType(p) === "image");
   const thumb     = item.thumbnail_url ?? item.cover_photo_url ?? firstImg?.file_path ?? null;
   const fileCount = item.photos_count ?? item.file_count ?? photos.length ?? 0;
-  const isVideo   = ["videos","mass","speeches"].includes(item.type);
+  const isVideo   = ["videos", "mass", "speeches"].includes(item.type);
   const isAudio   = item.type === "songs";
   const hasFace   = FACE_TYPES.includes(item.type);
+  const hasStrip  = photos.length > 0;
+
+  // Clean meta: show batch name + formatted event date only (no raw year duplication)
+  const batchLabel = item.batch_name ?? "All Batches";
+  const dateLabel  = item.event_date
+    ? new Date(item.event_date).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+    : null;
+  const metaLine = [batchLabel, dateLabel].filter(Boolean).join(" · ");
+
+  // Only show uploader if non-empty
+  const uploader = item.uploaded_by?.trim() || null;
 
   return (
     <div
-      style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: 16, overflow: "hidden", boxShadow: T.shadow, display: "flex", flexDirection: "column", transition: "box-shadow .18s" }}
-      onMouseEnter={e => e.currentTarget.style.boxShadow = T.shadowMd}
-      onMouseLeave={e => e.currentTarget.style.boxShadow = T.shadow}
+      style={{
+        background: T.surface, border: `1px solid ${T.border}`,
+        borderRadius: 16, overflow: "hidden", boxShadow: T.shadow,
+        display: "flex", flexDirection: "column",
+        transition: "box-shadow .18s, border-color .18s",
+      }}
+      onMouseEnter={e => { e.currentTarget.style.boxShadow = T.shadowMd; e.currentTarget.style.borderColor = "#c7d2fe"; }}
+      onMouseLeave={e => { e.currentTarget.style.boxShadow = T.shadow;   e.currentTarget.style.borderColor = T.border; }}
     >
-      {/* Thumbnail */}
+      {/* ── Thumbnail ── */}
       <div
         onClick={onViewFiles}
-        style={{ height: 140, background: "linear-gradient(135deg,#1a2540,#2d3a6b)", display: "flex", alignItems: "center", justifyContent: "center", position: "relative", overflow: "hidden", cursor: "pointer" }}
+        style={{
+          height: 140, background: "linear-gradient(135deg,#1a2540,#2d3a6b)",
+          position: "relative", overflow: "hidden", cursor: "pointer", flexShrink: 0,
+        }}
       >
-        {thumb
-          ? <img src={thumb} alt={item.title} style={{ width: "100%", height: "100%", objectFit: "cover" }} onError={e => { e.target.style.display = "none"; }} />
-          : <div style={{ fontSize: "2.8rem", color: "rgba(255,255,255,.18)" }}>
-              {isVideo ? "▶" : isAudio ? "🎵" : typeEmoji[item.type] ?? "📁"}
-            </div>
-        }
+        {thumb && (
+          <img
+            src={thumb} alt={item.title}
+            style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+            onError={e => { e.target.style.display = "none"; }}
+          />
+        )}
+        {/* Fallback icon — only shows when no thumb */}
+        {!thumb && (
+          <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: "2.2rem", color: "rgba(255,255,255,.13)" }}>
+            {isVideo ? "▶" : isAudio ? "🎵" : typeEmoji[item.type] ?? "📁"}
+          </div>
+        )}
 
-        {/* Status badge top-left */}
+        {/* Status badge — top left */}
         <div style={{ position: "absolute", top: 8, left: 8 }}>
           <StatusBadge status={item.status} />
         </div>
 
-        {/* File count top-right */}
+        {/* File count — top right */}
         {fileCount > 0 && (
-          <div style={{ position: "absolute", top: 8, right: 8, background: "rgba(0,0,0,.65)", color: "#fff", fontSize: "0.7rem", fontWeight: 700, padding: "2px 8px", borderRadius: 6 }}>
+          <div style={{ position: "absolute", top: 8, right: 8, background: "rgba(0,0,0,.58)", color: "#fff", fontSize: "0.67rem", fontWeight: 600, padding: "2px 8px", borderRadius: 5 }}>
             {fileCount} {fileCount === 1 ? "file" : "files"}
           </div>
         )}
 
-        {/* AI badges bottom-left */}
-        <div style={{ position: "absolute", bottom: 36, left: 6, display: "flex", gap: 4 }}>
-          {hasFace && (
-            <span style={{ fontSize: "0.6rem", background: "rgba(66,84,197,.85)", color: "#fff", padding: "2px 6px", borderRadius: 4, fontWeight: 700 }}>👤 AI</span>
-          )}
-          {item.has_transcript && (
-            <span style={{ fontSize: "0.6rem", background: "rgba(22,163,74,.85)", color: "#fff", padding: "2px 6px", borderRadius: 4, fontWeight: 700 }}>📝 Transcript</span>
-          )}
-        </div>
+        {/* AI / Transcript pills — sit above the strip if present */}
+        {(hasFace || item.has_transcript) && (
+          <div style={{ position: "absolute", bottom: hasStrip ? 36 : 8, left: 8, display: "flex", gap: 4 }}>
+            {hasFace && (
+              <span style={{ fontSize: "0.6rem", fontWeight: 700, padding: "2px 7px", borderRadius: 4, background: "rgba(66,84,197,.88)", color: "#fff" }}>
+                👤 AI
+              </span>
+            )}
+            {item.has_transcript && (
+              <span style={{ fontSize: "0.6rem", fontWeight: 700, padding: "2px 7px", borderRadius: 4, background: "rgba(22,163,74,.88)", color: "#fff" }}>
+                📝
+              </span>
+            )}
+          </div>
+        )}
 
-        {/* Mini file strip — shows up to 4 thumbnails at bottom */}
-        {photos.length > 0 && (
-          <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, display: "flex", height: 32, overflow: "hidden" }}>
+        {/* Mini file strip — flush at bottom, inside the 140px */}
+        {hasStrip && (
+          <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, height: 28, display: "flex" }}>
             {photos.slice(0, 4).map((p, i) => {
               const t = detectFileType(p);
               return (
-                <div key={i} style={{
-                  flex: 1,
-                  background: t === "image" ? `url(${p.file_path}) center/cover no-repeat` : "#0d1420",
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                  borderRight: i < 3 ? "1px solid rgba(255,255,255,.08)" : "none",
-                  fontSize: "0.75rem",
-                }}>
-                  {t === "video" && <span style={{ color: "rgba(255,255,255,.7)" }}>▶</span>}
-                  {t === "audio" && <span style={{ color: "rgba(255,255,255,.7)" }}>♪</span>}
-                  {t === "pdf"   && <span style={{ color: "rgba(255,255,255,.7)" }}>📄</span>}
-                  {t === "file"  && <span style={{ color: "rgba(255,255,255,.7)" }}>📎</span>}
+                <div
+                  key={i}
+                  style={{
+                    flex: 1, overflow: "hidden",
+                    borderRight: i < 3 ? "0.5px solid rgba(255,255,255,.08)" : "none",
+                    background: t === "image" ? `url(${p.file_path}) center/cover no-repeat` : "rgba(10,18,40,.35)",
+                    backdropFilter: "blur(2px)",
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    fontSize: "0.72rem",
+                  }}
+                >
+                  {t === "video" && <span style={{ color: "rgba(255,255,255,.65)" }}>▶</span>}
+                  {t === "audio" && <span style={{ color: "rgba(255,255,255,.65)" }}>♪</span>}
+                  {t === "pdf"   && <span style={{ color: "rgba(255,255,255,.65)" }}>📄</span>}
+                  {t === "file"  && <span style={{ color: "rgba(255,255,255,.65)" }}>📎</span>}
                 </div>
               );
             })}
@@ -971,58 +1012,52 @@ function ContentCard({ item, isAdmin, onViewFiles, onEdit, onDelete, onPublish, 
         )}
       </div>
 
-      {/* Info */}
-      <div style={{ padding: "12px 14px", flex: 1 }}>
-        <div style={{ fontWeight: 700, fontSize: "0.88rem", color: T.text, marginBottom: 3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+      {/* ── Body ── */}
+      <div style={{ padding: "11px 13px 10px", flex: 1, minWidth: 0 }}>
+        <div style={{ fontWeight: 700, fontSize: "0.87rem", color: T.text, marginBottom: 4, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
           {item.title}
         </div>
-        <div style={{ fontSize: "0.74rem", color: T.muted, marginBottom: 4 }}>
-          {item.batch_name ?? "All Batches"}{item.event_date ? ` · ${item.event_date}` : ""}
+        <div style={{ fontSize: "0.73rem", color: T.muted, marginBottom: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          {metaLine}
+        </div>
+        <div style={{ fontSize: "0.71rem", color: T.hint }}>
+          {item.created_at_human}{uploader ? ` · by ${uploader}` : ""}
         </div>
         {item.description && (
-          <div style={{ fontSize: "0.74rem", color: T.hint, overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", marginBottom: 4 }}>
+          <div style={{ fontSize: "0.73rem", color: T.hint, marginTop: 5, lineHeight: 1.5, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
             {item.description}
           </div>
         )}
-        <div style={{ fontSize: "0.7rem", color: T.hint }}>{item.created_at_human}</div>
-        {isAdmin && item.uploaded_by && (
-          <div style={{ fontSize: "0.7rem", color: T.hint }}>by {item.uploaded_by}</div>
-        )}
       </div>
 
-      {/* Actions */}
-      <div style={{ padding: "10px 14px", borderTop: `1px solid ${T.border}`, display: "flex", gap: 5, flexWrap: "wrap" }}>
-        <button onClick={onViewFiles}
-          style={{ flex: 1, padding: "6px", borderRadius: 8, border: `1px solid ${T.border}`, background: T.primaryBg, color: T.primary, fontSize: "0.77rem", fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>
-          👁 View {fileCount > 0 ? `(${fileCount})` : ""}
+      {/* ── Actions row ── */}
+      <div style={{ padding: "9px 10px", borderTop: `1px solid ${T.border}`, display: "flex", alignItems: "center", gap: 5 }}>
+        <button
+          onClick={onViewFiles}
+          style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 5, padding: "6px 8px", borderRadius: 8, border: `1px solid #c7d2fe`, background: T.primaryBg, color: T.primary, fontSize: "0.75rem", fontWeight: 600, cursor: "pointer", fontFamily: "inherit", whiteSpace: "nowrap" }}
+        >
+          <Icon name="eye" className="h-3.5 w-3.5" /> View{fileCount > 0 ? ` (${fileCount})` : ""}
         </button>
 
         {isAdmin && (
           <>
-            <button onClick={e => { e.stopPropagation(); onAddFiles(); }}
-              style={{ flex: 1, padding: "6px", borderRadius: 8, border: `1px solid ${T.border}`, background: "none", color: T.muted, fontSize: "0.77rem", fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>
+            <button
+              onClick={e => { e.stopPropagation(); onAddFiles(); }}
+              style={{ display: "flex", alignItems: "center", gap: 3, padding: "6px 9px", borderRadius: 8, border: `1px solid ${T.border}`, background: "none", color: T.muted, fontSize: "0.75rem", fontWeight: 500, cursor: "pointer", fontFamily: "inherit", whiteSpace: "nowrap" }}
+            >
               + Files
             </button>
-            {item.status !== "published" && (
-              <button onClick={e => { e.stopPropagation(); onPublish(); }}
-                style={{ padding: "6px 10px", borderRadius: 8, border: "none", background: T.successBg, color: T.success, fontSize: "0.77rem", fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}
-                title="Publish">✓
-              </button>
+
+            {/* Separator */}
+            <div style={{ width: 1, height: 18, background: T.border, flexShrink: 0, margin: "0 1px" }} />
+
+            {item.status !== "published" ? (
+              <button onClick={e => { e.stopPropagation(); onPublish(); }} title="Publish" style={iconBtn(T.success, T.successBg, "#86efac")}><Icon name="check" className="h-3.5 w-3.5" /></button>
+            ) : (
+              <button onClick={e => { e.stopPropagation(); onArchive(); }} title="Archive" style={iconBtn(T.warning, T.warningBg, "#fde68a")}><Icon name="archive" className="h-3.5 w-3.5" /></button>
             )}
-            {item.status === "published" && (
-              <button onClick={e => { e.stopPropagation(); onArchive(); }}
-                style={{ padding: "6px 10px", borderRadius: 8, border: `1px solid ${T.border}`, background: "none", color: T.warning, fontSize: "0.77rem", fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}
-                title="Archive">⬇
-              </button>
-            )}
-            <button onClick={e => { e.stopPropagation(); onEdit(); }}
-              style={{ padding: "6px 10px", borderRadius: 8, border: `1px solid ${T.border}`, background: "none", color: T.muted, fontSize: "0.77rem", cursor: "pointer", fontFamily: "inherit" }}
-              title="Edit">✏
-            </button>
-            <button onClick={e => { e.stopPropagation(); onDelete(); }}
-              style={{ padding: "6px 10px", borderRadius: 8, border: "none", background: T.dangerBg, color: T.danger, fontSize: "0.77rem", cursor: "pointer", fontFamily: "inherit" }}
-              title="Delete">🗑
-            </button>
+            <button onClick={e => { e.stopPropagation(); onEdit(); }}   title="Edit"   style={iconBtn(T.muted, "none", T.border)}><Icon name="edit" className="h-3.5 w-3.5" /></button>
+            <button onClick={e => { e.stopPropagation(); onDelete(); }} title="Delete" style={iconBtn(T.danger, T.dangerBg, "#fecaca")}><Icon name="trash" className="h-3.5 w-3.5" /></button>
           </>
         )}
       </div>
@@ -1112,17 +1147,26 @@ function ContentTab({ contentType, isAdmin, batches, stats, toast }) {
 
       {/* Toolbar */}
       <div className="mb-4 flex flex-wrap items-center gap-2.5">
-        <input value={search} onChange={e => handleSearch(e.target.value)}
-          placeholder={`Search ${cfg?.label?.replace(/^.+?\s/, "") ?? "content"}...`}
-          className="min-w-[180px] flex-1 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-200" />
-        <select value={batchFilter} onChange={e => { setBatchFilter(e.target.value); setPage(1); }}
-          className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-200">
+        <input
+          value={search}
+          onChange={e => handleSearch(e.target.value)}
+          placeholder={`Search ${cfg?.label ?? "content"}...`}
+          className="min-w-[180px] flex-1 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-200"
+        />
+        <select
+          value={batchFilter}
+          onChange={e => { setBatchFilter(e.target.value); setPage(1); }}
+          className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-200"
+        >
           <option value="all">All Batches</option>
           {batches.map(b => <option key={b.id} value={b.id}>{b.name} — {b.graduation_year}</option>)}
         </select>
         {isAdmin && (
-          <select value={statusFilter} onChange={e => { setStatusFilter(e.target.value); setPage(1); }}
-            className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-200">
+          <select
+            value={statusFilter}
+            onChange={e => { setStatusFilter(e.target.value); setPage(1); }}
+            className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-200"
+          >
             <option value="all">All Statuses</option>
             <option value="draft">Draft</option>
             <option value="published">Published</option>
@@ -1131,7 +1175,10 @@ function ContentTab({ contentType, isAdmin, batches, stats, toast }) {
         )}
         {meta && <div className="text-sm text-slate-500">{meta.total} albums</div>}
         {isAdmin && (
-          <button onClick={() => setAlbumModal(true)} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-bold text-white transition hover:bg-indigo-700">
+          <button
+            onClick={() => setAlbumModal(true)}
+            className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-bold text-white transition hover:bg-indigo-700"
+          >
             + New Album
           </button>
         )}
@@ -1154,13 +1201,16 @@ function ContentTab({ contentType, isAdmin, batches, stats, toast }) {
         <div className="px-5 py-12 text-center text-slate-500">
           <div className="mb-3 text-4xl font-black text-indigo-300">{cfg?.icon ?? "FIL"}</div>
           <div className="mb-1.5 text-base font-bold text-slate-800">
-            No {cfg?.label?.replace(/^.+?\s/, "") ?? "content"} yet
+            No {cfg?.label ?? "content"} yet
           </div>
           <div className="mb-5 text-sm">
             {isAdmin ? "Create an album to get started." : "No published content available yet."}
           </div>
           {isAdmin && (
-            <button onClick={() => setAlbumModal(true)} className="rounded-lg bg-indigo-600 px-5 py-2 text-sm font-bold text-white transition hover:bg-indigo-700">
+            <button
+              onClick={() => setAlbumModal(true)}
+              className="rounded-lg bg-indigo-600 px-5 py-2 text-sm font-bold text-white transition hover:bg-indigo-700"
+            >
               + Create First Album
             </button>
           )}
@@ -1185,7 +1235,7 @@ function ContentTab({ contentType, isAdmin, batches, stats, toast }) {
 
       <Pagination meta={meta} onPage={p => setPage(p)} />
 
-      {/* ── Modals ── */}
+      {/* Modals */}
       <AlbumUploadModal
         open={albumModal}
         contentType={contentType}
@@ -1301,7 +1351,9 @@ export default function GraduationContentPage({ isAdmin = false }) {
         {/* Tabs */}
         <div className="mb-5 flex flex-wrap gap-2">
           {CONTENT_TYPES.map(ct => (
-            <button key={ct.key} onClick={() => setActiveTab(ct.key)}
+            <button
+              key={ct.key}
+              onClick={() => setActiveTab(ct.key)}
               className={`rounded-xl border px-4 py-2 text-sm font-bold transition ${
                 activeTab === ct.key
                   ? "border-indigo-600 bg-indigo-600 text-white"

@@ -22,6 +22,7 @@ import AnalyticsPage         from "./pages/AnalyticsPage";
 import BatchManagementPage   from "./pages/BatchManagementPage";
 import GraduationContentPage from "./pages/GraduationContentPage";
 import MediaModerationPage   from "./pages/MediaModerationPage";
+import AnnouncementManagementPage from "./pages/AnnouncementManagementPage";
 import TrashPage             from "./pages/TrashPage";
 import ReportsPage           from "./pages/ReportsPage";
 import SubscriptionsPage     from "./pages/SubscriptionsPage";
@@ -46,7 +47,7 @@ function AdminLayout({ children, toasts, onDismiss }) {
   return (
     <div className="min-h-screen bg-[#e9edf4] flex font-[Inter,system-ui,sans-serif]">
       <Sidebar onLogout={handleLogout} />
-      <div className="flex flex-col flex-1 min-h-screen overflow-hidden ml-[236px]">
+      <div className="flex flex-col flex-1 min-h-screen overflow-hidden ml-[240px]">
         <Topbar />
         <div className="flex-1 overflow-y-auto">{children}</div>
       </div>
@@ -105,6 +106,7 @@ function AppRoutes({ toasts, dismiss, showToast }) {
       <Route path="/faculty"            element={<PP><FacultyPage            {...pp} /></PP>} />
       <Route path="/media-library"      element={<PP><MediaModerationPage    {...pp} /></PP>} />
       <Route path="/content-moderation" element={<PP><MediaModerationPage    {...pp} /></PP>} />
+      <Route path="/announcements"      element={<PP><AnnouncementManagementPage {...pp} /></PP>} />
       <Route path="/graduation"         element={<PP><GraduationContentPage  {...pp} isAdmin={true} /></PP>} />
       <Route path="/batches"            element={<PP><BatchManagementPage    {...pp} /></PP>} />
       <Route path="/analytics"          element={<PP><AnalyticsPage          {...pp} /></PP>} />

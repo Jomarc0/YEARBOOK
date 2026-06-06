@@ -1,24 +1,14 @@
 const styles = {
-  success:  { color: "#16a34a", background: "#dcfce7" },
-  warning:  { color: "#d97706", background: "#fef3c7" },
-  critical: { color: "#dc2626", background: "#fee2e2" },
-  info:     { color: "#4254c5", background: "#eef1ff" },
-  muted:    { color: "#64748b", background: "#f1f5f9" },
+  success: "bg-emerald-100 text-emerald-700",
+  warning: "bg-amber-100 text-amber-700",
+  critical: "bg-rose-100 text-rose-700",
+  info: "bg-indigo-100 text-indigo-700",
+  muted: "bg-slate-100 text-slate-600",
 };
 
-export default function Badge({ children, variant = "info" }) {
-  const s = styles[variant] || styles.info;
+export default function Badge({ children, variant = "info", className = "" }) {
   return (
-    <span style={{
-      ...s,
-      display: "inline-flex",
-      padding: "4px 11px",
-      borderRadius: 999,
-      fontSize: "0.78rem",
-      fontWeight: 800,
-      textTransform: "uppercase",
-      whiteSpace: "nowrap",
-    }}>
+    <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-black uppercase tracking-normal ${styles[variant] ?? styles.info} ${className}`}>
       {children}
     </span>
   );

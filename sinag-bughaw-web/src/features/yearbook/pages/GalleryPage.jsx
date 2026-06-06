@@ -14,10 +14,9 @@ import ProtectedImage from '@/components/ui/ProtectedImage';
 import { ContentOwnershipBanner } from '@/components/ui/CopyrightLabel';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-const safeGetToken = () => {
-  try { return localStorage.getItem('auth_token') || localStorage.getItem('sb_token') || ''; }
-  catch { return ''; }
-};
+
+// REMOVED: safeGetToken() — no longer needed.
+// All API calls now go through the axios client which handles auth automatically.
 
 const getTier = (user) => {
   if (!user) return 'free';
@@ -30,8 +29,6 @@ const getTier = (user) => {
 const TABS = [
   { key: 'general',               label: 'All Photos',    icon: 'fa-images'             },
   { key: 'graduation:photos',     label: 'Graduation',    icon: 'fa-graduation-cap'     },
-  { key: 'graduation:toga',       label: 'Toga Gallery',  icon: 'fa-user-graduate'      },
-  { key: 'graduation:archive',    label: 'Archive',       icon: 'fa-box-archive'        },
   { key: 'graduation:videos',     label: 'Videos',        icon: 'fa-film'               },
   { key: 'graduation:program',    label: 'Program',       icon: 'fa-file-pdf'           },
   { key: 'graduation:invitation', label: 'Invitation',    icon: 'fa-envelope-open-text' },
@@ -212,7 +209,6 @@ function CreateAlbumStep({
 }
 
 // ─── Transcript Modal ─────────────────────────────────────────────────────────
-// Now receives photoId (graduation_photo_id) — fetches only that video's transcripts
 function TranscriptModal({ photoId, videoTitle, onClose }) {
   const [transcripts, setTranscripts] = useState([]);
   const [loading,     setLoading]     = useState(true);
@@ -228,7 +224,6 @@ function TranscriptModal({ photoId, videoTitle, onClose }) {
   useEffect(() => {
     if (!photoId) return;
     setLoading(true);
-    // ── KEY CHANGE: filter by graduation_photo_id, not album_id ──────────
     transcriptApi.list({ graduation_photo_id: photoId })
       .then(({ data }) => {
         const list = data.data ?? data ?? [];
@@ -268,7 +263,6 @@ function TranscriptModal({ photoId, videoTitle, onClose }) {
         style={{ maxHeight: '92vh', boxShadow: '0 40px 100px rgba(0,0,0,0.3)' }}
         onClick={e => e.stopPropagation()}>
 
-        {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 flex-shrink-0">
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 rounded-xl bg-[#fdb813]/[0.12] flex items-center justify-center">
@@ -298,7 +292,6 @@ function TranscriptModal({ photoId, videoTitle, onClose }) {
           </div>
         ) : (
           <div className="flex flex-1 overflow-hidden">
-            {/* Sidebar — transcript list for this video only */}
             <div className="w-[220px] sm:w-[240px] border-r border-slate-100 overflow-y-auto flex-shrink-0 p-3 flex flex-col gap-2">
               {transcripts.map(t => {
                 const s   = statusCfg[t.status] ?? statusCfg.pending;
@@ -330,7 +323,6 @@ function TranscriptModal({ photoId, videoTitle, onClose }) {
               })}
             </div>
 
-            {/* Main panel */}
             {selected && (
               <div className="flex-1 flex flex-col overflow-hidden">
                 {selected.status === 'done' && (
@@ -455,7 +447,6 @@ function GradAlbumCard({ album }) {
 }
 
 // ─── VideoAlbumCard ───────────────────────────────────────────────────────────
-// Shown on the Videos tab FIRST — click to drill into that album's videos
 function VideoAlbumCard({ album, onClick }) {
   const videoCount = (album.media_files ?? album.mediaFiles ?? album.videos ?? []).length
     || (album.media_url ? 1 : 0);
@@ -465,21 +456,17 @@ function VideoAlbumCard({ album, onClick }) {
       className="text-left w-full border-none bg-white rounded-3xl overflow-hidden
                  shadow-sm border border-black/[0.04] cursor-pointer group
                  transition-all duration-300 hover:-translate-y-2 hover:shadow-xl">
-      {/* Thumbnail */}
       <div className="h-[200px] bg-gradient-to-br from-[#0d1b35] to-[#1d2b4b] relative overflow-hidden
                       flex items-center justify-center">
-        {/* Video play overlay */}
         <div className="w-16 h-16 rounded-full bg-[#fdb813] flex items-center justify-center
                         shadow-lg group-hover:scale-110 transition-transform duration-300">
           <i className="fas fa-play text-2xl text-[#1d2b4b] ml-1" />
         </div>
-        {/* Video count badge */}
         <div className="absolute bottom-3 right-3 bg-black/60 backdrop-blur-sm text-white
                         text-[11px] font-bold px-2.5 py-1 rounded-full flex items-center gap-1">
           <i className="fas fa-film text-[#fdb813] text-[10px]" />
           {videoCount} {videoCount === 1 ? 'video' : 'videos'}
         </div>
-        {/* Decorative stripes */}
         <div className="absolute inset-0 opacity-[0.06]"
           style={{ backgroundImage: 'repeating-linear-gradient(45deg, #fdb813 0, #fdb813 1px, transparent 0, transparent 50%)', backgroundSize: '12px 12px' }} />
       </div>
@@ -500,7 +487,6 @@ function VideoAlbumCard({ album, onClick }) {
 }
 
 // ─── GradVideoCard ────────────────────────────────────────────────────────────
-// Now receives photoId (the graduation_photos.id) for transcript lookup
 function GradVideoCard({ video, photoId, albumTitle, badge }) {
   const [playing,        setPlaying]        = useState(false);
   const [showTranscript, setShowTranscript] = useState(false);
@@ -545,7 +531,6 @@ function GradVideoCard({ video, photoId, albumTitle, badge }) {
         </div>
       </div>
 
-      {/* ── KEY CHANGE: pass photoId so modal fetches only THIS video's transcripts ── */}
       {showTranscript && (
         <TranscriptModal
           photoId={photoId}
@@ -774,8 +759,6 @@ export default function GalleryPage() {
   const [storage,       reloadStorage]    = useStorageUsage();
   const [newAlbumName,  setNewAlbumName]  = useState('');
   const [creatingAlbum, setCreatingAlbum] = useState(false);
-
-  // ── NEW: for Videos/Mass tabs — track which album is "drilled into" ────────
   const [selectedVideoAlbum, setSelectedVideoAlbum] = useState(null);
 
   const isGrad = activeTab !== 'general';
@@ -825,31 +808,32 @@ export default function GalleryPage() {
     setMatches([]);
     setActiveAlbum(null);
     setNewAlbumName('');
-    setSelectedVideoAlbum(null); // reset drill-down on tab switch
+    setSelectedVideoAlbum(null);
   };
 
+  // ── FIX: replaced raw fetch() + safeGetToken() with galleryApi.createAlbum()
+  //         so the axios interceptor handles the Authorization header correctly.
   const handleCreateAlbum = async () => {
     if (!newAlbumName.trim()) return;
     setCreatingAlbum(true);
     try {
-      const token = safeGetToken();
-      const r = await fetch('/api/gallery/albums', {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body:    JSON.stringify({ title: newAlbumName.trim(), type: 'general' }),
+      const { data } = await galleryApi.createAlbum({
+        title: newAlbumName.trim(),
+        type:  'general',
       });
-      const ct = r.headers.get('content-type') ?? '';
-      if (!ct.includes('application/json')) throw new Error(`Server error (${r.status})`);
-      const d = await r.json();
-      if (!r.ok) throw new Error(d.message ?? 'Album creation failed.');
-      const newId = d.data?.id ?? d.id;
-      await galleryApi.list('general', null).then(({ data }) => {
-        setAlbums(data.data ?? data ?? []);
-        setActiveAlbum(newId);
-      }).catch(() => {});
+
+      const newId = data?.data?.id ?? data?.id;
+
+      // Refresh the album list and auto-select the newly created album.
+      const { data: listData } = await galleryApi.list('general', null);
+      setAlbums(listData.data ?? listData ?? []);
+      setActiveAlbum(newId);
       setNewAlbumName('');
-    } catch (e) { alert(e.message); }
-    finally { setCreatingAlbum(false); }
+    } catch (e) {
+      alert(e?.response?.data?.message ?? e.message ?? 'Album creation failed.');
+    } finally {
+      setCreatingAlbum(false);
+    }
   };
 
   const handleFaceFile = async (file) => {
@@ -863,8 +847,8 @@ export default function GalleryPage() {
       const { data } = await galleryApi.faceSearch(fd);
       setMatches(data.photos ?? []);
       if (!data.photos?.length) alert('No matching photos found.');
-    } catch {
-      alert('Face search failed.');
+    } catch (err) {
+      alert(err?.response?.data?.message || 'Face search failed.');
     } finally {
       setSearching(false);
     }
@@ -883,57 +867,54 @@ export default function GalleryPage() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  // ── Flatten videos from the SELECTED album only ───────────────────────────
   const flattenVideosFromAlbum = (album, badge = undefined) => {
     const vids = album.media_files ?? album.mediaFiles ?? album.videos ?? [];
     if (vids.length > 0) {
       return vids.map(v => ({
         video:      v,
-        photoId:    v.id,           // graduation_photos.id for transcript lookup
+        photoId:    v.id,
         albumId:    album.id,
         albumTitle: album.title,
         badge,
       }));
     }
-    // Fallback: single media_url on the album itself
     return [{
       video:      { ...album, file_path: album.media_url },
-      photoId:    album.id,         // fallback
+      photoId:    album.id,
       albumId:    album.id,
       albumTitle: album.title,
       badge,
     }];
   };
 
-  const isVideoTab = activeTab === 'graduation:videos' || activeTab === 'graduation:mass';
-  const videoTabBadge = activeTab === 'graduation:mass' ? 'Baccalaureate Mass' : undefined;
-
-  const photoGradTabs = ['graduation:photos', 'graduation:toga', 'graduation:archive'];
-  const primaryTabs   = TABS.slice(0, 5);
-  const secondaryTabs = TABS.slice(5);
+  const isVideoTab     = activeTab === 'graduation:videos' || activeTab === 'graduation:mass';
+  const videoTabBadge  = activeTab === 'graduation:mass' ? 'Baccalaureate Mass' : undefined;
+  const photoGradTabs  = ['graduation:photos'];
+  const primaryTabs    = TABS.slice(0, 4);
+  const secondaryTabs  = TABS.slice(4);
 
   const tabCls = (key, sm = false) =>
     `flex items-center justify-center gap-1.5 font-bold border-none cursor-pointer transition-all rounded-[14px]
      ${sm ? 'py-2 px-1.5 text-[11px]' : 'py-2.5 px-2 text-[12px]'}
      ${activeTab === key ? 'bg-[#1d2b4b] text-white' : 'bg-transparent text-slate-400 hover:text-slate-600'}`;
 
-  const heroTitle    = isGrad
+  const heroTitle = isGrad
     ? <><span className="text-[#fdb813]">Graduation</span> Hub</>
     : <>The <span className="text-[#fdb813]">Visual Archive</span></>;
   const heroSubtitle = isGrad
     ? 'Photos, videos, programs, ceremonies, and memories — all in one place.'
     : 'Relive the milestones and pioneer memories through our AI-powered digital gallery.';
-  const heroLabel    = isGrad ? 'Class Milestones' : 'National University Lipa';
+  const heroLabel = isGrad ? 'Class Milestones' : 'National University Lipa';
 
   return (
     <div className="min-h-screen flex flex-col bg-[#f4f7fe] font-sans">
       <Navbar />
 
       {/* ── Hero ── */}
-      <header className="bg-gradient-to-br from-[#1d2b4b] to-[#2a3d66] px-[8%] pt-20 pb-[70px] text-center text-white rounded-b-[60px]">
+      <header className="bg-gradient-to-br from-[#1d2b4b] to-[#2a3d66] px-[8%] pt-10 pb-10 text-center text-white rounded-b-[28px]">
         <p className="text-[11px] font-bold tracking-[0.15em] uppercase text-white/50 mb-2.5">{heroLabel}</p>
-        <h1 className="text-5xl font-black tracking-tight mb-3.5">{heroTitle}</h1>
-        <p className="text-base text-white/70 max-w-[560px] mx-auto mb-6 leading-relaxed font-light">
+        <h1 className="text-3xl sm:text-4xl font-black tracking-tight mb-2">{heroTitle}</h1>
+        <p className="text-sm text-white/70 max-w-[520px] mx-auto mb-4 leading-relaxed font-light">
           {heroSubtitle}
         </p>
 
@@ -953,12 +934,12 @@ export default function GalleryPage() {
           </div>
         )}
 
-        <div className="max-w-[600px] mx-auto relative z-10">
+        <div className="max-w-[560px] mx-auto relative z-10">
           <div className="relative">
             <i className="fas fa-search absolute left-[18px] top-1/2 -translate-y-1/2 text-[#fdb813] text-[15px] z-[1] pointer-events-none" />
             <input type="text" readOnly
               placeholder={searching ? 'Searching…' : 'Click the camera icon to search by face…'}
-              className="w-full h-[52px] pl-[50px] pr-14 border border-white/15 rounded-[14px] outline-none
+              className="w-full h-11 pl-[46px] pr-14 border border-white/15 rounded-xl outline-none
                          bg-white/10 backdrop-blur-xl text-white text-sm font-medium cursor-pointer
                          focus:bg-white/[0.18] focus:border-[#fdb813]/60 transition-all placeholder-white/50" />
             <FaceSearchButton onFile={handleFaceFile} loading={searching} />
@@ -968,7 +949,7 @@ export default function GalleryPage() {
       </header>
 
       {/* ── Tabs ── */}
-      <div className="max-w-[1000px] mx-auto -mt-[30px] px-5 w-full relative z-10">
+      <div className="max-w-[1000px] mx-auto -mt-4 px-5 w-full relative z-10">
         <div className="bg-white flex gap-1 p-1.5 rounded-t-[20px] shadow-sm border-b border-slate-100">
           {primaryTabs.map(tab => (
             <button key={tab.key} onClick={() => handleTabChange(tab.key)} className={`flex-1 min-w-[60px] ${tabCls(tab.key)}`}>
@@ -1053,8 +1034,6 @@ export default function GalleryPage() {
       {/* ── Content ── */}
       <section className="px-[8%] pt-8 pb-24 flex-1">
         <div className="flex items-center justify-between mb-7">
-
-          {/* Title — shows breadcrumb when drilled into a video album */}
           <h2 className="text-xl font-extrabold text-[#1d2b4b] m-0 flex items-center gap-2">
             {isVideoTab && selectedVideoAlbum ? (
               <>
@@ -1153,23 +1132,16 @@ export default function GalleryPage() {
             {/* ── Videos / Baccalaureate Mass tabs ── */}
             {isVideoTab && (
               <>
-                {/* LEVEL 1 — Album grid */}
                 {!selectedVideoAlbum && (
                   <div className="grid grid-cols-[repeat(auto-fill,minmax(300px,1fr))] gap-6">
                     {albums.map(album => (
-                      <VideoAlbumCard
-                        key={album.id}
-                        album={album}
-                        onClick={setSelectedVideoAlbum}
-                      />
+                      <VideoAlbumCard key={album.id} album={album} onClick={setSelectedVideoAlbum} />
                     ))}
                   </div>
                 )}
 
-                {/* LEVEL 2 — Videos inside selected album */}
                 {selectedVideoAlbum && (
                   <>
-                    {/* Back button (mobile-friendly extra) */}
                     <button onClick={() => setSelectedVideoAlbum(null)}
                       className="mb-5 inline-flex items-center gap-2 text-[13px] font-bold text-slate-500
                                  hover:text-[#1d2b4b] border-none bg-transparent cursor-pointer transition-colors">

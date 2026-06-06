@@ -86,7 +86,7 @@ export default function PostCard({ post, onClick, isOwn, onMenuClick }) {
           className="ig-menu-btn absolute bottom-2 right-2 w-7 h-7 rounded-lg
                      bg-[#1d2b4b]/75 backdrop-blur-sm border border-white/10
                      text-white cursor-pointer flex items-center justify-center
-                     text-xs opacity-0 transition-opacity duration-200 z-[4]"
+                     text-xs opacity-100 transition-opacity duration-200 z-[4]"
           onClick={e => { e.stopPropagation(); onMenuClick?.(e, post); }}
         >
           <i className="fas fa-ellipsis-v" />

@@ -23,27 +23,12 @@ const YearbookHomePage    = lazy(() => import('../features/yearbook/pages/Yearbo
 const FlipbookViewerPage  = lazy(() => import('../features/yearbook/pages/FlipbookViewerPage'));
 
 const Fallback = () => (
-  <div
-    style={{
-      minHeight: '100vh',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      background: '#0a0a14',
-    }}
-  >
+  <div className="flex min-h-screen items-center justify-center bg-[#0a0a14]">
     <div
-      style={{
-        width: 32, height: 32,
-        border: '2px solid rgba(201,168,76,.15)',
-        borderTop: '2px solid #c9a84c',
-        borderRadius: '50%',
-        animation: 'spin 1s linear infinite',
-      }}
+      className="h-8 w-8 animate-spin rounded-full border-2 border-[#c9a84c]/15 border-t-[#c9a84c]"
       role="status"
       aria-label="Loading"
     />
-    <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
   </div>
 );
 

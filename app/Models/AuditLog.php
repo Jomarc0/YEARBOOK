@@ -96,6 +96,23 @@ class AuditLog extends Model
         'logged_at' => 'datetime',
     ];
 
+    private static function actorName(?object $actor): string
+    {
+        if (! $actor) {
+            return 'system';
+        }
+
+        $fullName = trim((string) (($actor->first_name ?? '') . ' ' . ($actor->last_name ?? '')));
+        $name = trim((string) ($actor->name ?? $fullName ?: ($actor->username ?? $actor->email ?? 'system')));
+        $role = $actor->role ?? null;
+
+        return match ($role) {
+            'super_admin' => "{$name} (Super Admin)",
+            'admin'       => "{$name} (Admin)",
+            default       => $name,
+        };
+    }
+
     /**
      * Quick log from a controller with a Request object.
      * Used by other parts of the app (non-moderation).
@@ -111,11 +128,11 @@ class AuditLog extends Model
         string  $status = self::STATUS_SUCCESS
     ): self {
         $user    = $request->user();
-        $adminId = ($user?->role === 'admin') ? $user->id : null;
+        $adminId = in_array($user?->role, ['admin', 'super_admin'], true) ? $user->id : null;
 
         return self::create([
             'admin_id'   => $adminId,
-            'user_name'  => $user?->email ?? 'system',
+            'user_name'  => self::actorName($user),
             'action'     => $action,
             'details'    => $details,
             'ip_address' => $request->ip() ?? '127.0.0.1',
@@ -140,9 +157,9 @@ class AuditLog extends Model
     ): self {
         return self::create([
             'admin_id'     => $admin?->id,
-            'user_name'    => $admin ? "{$admin->first_name} {$admin->last_name}" : 'system',
+            'user_name'    => self::actorName($admin),
             'action'       => $action,
-            'details'      => "Admin {$action} {$type} #{$id}" . ($reason ? ": {$reason}" : ''),
+            'details'      => self::actorName($admin) . " {$action} {$type} #{$id}" . ($reason ? ": {$reason}" : ''),
             'subject_id'   => $id,
             'subject_name' => "{$type}#{$id}",
             'reason'       => $reason,
@@ -170,7 +187,7 @@ class AuditLog extends Model
     ): self {
         return self::create([
             'admin_id'     => $admin?->id,
-            'user_name'    => $admin ? "{$admin->first_name} {$admin->last_name}" : 'system',
+            'user_name'    => self::actorName($admin),
             'action'       => self::ACTION_REVERTED,
             'details'      => "Admin reverted {$type} #{$id}: {$from}→{$to}",
             'subject_id'   => $id,

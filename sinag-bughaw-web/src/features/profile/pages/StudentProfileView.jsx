@@ -13,28 +13,12 @@ import StudentPhotosSection from '../components/StudentPhotosSection';
 import PostContextMenu from '../components/PostContextMenu';
 import VoiceNotesSection from '@/features/messaging/components/VoiceNotesSection';
 import { imageUrl, avatarUrl as makeAvatar } from '@/utils/imageUrl';
+import { recordProfileView } from '@/api/analytics.api';
+import { trackProfileView } from '@/utils/ga4';
+import { getCourseShort } from '@/utils/courseShort';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 const isGraduate = (student) => !!student?.graduation_year;
-
-const COURSE_SHORT = {
-  'Bachelor of Science in Computer Science':                                'BSCS',
-  'Bachelor of Science in Information Technology':                          'BSIT',
-  'Bachelor of Science in Civil Engineering':                               'BSCE',
-  'Bachelor of Science in Architecture':                                    'BSArch',
-  'Bachelor of Multimedia Arts':                                            'BMA',
-  'Bachelor of Science in Nursing':                                         'BSN',
-  'Bachelor of Science in Medical Technology':                              'BSMT',
-  'Bachelor of Science in Psychology':                                      'BSPsy',
-  'Bachelor of Science in Accountancy':                                     'BSA',
-  'Bachelor of Science in Business Administration - Financial Management':  'BSBA-FM',
-  'Bachelor of Science in Business Administration - Marketing Management':  'BSBA-MM',
-  'Bachelor of Science in Tourism Management':                              'BSTM',
-  'Master in Management':                                                   'MM',
-  'ABM':                                                                    'ABM',
-  'STEM':                                                                   'STEM',
-  'HUMSS':                                                                  'HUMSS',
-};
 
 // ── Sub-components ────────────────────────────────────────────────────────────
 function SkeletonBlock({ w = '60%', h = 11 }) {
@@ -110,13 +94,27 @@ export default function StudentProfileView() {
     { key: 'voice',        icon: 'fas fa-microphone',     label: 'Voice Memories' },
   ];
 
+  // ── Fetch student + record view ────────────────────────────────────────────
   useEffect(() => {
     if (!id) return;
     if (parseInt(id) === authUser?.id) { navigate('/profile', { replace: true }); return; }
     setLoading(true);
     studentsApi.show(id)
-      .then(({ data }) => setStudent(data))
-      .catch(err => { setVisibility(err.response?.data?.visibility ?? null); setStudent(null); })
+      .then(({ data }) => {
+        setStudent(data);
+        // id here is users.id — correct for profile_views table
+        recordProfileView(parseInt(id));
+        trackProfileView({
+          id:     parseInt(id),
+          name:   data.name   ?? '',
+          course: data.course ?? '',
+          batch:  data.graduation_year ?? '',
+        });
+      })
+      .catch(err => {
+        setVisibility(err.response?.data?.visibility ?? null);
+        setStudent(null);
+      })
       .finally(() => setLoading(false));
   }, [id, authUser]);
 
@@ -174,17 +172,46 @@ export default function StudentProfileView() {
   );
 
   // ── Not found / private ────────────────────────────────────────────────────
+  if (!student && visibility === 'subscription') return (
+    <div className="min-h-screen flex flex-col bg-[#f4f7fe]">
+      <Navbar />
+      <main className="flex-1 flex items-center justify-center px-4 py-12">
+        <div className="w-full max-w-lg rounded-3xl bg-white border border-slate-100 shadow-xl shadow-slate-200/60 p-8 text-center">
+          <div className="mx-auto mb-5 h-14 w-14 rounded-2xl bg-amber-100 text-amber-600 flex items-center justify-center">
+            <i className="fas fa-lock text-xl" />
+          </div>
+          <p className="m-0 mb-2 text-[11px] font-black uppercase tracking-[0.22em] text-amber-600">Full Profile Locked</p>
+          <h2 className="m-0 text-2xl font-black text-[#1d2b4b]">Upgrade to view student profiles</h2>
+          <p className="mx-auto mt-3 max-w-sm text-sm leading-relaxed text-slate-500">
+            Standard unlocks student profiles and gallery access. Premium unlocks complete discovery details, mottos, and contact information.
+          </p>
+          <div className="mt-6 flex flex-col sm:flex-row gap-3 justify-center">
+            <button onClick={() => navigate('/premium')}
+              className="rounded-xl border-none bg-[#fdb813] px-5 py-3 text-sm font-black text-[#1d2b4b] cursor-pointer hover:bg-amber-300 transition">
+              Upgrade access
+            </button>
+            <button onClick={() => navigate(-1)}
+              className="rounded-xl border border-slate-200 bg-white px-5 py-3 text-sm font-bold text-slate-500 cursor-pointer hover:bg-slate-50 transition">
+              Go back
+            </button>
+          </div>
+        </div>
+      </main>
+      <Footer />
+    </div>
+  );
+
   if (!student) return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-[#f4f7fe] gap-3 px-4 text-center">
-      <i className={`fas ${visibility === 'private' ? 'fa-lock' : visibility === 'alumni_only' ? 'fa-user-shield' : 'fa-user-slash'} text-5xl text-slate-200`} />
+      <i className={`fas ${visibility === 'private' ? 'fa-lock' : visibility === 'batchmates' ? 'fa-users' : 'fa-user-slash'} text-5xl text-slate-200`} />
       <h2 className="text-lg font-black text-[#1d2b4b] m-0">
         {visibility === 'private'     ? 'This profile is private.'     : ''}
-        {visibility === 'alumni_only' ? 'Log in to view this profile.' : ''}
+        {visibility === 'batchmates'  ? 'This profile is for batchmates only.' : ''}
         {!visibility                  ? 'Student not found.'           : ''}
       </h2>
       <p className="text-sm text-slate-400 m-0">
         {visibility === 'private'     ? 'The student has restricted access to their profile.' : ''}
-        {visibility === 'alumni_only' ? 'This profile is visible to logged-in users only.'   : ''}
+        {visibility === 'batchmates'  ? 'Only students from the same batch can view it.'     : ''}
       </p>
       <button onClick={() => navigate('/directory')}
         className="bg-transparent border-none text-[#3f51b5] text-sm font-semibold cursor-pointer">
@@ -195,19 +222,11 @@ export default function StudentProfileView() {
 
   const graduate    = isGraduate(student);
   const batchYear   = student.graduation_year || student.section?.batch_year || new Date().getFullYear();
-  const courseShort = COURSE_SHORT[student.course] || student.course?.match(/\b[A-Z]/g)?.join('') || 'Student';
+  const courseShort = student.course_short || getCourseShort(student.course);
   const avatar      = imageUrl(student.profile_picture) || makeAvatar(student.name);
 
   return (
     <div className="min-h-screen bg-[#f4f7fe] flex flex-col font-sans">
-      <style>{`
-        @keyframes fadeUp  { from{opacity:0;transform:translateY(10px)} to{opacity:1;transform:translateY(0)} }
-        @keyframes toastIn { from{opacity:0;transform:translateX(-50%) translateY(-8px)} to{opacity:1;transform:translateX(-50%) translateY(0)} }
-        .post-cell:hover .post-overlay { opacity: 1 !important; }
-        .post-cell:hover img, .post-cell:hover video { transform: scale(1.04); }
-        .post-cell img, .post-cell video { transition: transform 0.35s ease; }
-      `}</style>
-
       <Navbar />
 
       <MessageModal isOpen={showMsg}   onClose={() => setShowMsg(false)}   student={student} authUser={authUser} />
@@ -238,24 +257,22 @@ export default function StudentProfileView() {
 
       {/* Toast */}
       {toast && (
-        <div className={`fixed top-20 left-1/2 z-[9000] px-5 py-2.5 rounded-xl text-sm font-semibold shadow-xl
+        <div className={`fixed top-20 left-1/2 z-[9000] -translate-x-1/2 animate-[fadeIn_0.2s_ease] px-5 py-2.5 rounded-xl text-sm font-semibold shadow-xl
                          whitespace-nowrap flex items-center gap-2
-                         ${toast.type === 'error' ? 'bg-red-600 text-white' : 'bg-[#1d2b4b] text-white'}`}
-          style={{ transform: 'translateX(-50%)', animation: 'toastIn 0.25s ease' }}>
+                         ${toast.type === 'error' ? 'bg-red-600 text-white' : 'bg-[#1d2b4b] text-white'}`}>
           <i className={`fas ${toast.type === 'error' ? 'fa-circle-xmark' : 'fa-circle-check'} text-[#fdb813]`} />
           {toast.msg}
         </div>
       )}
 
-      <main className="flex-1 max-w-[900px] mx-auto w-full px-4 sm:px-6 py-8 animate-[fadeUp_0.35s_ease]">
+      <main className="flex-1 max-w-[980px] mx-auto w-full px-4 sm:px-6 py-8 animate-[fadeIn_0.25s_ease]">
 
         {/* ── PROFILE CARD ── */}
         <div className="bg-white rounded-2xl overflow-hidden mb-3 shadow-sm border border-slate-100">
 
           {/* Cover */}
           <div className="h-28 sm:h-36 relative overflow-hidden bg-gradient-to-br from-[#1d2b4b] via-[#2d4270] to-[#3f51b5]">
-            <div className="absolute inset-0 opacity-[0.07]"
-              style={{ backgroundImage: 'radial-gradient(circle, #fdb813 1.5px, transparent 1.5px)', backgroundSize: '22px 22px' }} />
+            <div className="absolute inset-0 opacity-[0.07] bg-[radial-gradient(circle,#fdb813_1.5px,transparent_1.5px)] bg-[length:22px_22px]" />
             <div className="absolute -top-16 -right-16 w-52 h-52 rounded-full bg-[#fdb813]/5" />
             <button onClick={() => navigate(-1)}
               className="absolute top-4 left-5 flex items-center gap-1.5 text-white/75 hover:text-white bg-white/10 backdrop-blur-sm border border-white/15 rounded-lg px-3 py-1.5 cursor-pointer text-xs font-semibold transition">
@@ -361,7 +378,6 @@ export default function StudentProfileView() {
                 <span className="flex items-center gap-1.5 text-xs text-slate-400">
                   <i className="fas fa-university text-[#3f51b5] text-[10px]" /> NU Lipa
                 </span>
-                {/* Social quick links — graduates only */}
                 {graduate && (student.facebook_url || student.instagram_url || student.linkedin_url || student.github_url) && (
                   <div className="flex items-center gap-2 ml-auto">
                     {student.facebook_url  && <a href={student.facebook_url}  target="_blank" rel="noopener noreferrer" className="text-[#1877F2] text-sm hover:opacity-75 transition"><i className="fab fa-facebook" /></a>}
@@ -422,15 +438,15 @@ export default function StudentProfileView() {
             ) : (
               <div className="grid grid-cols-3 gap-1 rounded-2xl overflow-hidden shadow-sm">
                 {posts.map(post => (
-                  <div key={post.id} className="post-cell relative aspect-square overflow-hidden bg-[#1d2b4b] cursor-pointer"
+                  <div key={post.id} className="group relative aspect-square overflow-hidden bg-[#1d2b4b] cursor-pointer"
                     onClick={() => !contextMenu && setLightbox(post)}
                     onContextMenu={e => { e.preventDefault(); setContextMenu({ post, x: e.clientX, y: e.clientY }); }}
                   >
                     {post.file_path?.match(/\.(mp4|mov|webm)(\?|$)/i)
-                      ? <video src={post.file_path} className="w-full h-full object-cover block" muted />
-                      : <img   src={post.file_path} alt={post.caption ?? ''} className="w-full h-full object-cover block" />
+                      ? <video src={post.file_path} className="w-full h-full object-cover block transition-transform duration-300 group-hover:scale-105" muted />
+                      : <img   src={post.file_path} alt={post.caption ?? ''} className="w-full h-full object-cover block transition-transform duration-300 group-hover:scale-105" />
                     }
-                    <div className="post-overlay absolute inset-0 bg-[#1d2b4b]/55 opacity-0 transition-opacity duration-200 flex items-center justify-center gap-5">
+                    <div className="absolute inset-0 bg-[#1d2b4b]/55 opacity-0 transition-opacity duration-200 group-hover:opacity-100 flex items-center justify-center gap-5">
                       <span className="text-white text-sm font-bold"><i className="fas fa-heart text-[#fdb813] mr-1" />0</span>
                       <span className="text-white text-sm font-bold"><i className="fas fa-comment text-[#fdb813] mr-1" />0</span>
                     </div>

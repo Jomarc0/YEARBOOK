@@ -141,13 +141,11 @@ export default function LandingPage() {
 
       {/* ── Hero ────────────────────────────────────────────────────────────── */}
       <section
-        className="relative min-h-screen flex flex-col items-center justify-center text-center text-white px-5"
-        style={{ background: "linear-gradient(to bottom, rgba(29,43,75,0.82) 0%, rgba(29,43,75,0.65) 60%, rgba(29,43,75,0.9) 100%), url('/images/NU-building.jpg') center/cover no-repeat" }}
+        className="relative min-h-screen flex flex-col items-center justify-center text-center text-white px-5 bg-[linear-gradient(to_bottom,rgba(29,43,75,0.82)_0%,rgba(29,43,75,0.65)_60%,rgba(29,43,75,0.9)_100%),url('/images/NU-building.jpg')] bg-cover bg-center bg-no-repeat"
       >
         {/* Subtle grid overlay */}
         <div
-          className="absolute inset-0 opacity-[0.04] pointer-events-none"
-          style={{ backgroundImage: 'linear-gradient(rgba(255,255,255,0.5) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.5) 1px, transparent 1px)', backgroundSize: '60px 60px' }}
+          className="absolute inset-0 pointer-events-none bg-[linear-gradient(rgba(255,255,255,0.5)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.5)_1px,transparent_1px)] bg-[length:60px_60px] opacity-[0.04]"
         />
 
         <div className="relative z-10 max-w-3xl mx-auto">

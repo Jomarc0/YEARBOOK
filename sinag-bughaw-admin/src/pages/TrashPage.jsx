@@ -23,6 +23,22 @@ const TYPE_ORDER = [
   "batch","section","student",
 ];
 
+const ICONS = {
+  trash: <><path d="M4 7h16" /><path d="M10 11v6" /><path d="M14 11v6" /><path d="M6 7l1 14h10l1-14" /><path d="M9 7V4h6v3" /></>,
+  restore: <><path d="M3 12a9 9 0 1 0 3-6.7" /><path d="M3 4v6h6" /></>,
+  user: <><path d="M20 21a8 8 0 0 0-16 0" /><circle cx="12" cy="8" r="4" /></>,
+  faculty: <><path d="M12 3 3 8l9 5 9-5-9-5Z" /><path d="M7 11v5c3 2 7 2 10 0v-5" /></>,
+  student: <><path d="M12 3 3 7.5 12 12l9-4.5L12 3Z" /><path d="M7 10v3c3 2 7 2 10 0v-3" /><circle cx="12" cy="16" r="2.4" /><path d="M7.5 21a4.5 4.5 0 0 1 9 0" /></>,
+};
+
+function Icon({ name, className = "h-4 w-4", style }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className={className} style={style} aria-hidden="true">
+      {ICONS[name] ?? ICONS.trash}
+    </svg>
+  );
+}
+
 // ─── Tiny helpers ─────────────────────────────────────────────────────────────
 const Sk = ({ w = "100%", h = 14, r = 6, style = {} }) => (
   <div style={{
@@ -117,6 +133,8 @@ function Pagination({ meta, onPage }) {
 
 // ─── Type sidebar tab ─────────────────────────────────────────────────────────
 function TypeTab({ slug, icon, label, count, active, onClick }) {
+  const iconName = slug === "faculty" ? "faculty" : slug === "student" ? "student" : slug === "user" ? "user" : "trash";
+
   return (
     <button onClick={() => onClick(slug)}
       style={{
@@ -130,7 +148,7 @@ function TypeTab({ slug, icon, label, count, active, onClick }) {
         transition:"all .15s",
       }}>
       <span style={{ display:"flex", alignItems:"center", gap:8 }}>
-        <span>{icon}</span>
+        <Icon name={iconName} className="h-4 w-4" />
         <span>{label}</span>
       </span>
       {count > 0 && (
@@ -163,8 +181,8 @@ function TrashCard({ item, selected, onSelect, onRestore, onForce, busy }) {
         {item.thumbnail
           ? <img src={item.thumbnail} alt={item.title}
               style={{ width:"100%", height:"100%", objectFit:"cover" }} />
-          : <div style={{ height:"100%", display:"flex", alignItems:"center", justifyContent:"center", fontSize:"2rem" }}>
-              {item.icon}
+          : <div style={{ height:"100%", display:"flex", alignItems:"center", justifyContent:"center", color:"rgba(255,255,255,.72)" }}>
+              <Icon name={item.type === "faculty" ? "faculty" : item.type === "student" ? "student" : item.type === "user" ? "user" : "trash"} className="h-9 w-9" />
             </div>
         }
         {/* Checkbox */}
@@ -195,7 +213,10 @@ function TrashCard({ item, selected, onSelect, onRestore, onForce, busy }) {
         {item.subtitle && (
           <div style={{ fontSize:"0.76rem", color:T.muted, marginBottom:6 }}>{item.subtitle}</div>
         )}
-        <div style={{ fontSize:"0.74rem", color:T.warning, fontWeight:500 }}>
+        <div style={{ fontSize:0, color:T.warning, fontWeight:500 }}>
+          <span style={{ display:"inline-flex", alignItems:"center", gap:5, fontSize:"0.74rem" }}>
+            <Icon name="trash" className="h-3.5 w-3.5" /> Deleted {item.deleted_ago}
+          </span>
           🗑 Deleted {item.deleted_ago}
         </div>
       </div>
@@ -203,11 +224,13 @@ function TrashCard({ item, selected, onSelect, onRestore, onForce, busy }) {
       {/* Actions */}
       <div style={{ padding:"10px 14px", borderTop:`1px solid ${T.border}`, display:"flex", gap:7 }}>
         <button onClick={() => onRestore(item)} disabled={isBusy}
-          style={{ flex:1, padding:"7px", borderRadius:9, border:"none", background:T.successBg, color:T.success, fontWeight:700, fontSize:"0.78rem", cursor:"pointer", fontFamily:"inherit", opacity:isBusy?0.6:1 }}>
+          style={{ flex:1, padding:"7px", borderRadius:9, border:"none", background:T.successBg, color:T.success, fontWeight:700, fontSize:0, cursor:"pointer", fontFamily:"inherit", opacity:isBusy?0.6:1, display:"inline-flex", alignItems:"center", justifyContent:"center", gap:6 }}>
+          <span style={{ display:"inline-flex", alignItems:"center", gap:6, fontSize:"0.78rem" }}><Icon name="restore" className="h-4 w-4" /> Restore</span>
           ↩ Restore
         </button>
         <button onClick={() => onForce(item)} disabled={isBusy}
-          style={{ padding:"7px 10px", borderRadius:9, border:"none", background:T.dangerBg, color:T.danger, fontWeight:700, fontSize:"0.78rem", cursor:"pointer", fontFamily:"inherit", opacity:isBusy?0.6:1 }}>
+          style={{ padding:"7px 10px", borderRadius:9, border:"none", background:T.dangerBg, color:T.danger, fontWeight:700, fontSize:0, cursor:"pointer", fontFamily:"inherit", opacity:isBusy?0.6:1, display:"inline-flex", alignItems:"center", justifyContent:"center" }}>
+          <Icon name="trash" className="h-4 w-4" />
           🗑
         </button>
       </div>
@@ -218,7 +241,10 @@ function TrashCard({ item, selected, onSelect, onRestore, onForce, busy }) {
 // ─── Empty state ─────────────────────────────────────────────────────────────
 function EmptyBin({ filtered }) {
   return (
-    <div style={{ textAlign:"center", padding:"64px 20px", color:T.muted }}>
+    <div className="trash-empty-state" style={{ textAlign:"center", padding:"64px 20px", color:T.muted }}>
+      <div className="trash-empty-icon" style={{ display:"inline-flex", width:64, height:64, alignItems:"center", justifyContent:"center", borderRadius:18, background:T.dangerBg, color:T.danger, marginBottom:16 }}>
+        <Icon name="trash" className="h-8 w-8" />
+      </div>
       <div style={{ fontSize:"3.5rem", marginBottom:16 }}>🗑️</div>
       <div style={{ fontWeight:800, fontSize:"1.1rem", color:T.text, marginBottom:8 }}>
         {filtered ? "No matching items in trash" : "Trash is empty"}
@@ -438,6 +464,7 @@ export default function TrashPage() {
       <style>{`
         @keyframes shimmer { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
         @keyframes fadeIn  { from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:translateY(0)} }
+        .trash-empty-icon + div { display: none; }
         * { box-sizing: border-box; }
       `}</style>
 
@@ -492,14 +519,15 @@ export default function TrashPage() {
                   border: `1px solid ${hasSelection ? T.primary : T.border}`,
                   fontWeight: 600,
                 }}>
-                {selected.size === items.length && items.length > 0 ? "☑ Deselect All" : "☐ Select All"}
+                {selected.size === items.length && items.length > 0 ? "Deselect All" : "Select All"}
               </button>
 
               {/* Bulk restore */}
               {hasSelection && (
                 <button
                   onClick={() => setConfirm({ mode: "bulk-restore" })}
-                  style={{ padding:"9px 16px", borderRadius:10, border:"none", background:T.successBg, color:T.success, fontWeight:700, fontSize:"0.87rem", cursor:"pointer", fontFamily:"inherit", whiteSpace:"nowrap" }}>
+                  style={{ padding:"9px 16px", borderRadius:10, border:"none", background:T.successBg, color:T.success, fontWeight:700, fontSize:0, cursor:"pointer", fontFamily:"inherit", whiteSpace:"nowrap" }}>
+                  <span style={{ display:"inline-flex", alignItems:"center", gap:6, fontSize:"0.87rem" }}><Icon name="restore" className="h-4 w-4" /> Restore {selected.size}</span>
                   ↩ Restore {selected.size}
                 </button>
               )}
@@ -508,7 +536,8 @@ export default function TrashPage() {
               {hasSelection && (
                 <button
                   onClick={() => setConfirm({ mode: "bulk-force" })}
-                  style={{ padding:"9px 16px", borderRadius:10, border:"none", background:T.dangerBg, color:T.danger, fontWeight:700, fontSize:"0.87rem", cursor:"pointer", fontFamily:"inherit", whiteSpace:"nowrap" }}>
+                  style={{ padding:"9px 16px", borderRadius:10, border:"none", background:T.dangerBg, color:T.danger, fontWeight:700, fontSize:0, cursor:"pointer", fontFamily:"inherit", whiteSpace:"nowrap" }}>
+                  <span style={{ display:"inline-flex", alignItems:"center", gap:6, fontSize:"0.87rem" }}><Icon name="trash" className="h-4 w-4" /> Delete {selected.size}</span>
                   🗑 Delete {selected.size}
                 </button>
               )}

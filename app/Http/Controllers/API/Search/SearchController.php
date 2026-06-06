@@ -15,17 +15,6 @@ class SearchController extends Controller
     private const PER_PAGE = 20;
     private const SUGGEST_LIMIT = 6;
 
-    private const COURSE_SHORT = [
-        'Bachelor of Science in Computer Science'       => 'BSCS',
-        'Bachelor of Science in Information Technology' => 'BSIT',
-        'Bachelor of Science in Civil Engineering'      => 'BSCE',
-        'Bachelor of Science in Mechanical Engineering' => 'BSME',
-        'Bachelor of Science in Nursing'                => 'Nursing',
-        'Bachelor of Science in Accountancy'            => 'Accountancy',
-        'Bachelor of Science in Psychology'             => 'Psychology',
-        'Bachelor of Education'                         => 'Education',
-    ];
-
     // ── Legacy search (kept for backward compatibility) ─────────────────────────
     public function search(Request $request)
     {
@@ -42,16 +31,47 @@ class SearchController extends Controller
         if (in_array($type, ['students', 'all'])) {
             $results['students'] = User::whereIn('role', PlatformSettings::directoryRoles())
                 ->where(function ($q) use ($query) {
-                    $q->where('name',       'like', "%{$query}%")
-                      ->orWhere('student_id', 'like', "%{$query}%")
-                      ->orWhere('course',     'like', "%{$query}%");
+                    $q->where('name', 'like', "%{$query}%")
+                      ->orWhere('email', 'like', "%{$query}%")
+                      ->orWhereHas('studentRecord', function ($student) use ($query) {
+                          $student->where('student_no', 'like', "%{$query}%")
+                              ->orWhere('course', 'like', "%{$query}%")
+                              ->orWhere('first_name', 'like', "%{$query}%")
+                              ->orWhere('last_name', 'like', "%{$query}%");
+                      });
                 })
                 ->when(!$viewer, fn($q) =>
                     $q->where('profile_visibility', 'public')
                 )
                 ->when($viewer, fn($q) =>
                     $q->where(function ($inner) use ($viewer) {
-                        $inner->whereIn('profile_visibility', ['public', 'alumni_only'])
+                        $inner->where('profile_visibility', 'public')
+                              ->orWhere(function ($batchmates) use ($viewer) {
+                                  $batchmates->whereIn('profile_visibility', ['batchmates', 'alumni_only'])
+                                      ->where(function ($sameBatch) use ($viewer) {
+                                          $hasBatchScope = false;
+
+                                          if ($viewer->batch_id) {
+                                              $sameBatch->orWhere('batch_id', $viewer->batch_id);
+                                              $hasBatchScope = true;
+                                          }
+
+                                          $viewerYear = $viewer->graduation_year ?? $viewer->batch;
+                                          if ($viewerYear) {
+                                              $sameBatch
+                                                  ->orWhere('graduation_year', $viewerYear)
+                                                  ->orWhere('batch', (string) $viewerYear)
+                                                  ->orWhereHas('studentRecord', fn($student) =>
+                                                      $student->where('graduation_year', $viewerYear)
+                                                  );
+                                              $hasBatchScope = true;
+                                          }
+
+                                          if (! $hasBatchScope) {
+                                              $sameBatch->whereRaw('1 = 0');
+                                          }
+                                      });
+                              })
                               ->orWhere('id', $viewer->id);
                     })
                 )
@@ -161,14 +181,19 @@ class SearchController extends Controller
             ->whereIn('role', PlatformSettings::directoryRoles())
             ->when($query !== '', function ($q) use ($query) {
                 $q->where(function ($sub) use ($query) {
-                    $sub->where('name',       'like', "%{$query}%")
-                        ->orWhere('student_id', 'like', "%{$query}%")
-                        ->orWhere('course',     'like', "%{$query}%");
+                    $sub->where('name', 'like', "%{$query}%")
+                        ->orWhere('email', 'like', "%{$query}%")
+                        ->orWhereHas('studentRecord', function ($student) use ($query) {
+                            $student->where('student_no', 'like', "%{$query}%")
+                                ->orWhere('course', 'like', "%{$query}%")
+                                ->orWhere('first_name', 'like', "%{$query}%")
+                                ->orWhere('last_name', 'like', "%{$query}%");
+                        });
                 });
             })
-            ->when($course,      fn($q) => $q->where('course', $course))
-            ->when($courseShort, fn($q) => $q->where('course', array_search($courseShort, self::COURSE_SHORT) ?: $courseShort))
-            ->when($batchYear,   fn($q) => $q->whereHas('section', fn($s) => $s->where('batch_year', $batchYear)))
+            ->when($course,      fn($q) => $q->whereHas('studentRecord', fn($s) => $s->where('course', $course)))
+            ->when($courseShort, fn($q) => $q->whereHas('studentRecord', fn($s) => $s->where('course', array_search($courseShort, User::COURSE_SHORT, true) ?: $courseShort)))
+            ->when($batchYear,   fn($q) => $q->whereHas('studentRecord', fn($s) => $s->where('graduation_year', $batchYear)))
             ->when($section,     fn($q) => $q->whereHas('section', fn($s) => $s->where('name', $section)))
             ->orderBy('name');
 
@@ -209,8 +234,9 @@ class SearchController extends Controller
         } catch (\Throwable) {
             $results = User::whereIn('role', PlatformSettings::directoryRoles())
                 ->where(function ($q) use ($query) {
-                    $q->where('name',       'like', "%{$query}%")
-                      ->orWhere('student_id', 'like', "%{$query}%");
+                    $q->where('name', 'like', "%{$query}%")
+                      ->orWhere('email', 'like', "%{$query}%")
+                      ->orWhereHas('studentRecord', fn($student) => $student->where('student_no', 'like', "%{$query}%"));
                 })
                 ->orderBy('name')
                 ->take(self::SUGGEST_LIMIT)
@@ -232,7 +258,7 @@ class SearchController extends Controller
     // ── Filters ────────────────────────────────────────────────────────────────
     public function studentFilters(): JsonResponse
     {
-        $courses = User::whereIn('role', PlatformSettings::directoryRoles())
+        $courses = \App\Models\Student::query()
             ->whereNotNull('course')
             ->select('course')
             ->distinct()
@@ -240,11 +266,9 @@ class SearchController extends Controller
             ->pluck('course')
             ->map(fn($c) => ['label' => $this->shortCourse($c), 'value' => $c]);
 
-        $batchYears = User::whereIn('role', PlatformSettings::directoryRoles())
-            ->whereHas('section', fn($q) => $q->whereNotNull('batch_year'))
-            ->with('section:id,batch_year')
-            ->get()
-            ->pluck('section.batch_year')
+        $batchYears = \App\Models\Student::query()
+            ->whereNotNull('graduation_year')
+            ->pluck('graduation_year')
             ->filter()
             ->unique()
             ->sort()
@@ -274,7 +298,7 @@ class SearchController extends Controller
 
     private function shortCourse(?string $course): string
     {
-        return self::COURSE_SHORT[$course] ?? $course ?? 'Student';
+        return User::COURSE_SHORT[$course] ?? $course ?? 'Student';
     }
 
     // Returns true only when Scout/Meilisearch is configured and reachable.

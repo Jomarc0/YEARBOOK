@@ -1,26 +1,27 @@
 /**
  * DashboardPage.jsx
  * ─────────────────────────────────────────────────────────────────────────────
- * MIGRATION NOTES:
- *  - Removed all inline `style={{}}` props; replaced with Tailwind utility classes.
- *  - Replaced arbitrary hex colors with a consistent token set via Tailwind's
- *    JIT `[value]` syntax for the brand palette (#1d2b4b, #3f51b5, #fdb813).
- *  - `onMouseEnter/Leave` inline style mutations removed; replaced with Tailwind
- *    `hover:` variants and `group-hover:` where needed.
- *  - No logic, API calls, routes, or backend behavior changed.
+ * Instagram-style feed dashboard.
+ * - 3-column desktop layout: left sidebar | feed | right sidebar
+ * - Posts fetched from GET /api/feed?filter=all|public|batchmates|mine
+ * - Visibility: public posts + batchmates posts (same batch_id) + own posts
+ * - No likes, no comments — view count + tag students only
+ * - Tag modal → POST /api/students/profile/tagged-photos
+ * - Uses existing Navbar + Footer from your codebase
  * ─────────────────────────────────────────────────────────────────────────────
  */
 
-import { useEffect, useRef, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { useAuth } from '@/features/auth/hooks/useAuth';
-import { searchApi } from '@/api/search.api';
-import { storageUrl } from '@/api/client';
-import Navbar from '@/components/layout/Navbar';
-import { useAppConfig } from '@/features/platform/AppConfigProvider';
-import axios from '@/api/client';
+import { useEffect, useRef, useState, useCallback } from 'react';
+import { Link, useNavigate }                         from 'react-router-dom';
+import { useAuth }                                   from '@/features/auth/hooks/useAuth';
+import { useAppConfig }                              from '@/features/platform/AppConfigProvider';
+import { searchApi }                                 from '@/api/search.api';
+import { storageUrl }                                from '@/api/client';
+import axios                                         from '@/api/client';
+import Navbar                                        from '@/components/layout/Navbar';
+import Footer                                        from '@/components/layout/Footer';
 
-// ─── Tier helper ──────────────────────────────────────────────────────────────
+// ─── Tier helper ─────────────────────────────────────────────────────────────
 const getTier = (user) => {
   if (!user) return 'free';
   if (user.tier === 'premium' || user.is_premium) return 'premium';
@@ -28,59 +29,685 @@ const getTier = (user) => {
   return 'free';
 };
 
-// ─── Quick access card definitions ───────────────────────────────────────────
-const CARDS = [
-  { to: '/directory',   icon: 'fas fa-users',              label: 'Students',    desc: 'Browse the student directory.',  iconBg: 'bg-indigo-50',  iconTxt: 'text-indigo-600'  },
-  { to: '/faculty',     icon: 'fas fa-chalkboard-teacher', label: 'Faculty',     desc: 'Meet our educators.',            iconBg: 'bg-violet-50',  iconTxt: 'text-violet-600'  },
-  { to: '/gallery',     icon: 'fas fa-images',             label: 'Gallery',     desc: 'Relive school memories.',        iconBg: 'bg-emerald-50', iconTxt: 'text-emerald-600' },
-  { to: '/sections',    icon: 'fas fa-layer-group',        label: 'Sections',    desc: 'View batch groupings.',          iconBg: 'bg-orange-50',  iconTxt: 'text-orange-500'  },
-  { to: '/messages',    icon: 'fas fa-comment-dots',       label: 'Messages',    desc: 'Chat with classmates.',          iconBg: 'bg-amber-50',   iconTxt: 'text-amber-600'   },
-  { to: '/flipbook',    icon: 'fas fa-book-open',          label: 'Flipbook',    desc: 'Browse the digital yearbook.',   iconBg: 'bg-pink-50',    iconTxt: 'text-pink-600'    },
-  { to: '/voice-notes', icon: 'fas fa-microphone',         label: 'Voice Notes', desc: 'Record audio memories.',         iconBg: 'bg-teal-50',    iconTxt: 'text-teal-600'    },
-  { to: '/analytics',   icon: 'fas fa-chart-bar',          label: 'Analytics',   desc: "See who's trending.",            iconBg: 'bg-sky-50',     iconTxt: 'text-sky-600'     },
-  { to: '/settings',    icon: 'fas fa-cog',                label: 'Settings',    desc: 'Manage your profile.',           iconBg: 'bg-slate-100',  iconTxt: 'text-slate-500'   },
-];
+// ─── Visibility pill ─────────────────────────────────────────────────────────
+function VisPill({ visibility }) {
+  const map = {
+    public:     { label: 'Public',     cls: 'bg-emerald-50 text-emerald-800 border-emerald-200',  icon: 'fa-globe'   },
+    batchmates: { label: 'Batchmates', cls: 'bg-indigo-50  text-indigo-800  border-indigo-200',   icon: 'fa-users'   },
+    private:    { label: 'Private',    cls: 'bg-slate-100  text-slate-500   border-slate-200',    icon: 'fa-lock'    },
+  };
+  const cfg = map[visibility] ?? map.private;
+  return (
+    <span className={`inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full border ${cfg.cls}`}>
+      <i className={`fas ${cfg.icon} text-[8px]`} aria-hidden="true" />
+      {cfg.label}
+    </span>
+  );
+}
 
-// ─── Main page component ──────────────────────────────────────────────────────
-const CARD_FEATURES = {
-  '/directory': 'enable_student_directory_search',
-  '/flipbook': ['enable_flipbook_viewer', 'publish_yearbook'],
-};
+// ─── Post media grid (Instagram-style carousel) ───────────────────────────────
+function PostMediaGrid({ media }) {
+  const [current, setCurrent] = useState(0);
 
-export default function DashboardPage() {
-  const { user, logout } = useAuth();
-  const { isOn } = useAppConfig();
-  const navigate = useNavigate();
+  if (!media?.length) return null;
 
-  const userTier  = getTier(user);
-  const isPremium = userTier === 'premium' || userTier === 'standard';
+  const isVideo = (path) => /\.(mp4|mov|webm)(\?|$)/i.test(path ?? '');
+  const getUrl  = (path) => path?.startsWith('http') ? path : (storageUrl(path) || path);
 
-  const visibleCards = CARDS.filter((card) => {
-    const rule = CARD_FEATURES[card.to];
-    if (!rule) return true;
-    const keys = Array.isArray(rule) ? rule : [rule];
-    return keys.every((k) => isOn(k));
+  // Single item — no carousel needed
+  if (media.length === 1) {
+    const m = media[0];
+    return (
+      <div className="w-full max-h-[480px] bg-black">
+        {isVideo(m.file_path)
+          ? <video src={getUrl(m.file_path)} controls className="w-full max-h-[480px] object-contain mx-auto block" />
+          : <img   src={getUrl(m.file_path)} alt={m.caption ?? 'post'}
+              className="w-full max-h-[480px] object-cover block"
+              loading="lazy"
+              onError={e => { e.currentTarget.src = 'https://via.placeholder.com/800x480?text=Photo'; }}
+            />
+        }
+      </div>
+    );
+  }
+
+  // Multiple items — Instagram-style carousel
+  const prev = (e) => { e.stopPropagation(); setCurrent(i => (i - 1 + media.length) % media.length); };
+  const next = (e) => { e.stopPropagation(); setCurrent(i => (i + 1) % media.length); };
+
+  const m = media[current];
+
+  return (
+    <div className="relative w-full max-h-[480px] bg-black select-none">
+
+      {/* Current slide */}
+      <div className="w-full max-h-[480px] overflow-hidden">
+        {isVideo(m.file_path)
+          ? <video src={getUrl(m.file_path)} controls
+              className="w-full max-h-[480px] object-contain mx-auto block" />
+          : <img src={getUrl(m.file_path)} alt={`slide ${current + 1}`}
+              className="w-full max-h-[480px] object-cover block"
+              loading="lazy"
+              onError={e => { e.currentTarget.src = 'https://via.placeholder.com/800x480?text=Photo'; }}
+            />
+        }
+      </div>
+
+      {/* Left arrow */}
+      <button
+        onClick={prev}
+        className="absolute left-3 top-1/2 -translate-y-1/2 z-10
+                   w-8 h-8 rounded-full bg-black/50 hover:bg-black/75
+                   text-white flex items-center justify-center
+                   border-none cursor-pointer transition-colors backdrop-blur-sm"
+        aria-label="Previous"
+      >
+        <i className="fas fa-chevron-left text-xs" />
+      </button>
+
+      {/* Right arrow */}
+      <button
+        onClick={next}
+        className="absolute right-3 top-1/2 -translate-y-1/2 z-10
+                   w-8 h-8 rounded-full bg-black/50 hover:bg-black/75
+                   text-white flex items-center justify-center
+                   border-none cursor-pointer transition-colors backdrop-blur-sm"
+        aria-label="Next"
+      >
+        <i className="fas fa-chevron-right text-xs" />
+      </button>
+
+      {/* Dot indicators */}
+      <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex items-center gap-1.5 z-10">
+        {media.map((_, i) => (
+          <button
+            key={i}
+            onClick={(e) => { e.stopPropagation(); setCurrent(i); }}
+            className={`rounded-full border-none cursor-pointer transition-all p-0
+              ${i === current
+                ? 'w-2 h-2 bg-white'
+                : 'w-1.5 h-1.5 bg-white/50 hover:bg-white/75'
+              }`}
+          />
+        ))}
+      </div>
+
+      {/* Counter badge — top right (like Instagram) */}
+      <div className="absolute top-3 right-3 z-10
+                      bg-black/50 backdrop-blur-sm text-white
+                      text-[11px] font-semibold px-2.5 py-1 rounded-full">
+        {current + 1} / {media.length}
+      </div>
+    </div>
+  );
+}
+
+// ─── Tag modal ────────────────────────────────────────────────────────────────
+//
+// FIX: onSaved now receives the full tagged_students array returned by the
+// server (not just the locally-selected IDs). This ensures the feed reflects
+// the server's authoritative state — e.g. AI-tagged students are preserved.
+// ─────────────────────────────────────────────────────────────────────────────
+function TagModal({ photoId, existingTags = [], batchmates = [], onClose, onSaved }) {
+  // Initialise selection from existing tag objects — always use .id
+  const [selected, setSelected] = useState(existingTags.map(t => t.id));
+  const [query,    setQuery]    = useState('');
+  const [saving,   setSaving]   = useState(false);
+  const [error,    setError]    = useState(null);
+
+  const filtered = batchmates.filter(s =>
+    !query || s.name.toLowerCase().includes(query.toLowerCase()) ||
+    (s.course ?? '').toLowerCase().includes(query.toLowerCase())
+  );
+
+  const toggle = (id) => setSelected(prev =>
+    prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+  );
+
+  // FIX: POST /students/profile/tagged-photos now expects
+  //   { photo_id: int, student_ids: int[] }
+  // and returns { success, message, tagged_students: [{id,name,profile_picture}] }
+  // We pass the server's tagged_students array straight to onSaved.
+  const save = async () => {
+    setSaving(true);
+    setError(null);
+    try {
+      const { data } = await axios.post('/students/profile/tagged-photos', {
+        photo_id:    photoId,
+        student_ids: selected,
+      });
+
+      // Pass back the authoritative list from the server
+      onSaved(data.tagged_students ?? []);
+      onClose();
+    } catch (e) {
+      setError(e?.response?.data?.message ?? 'Failed to save tags. Please try again.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-[9999] bg-black/50 flex items-center justify-center p-4"
+         onClick={e => e.target === e.currentTarget && onClose()}>
+      <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl overflow-hidden">
+        {/* Header */}
+        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+          <div>
+            <h3 className="text-[15px] font-bold text-[#1d2b4b] m-0">Tag batchmates</h3>
+            <p className="text-[11px] text-slate-400 m-0 mt-0.5">Select students to tag in this post</p>
+          </div>
+          <button onClick={onClose}
+            className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-400
+                       hover:bg-slate-200 hover:text-slate-600 transition-colors border-none cursor-pointer">
+            <i className="fas fa-times text-xs" aria-hidden="true" />
+          </button>
+        </div>
+
+        {/* Selected tags strip */}
+        {selected.length > 0 && (
+          <div className="flex flex-wrap gap-1.5 px-5 pt-3">
+            {selected.map(id => {
+              const s = batchmates.find(b => b.id === id);
+              if (!s) return null;
+              return (
+                <span key={id}
+                  className="inline-flex items-center gap-1.5 bg-indigo-50 text-indigo-700 border border-indigo-200
+                             text-[11px] font-medium px-2.5 py-1 rounded-full">
+                  {s.name}
+                  <button onClick={() => toggle(id)}
+                    className="text-indigo-400 hover:text-indigo-700 border-none bg-transparent cursor-pointer p-0 leading-none">
+                    <i className="fas fa-times text-[9px]" />
+                  </button>
+                </span>
+              );
+            })}
+          </div>
+        )}
+
+        {/* Search */}
+        <div className="px-5 pt-3 pb-2">
+          <div className="relative">
+            <i className="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs pointer-events-none" />
+            <input
+              type="text"
+              value={query}
+              onChange={e => setQuery(e.target.value)}
+              placeholder="Search by name or course…"
+              className="w-full pl-9 pr-4 py-2.5 text-sm rounded-xl bg-slate-50 border border-slate-200
+                         text-[#1d2b4b] placeholder-slate-400 outline-none
+                         focus:border-[#3f51b5] focus:ring-2 focus:ring-[#3f51b5]/20 transition"
+            />
+          </div>
+        </div>
+
+        {/* Student list */}
+        <div className="max-h-56 overflow-y-auto px-5 pb-2">
+          {filtered.length === 0 ? (
+            <p className="text-center text-sm text-slate-400 py-6">No students found.</p>
+          ) : (
+            <div className="flex flex-col gap-1">
+              {filtered.map(s => {
+                const isSelected = selected.includes(s.id);
+                const avatar = storageUrl(s.profile_picture)
+                  || `https://ui-avatars.com/api/?name=${encodeURIComponent(s.name)}&background=3f51b5&color=fff&size=64`;
+                return (
+                  <button
+                    key={s.id}
+                    onClick={() => toggle(s.id)}
+                    className={`flex items-center gap-3 px-3 py-2 rounded-xl text-left w-full border transition-all cursor-pointer
+                      ${isSelected
+                        ? 'bg-indigo-50 border-indigo-200'
+                        : 'bg-transparent border-transparent hover:bg-slate-50 hover:border-slate-200'
+                      }`}
+                  >
+                    <img src={avatar} alt={s.name}
+                      className="w-8 h-8 rounded-lg object-cover flex-shrink-0"
+                      onError={e => { e.currentTarget.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(s.name)}&background=1d2b4b&color=fff`; }}
+                    />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[13px] font-semibold text-[#1d2b4b] truncate m-0">{s.name}</p>
+                      <p className="text-[11px] text-slate-400 m-0">{s.course ?? 'Student'}</p>
+                    </div>
+                    {isSelected && (
+                      <i className="fas fa-check-circle text-indigo-500 text-sm flex-shrink-0" aria-hidden="true" />
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* Error */}
+        {error && (
+          <p className="text-xs text-red-500 px-5 mb-2">{error}</p>
+        )}
+
+        {/* Footer */}
+        <div className="flex items-center justify-between px-5 py-4 border-t border-slate-100">
+          <span className="text-[12px] text-slate-400">{selected.length} selected</span>
+          <div className="flex gap-2">
+            <button onClick={onClose}
+              className="px-4 py-2 text-sm text-slate-500 bg-slate-100 rounded-xl hover:bg-slate-200 transition-colors border-none cursor-pointer">
+              Cancel
+            </button>
+            <button onClick={save} disabled={saving}
+              className="px-4 py-2 text-sm font-semibold bg-[#1d2b4b] text-[#fdb813] rounded-xl
+                         hover:bg-[#2a3d6b] transition-colors border-none cursor-pointer disabled:opacity-60">
+              {saving ? 'Saving…' : 'Save tags'}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Single post card ─────────────────────────────────────────────────────────
+//
+// FIX: onTagSaved now receives the full tagged_students array from the server,
+// not a list of IDs. Passed straight through to TagModal's onSaved prop.
+// ─────────────────────────────────────────────────────────────────────────────
+function PostCard({ post, currentUser, batchmates, onTagSaved }) {
+  const [tagOpen, setTagOpen] = useState(false);
+
+  const avatar = storageUrl(post.user?.profile_picture)
+    || `https://ui-avatars.com/api/?name=${encodeURIComponent(post.user?.name ?? 'U')}&background=1d2b4b&color=fdb813&size=64`;
+
+  const isOwn = post.user_id === currentUser?.id;
+
+  return (
+    <>
+      <article className="bg-white rounded-2xl border border-slate-100 overflow-hidden
+                           transition-shadow duration-200 hover:shadow-md hover:shadow-slate-200/60">
+        {/* Post header */}
+        <div className="flex items-center gap-3 px-4 py-3">
+          <Link to={isOwn ? `/profile/${post.user_id}` : `/students/${post.user_id}`}
+            className="flex-shrink-0 no-underline">
+            <img src={avatar} alt={post.user?.name}
+              className="w-10 h-10 rounded-xl object-cover border border-slate-100"
+              onError={e => { e.currentTarget.src = `https://ui-avatars.com/api/?name=U&background=1d2b4b&color=fdb813`; }}
+            />
+          </Link>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <Link to={isOwn ? `/profile/${post.user_id}` : `/students/${post.user_id}`}
+                className="text-[13px] font-bold text-[#1d2b4b] no-underline hover:text-[#3f51b5] truncate">
+                {post.user?.name}
+              </Link>
+              {isOwn && <span className="text-[10px] text-slate-400">(you)</span>}
+            </div>
+            <div className="flex items-center gap-2 mt-0.5">
+              <span className="text-[11px] text-slate-400">{post.user?.course}</span>
+              <span className="text-slate-200">·</span>
+              <VisPill visibility={post.visibility} />
+            </div>
+          </div>
+          <span className="text-[11px] text-slate-400 flex-shrink-0">{post.time_ago ?? ''}</span>
+        </div>
+
+        {/* Media */}
+        <PostMediaGrid media={post.media ?? []} />
+
+        {/* Caption + tags */}
+        <div className="px-4 pt-3 pb-1">
+          {post.caption && (
+            <p className="text-[13px] text-slate-700 leading-relaxed mb-2">
+              <span className="font-semibold text-[#1d2b4b] mr-1">{post.user?.name}</span>
+              {post.caption}
+            </p>
+          )}
+
+          {/* Tagged students */}
+          {post.tagged_students?.length > 0 && (
+            <div className="flex flex-wrap gap-1.5 mb-2">
+              {post.tagged_students.map(s => (
+                <Link key={s.id} to={`/students/${s.id}`}
+                  className="inline-flex items-center gap-1 text-[11px] bg-indigo-50 text-indigo-700
+                             border border-indigo-100 rounded-full px-2.5 py-0.5 no-underline
+                             hover:bg-indigo-100 transition-colors">
+                  <i className="fas fa-tag text-[8px]" aria-hidden="true" />
+                  {s.name}
+                </Link>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Action bar */}
+        <div className="flex items-center gap-2 px-4 pb-3 pt-1 border-t border-slate-50 mt-1">
+          <button
+            onClick={() => setTagOpen(true)}
+            className="inline-flex items-center gap-1.5 text-[12px] font-medium text-slate-500
+                       bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-lg px-3 py-1.5
+                       transition-colors cursor-pointer"
+          >
+            <i className="fas fa-tag text-[11px]" aria-hidden="true" />
+            Tag a student
+          </button>
+
+          <Link to={`/gallery`}
+            className="inline-flex items-center gap-1.5 text-[12px] font-medium text-slate-500
+                       bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-lg px-3 py-1.5
+                       transition-colors no-underline">
+            <i className="fas fa-share text-[11px]" aria-hidden="true" />
+            Share
+          </Link>
+
+          <div className="ml-auto flex items-center gap-1 text-[11px] text-slate-400">
+            <i className="fas fa-eye text-[11px]" aria-hidden="true" />
+            {(post.views_count ?? post.views ?? 0).toLocaleString()} views
+          </div>
+        </div>
+      </article>
+
+      {tagOpen && (
+        <TagModal
+          photoId={post.id}
+          existingTags={post.tagged_students ?? []}
+          batchmates={batchmates}
+          onClose={() => setTagOpen(false)}
+          // FIX: receives full tagged_students array from server, forwarded up
+          onSaved={(taggedStudents) => onTagSaved(post.id, taggedStudents)}
+        />
+      )}
+    </>
+  );
+}
+
+// ─── Left sidebar ─────────────────────────────────────────────────────────────
+function LeftSidebar({ user, isOn }) {
+  const tier = getTier(user);
+  const isPremium = tier === 'premium' || tier === 'standard';
+
+  const avatar = storageUrl(user?.profile_picture)
+    || `https://ui-avatars.com/api/?name=${encodeURIComponent(user?.name ?? 'U')}&background=1d2b4b&color=fdb813&size=128`;
+
+  const NAV = [
+    { to: '/dashboard',   icon: 'fa-home',              label: 'Dashboard'  },
+    { to: '/directory',   icon: 'fa-users',             label: 'Directory',   feature: 'enable_student_directory_search' },
+    { to: '/faculty',     icon: 'fa-chalkboard-teacher',label: 'Faculty'    },
+    { to: '/gallery',     icon: 'fa-images',            label: 'Gallery'    },
+    { to: '/sections',    icon: 'fa-layer-group',       label: 'Sections'   },
+    { to: '/discover',    icon: 'fa-compass',           label: 'Discovery'  },
+    { to: '/messages',    icon: 'fa-comment-dots',      label: 'Messages'   },
+    { to: '/voice-notes', icon: 'fa-microphone',        label: 'Voice Notes'},
+    { to: '/analytics',   icon: 'fa-chart-bar',         label: 'Analytics'  },
+    { to: '/flipbook',    icon: 'fa-book-open',         label: 'Flipbook',    feature: ['enable_flipbook_viewer','publish_yearbook'] },
+  ].filter(n => {
+    if (!n.feature) return true;
+    const keys = Array.isArray(n.feature) ? n.feature : [n.feature];
+    return keys.every(k => isOn(k));
   });
 
-  const [query,         setQuery]         = useState('');
-  const [results,       setResults]       = useState(null);
-  const [showDrop,      setShowDrop]      = useState(false);
-  const [digest,        setDigest]        = useState(null);
-  const [digestLoading, setDigestLoading] = useState(true);
+  return (
+    <aside className="flex flex-col gap-4 sticky top-[88px]">
+      {/* Profile card */}
+      <div className="bg-white rounded-2xl border border-slate-100 p-5">
+        <div className="flex flex-col items-center text-center gap-2 pb-4 border-b border-slate-100 mb-4">
+          <div className="w-16 h-16 rounded-2xl overflow-hidden border-2 border-[#fdb813]/40">
+            <img src={avatar} alt={user?.name}
+              className="w-full h-full object-cover"
+              onError={e => { e.currentTarget.src = `https://ui-avatars.com/api/?name=U&background=fdb813&color=1d2b4b`; }}
+            />
+          </div>
+          <div>
+            <p className="text-[14px] font-bold text-[#1d2b4b] m-0">{user?.name}</p>
+            <p className="text-[11px] text-slate-400 m-0 mt-0.5">{user?.course ?? 'Student'}</p>
+          </div>
+
+          {tier === 'premium' && (
+            <span className="inline-flex items-center gap-1 bg-amber-50 text-amber-700 border border-amber-200 text-[10px] font-bold px-2.5 py-1 rounded-full">
+              <i className="fas fa-crown text-[8px]" /> Premium
+            </span>
+          )}
+          {tier === 'standard' && (
+            <span className="inline-flex items-center gap-1 bg-indigo-50 text-indigo-700 border border-indigo-200 text-[10px] font-bold px-2.5 py-1 rounded-full">
+              <i className="fas fa-star text-[8px]" /> Standard
+            </span>
+          )}
+          {tier === 'free' && (
+            <span className="inline-flex items-center gap-1 bg-slate-100 text-slate-500 text-[10px] font-semibold px-2.5 py-1 rounded-full">
+              <i className="fas fa-user text-[8px]" /> Free Plan
+            </span>
+          )}
+        </div>
+
+        {/* Stats */}
+        <div className="grid grid-cols-2 gap-2 mb-4">
+          {[
+            { label: 'Posts',    key: 'posts_count'   },
+            { label: 'Tagged in',key: 'tagged_count'  },
+          ].map(({ label, key }) => (
+            <div key={key} className="bg-[#f4f7fe] rounded-xl p-3 text-center">
+              <p className="text-[18px] font-extrabold text-[#1d2b4b] m-0">{user?.[key] ?? '—'}</p>
+              <p className="text-[10px] text-slate-400 m-0 mt-0.5">{label}</p>
+            </div>
+          ))}
+        </div>
+
+        <Link to={`/profile/${user?.id}`}
+          className="block text-center py-2.5 bg-[#1d2b4b] text-[#fdb813] font-bold text-[12px]
+                     rounded-xl no-underline hover:bg-[#2a3d6b] transition-colors">
+          View my profile
+        </Link>
+
+        {!isPremium && isOn('enable_premium_subscription') && (
+          <Link to="/premium"
+            className="mt-2 flex items-center justify-center gap-1.5 py-2 text-[11px] font-semibold
+                       text-[#fdb813] bg-[#fdb813]/10 border border-[#fdb813]/20 rounded-xl
+                       no-underline hover:bg-[#fdb813]/20 transition-colors">
+            <i className="fas fa-crown text-[10px]" /> Upgrade plan →
+          </Link>
+        )}
+      </div>
+
+      {/* Navigation */}
+      <div className="bg-white rounded-2xl border border-slate-100 p-3">
+        <p className="text-[10px] font-bold tracking-widest uppercase text-slate-400 px-2 py-1 mb-1">Navigation</p>
+        {NAV.map(({ to, icon, label }) => (
+          <Link key={to} to={to}
+            className="flex items-center gap-3 px-3 py-2 rounded-xl text-[13px] text-slate-600
+                       no-underline hover:bg-[#f4f7fe] hover:text-[#1d2b4b] transition-colors
+                       [&.active]:bg-[#3f51b5]/10 [&.active]:text-[#3f51b5] [&.active]:font-semibold">
+            <i className={`fas ${icon} text-[13px] w-4 text-center`} aria-hidden="true" />
+            {label}
+          </Link>
+        ))}
+      </div>
+    </aside>
+  );
+}
+
+// ─── Right sidebar ────────────────────────────────────────────────────────────
+function RightSidebar({ batchmates, batchStats, topViewed }) {
+  return (
+    <aside className="flex flex-col gap-4 sticky top-[88px]">
+
+      {/* Batchmates */}
+      <div className="bg-white rounded-2xl border border-slate-100 p-4">
+        <p className="text-[11px] font-bold tracking-widest uppercase text-slate-400 mb-3">Batchmates</p>
+        {batchmates.slice(0, 5).map(s => {
+          const avatar = storageUrl(s.profile_picture)
+            || `https://ui-avatars.com/api/?name=${encodeURIComponent(s.name)}&background=3f51b5&color=fff&size=64`;
+          return (
+            <Link key={s.id} to={`/students/${s.id}`}
+              className="flex items-center gap-2.5 py-2 no-underline group">
+              <img src={avatar} alt={s.name}
+                className="w-8 h-8 rounded-lg object-cover flex-shrink-0"
+                onError={e => { e.currentTarget.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(s.name)}&background=1d2b4b&color=fff`; }}
+              />
+              <div className="flex-1 min-w-0">
+                <p className="text-[12px] font-semibold text-[#1d2b4b] truncate m-0 group-hover:text-[#3f51b5] transition-colors">{s.name}</p>
+                <p className="text-[10px] text-slate-400 m-0 truncate">{s.course ?? 'Student'}</p>
+              </div>
+              <i className="fas fa-chevron-right text-[10px] text-slate-300 group-hover:text-[#3f51b5] transition-colors" aria-hidden="true" />
+            </Link>
+          );
+        })}
+        <Link to="/batchmates"
+          className="block text-center text-[11px] font-semibold text-[#3f51b5] mt-2 pt-3
+                     border-t border-slate-100 no-underline hover:text-[#1d2b4b] transition-colors">
+          View all batchmates →
+        </Link>
+      </div>
+
+      {/* Trending this week */}
+      {topViewed?.length > 0 && (
+        <div className="bg-white rounded-2xl border border-slate-100 p-4">
+          <p className="text-[11px] font-bold tracking-widest uppercase text-slate-400 mb-3">
+            <i className="fas fa-fire text-orange-400 mr-1.5" aria-hidden="true" />
+            Trending this week
+          </p>
+          {topViewed.slice(0, 5).map((s, i) => {
+            const avatar = storageUrl(s.profile_picture)
+              || `https://ui-avatars.com/api/?name=${encodeURIComponent(s.name)}&background=1d2b4b&color=fdb813&size=64`;
+            const views = s.views_this_week ?? s.views ?? s.total_views ?? 0;
+            return (
+              <Link key={s.id} to={`/students/${s.id}`}
+                className="flex items-center gap-2.5 py-2 no-underline group">
+                <span className="text-[11px] font-black text-slate-300 w-4 text-center flex-shrink-0">#{i + 1}</span>
+                <img src={avatar} alt={s.name}
+                  className="w-8 h-8 rounded-lg object-cover flex-shrink-0"
+                  onError={e => { e.currentTarget.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(s.name)}&background=1d2b4b&color=fff`; }}
+                />
+                <div className="flex-1 min-w-0">
+                  <p className="text-[12px] font-semibold text-[#1d2b4b] truncate m-0 group-hover:text-[#3f51b5] transition-colors">{s.name}</p>
+                  <p className="text-[10px] text-slate-400 m-0">{views.toLocaleString()} views</p>
+                </div>
+              </Link>
+            );
+          })}
+          <Link to="/analytics"
+            className="block text-center text-[11px] font-semibold text-[#3f51b5] mt-2 pt-3
+                       border-t border-slate-100 no-underline hover:text-[#1d2b4b] transition-colors">
+            See full analytics →
+          </Link>
+        </div>
+      )}
+
+      {/* Batch stats */}
+      {batchStats && (
+        <div className="bg-[#1d2b4b] rounded-2xl p-4">
+          <p className="text-[11px] font-bold tracking-widest uppercase text-[#fdb813]/70 mb-3">
+            Batch {batchStats.year} stats
+          </p>
+          {[
+            { label: 'Graduates',       value: batchStats.total_students  },
+            { label: 'Photos uploaded', value: batchStats.total_photos    },
+            { label: 'Posts this week', value: batchStats.posts_this_week },
+          ].map(({ label, value }) => (
+            <div key={label} className="flex justify-between items-center py-1.5">
+              <span className="text-[12px] text-white/50">{label}</span>
+              <span className="text-[12px] font-bold text-white">{(value ?? 0).toLocaleString()}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </aside>
+  );
+}
+
+// ─── Feed skeleton ────────────────────────────────────────────────────────────
+function FeedSkeleton() {
+  return (
+    <div className="flex flex-col gap-4">
+      {[1, 2, 3].map(i => (
+        <div key={i} className="bg-white rounded-2xl border border-slate-100 overflow-hidden animate-pulse">
+          <div className="flex items-center gap-3 px-4 py-3">
+            <div className="w-10 h-10 rounded-xl bg-slate-200 flex-shrink-0" />
+            <div className="flex-1">
+              <div className="h-3 bg-slate-200 rounded w-32 mb-1.5" />
+              <div className="h-2.5 bg-slate-100 rounded w-24" />
+            </div>
+          </div>
+          <div className="h-56 bg-slate-100" />
+          <div className="px-4 py-3">
+            <div className="h-3 bg-slate-100 rounded w-3/4 mb-2" />
+            <div className="h-3 bg-slate-100 rounded w-1/2" />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ─── Main page ────────────────────────────────────────────────────────────────
+export default function DashboardPage() {
+  const { user }    = useAuth();
+  const { isOn }    = useAppConfig();
+  const navigate    = useNavigate();
+
+  const [filter,      setFilter]      = useState('all');
+  const [posts,       setPosts]       = useState([]);
+  const [loading,     setLoading]     = useState(true);
+  const [page,        setPage]        = useState(1);
+  const [hasMore,     setHasMore]     = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+
+  const [batchmates,  setBatchmates]  = useState([]);
+  const [topViewed,   setTopViewed]   = useState([]);
+  const [batchStats,  setBatchStats]  = useState(null);
+
+  // ── Search state ────────────────────────────────────────────────────────────
+  const [query,      setQuery]      = useState('');
+  const [results,    setResults]    = useState(null);
+  const [showDrop,   setShowDrop]   = useState(false);
   const searchRef = useRef();
 
-  const handleLogout = async () => { await logout(); navigate('/login'); };
+  // ── Fetch feed ──────────────────────────────────────────────────────────────
+  const fetchFeed = useCallback(async (activeFilter, activePage, activeQuery = query) => {
+    try {
+      const { data } = await axios.get('/feed', {
+        params: { filter: activeFilter, page: activePage, per_page: 10, q: activeQuery || undefined },
+      });
+      const newPosts = data.data ?? data ?? [];
+      if (activePage === 1) {
+        setPosts(newPosts);
+      } else {
+        setPosts(prev => [...prev, ...newPosts]);
+      }
+      const meta = data.meta ?? data;
+      setHasMore(meta.current_page < meta.last_page || newPosts.length === 10);
+    } catch (_) {
+      // silently degrade
+    }
+  }, [query]);
 
+  // initial load + filter change
+  useEffect(() => {
+    setLoading(true);
+    setPage(1);
+    setHasMore(true);
+    fetchFeed(filter, 1, query).finally(() => setLoading(false));
+  }, [filter, query, fetchFeed]);
+
+  // ── Sidebar data ─────────────────────────────────────────────────────────────
   useEffect(() => {
     (async () => {
       try {
-        const { data } = await axios.get('/memories/digest');
-        setDigest(data.data);
+        const [bm, tv] = await Promise.allSettled([
+          axios.get('/batchmates', { params: { per_page: 10 } }),
+          axios.get('/analytics/trending'),
+        ]);
+        if (bm.status === 'fulfilled') setBatchmates(bm.value.data.data ?? bm.value.data ?? []);
+        if (tv.status === 'fulfilled') setTopViewed(tv.value.data.data ?? tv.value.data ?? []);
       } catch (_) {}
-      finally { setDigestLoading(false); }
     })();
   }, []);
 
+  // ── Load more ─────────────────────────────────────────────────────────────
+  const loadMore = async () => {
+    if (loadingMore || !hasMore) return;
+    setLoadingMore(true);
+    const next = page + 1;
+    setPage(next);
+    await fetchFeed(filter, next, query);
+    setLoadingMore(false);
+  };
+
+  // ── Search ───────────────────────────────────────────────────────────────
   const onSearch = async (val) => {
     setQuery(val);
     if (val.length < 2) { setShowDrop(false); return; }
@@ -99,431 +726,192 @@ export default function DashboardPage() {
     return () => document.removeEventListener('mousedown', h);
   }, []);
 
-  const firstName = user?.name?.split(' ')[0] ?? 'Pioneer';
-  const avatarSrc =
-    storageUrl(user?.profile_picture) ||
-    `https://ui-avatars.com/api/?name=${encodeURIComponent(user?.name ?? 'U')}&background=1d2b4b&color=fdb813&size=128`;
+  // ── Update tags in local state ──────────────────────────────────────────────
+  //
+  // FIX: now receives the full tagged_students array returned by the server
+  // instead of a flat list of IDs that we had to re-hydrate from batchmates.
+  // This means AI-tagged students (who may not be in the batchmates sidebar
+  // list) are correctly preserved in the feed card.
+  // ───────────────────────────────────────────────────────────────────────────
+  const handleTagSaved = (postId, taggedStudents) => {
+    setPosts(prev => prev.map(p =>
+      p.id !== postId ? p : { ...p, tagged_students: taggedStudents }
+    ));
+  };
+
+  const FILTERS = [
+    { key: 'all',        label: 'All posts'       },
+    { key: 'public',     label: 'Public'          },
+    { key: 'batchmates', label: 'Batchmates only' },
+    { key: 'mine',       label: 'My posts'        },
+  ];
 
   return (
-    <div className="min-h-screen bg-[#f4f7fe]">
-      {/* ── Watermark (decorative, aria-hidden) ── */}
+    <div className="min-h-screen bg-[#f4f7fe] flex flex-col">
+      {/* Watermark */}
       <div
         aria-hidden="true"
         className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 -rotate-[30deg]
-                   text-[clamp(2rem,6vw,5rem)] font-black text-black/[0.022]
-                   pointer-events-none select-none z-[9999] whitespace-nowrap"
+                   text-[clamp(2rem,6vw,5rem)] font-black text-black/[0.018]
+                   pointer-events-none select-none z-0 whitespace-nowrap"
       >
         {user?.name}
       </div>
 
       <Navbar />
 
-      <main className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-10 py-8 lg:py-10">
+      <main className="flex-1 max-w-[1400px] w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 lg:py-8">
 
-        {/* ── Welcome header ── */}
-        <header className="mb-8">
-          <p className="text-[11px] font-bold tracking-[0.18em] uppercase text-slate-400 mb-1">
-            Mabuhay, NU Lipa Pioneer!
-          </p>
-          <h1 className="text-[clamp(1.75rem,4vw,2.5rem)] font-extrabold tracking-tight text-[#1d2b4b] leading-none m-0">
-            Welcome back,{' '}
-            <span className="text-[#3f51b5]">{firstName}</span>
-          </h1>
-        </header>
+        {/* ── Top search bar ── */}
+        <div className="flex items-center gap-4 mb-6">
+          <div className="flex-1 max-w-xl relative z-50" ref={searchRef}>
+            <i className="fas fa-search absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 text-sm pointer-events-none" />
+            <input
+              type="text"
+              value={query}
+              onChange={e => onSearch(e.target.value)}
+              placeholder="Search students, faculty, or content…"
+              className="w-full pl-11 pr-4 py-3 text-sm rounded-xl bg-white border border-slate-200
+                         text-[#1d2b4b] placeholder-slate-400 outline-none shadow-sm
+                         focus:border-[#3f51b5] focus:ring-2 focus:ring-[#3f51b5]/20 transition"
+            />
 
-        {/* ── Global search ── */}
-        <div className="relative max-w-xl mb-10 z-50" ref={searchRef}>
-          <i className="fas fa-search absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 text-sm pointer-events-none" />
-          <input
-            type="text"
-            value={query}
-            onChange={e => onSearch(e.target.value)}
-            placeholder="Search students, faculty, or content…"
-            className="w-full pl-11 pr-4 py-3.5 text-sm rounded-xl bg-white border border-slate-200
-                       text-[#1d2b4b] placeholder-slate-400 outline-none shadow-sm
-                       transition focus:border-[#3f51b5] focus:ring-2 focus:ring-[#3f51b5]/20"
-          />
-
-          {/* ── Search dropdown ── */}
-          {showDrop && (
-            <div className="absolute w-full mt-2 bg-white rounded-2xl shadow-2xl border border-slate-100 overflow-hidden">
-              <SearchGroup label="Faculty" labelColor="text-[#3f51b5]">
-                {results?.faculty?.map(f => (
-                  <SearchRow
-                    key={f.id} to="/faculty"
-                    src={`https://ui-avatars.com/api/?name=${encodeURIComponent(f.name)}&background=1d2b4b&color=fff`}
-                    name={f.name} sub={f.title ?? 'Faculty'}
-                  />
-                ))}
-              </SearchGroup>
-              <SearchGroup label="Students" labelColor="text-amber-600">
-                {results?.students?.map(s => (
-                  <SearchRow
-                    key={s.id} to={`/profile/${s.id}`}
-                    src={storageUrl(s.profile_picture) || `https://ui-avatars.com/api/?name=${encodeURIComponent(s.name)}&background=3f51b5&color=fff`}
-                    name={s.name} sub="Pioneer Student"
-                  />
-                ))}
-              </SearchGroup>
-              {!results?.faculty?.length && !results?.students?.length && (
-                <p className="py-5 text-center text-sm text-slate-400">No results found.</p>
-              )}
-            </div>
-          )}
-        </div>
-
-        {/* ── Two-column content grid ── */}
-        <div className="grid grid-cols-1 xl:grid-cols-[1fr_296px] gap-6 items-start">
-
-          {/* ── LEFT column ── */}
-          <div className="flex flex-col gap-8">
-
-            {/* Quick Access cards */}
-            <section>
-              <SectionTitle>Quick Access</SectionTitle>
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-3 2xl:grid-cols-4 gap-3">
-                {visibleCards.map(c => (
-                  <Link
-                    key={c.to} to={c.to}
-                    className="group bg-white rounded-2xl p-4 border border-slate-100 no-underline
-                               hover:-translate-y-1 hover:shadow-xl hover:shadow-slate-200/70
-                               transition-all duration-200"
-                  >
-                    <div className={`w-10 h-10 rounded-xl ${c.iconBg} flex items-center justify-center mb-3 group-hover:scale-105 transition-transform`}>
-                      <i className={`${c.icon} ${c.iconTxt} text-base`} aria-hidden="true" />
-                    </div>
-                    <p className="text-[13px] font-semibold text-[#1d2b4b] mb-0.5 m-0">{c.label}</p>
-                    <p className="text-[11px] text-slate-400 leading-snug m-0">{c.desc}</p>
-                  </Link>
-                ))}
-              </div>
-            </section>
-
-            {/* Memory Digest */}
-            <section>
-              <div className="flex items-center justify-between mb-4">
-                <SectionTitle as="span" noBottom>
-                  <i className="fas fa-clock-rotate-left text-[#3f51b5] mr-2" aria-hidden="true" />
-                  Your Memories
-                </SectionTitle>
-
-                {/* Tier badge */}
-                {!isPremium ? (
-                  <span className="text-[11px] font-semibold text-amber-700 bg-amber-50 border border-amber-100 px-2.5 py-1 rounded-full">
-                    <i className="fas fa-lock text-[9px] mr-1" />
-                    Upgrade for more
-                  </span>
-                ) : userTier === 'premium' ? (
-                  <span className="text-[11px] font-semibold text-amber-700 bg-amber-50 border border-amber-100 px-2.5 py-1 rounded-full">
-                    Premium
-                  </span>
-                ) : (
-                  <span className="text-[11px] font-semibold text-indigo-700 bg-indigo-50 border border-indigo-100 px-2.5 py-1 rounded-full">
-                    Standard
-                  </span>
+            {showDrop && (
+              <div className="absolute w-full mt-2 bg-white rounded-2xl shadow-2xl border border-slate-100 overflow-hidden z-50">
+                {results?.faculty?.length > 0 && (
+                  <>
+                    <p className="px-4 py-2 text-[10px] font-bold tracking-widest uppercase text-[#3f51b5] bg-slate-50 m-0">Faculty</p>
+                    {results.faculty.map(f => (
+                      <Link key={f.id} to="/faculty"
+                        className="flex items-center gap-3 px-4 py-2.5 no-underline hover:bg-slate-50 border-b border-slate-50 transition-colors">
+                        <img
+                          src={`https://ui-avatars.com/api/?name=${encodeURIComponent(f.name)}&background=1d2b4b&color=fff`}
+                          className="w-8 h-8 rounded-lg object-cover flex-shrink-0" alt={f.name}
+                        />
+                        <div>
+                          <p className="text-[13px] font-semibold text-[#1d2b4b] m-0">{f.name}</p>
+                          <p className="text-[11px] text-slate-400 m-0">{f.title ?? 'Faculty'}</p>
+                        </div>
+                      </Link>
+                    ))}
+                  </>
+                )}
+                {results?.students?.length > 0 && (
+                  <>
+                    <p className="px-4 py-2 text-[10px] font-bold tracking-widest uppercase text-amber-600 bg-slate-50 m-0">Students</p>
+                    {results.students.map(s => (
+                      <Link key={s.id} to={`/students/${s.id}`}
+                        className="flex items-center gap-3 px-4 py-2.5 no-underline hover:bg-slate-50 border-b border-slate-50 transition-colors">
+                        <img
+                          src={storageUrl(s.profile_picture) || `https://ui-avatars.com/api/?name=${encodeURIComponent(s.name)}&background=3f51b5&color=fff`}
+                          className="w-8 h-8 rounded-lg object-cover flex-shrink-0" alt={s.name}
+                        />
+                        <div>
+                          <p className="text-[13px] font-semibold text-[#1d2b4b] m-0">{s.name}</p>
+                          <p className="text-[11px] text-slate-400 m-0">Pioneer Student</p>
+                        </div>
+                      </Link>
+                    ))}
+                  </>
+                )}
+                {!results?.faculty?.length && !results?.students?.length && (
+                  <p className="py-5 text-center text-sm text-slate-400">No results found.</p>
                 )}
               </div>
-
-              {digestLoading ? (
-                /* Loading skeleton */
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {[1, 2].map(i => (
-                    <div key={i} className="h-32 rounded-2xl bg-gradient-to-r from-slate-100 via-slate-200 to-slate-100 animate-pulse" />
-                  ))}
-                </div>
-              ) : (
-                <div className="flex flex-col gap-3">
-
-                  {/* "On This Day" — visible to all tiers */}
-                  <MemoryCard
-                    icon="fas fa-calendar-day" iconCls="text-indigo-600" iconBg="bg-indigo-50"
-                    label={`On This Day${digest?.on_this_day?.date ? ` — ${digest.on_this_day.date}` : ''}`}
-                    empty={!digest?.on_this_day?.has_memories}
-                    emptyText="No memories from this day yet. Start uploading photos!"
-                  >
-                    <PhotoStrip photos={[...(digest?.on_this_day?.uploaded ?? []), ...(digest?.on_this_day?.tagged ?? [])]} />
-                  </MemoryCard>
-
-                  {isPremium ? (
-                    /* Premium & Standard extra memory cards */
-                    <>
-                      <MemoryCard
-                        icon="fas fa-user-tag" iconCls="text-violet-600" iconBg="bg-violet-50"
-                        label="You Appeared In These Photos"
-                        empty={!digest?.tagged_photos?.count}
-                        emptyText="No face-tagged photos found yet."
-                      >
-                        <PhotoStrip photos={digest?.tagged_photos?.photos ?? []} />
-                      </MemoryCard>
-
-                      <MemoryCard
-                        icon="fas fa-users" iconCls="text-emerald-600" iconBg="bg-emerald-50"
-                        label="People You Interacted With Most"
-                        empty={!digest?.top_interactions?.peers?.length}
-                        emptyText="Start messaging classmates to see your top connections."
-                      >
-                        <div className="flex flex-wrap gap-2">
-                          {digest?.top_interactions?.peers?.map((p, i) => (
-                            <Link
-                              key={i} to={`/profile/${p.user.id}`}
-                              className="flex items-center gap-2 bg-slate-50 hover:bg-slate-100 border border-slate-100
-                                         rounded-xl px-3 py-2 no-underline transition-colors"
-                            >
-                              <img
-                                src={storageUrl(p.user.profile_picture) || `https://ui-avatars.com/api/?name=${encodeURIComponent(p.user.name ?? '')}&background=3f51b5&color=fff`}
-                                className="w-8 h-8 rounded-lg object-cover flex-shrink-0"
-                                alt={p.user.name}
-                              />
-                              <div>
-                                <p className="text-[12px] font-semibold text-[#1d2b4b] m-0">{p.user.name}</p>
-                                <p className="text-[10px] text-slate-400 m-0">{p.messages} msgs · {p.shared_photos} photos</p>
-                              </div>
-                            </Link>
-                          ))}
-                        </div>
-                      </MemoryCard>
-
-                      <MemoryCard
-                        icon="fas fa-graduation-cap" iconCls="text-pink-600" iconBg="bg-pink-50"
-                        label={`Graduation Memories${digest?.graduation?.graduation_year ? ` — ${digest.graduation.graduation_year}` : ''}`}
-                        empty={!digest?.graduation?.has_photos}
-                        emptyText="No graduation photos found for your batch yet."
-                      >
-                        <PhotoStrip photos={digest?.graduation?.photos ?? []} />
-                      </MemoryCard>
-
-                      <MemoryCard
-                        icon="fas fa-fire" iconCls="text-orange-500" iconBg="bg-orange-50"
-                        label="Most Viewed Alumni Today"
-                        empty={!digest?.most_viewed?.students?.length}
-                        emptyText="No view data yet."
-                      >
-                        <div className="flex flex-col divide-y divide-slate-50">
-                          {digest?.most_viewed?.students?.map((s, i) => (
-                            <Link
-                              key={i} to={`/profile/${s.id}`}
-                              className="flex items-center gap-3 py-2.5 first:pt-0 last:pb-0 no-underline hover:opacity-75 transition-opacity"
-                            >
-                              <span className="text-[11px] font-bold text-slate-300 w-5 text-center shrink-0">#{i + 1}</span>
-                              <img
-                                src={storageUrl(s.profile_picture) || `https://ui-avatars.com/api/?name=${encodeURIComponent(s.name ?? '')}&background=1d2b4b&color=fdb813`}
-                                className="w-8 h-8 rounded-lg object-cover flex-shrink-0"
-                                alt={s.name}
-                              />
-                              <div className="flex-1 min-w-0">
-                                <p className="text-[12px] font-semibold text-[#1d2b4b] truncate m-0">{s.name}</p>
-                                <p className="text-[10px] text-slate-400 m-0">{s.course?.split(' ').pop()}</p>
-                              </div>
-                              <span className="text-[11px] text-orange-500 font-semibold whitespace-nowrap">{s.views} views</span>
-                            </Link>
-                          ))}
-                        </div>
-                      </MemoryCard>
-                    </>
-                  ) : (
-                    /* Free tier — upgrade prompt */
-                    <div className="rounded-2xl bg-gradient-to-br from-[#1d2b4b] to-[#3f51b5] p-6
-                                    flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-                      <div>
-                        <p className="text-sm font-bold text-white mb-1 m-0">
-                          <i className="fas fa-lock text-[#fdb813] mr-2" />
-                          Unlock 4 more memory cards
-                        </p>
-                        <p className="text-xs text-white/60 m-0">Tagged photos · Top connections · Graduation memories · Most viewed alumni</p>
-                        <p className="text-[10px] text-white/40 m-0 mt-1">Available on Standard and Premium plans.</p>
-                      </div>
-                      <Link
-                        to="/payment"
-                        className="shrink-0 bg-[#fdb813] text-[#1d2b4b] font-bold text-xs px-5 py-3 rounded-xl
-                                   no-underline hover:bg-yellow-300 transition-colors whitespace-nowrap"
-                      >
-                        <i className="fas fa-crown mr-1.5" />
-                        Go Premium →
-                      </Link>
-                    </div>
-                  )}
-                </div>
-              )}
-            </section>
+            )}
           </div>
 
-          {/* ── RIGHT: Profile sidebar ── */}
-          <aside className="xl:sticky xl:top-6">
-            <div className="bg-[#1d2b4b] rounded-2xl p-6 text-white flex flex-col gap-5">
+          {/* Welcome greeting */}
+          <div className="hidden lg:block ml-auto text-right">
+            <p className="text-[11px] text-slate-400 m-0 tracking-widest uppercase">Mabuhay, Pioneer!</p>
+            <p className="text-[15px] font-extrabold text-[#1d2b4b] m-0">
+              Welcome back, <span className="text-[#3f51b5]">{user?.name?.split(' ')[0]}</span>
+            </p>
+          </div>
+        </div>
 
-              <span className="inline-flex items-center gap-1.5 bg-[#fdb813]/15 text-[#fdb813]
-                               text-[10px] font-bold tracking-widest uppercase px-3 py-1.5 rounded-lg w-fit">
-                Pioneer Batch
-              </span>
+        {/* ── 3-column layout ── */}
+        <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_260px] gap-6 items-start">
 
-              {/* Avatar */}
-              <div className="w-[72px] h-[72px] rounded-2xl overflow-hidden border-[3px] border-[#fdb813]/40 flex-shrink-0">
-                <img
-                  src={avatarSrc}
-                  alt={user?.name}
-                  className="w-full h-full object-cover block"
-                  onError={e => {
-                    e.currentTarget.onerror = null;
-                    e.currentTarget.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(user?.name ?? 'U')}&background=fdb813&color=1d2b4b&size=128`;
-                  }}
-                />
-              </div>
+          {/* Left sidebar */}
+          <div className="hidden">
+            <LeftSidebar user={user} isOn={isOn} />
+          </div>
 
-              {/* User info */}
-              <div>
-                <h2 className="text-xl font-bold leading-snug mb-1">{user?.name}</h2>
-                <p className="text-xs text-white/40 mb-0.5 m-0">ID: {user?.student_id ?? 'N/A'}</p>
-                <p className="text-xs text-white/40 m-0">{user?.course ?? 'Student'}</p>
-
-                {/* Tier pill */}
-                <div className="mt-2">
-                  {userTier === 'premium' && (
-                    <span className="inline-flex items-center gap-1 bg-amber-400/15 text-amber-300
-                                     text-[10px] font-bold px-2 py-1 rounded-lg leading-none">
-                      Premium Plan
-                    </span>
-                  )}
-                  {userTier === 'standard' && (
-                    <span className="inline-flex items-center gap-1 bg-indigo-400/15 text-indigo-300
-                                     text-[10px] font-bold px-2 py-1 rounded-lg leading-none">
-                      Standard Plan
-                    </span>
-                  )}
-                  {userTier === 'free' && (
-                    <span className="inline-flex items-center gap-1 bg-white/[0.08] text-white/30
-                                     text-[10px] font-semibold px-2 py-1 rounded-lg leading-none">
-                      <i className="fas fa-user text-[8px]" /> Free Plan
-                    </span>
-                  )}
-                </div>
-              </div>
-
-              {/* CTA buttons */}
-              <Link
-                to={`/profile/${user?.id}`}
-                className="block text-center py-3 bg-[#fdb813] text-[#1d2b4b] font-bold text-sm
-                           rounded-xl no-underline hover:bg-yellow-300 transition-colors"
-              >
-                View My Profile
-              </Link>
-
-              <Link
-                to="/analytics"
-                className="flex items-center justify-center gap-2 py-2.5 bg-sky-500/10 text-sky-300
-                           font-semibold text-xs rounded-xl no-underline hover:bg-sky-500/20 transition-colors"
-              >
-                <i className="fas fa-chart-bar text-xs" aria-hidden="true" />
-                See who's trending this week →
-              </Link>
-
-              {!isPremium && (
-                <Link
-                  to="/payment"
-                  className="flex items-center justify-center gap-2 py-2.5 bg-[#fdb813]/10 text-[#fdb813]
-                             font-semibold text-xs rounded-xl no-underline hover:bg-[#fdb813]/20 transition-colors
-                             border border-[#fdb813]/20"
+          {/* Feed column */}
+          <div className="min-w-0">
+            {/* Filter tabs */}
+            <div className="flex items-center gap-2 mb-5 flex-wrap">
+              {FILTERS.map(({ key, label }) => (
+                <button
+                  key={key}
+                  onClick={() => setFilter(key)}
+                  className={`text-[12px] font-semibold px-4 py-2 rounded-full border transition-all cursor-pointer
+                    ${filter === key
+                      ? 'bg-[#1d2b4b] text-[#fdb813] border-[#1d2b4b]'
+                      : 'bg-white text-slate-500 border-slate-200 hover:border-slate-300 hover:text-slate-700'
+                    }`}
                 >
-                  <i className="fas fa-crown text-xs" aria-hidden="true" />
-                  Upgrade Your Plan →
-                </Link>
-              )}
-
-              <button
-                onClick={handleLogout}
-                className="flex items-center justify-center gap-2 py-2 text-xs text-white/30
-                           hover:text-white/70 transition-colors cursor-pointer bg-transparent border-none"
-              >
-                <i className="fas fa-sign-out-alt text-xs" aria-hidden="true" />
-                Sign out
-              </button>
+                  {label}
+                </button>
+              ))}
             </div>
-          </aside>
+
+            {/* Posts */}
+            {loading ? (
+              <FeedSkeleton />
+            ) : posts.length === 0 ? (
+              <div className="bg-white rounded-2xl border border-slate-100 py-16 text-center">
+                <i className="fas fa-photo-video text-3xl text-slate-200 block mb-3" aria-hidden="true" />
+                <p className="text-[14px] font-semibold text-slate-400 m-0">No posts here yet.</p>
+                <p className="text-[12px] text-slate-300 m-0 mt-1">
+                  {filter === 'mine' ? 'Upload your first photo in Gallery.' : 'Check back later!'}
+                </p>
+              </div>
+            ) : (
+              <div className="flex flex-col gap-4">
+                {posts.map(post => (
+                  <PostCard
+                    key={post.id}
+                    post={post}
+                    currentUser={user}
+                    batchmates={batchmates}
+                    onTagSaved={handleTagSaved}
+                  />
+                ))}
+
+                {/* Load more */}
+                {hasMore && (
+                  <button
+                    onClick={loadMore}
+                    disabled={loadingMore}
+                    className="w-full py-3 text-[13px] font-semibold text-[#3f51b5] bg-white
+                               border border-slate-200 rounded-2xl hover:bg-slate-50 transition-colors
+                               cursor-pointer disabled:opacity-60"
+                  >
+                    {loadingMore ? (
+                      <span className="flex items-center justify-center gap-2">
+                        <i className="fas fa-spinner fa-spin text-xs" /> Loading more…
+                      </span>
+                    ) : 'Load more posts'}
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Right sidebar */}
+          <div className="hidden lg:block">
+            <RightSidebar
+              batchmates={batchmates}
+              topViewed={topViewed}
+              batchStats={batchStats}
+            />
+          </div>
         </div>
       </main>
-    </div>
-  );
-}
 
-// ─── Primitive components ─────────────────────────────────────────────────────
-
-/** Section heading with optional bottom margin */
-function SectionTitle({ children, as: Tag = 'h2', noBottom }) {
-  return (
-    <Tag className={`text-[13px] font-semibold text-[#1d2b4b] uppercase tracking-widest ${noBottom ? '' : 'mb-4'}`}>
-      {children}
-    </Tag>
-  );
-}
-
-/** Labelled search result group — renders nothing if no child rows */
-function SearchGroup({ label, labelColor, children }) {
-  const kids = Array.isArray(children) ? children.filter(Boolean) : [children].filter(Boolean);
-  if (!kids.length) return null;
-  return (
-    <>
-      <p className={`px-4 py-2 text-[10px] font-bold tracking-widest uppercase ${labelColor} bg-slate-50 m-0`}>
-        {label}
-      </p>
-      {children}
-    </>
-  );
-}
-
-/** Single search result row */
-function SearchRow({ to, src, name, sub }) {
-  return (
-    <Link
-      to={to}
-      className="flex items-center gap-3 px-4 py-2.5 no-underline hover:bg-slate-50 border-b border-slate-50 transition-colors"
-    >
-      <img src={src} className="w-9 h-9 rounded-lg object-cover flex-shrink-0" alt={name} />
-      <div>
-        <p className="text-[13px] font-semibold text-[#1d2b4b] m-0">{name}</p>
-        <p className="text-[11px] text-slate-400 m-0">{sub}</p>
-      </div>
-    </Link>
-  );
-}
-
-/** Memory digest card wrapper */
-function MemoryCard({ icon, iconCls, iconBg, label, empty, emptyText, children }) {
-  return (
-    <div className="bg-white rounded-2xl p-5 border border-slate-100">
-      <div className="flex items-center gap-3 mb-4">
-        <div className={`w-8 h-8 rounded-lg ${iconBg} flex items-center justify-center flex-shrink-0`}>
-          <i className={`${icon} ${iconCls} text-[13px]`} aria-hidden="true" />
-        </div>
-        <span className="text-[13px] font-semibold text-[#1d2b4b]">{label}</span>
-      </div>
-      {empty ? <p className="text-[12px] text-slate-400 m-0">{emptyText}</p> : children}
-    </div>
-  );
-}
-
-/**
- * Horizontal photo strip used inside memory cards.
- * Hides scrollbar cross-browser via Tailwind's scrollbar-hide utility.
- */
-function PhotoStrip({ photos }) {
-  if (!photos?.length) return null;
-  return (
-    <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
-      {photos.map((p, i) => (
-        <div key={i} className="relative flex-shrink-0">
-          <img
-            src={p.url}
-            alt={p.caption ?? ''}
-            className="w-20 h-20 rounded-xl object-cover border border-slate-100 block"
-            onError={e => { e.currentTarget.onerror = null; e.currentTarget.src = 'https://via.placeholder.com/80?text=📷'; }}
-          />
-          {p.years_ago && (
-            <span className="absolute bottom-1.5 left-1 right-1 bg-black/55 text-white text-[9px]
-                             font-bold rounded px-1 py-0.5 text-center leading-none">
-              {p.years_ago}y ago
-            </span>
-          )}
-        </div>
-      ))}
+      <Footer />
     </div>
   );
 }

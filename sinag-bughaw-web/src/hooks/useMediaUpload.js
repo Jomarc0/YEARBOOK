@@ -70,7 +70,7 @@ export function useMediaUpload(albumId = null, tierKey = 'free', onSuccess = nul
   const [results,    setResults]    = useState(null);
   const [error,      setError]      = useState(null);
   const [isDragging, setIsDragging] = useState(false);
-  const [mode,       setMode]       = useState('bulk'); // 'bulk' | 'video'
+  const [mode,       setMode]       = useState('bulk'); // kept for backward compatibility
 
   const inputRef = useRef(null);
 
@@ -81,23 +81,20 @@ export function useMediaUpload(albumId = null, tierKey = 'free', onSuccess = nul
     const isVideo = VIDEO_TYPES.includes(file.type);
     const sizeMB  = file.size / (1024 * 1024);
 
-    if (mode === 'bulk' && !isPhoto) {
-      return `${file.name}: Only JPEG, PNG, WebP, GIF accepted.`;
+    if (!isPhoto && !isVideo) {
+      return `${file.name}: Only JPEG, PNG, WebP, GIF, MP4, MOV, AVI, WebM accepted.`;
     }
-    if (mode === 'video' && !isVideo) {
-      return `${file.name}: Only MP4, MOV, AVI, WebM accepted.`;
-    }
-    if (mode === 'video' && tier.maxVideoSizeMB === 0) {
+    if (isVideo && tier.maxVideoSizeMB === 0) {
       return `${file.name}: Video uploads require a paid plan.`;
     }
-    if (mode === 'bulk' && sizeMB > tier.maxFileSizeMB) {
+    if (isPhoto && sizeMB > tier.maxFileSizeMB) {
       return `${file.name}: Exceeds ${tier.maxFileSizeMB} MB limit.`;
     }
-    if (mode === 'video' && sizeMB > tier.maxVideoSizeMB) {
+    if (isVideo && sizeMB > tier.maxVideoSizeMB) {
       return `${file.name}: Exceeds ${tier.maxVideoSizeMB} MB video limit.`;
     }
     return null;
-  }, [mode, tier]);
+  }, [tier]);
 
   // ── Add files ───────────────────────────────────────────────────────────────
 
@@ -105,7 +102,7 @@ export function useMediaUpload(albumId = null, tierKey = 'free', onSuccess = nul
     const arr = Array.from(newFiles);
     setError(null);
 
-    if (mode === 'bulk' && files.length + arr.length > tier.maxFiles) {
+    if (files.length + arr.length > tier.maxFiles) {
       setError(`Your ${tier.label} plan allows up to ${tier.maxFiles} files per upload.`);
       return;
     }
@@ -119,8 +116,8 @@ export function useMediaUpload(albumId = null, tierKey = 'free', onSuccess = nul
       error:   validateFile(file),
     }));
 
-    setFiles((prev) => mode === 'video' ? mapped.slice(0, 1) : [...prev, ...mapped]);
-  }, [files.length, mode, tier, validateFile]);
+    setFiles((prev) => [...prev, ...mapped]);
+  }, [files.length, tier, validateFile]);
 
   const removeFile = useCallback((id) => {
     setFiles((prev) => {
@@ -152,15 +149,29 @@ export function useMediaUpload(albumId = null, tierKey = 'free', onSuccess = nul
     setError(null);
 
     try {
-      let response;
+      const imageFiles = valid.filter((f) => f.type === 'image').map((f) => f.file);
+      const videoFiles = valid.filter((f) => f.type === 'video').map((f) => f.file);
+      const responses = [];
+      const totalSteps = (imageFiles.length ? 1 : 0) + videoFiles.length;
+      let completedSteps = 0;
+      const stepProgress = (innerProgress = 0) => {
+        if (!totalSteps) return;
+        setProgress(Math.min(99, Math.round(((completedSteps + innerProgress / 100) / totalSteps) * 100)));
+      };
 
-      if (mode === 'video') {
-        response = await mediaApi.uploadVideo(albumId, valid[0].file, caption, setProgress);
-      } else {
-        response = await mediaApi.bulkUpload(albumId, valid.map((f) => f.file), setProgress);
+      if (imageFiles.length) {
+        responses.push(await mediaApi.bulkUpload(albumId, imageFiles, stepProgress));
+        completedSteps += 1;
+        stepProgress(0);
       }
 
-      const data = response.data?.data ?? response.data;
+      for (const file of videoFiles) {
+        responses.push(await mediaApi.uploadVideo(albumId, file, caption, stepProgress));
+        completedSteps += 1;
+        stepProgress(0);
+      }
+
+      const data = responses.map((response) => response.data?.data ?? response.data);
       setResults(data);
       setProgress(100);
       clearFiles();
@@ -171,7 +182,7 @@ export function useMediaUpload(albumId = null, tierKey = 'free', onSuccess = nul
     } finally {
       setUploading(false);
     }
-  }, [files, mode, albumId, clearFiles, onSuccess]);
+  }, [files, albumId, clearFiles, onSuccess]);
 
   // ── Delete ──────────────────────────────────────────────────────────────────
 
@@ -198,8 +209,8 @@ export function useMediaUpload(albumId = null, tierKey = 'free', onSuccess = nul
   const inputProps = {
     ref:      inputRef,
     type:     'file',
-    multiple: mode === 'bulk',
-    accept:   mode === 'video' ? VIDEO_TYPES.join(',') : PHOTO_TYPES.join(','),
+    multiple: true,
+    accept:   [...PHOTO_TYPES, ...VIDEO_TYPES].join(','),
     style:    { display: 'none' },
     onChange: (e) => addFiles(e.target.files),
   };

@@ -3,18 +3,18 @@
  * NU Lipa / Sinag-Bughaw — Admin Panel
  *
  * Single unified page with two modes:
- *   📋 Moderation  → Photos (album-grouped) | Videos | Voice Notes | Reported
- *   🗂 Media Library → Albums (CRUD) | Photos (browse) | Videos | Voice Notes
+ *   Moderation  → Photos (album-grouped) | Videos | Voice Notes | Reported
+ *   Media Library → Albums (CRUD) | Photos (browse) | Videos | Voice Notes
  *
  * Features:
- *   ✅ Approve / Reject with reason modal
- *   ✅ Bulk approve / reject
- *   ✅ Album drill-down panel with lightbox
- *   ✅ Generic preview modal (video / voice)
- *   ✅ Revert Status — flip any approved/rejected item back to pending or opposite
- *   ✅ Status History — full audit trail in a slide-out drawer
- *   ✅ Media Library — Albums CRUD, Photos browse/delete, Videos, Voice Notes
- *   ✅ Media Library album drill-down — open any album and see all its photos
+ *   Approve / Reject with reason modal
+ *   Bulk approve / reject
+ *   Album drill-down panel with lightbox
+ *   Generic preview modal (video / voice)
+ *   Revert Status — flip any approved/rejected item back to pending or opposite
+ *   Status History — full audit trail in a slide-out drawer
+ *   Media Library — Albums CRUD, Photos browse/delete, Videos, Voice Notes
+ *   Media Library album drill-down — open any album and see all its photos
  */
 
 import { useEffect, useState, useCallback } from "react";
@@ -56,6 +56,25 @@ const Skeleton = ({ w = "100%", h = 14, radius = 6, style = {} }) => (
     ...style,
   }} />
 );
+
+const ICONS = {
+  albums: <><path d="M4 6.5A2.5 2.5 0 0 1 6.5 4h11A2.5 2.5 0 0 1 20 6.5v11a2.5 2.5 0 0 1-2.5 2.5h-11A2.5 2.5 0 0 1 4 17.5z" /><path d="m8 14 2.2-2.2a1 1 0 0 1 1.4 0L14 14.2l1-1a1 1 0 0 1 1.4 0L20 16.8" /><path d="M8.5 8.5h.01" /></>,
+  photos: <><path d="M4 7a3 3 0 0 1 3-3h10a3 3 0 0 1 3 3v10a3 3 0 0 1-3 3H7a3 3 0 0 1-3-3z" /><path d="m8 15 2.5-2.5a1 1 0 0 1 1.4 0L14 14.6l1.2-1.2a1 1 0 0 1 1.4 0L20 16.8" /><path d="M8.5 8.5h.01" /></>,
+  videos: <><path d="M5 5h11a3 3 0 0 1 3 3v8a3 3 0 0 1-3 3H5z" /><path d="m10 9 5 3-5 3z" /></>,
+  voice: <><path d="M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3Z" /><path d="M19 11a7 7 0 0 1-14 0" /><path d="M12 18v3" /></>,
+  moderation: <><path d="M12 3 5 6v5c0 5 3.5 8 7 10 3.5-2 7-5 7-10V6z" /><path d="m9 12 2 2 4-5" /></>,
+  library: <><path d="M4 6h16" /><path d="M4 12h16" /><path d="M4 18h16" /><path d="M8 6v12" /></>,
+  trash: <><path d="M4 7h16" /><path d="M10 11v6" /><path d="M14 11v6" /><path d="M6 7l1 14h10l1-14" /><path d="M9 7V4h6v3" /></>,
+  restore: <><path d="M3 12a9 9 0 1 0 3-6.7" /><path d="M3 4v6h6" /></>,
+};
+
+function Icon({ name, className = "h-5 w-5", style }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className={className} style={style} aria-hidden="true">
+      {ICONS[name] ?? ICONS.photos}
+    </svg>
+  );
+}
 
 function Badge({ label, color, bg }) {
   return (
@@ -1402,7 +1421,7 @@ function LibraryAlbumDrillPanel({ album, onClose, toast }) {
                           onClick={e => { e.stopPropagation(); setDeleteTarget(photo); }}
                           title="Delete photo"
                           style={{ width: 28, height: 28, borderRadius: 7, border: "none", background: T.dangerBg, color: T.danger, fontSize: "0.8rem", cursor: "pointer", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" }}
-                        >🗑</button>
+                        ><Icon name="trash" className="h-3.5 w-3.5" /></button>
                       </div>
 
                       {/* Uploader info */}
@@ -1458,7 +1477,7 @@ function LibraryAlbumDrillPanel({ album, onClose, toast }) {
                 <button
                   onClick={() => { setDeleteTarget(lightbox); setLightbox(null); }}
                   style={{ padding: "6px 14px", borderRadius: 9, border: "none", background: "rgba(239,68,68,.25)", color: "#fca5a5", fontWeight: 700, fontSize: "0.8rem", cursor: "pointer", fontFamily: "inherit" }}
-                >🗑 Delete</button>
+                ><Icon name="trash" className="h-4 w-4" /> Delete</button>
               </div>
             </div>
             {photos.length > 1 && (
@@ -1489,7 +1508,9 @@ function LibraryAlbumDrillPanel({ album, onClose, toast }) {
 function StatCard({ icon, label, value, color = T.primary }) {
   return (
     <div style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: 16, padding: "18px 20px", boxShadow: T.shadow, display: "flex", alignItems: "center", gap: 14 }}>
-      <div style={{ fontSize: "1.8rem", width: 48, height: 48, borderRadius: 12, background: T.bg, display: "flex", alignItems: "center", justifyContent: "center" }}>{icon}</div>
+      <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-slate-100" style={{ color }}>
+        <Icon name={icon} className="h-6 w-6" />
+      </div>
       <div>
         <div style={{ fontSize: "0.75rem", fontWeight: 700, color: T.muted, textTransform: "uppercase", letterSpacing: ".05em" }}>{label}</div>
         <div style={{ fontSize: "1.5rem", fontWeight: 900, color }}>{value ?? "—"}</div>
@@ -1605,7 +1626,7 @@ function LibraryAlbumsTab({ toast }) {
                     <button
                       onClick={() => setDeleteTarget(album)}
                       style={{ flex: 1, padding: "6px", borderRadius: 8, border: "none", background: T.dangerBg, color: T.danger, fontSize: "0.78rem", fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}
-                    >🗑 Delete</button>
+                    ><Icon name="trash" className="h-4 w-4" /> Delete</button>
                   </div>
                 </div>
               </div>
@@ -1694,7 +1715,7 @@ function LibraryPhotosTab({ toast }) {
                 <div style={{ position: "absolute", top: 6, left: 6 }}><Badge label={photo.visibility ?? "public"} color={vc.color} bg={vc.bg} /></div>
                 <div style={{ position: "absolute", top: 6, right: 6 }}>
                   <button onClick={e => { e.stopPropagation(); setDeleteTarget(photo); }}
-                    style={{ width: 28, height: 28, borderRadius: 8, border: "none", background: "rgba(239,68,68,.9)", color: "#fff", fontSize: "0.8rem", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>🗑</button>
+                    style={{ width: 28, height: 28, borderRadius: 8, border: "none", background: "rgba(239,68,68,.9)", color: "#fff", fontSize: "0.8rem", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}><Icon name="trash" className="h-3.5 w-3.5" /></button>
                 </div>
                 {photo.caption && (
                   <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, background: "linear-gradient(transparent, rgba(0,0,0,.7))", padding: "16px 8px 6px", fontSize: "0.72rem", color: "#fff", fontWeight: 600 }}>{photo.caption}</div>
@@ -1714,7 +1735,7 @@ function LibraryPhotosTab({ toast }) {
             <div style={{ marginTop: 14, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               <div style={{ color: "#fff", fontSize: "0.88rem" }}>{preview.caption ?? "No caption"} · <span style={{ color: "#ffffff88" }}>{preview.uploader}</span></div>
               <button onClick={() => { setPreview(null); setDeleteTarget(preview); }}
-                style={{ padding: "7px 16px", borderRadius: 10, border: "none", background: T.dangerBg, color: T.danger, fontWeight: 700, fontSize: "0.82rem", cursor: "pointer", fontFamily: "inherit" }}>🗑 Delete</button>
+                style={{ padding: "7px 16px", borderRadius: 10, border: "none", background: T.dangerBg, color: T.danger, fontWeight: 700, fontSize: "0.82rem", cursor: "pointer", fontFamily: "inherit", display: "inline-flex", alignItems: "center", gap: 6 }}><Icon name="trash" className="h-4 w-4" /> Delete</button>
             </div>
           </div>
         </div>
@@ -1783,7 +1804,7 @@ function LibraryVideosTab({ toast }) {
               <div style={{ padding: "12px 14px" }}>
                 <div style={{ fontSize: "0.82rem", fontWeight: 700, color: T.text, marginBottom: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{video.filename ?? "Untitled"}</div>
                 <div style={{ fontSize: "0.74rem", color: T.muted, marginBottom: 10 }}>{video.uploader ?? "Unknown"}{video.width && video.height ? ` · ${video.width}×${video.height}` : ""}</div>
-                <button onClick={() => setDeleteTarget(video)} style={{ width: "100%", padding: "6px", borderRadius: 8, border: "none", background: T.dangerBg, color: T.danger, fontSize: "0.78rem", fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>🗑 Delete</button>
+                <button onClick={() => setDeleteTarget(video)} style={{ width: "100%", padding: "6px", borderRadius: 8, border: "none", background: T.dangerBg, color: T.danger, fontSize: "0.78rem", fontWeight: 600, cursor: "pointer", fontFamily: "inherit", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6 }}><Icon name="trash" className="h-4 w-4" /> Delete</button>
               </div>
             </div>
           ))}
@@ -1803,7 +1824,7 @@ function LibraryVideosTab({ toast }) {
               </div>
               <div style={{ display: "flex", gap: 8 }}>
                 <button onClick={() => { setPreview(null); setDeleteTarget(preview); }}
-                  style={{ padding: "7px 16px", borderRadius: 10, border: "none", background: T.dangerBg, color: T.danger, fontWeight: 700, fontSize: "0.82rem", cursor: "pointer", fontFamily: "inherit" }}>🗑 Delete</button>
+                  style={{ padding: "7px 16px", borderRadius: 10, border: "none", background: T.dangerBg, color: T.danger, fontWeight: 700, fontSize: "0.82rem", cursor: "pointer", fontFamily: "inherit", display: "inline-flex", alignItems: "center", gap: 6 }}><Icon name="trash" className="h-4 w-4" /> Delete</button>
                 <button onClick={() => setPreview(null)}
                   style={{ padding: "7px 16px", borderRadius: 10, border: "none", background: "rgba(255,255,255,.15)", color: "#fff", fontWeight: 700, fontSize: "0.82rem", cursor: "pointer", fontFamily: "inherit" }}>Close</button>
               </div>
@@ -1883,7 +1904,7 @@ function LibraryVoiceNotesTab({ toast }) {
                 {vn.audio_url && <audio src={vn.audio_url} controls style={{ height: 32 }} />}
                 <Badge label={vn.status ?? "pending"} color={sc.color} bg={sc.bg} />
                 <button onClick={() => setDeleteTarget(vn)}
-                  style={{ width: 32, height: 32, borderRadius: 8, border: "none", background: T.dangerBg, color: T.danger, fontSize: "0.9rem", cursor: "pointer", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>🗑</button>
+                  style={{ width: 32, height: 32, borderRadius: 8, border: "none", background: T.dangerBg, color: T.danger, fontSize: "0.9rem", cursor: "pointer", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" }}><Icon name="trash" className="h-4 w-4" /></button>
               </div>
             );
           })}
@@ -1916,10 +1937,10 @@ function MediaLibraryMode({ toast }) {
     <div>
       {stats && (
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))", gap: 14, marginBottom: 24 }}>
-          <StatCard icon="ALB" label="Albums"      value={stats.albums}      />
-          <StatCard icon="PHO" label="Photos"      value={stats.photos}      />
-          <StatCard icon="VID" label="Videos"      value={stats.videos}      />
-          <StatCard icon="AUD" label="Voice Notes" value={stats.voice_notes} />
+          <StatCard icon="albums" label="Albums"      value={stats.albums}      />
+          <StatCard icon="photos" label="Photos"      value={stats.photos}      />
+          <StatCard icon="videos" label="Videos"      value={stats.videos}      />
+          <StatCard icon="voice"  label="Voice Notes" value={stats.voice_notes} />
         </div>
       )}
 
@@ -1947,8 +1968,8 @@ function MediaLibraryMode({ toast }) {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 const MODES = [
-  { key: "moderation", icon: "MOD", label: "Moderation",   desc: "Review and approve user-uploaded content" },
-  { key: "library",    icon: "LIB", label: "Media Library", desc: "Browse, manage, and delete all media"    },
+  { key: "moderation", icon: "moderation", label: "Moderation",   desc: "Review and approve user-uploaded content" },
+  { key: "library",    icon: "library",    label: "Media Library", desc: "Browse, manage, and delete all media"    },
 ];
 
 export default function MediaModerationPage() {
@@ -1979,7 +2000,7 @@ export default function MediaModerationPage() {
                     : "text-slate-600 hover:bg-slate-100"
                 }`}
               >
-                <span className="text-[11px] font-extrabold">{m.icon}</span>
+                <Icon name={m.icon} className="h-4 w-4" />
                 <span>{m.label}</span>
               </button>
             ))}

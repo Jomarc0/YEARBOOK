@@ -16,14 +16,14 @@ use Illuminate\Support\Facades\Route;
 |--------------------------------------------------------------------------
 */
 
-// ── Google OAuth ──────────────────────────────────────────────────────────────
+// ── Google OAuth ───────────────────────────────────────────────────────────
 Route::get('/auth/google/redirect', [SocialAuthController::class, 'redirectToGoogle'])
     ->name('auth.google.redirect');
 
 Route::get('/auth/google/callback', [SocialAuthController::class, 'handleGoogleCallback'])
     ->name('auth.google.callback');
 
-// ── React SPA catch-all ───────────────────────────────────────────────────────
+// ── React SPA catch-all ────────────────────────────────────────────────────
 // IMPORTANT: This must come LAST. The negative lookahead ensures it never
 // swallows the /auth/google/* routes above.
 Route::get('/{any}', function () {

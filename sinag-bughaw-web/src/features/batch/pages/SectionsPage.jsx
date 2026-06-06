@@ -6,11 +6,20 @@ import { faceApi } from '@/api/gallery.api';
 import FaceSearchButton from '@/components/ui/FaceSearchButton';
 import Navbar from '@/components/layout/Navbar';
 import Footer from '@/components/layout/Footer';
+import { storageUrl } from '@/api/client';
 
 const TABS = [
   { key: 'sections', label: 'Sections', icon: 'fa-layer-group' },
   { key: 'batches',  label: 'Batches',  icon: 'fa-graduation-cap' },
 ];
+
+function usableFaceMatches(matches = []) {
+  const validMatches = matches.filter(m =>
+    m?.user_id && (m.student_id || m.course || m.profile_picture)
+  );
+  const source = validMatches.length ? validMatches : matches.filter(m => m?.user_id);
+  return Array.from(new Map(source.map(m => [m.user_id, m])).values());
+}
 
 // ── NEW: Generate Yearbook Button ─────────────────────────────────────────────
 /**
@@ -28,7 +37,7 @@ function GenerateYearbookButton({ batchId, batchYear }) {
       onClick={(e) => {
         e.preventDefault();          // stop Link parent from firing
         e.stopPropagation();
-        navigate(`/yearbook/${batchId}`);
+        navigate(`/yearbook/${batchId}/view`);
       }}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
@@ -107,13 +116,13 @@ export default function SectionsPage() {
       const formData = new FormData();
       formData.append('face_image', file);
       const { data } = await faceApi.search(formData);
-      const matches  = data.matches ?? [];
+      const matches  = usableFaceMatches(data.matches ?? []);
       if (!matches.length) { alert('No matching section found by face.'); return; }
       const ids = new Set(matches.map(m => m.user_id));
       setMatchedIds(ids);
       setIsFaceMode(true);
-    } catch {
-      alert('Face search failed. Please try again.');
+    } catch (err) {
+      alert(err?.response?.data?.message || 'Face search failed. Please try again.');
     } finally {
       setFaceSearching(false);
     }
@@ -151,17 +160,17 @@ export default function SectionsPage() {
       <header className="text-white text-center"
         style={{
           background:   'linear-gradient(135deg, #1d2b4b 0%, #3f51b5 100%)',
-          padding:      '70px 8% 120px',
-          borderRadius: '0 0 60px 60px',
+          padding:      '42px 8% 64px',
+          borderRadius: '0 0 28px 28px',
         }}>
-        <h1 className="font-extrabold mb-3" style={{ fontSize: '3rem', letterSpacing: '-2px' }}>
+        <h1 className="font-extrabold mb-2 text-3xl sm:text-4xl">
           Sections & <span style={{ color: '#fdb813' }}>Batches</span>
         </h1>
         <p className="font-light opacity-80" style={{ fontSize: '1rem' }}>
           Browse academic sections and graduation batches.
         </p>
 
-        <div style={{ maxWidth: 560, margin: '28px auto 0', position: 'relative' }}>
+        <div style={{ maxWidth: 560, margin: '18px auto 0', position: 'relative' }}>
           <div style={{
             background:    'rgba(255,255,255,0.12)',
             backdropFilter:'blur(16px)',
@@ -350,10 +359,10 @@ export default function SectionsPage() {
                         <div className="flex" style={{ gap: '-8px' }}>
                           {sec.students.slice(0, 4).map(s => (
                             <img key={s.id}
-                              src={s.profile_picture
-                                ? `http://127.0.0.1:8000/storage/${s.profile_picture}`
-                                : `https://ui-avatars.com/api/?name=${encodeURIComponent(s.name)}&background=1d2b4b&color=fff&size=40`}
-                              alt={s.name} title={s.name}
+                              src={storageUrl(s.profile_picture ?? s.photo ?? s.photo_url)
+                                || `https://ui-avatars.com/api/?name=${encodeURIComponent(`${s.first_name ?? ''} ${s.last_name ?? ''}`.trim() || s.name || 'Student')}&background=1d2b4b&color=fff&size=40`}
+                              alt={`${s.first_name ?? ''} ${s.last_name ?? ''}`.trim() || s.name}
+                              title={`${s.first_name ?? ''} ${s.last_name ?? ''}`.trim() || s.name}
                               className="rounded-full"
                               style={{
                                 width: '30px', height: '30px', objectFit: 'cover', marginLeft: '-8px',
@@ -408,14 +417,9 @@ export default function SectionsPage() {
                     </span>
                   </div>
 
-                  <div style={{
-                    display:             'grid',
-                    gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))',
-                    gap:                 '18px',
-                  }}>
+                  <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-3">
                     {(batches[dept] ?? []).map(batch => (
-                      <div key={batch.id} className="bg-white rounded-2xl p-6 border transition-all"
-                        style={{ border: '1px solid #e2e8f0', boxShadow: '0 2px 8px rgba(0,0,0,0.03)' }}>
+                      <div key={batch.id} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-lg hover:shadow-[#1d2b4b]/10">
 
                         {/* Batch header */}
                         <div className="flex items-start justify-between mb-3">
@@ -433,14 +437,28 @@ export default function SectionsPage() {
                         </div>
 
                         {/* Meta */}
-                        <p className="text-sm font-semibold m-0 mb-1" style={{ color: '#64748b' }}>
+                        <p className="text-sm font-semibold m-0 mb-2" style={{ color: '#64748b' }}>
                           <i className="fas fa-users mr-2" />{batch.students_count ?? 0} students
                         </p>
                         {batch.sections?.length > 0 && (
-                          <p className="text-xs m-0" style={{ color: '#94a3b8' }}>
-                            <i className="fas fa-layer-group mr-1" />
-                            {batch.sections.map(s => `Section ${s.name}`).join(', ')}
-                          </p>
+                          <div className="rounded-xl border border-slate-100 bg-slate-50 px-3 py-2">
+                            <p className="m-0 text-xs font-bold text-slate-500">
+                              <i className="fas fa-layer-group mr-1.5 text-[#fdb813]" />
+                              {batch.sections.length} section{batch.sections.length !== 1 ? 's' : ''}
+                            </p>
+                            <div className="mt-2 flex flex-wrap gap-1.5">
+                              {batch.sections.slice(0, 3).map(s => (
+                                <span key={s.id ?? s.name} className="rounded-full bg-white px-2 py-1 text-[10px] font-bold text-slate-500 ring-1 ring-slate-200">
+                                  {s.name}
+                                </span>
+                              ))}
+                              {batch.sections.length > 3 && (
+                                <span className="rounded-full bg-[#1d2b4b] px-2 py-1 text-[10px] font-bold text-white">
+                                  +{batch.sections.length - 3} more
+                                </span>
+                              )}
+                            </div>
+                          </div>
                         )}
 
                         {/* ── Action buttons row ─────────────────────────── */}

@@ -10,6 +10,11 @@ export const galleryApi = {
     client.post('/gallery/face-search', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
     }),
+
+  // ── NEW: create a general album via the axios client so auth headers
+  //         are automatically injected from the axios interceptor.
+  createAlbum: (payload) =>
+    client.post('/gallery/albums', payload),
 };
 
 export const mediaApi = {
@@ -45,11 +50,10 @@ export const mediaApi = {
 };
 
 export const faceApi = {
-
   studentPhotos: (userId, page = 1) =>
     client.get(`/face/students/${userId}/photos`, { params: { page } }),
 
-  search:       (formData) =>
+  search: (formData) =>
     client.post('/face/search', formData, { headers: { 'Content-Type': 'multipart/form-data' } }),
 
   analyzePhoto: (photoId) => client.post(`/face/photos/${photoId}/analyze`),

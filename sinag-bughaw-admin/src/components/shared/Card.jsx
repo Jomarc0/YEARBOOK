@@ -1,62 +1,71 @@
-import { T } from "../../tokens/design";
+import Icon from "./Icon";
 
-export function Card({ children, style = {} }) {
+export function Card({ children, className = "", style }) {
   return (
-    <div style={{
-      background: T.surface,
-      border: `1px solid ${T.border}`,
-      borderRadius: 18,
-      boxShadow: T.shadow,
-      overflow: "hidden",
-      ...style,
-    }}>
+    <div className={`admin-shell-card overflow-hidden ${className}`} style={style}>
       {children}
     </div>
   );
 }
 
-export function CardHead({ title, sub }) {
+export function CardHead({ title, sub, icon }) {
   return (
-    <div style={{ padding: "18px 18px 14px", borderBottom: "1px solid #e5ebf5" }}>
-      <h2 style={{ margin: "0 0 6px", fontSize: "1.05rem", fontWeight: 800, color: T.text }}>{title}</h2>
-      {sub && <p style={{ margin: 0, color: "#7790b2", fontSize: "0.9rem" }}>{sub}</p>}
+    <div className="border-b border-slate-100 px-5 py-4">
+      <div className="flex items-start gap-3">
+        {icon && (
+          <div className="mt-0.5 inline-flex h-9 w-9 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600">
+            <Icon name={icon} className="h-4 w-4" />
+          </div>
+        )}
+        <div className="min-w-0">
+          <h2 className="text-base font-black leading-tight text-slate-900">{title}</h2>
+          {sub && <p className="mt-1 text-sm leading-6 text-slate-500">{sub}</p>}
+        </div>
+      </div>
     </div>
   );
 }
 
 export function PageHdr({ title, sub, action }) {
   return (
-    <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 24, flexWrap: "wrap", gap: 12 }}>
-      <div>
-        <h1 style={{ margin: 0, fontSize: "clamp(1.6rem,3vw,2.2rem)", fontWeight: 800, color: T.text, lineHeight: 1.1 }}>
+    <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
+      <div className="min-w-0">
+        <h1 className="text-2xl font-black leading-tight tracking-normal text-slate-950 md:text-3xl">
           {title}
         </h1>
-        {sub && <p style={{ margin: "6px 0 0", color: T.muted }}>{sub}</p>}
+        {sub && <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-500 md:text-base">{sub}</p>}
       </div>
-      {action && <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>{action}</div>}
+      {action && <div className="flex flex-wrap items-center gap-2">{action}</div>}
     </div>
   );
 }
 
 export function Flash({ msg, type = "success", onClose }) {
   if (!msg) return null;
-  const s = type === "success"
-    ? { background: "#ecfdf3", border: "1px solid #b7efcd", color: "#15803d" }
-    : { background: "#fff1f2", border: "1px solid #fecdd3", color: "#be123c" };
+
+  const palette = type === "success"
+    ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+    : "border-rose-200 bg-rose-50 text-rose-700";
+
   return (
-    <div style={{ ...s, borderRadius: 14, padding: "13px 16px", fontWeight: 600, marginBottom: 20, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+    <div className={`mb-5 flex items-center justify-between gap-3 rounded-xl border px-4 py-3 text-sm font-bold ${palette}`}>
       <span>{msg}</span>
       {onClose && (
-        <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", color: "inherit", fontSize: 16, lineHeight: 1 }}>✕</button>
+        <button type="button" onClick={onClose} className="rounded-lg p-1 transition hover:bg-white/60" aria-label="Dismiss">
+          <Icon name="close" className="h-4 w-4" />
+        </button>
       )}
     </div>
   );
 }
 
-export function EmptyState({ msg = "No records found." }) {
+export function EmptyState({ msg = "No records found.", icon = "archive" }) {
   return (
-    <div style={{ padding: "44px 24px", textAlign: "center", color: "#7d8ba6", fontSize: "0.95rem" }}>
-      {msg}
+    <div className="grid place-items-center px-6 py-14 text-center">
+      <div className="mb-3 inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-100 text-slate-400">
+        <Icon name={icon} className="h-6 w-6" />
+      </div>
+      <p className="text-sm font-semibold text-slate-500">{msg}</p>
     </div>
   );
 }

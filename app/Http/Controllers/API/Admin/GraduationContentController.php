@@ -305,6 +305,33 @@ class GraduationContentController extends Controller
     // UPLOAD HELPERS
     // =========================================================================
 
+    public function uploadContent(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'type' => 'required|in:' . implode(',', self::ALLOWED_TYPES),
+        ]);
+
+        if ($request->hasFile('files')) {
+            $album = $this->getOrCreateAlbum($request, $data['type']);
+
+            return $this->uploadToAlbum($request, $album);
+        }
+
+        return match ($data['type']) {
+            'photos'      => $this->uploadPhotos($request),
+            'toga'        => $this->uploadToga($request),
+            'highlights'  => $this->uploadHighlights($request),
+            'videos'      => $this->uploadVideo($request),
+            'songs'       => $this->uploadSong($request),
+            'mass'        => $this->uploadMass($request),
+            'speeches'    => $this->uploadSpeech($request),
+            'program'     => $this->uploadProgram($request),
+            'invitations' => $this->uploadInvitation($request),
+            'messages'    => $this->uploadMessage($request),
+            'archive'     => $this->uploadArchive($request),
+        };
+    }
+
     public function uploadPhotos(Request $request, string $type = 'photos'): JsonResponse
     {
         $type = in_array($type, self::FACE_TYPES) ? $type : 'photos';
@@ -333,6 +360,16 @@ class GraduationContentController extends Controller
             Log::error("[GradContent] uploadPhotos ({$type}) failed", ['message' => $e->getMessage()]);
             return response()->json(['message' => 'Photo upload failed: ' . $e->getMessage()], 500);
         }
+    }
+
+    public function uploadToga(Request $request): JsonResponse
+    {
+        return $this->uploadPhotos($request, 'toga');
+    }
+
+    public function uploadHighlights(Request $request): JsonResponse
+    {
+        return $this->uploadPhotos($request, 'highlights');
     }
 
     public function uploadVideo(Request $request): JsonResponse

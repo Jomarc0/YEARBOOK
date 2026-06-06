@@ -6,6 +6,7 @@ use App\Contracts\StorageServiceInterface;
 use App\Http\Controllers\Controller;
 use App\Jobs\AI\ProcessFaceIndexing;
 use App\Models\AuditLog;
+use App\Models\Photo;
 use App\Models\TaggedPhoto;
 use App\Models\User;
 use App\Notifications\PhotoTaggedNotification;
@@ -39,14 +40,39 @@ class StudentController extends Controller
                 )
                 ->when($viewer, fn($q) =>
                     $q->where(function ($inner) use ($viewer) {
-                        $inner->whereIn('profile_visibility', ['public', 'alumni_only'])
+                        $inner->where('profile_visibility', 'public')
+                              ->orWhere(function ($batchmates) use ($viewer) {
+                                  $batchmates->whereIn('profile_visibility', ['batchmates', 'alumni_only'])
+                                      ->where(function ($sameBatch) use ($viewer) {
+                                          $hasBatchScope = false;
+
+                                          if ($viewer->batch_id) {
+                                              $sameBatch->orWhere('batch_id', $viewer->batch_id);
+                                              $hasBatchScope = true;
+                                          }
+
+                                          $viewerYear = $viewer->graduation_year ?? $viewer->batch;
+                                          if ($viewerYear) {
+                                              $sameBatch
+                                                  ->orWhere('graduation_year', $viewerYear)
+                                                  ->orWhere('batch', (string) $viewerYear)
+                                                  ->orWhereHas('studentRecord', fn($student) =>
+                                                      $student->where('graduation_year', $viewerYear)
+                                                  );
+                                              $hasBatchScope = true;
+                                          }
+
+                                          if (! $hasBatchScope) {
+                                              $sameBatch->whereRaw('1 = 0');
+                                          }
+                                      });
+                              })
                               ->orWhere('id', $viewer->id);
                     })
                 )
                 ->when($request->section_id, fn($q) =>
                     $q->where('section_id', $request->section_id)
                 )
-                // course filter now goes through the joined studentRecord
                 ->when($request->course, fn($q) =>
                     $q->whereHas('studentRecord', fn($s) => $s->where('course', $request->course))
                 )
@@ -67,7 +93,6 @@ class StudentController extends Controller
 
     public function show(Request $request, int $id): JsonResponse
     {
-        // Always eager-load studentRecord so accessors resolve correctly
         $student      = User::with(['section', 'studentRecord'])->findOrFail($id);
         $isSubscribed = $request->attributes->get('viewer_is_subscribed', false);
         $isOwner      = $request->user()?->id === $id;
@@ -80,19 +105,18 @@ class StudentController extends Controller
         }
 
         if (! $isSubscribed) {
-            // Non-subscribed viewers get minimal public data only
             return response()->json([
-                'id'                   => $student->id,
-                'name'                 => $student->name,
-                'profile_picture'      => $student->profile_picture,   // accessor
-                'is_premium'           => $student->is_premium,
-                'is_subscribed_viewer' => false,
-            ]);
+                'message'    => 'Upgrade to Standard or Premium to view full student profiles.',
+                'restricted' => true,
+                'visibility' => 'subscription',
+                'student'    => [
+                    'id'              => $student->id,
+                    'name'            => $student->name,
+                    'profile_picture' => $student->profile_picture,
+                ],
+            ], 402);
         }
 
-        // Subscribed viewer — full profile
-        // toArray() will include all accessor values (course, honors, ambition, etc.)
-        // because they are defined as getXxxAttribute() on the model.
         return response()->json(array_merge(
             $student->toArray(),
             ['is_subscribed_viewer' => true]
@@ -107,7 +131,6 @@ class StudentController extends Controller
 
         $user = $request->user();
 
-        // Delete old photo from storage if it exists
         if ($user->getRawOriginal('profile_picture_public_id') ?? $user->profile_picture_public_id) {
             try {
                 $this->storage->deletePhoto(
@@ -131,7 +154,6 @@ class StudentController extends Controller
             folder: 'profile_pics',
         );
 
-        // Store on users table directly (overrides the student record photo)
         $user->update([
             'profile_picture'           => $result['secure_url'],
             'profile_picture_public_id' => $result['public_id'] ?? null,
@@ -148,7 +170,6 @@ class StudentController extends Controller
     }
 
     // ── Update bio ────────────────────────────────────────────────────────────
-    // bio stays on users table — it's the user's own quote, not admin-managed
 
     public function updateBio(Request $request): JsonResponse
     {
@@ -246,7 +267,91 @@ class StudentController extends Controller
         ]);
     }
 
-    // ── Tagged photos (add) ───────────────────────────────────────────────────
+    // ── Tag students on a feed post (batch tag: photo_id + student_ids) ───────
+    //
+    //  POST /api/students/profile/tagged-photos
+    //  Body: { photo_id: int, student_ids: int[] }
+    //
+    //  Used by the DashboardPage TagModal. Replaces the old addTaggedPhoto()
+    //  contract which expected a file upload.
+    // ─────────────────────────────────────────────────────────────────────────
+
+    public function tagStudentsOnPost(Request $request): JsonResponse
+    {
+        $request->validate([
+            'photo_id'      => ['required', 'integer', 'exists:photos,id'],
+            'student_ids'   => ['required', 'array', 'min:1'],
+            'student_ids.*' => ['integer', 'exists:users,id'],
+        ]);
+
+        $photo  = Photo::with(['user:id,batch_id', 'media'])->findOrFail($request->photo_id);
+        $authId = $request->user()->id;
+
+        // Only the photo owner or a batchmate may tag
+        abort_unless(
+            $photo->user_id === $authId ||
+            $request->user()->batch_id === optional($photo->user)->batch_id,
+            403,
+            'You cannot tag students on this post.'
+        );
+
+        $studentIds = collect($request->student_ids)->unique()->values();
+
+        // Sync via the BelongsToMany pivot (tagged_photos table).
+        // syncWithoutDetaching preserves existing AI-tagged rows.
+        $photo->taggedStudents()->syncWithoutDetaching(
+            $studentIds->mapWithKeys(fn (int $id) => [
+                $id => [
+                    'source'    => 'manual',
+                    'tagged_by' => $authId,
+                ],
+            ])->all()
+        );
+
+        // Notify only students that weren't already tagged manually
+        $alreadyTaggedIds = $photo->taggedStudents()
+            ->wherePivot('tagged_by', $authId)
+            ->pluck('users.id');
+
+        $newlyTagged = User::whereIn('id', $studentIds)
+            ->whereNotIn('id', $alreadyTaggedIds)
+            ->get();
+
+        $photoUrl = $photo->media->first()?->file_path ?? '';
+
+        foreach ($newlyTagged as $tagged) {
+            try {
+                PhotoTaggedNotification::dispatchFor($tagged, $request->user(), $photoUrl);
+            } catch (\Throwable) {
+                // Never let a notification failure break the response
+            }
+        }
+
+        // Return the full, authoritative tagged-student list for this photo
+        $tagged = $photo->taggedStudents()
+            ->select('users.id', 'users.name', 'users.profile_picture')
+            ->get()
+            ->map(fn ($s) => [
+                'id'              => $s->id,
+                'name'            => $s->name,
+                'profile_picture' => $s->profile_picture,
+            ]);
+
+        return response()->json([
+            'success'         => true,
+            'message'         => 'Students tagged successfully.',
+            'tagged_students' => $tagged,
+        ]);
+    }
+
+    // ── Tagged photos (upload a photo and tag a single user) ──────────────────
+    //
+    //  POST /api/students/profile/tagged-photos/upload
+    //  Body: multipart — photo (file), user_id (int), caption (string|null)
+    //
+    //  Original endpoint kept intact under a new path so existing callers
+    //  are not broken.
+    // ─────────────────────────────────────────────────────────────────────────
 
     public function addTaggedPhoto(Request $request): JsonResponse
     {
@@ -268,11 +373,9 @@ class StudentController extends Controller
 
         $taggedUser = User::find($request->user_id);
         if ($taggedUser) {
-            PhotoTaggedNotification::dispatchFor(
-                tagged:   $taggedUser,
-                tagger:   $request->user(),
-                photoUrl: $photo->photo_url,
-            );
+            try {
+                PhotoTaggedNotification::dispatchFor($taggedUser, $request->user(), $photo->photo_url);
+            } catch (\Throwable) {}
         }
 
         return response()->json([
@@ -282,7 +385,10 @@ class StudentController extends Controller
                 'id'          => $photo->id,
                 'photo_url'   => $photo->photo_url,
                 'caption'     => $photo->caption,
-                'uploaded_by' => ['id' => $request->user()->id, 'name' => $request->user()->name],
+                'uploaded_by' => [
+                    'id'   => $request->user()->id,
+                    'name' => $request->user()->name,
+                ],
                 'created_at'  => $photo->created_at->diffForHumans(),
             ],
         ], 201);

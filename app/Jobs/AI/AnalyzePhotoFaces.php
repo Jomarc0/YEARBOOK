@@ -4,7 +4,8 @@ namespace App\Jobs\AI;
 
 use App\Contracts\AnalyzablePhoto;
 use App\Contracts\FaceRecognition;
-use App\Events\PhotoFacesAnalyzed;
+use App\Models\Gallery;
+use App\Models\GraduationPhoto;
 use App\Models\TaggedPhoto;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -36,34 +37,37 @@ class AnalyzePhotoFaces implements ShouldQueue
             return;
         }
 
-        if (! $this->force && $photo->taggedPhotos()->exists()) {
+        if (! $this->force && method_exists($photo, 'taggedPhotos') && $photo->taggedPhotos()->exists()) {
             Log::info("Photo #{$photo->getKey()} already tagged – skipping");
             return;
         }
 
         try {
-            $filePath = $photo->getAttribute('file_path');
+            [$filePath, $externalImageId] = $this->photoSource($photo);
 
-            $faceRecognition->indexPhoto($filePath, 'photo:' . $photo->getKey());
+            $faceRecognition->indexPhoto($filePath, $externalImageId);
 
             $result    = $faceRecognition->analyzePhoto('public', $filePath);
             $matches   = $result['matches']    ?? [];
             $faceCount = $result['face_count'] ?? 0;
 
             if (! empty($matches)) {
-                if ($this->force) {
+                if ($this->force && method_exists($photo, 'taggedPhotos')) {
                     $photo->taggedPhotos()->where('source', 'rekognition')->delete();
                 }
 
                 foreach ($matches as $match) {
                     $userId = data_get($match, 'user_id');
                     if (blank($userId)) continue;
+                    if (! method_exists($photo, 'taggedPhotos')) continue;
+
+                    $photoKey = $photo instanceof GraduationPhoto ? 'graduation_photo_id' : 'photo_id';
 
                     TaggedPhoto::updateOrCreate(
                         [
-                            'photo_id' => $photo->getKey(),
-                            'user_id'  => (int) $userId,
-                            'source'   => 'rekognition',
+                            $photoKey => $photo->getKey(),
+                            'user_id' => (int) $userId,
+                            'source'  => 'rekognition',
                         ],
                         [
                             'similarity' => (float) data_get($match, 'similarity', 0),
@@ -77,6 +81,7 @@ class AnalyzePhotoFaces implements ShouldQueue
             $photo->markAiDone([
                 'provider'    => $result['provider'] ?? 'aws-rekognition',
                 'face_count'  => $faceCount,
+                'matches'     => $matches,
                 'analyzed_at' => now()->toIso8601String(),
             ]);
 
@@ -88,5 +93,27 @@ class AnalyzePhotoFaces implements ShouldQueue
             Log::error("AnalyzePhotoFaces failed for Photo #{$photo->getKey()}: {$e->getMessage()}");
             $photo->markAiError($e->getMessage());
         }
+    }
+
+    private function photoSource(AnalyzablePhoto $photo): array
+    {
+        if ($photo instanceof Gallery) {
+            $media = $photo->media()
+                ->where('resource_type', 'image')
+                ->orderBy('sort_order')
+                ->first();
+
+            if (! $media) {
+                throw new \RuntimeException("Gallery #{$photo->getKey()} has no image media to analyze.");
+            }
+
+            return [$media->file_path, 'gallery_media:' . $media->getKey()];
+        }
+
+        $externalImageId = $photo instanceof GraduationPhoto
+            ? 'graduation_photo:' . $photo->getKey()
+            : 'photo:' . $photo->getKey();
+
+        return [$photo->getAttribute('file_path'), $externalImageId];
     }
 }

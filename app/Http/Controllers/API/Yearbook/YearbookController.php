@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Album;
 use App\Models\Batch;
 use App\Models\Faculty;
+use App\Models\Student;
 use App\Models\User;
 use App\Models\Yearbook;
 use App\Models\YearbookBookmark;
@@ -60,11 +61,21 @@ class YearbookController extends Controller
 
     public function flipbookData(): JsonResponse
     {
-        $students = User::with('section')
-            ->whereIn('role', PlatformSettings::directoryRoles())
-            ->whereNotNull('student_id')
-            ->orderBy('name')
-            ->get(['id', 'name', 'student_id', 'course', 'bio', 'profile_picture']);
+        $students = Student::with('section:id,name')
+            ->orderBy('last_name')
+            ->orderBy('first_name')
+            ->get([
+                'id',
+                'first_name',
+                'last_name',
+                'student_no',
+                'course',
+                'student_quote',
+                'motto',
+                'photo',
+                'section_id',
+            ])
+            ->map(fn ($student) => $this->mapStudent($student));
 
         return response()->json($students);
     }
@@ -100,44 +111,110 @@ class YearbookController extends Controller
     {
         $sections = $batch->sections()
             ->with(['students' => function ($q) {
-                $q->select('id', 'name', 'student_id', 'course', 'bio', 'profile_picture', 'section_id')
-                  ->orderBy('name');
-            }])
+                $q->select(
+                    'id',
+                    'first_name',
+                    'last_name',
+                    'middle_name',
+                    'student_no',
+                    'email',
+                    'photo',
+                    'birthday',
+                    'hometown',
+                    'nickname',
+                    'course',
+                    'graduation_year',
+                    'honors',
+                    'organizations',
+                    'achievements',
+                    'motto',
+                    'student_quote',
+                    'fondest_memory',
+                    'ambition',
+                    'future_plans',
+                    'message_to_batchmates',
+                    'message_to_parents',
+                    'most_likely_to',
+                    'facebook_url',
+                    'instagram_url',
+                    'linkedin_url',
+                    'github_url',
+                    'section_id'
+                )
+                ->orderBy('last_name')
+                ->orderBy('first_name');
+            }, 'adviser:id,name'])
             ->get();
 
         $albums = Album::where('batch_id', $batch->id)
             ->with(['photos' => fn ($q) => $q->limit(6)])
             ->get();
 
-        $faculty = User::where('role', 'faculty')
-            ->get(['id', 'name', 'profile_picture']);
+        $faculty = Faculty::query()
+            ->orderBy('name')
+            ->get(['id', 'name', 'title', 'department', 'bio', 'image', 'email']);
+
+        $allStudents = $sections->flatMap(fn ($s) => $s->students);
+        $mappedStudents = $allStudents->map(fn ($student) => $this->mapStudent($student))->values();
+        $stats = $this->buildYearbookStats($mappedStudents, $sections);
 
         $meta = [
-            'title'  => 'Senior Yearbook',
-            'school' => config('app.school_name', 'National University Lipa'),
+            'title'  => PlatformSettings::get('yearbook_name') ?: 'Sinag-Bughaw Yearbook',
+            'school' => PlatformSettings::get('school_name') ?: config('app.school_name', 'National University Lipa'),
             'year'   => $batch->year ?? now()->year,
+            'theme'  => PlatformSettings::get('graduation_theme') ?: 'Legacy in Motion',
+            'academic_year' => PlatformSettings::get('academic_year'),
+            'graduation_date' => PlatformSettings::get('graduation_date'),
         ];
 
         $pages = [];
 
-        // 1. Cover + Dedication
-        $pages[] = ['type' => 'cover',      'side' => 'left',  'meta' => $meta];
-        $pages[] = ['type' => 'dedication', 'side' => 'right', 'meta' => $meta];
+        // 1. Cover + opening editorial pages
+        $pages[] = ['type' => 'cover',      'side' => 'left',  'meta' => $meta, 'stats' => $stats];
+        $pages[] = ['type' => 'dedication', 'side' => 'right', 'meta' => $meta, 'stats' => $stats];
 
-        // 2. TOC placeholders
+        // 2. TOC placeholders; populated after the manifest is assembled.
+        $tocIndexes = [count($pages), count($pages) + 1];
         $pages[] = ['type' => 'toc', 'side' => 'left',  'toc' => []];
         $pages[] = ['type' => 'toc', 'side' => 'right', 'toc' => []];
 
-        // 3. Section spreads
+        $pages[] = ['type' => 'welcome', 'side' => 'left', 'meta' => $meta, 'messageType' => 'university'];
+        $pages[] = ['type' => 'welcome', 'side' => 'right', 'meta' => $meta, 'messageType' => 'dean'];
+        $pages[] = ['type' => 'welcome', 'side' => 'left', 'meta' => $meta, 'messageType' => 'chair'];
+        $pages[] = ['type' => 'program-overview', 'side' => 'right', 'meta' => $meta, 'stats' => $stats];
+        $pages[] = ['type' => 'stats', 'side' => 'left', 'meta' => $meta, 'stats' => $stats, 'studentCount' => $allStudents->count(), 'sectionCount' => $sections->count()];
+        $pages[] = ['type' => 'achievements', 'side' => 'right', 'meta' => $meta, 'students' => $this->featuredStudents($mappedStudents, 'achievements', 6), 'stats' => $stats];
+
+        // 3. Section spreads with student profile/story pages.
         foreach ($sections as $section) {
             $pages[] = ['type' => 'section-header', 'side' => 'left',  'section' => $this->mapSection($section)];
             $pages[] = ['type' => 'section-header', 'side' => 'right', 'section' => $this->mapSection($section)];
 
-            $chunks = array_chunk($section->students->toArray(), 4);
-            foreach ($chunks as $chunk) {
-                $leftPage = count($pages) + 1;
-                $pages[]  = ['type' => 'student-grid',   'side' => 'left',  'students' => $chunk, 'section' => $this->mapSection($section), 'pageNum' => $leftPage];
-                $pages[]  = ['type' => 'student-quotes', 'side' => 'right', 'students' => $chunk, 'section' => $this->mapSection($section), 'pageNum' => $leftPage + 1];
+            $students = $section->students
+                ->map(fn ($student) => $this->mapStudent($student))
+                ->values()
+                ->toArray();
+
+            foreach ($students as $student) {
+                $pageNumber = count($pages) + 1;
+                $pages[] = [
+                    'type' => 'student-profile',
+                    'side' => $pageNumber % 2 === 0 ? 'right' : 'left',
+                    'profilePart' => 'portrait',
+                    'student' => $student,
+                    'section' => $this->mapSection($section),
+                    'pageNum' => $pageNumber,
+                ];
+
+                $detailPageNumber = count($pages) + 1;
+                $pages[] = [
+                    'type' => 'student-profile',
+                    'side' => $detailPageNumber % 2 === 0 ? 'right' : 'left',
+                    'profilePart' => 'details',
+                    'student' => $student,
+                    'section' => $this->mapSection($section),
+                    'pageNum' => $detailPageNumber,
+                ];
             }
         }
 
@@ -147,22 +224,49 @@ class YearbookController extends Controller
             $pages[] = ['type' => 'gallery', 'side' => 'right', 'gallery' => $this->mapAlbum($album)];
         }
 
-        // 5. Faculty
+        // 5. Senior editorial collections. Quotes now live inside each student profile.
+        $pages[] = ['type' => 'organizations', 'side' => 'left', 'students' => $this->featuredStudents($mappedStudents, 'organizations', 8), 'meta' => $meta];
+        $pages[] = ['type' => 'memories', 'side' => 'right', 'students' => $this->featuredStudents($mappedStudents, 'fondest_memory', 6), 'meta' => $meta];
+        $pages[] = ['type' => 'aspirations', 'side' => 'left', 'students' => $this->featuredStudents($mappedStudents, 'future_plans', 6), 'meta' => $meta];
+
+        // 6. Faculty
         if ($faculty->isNotEmpty()) {
-            $pages[] = ['type' => 'faculty', 'side' => 'left',  'faculty' => $this->mapFaculty($faculty)];
-            $pages[] = ['type' => 'faculty', 'side' => 'right', 'faculty' => $this->mapFaculty($faculty)];
+            $facultyChunks = array_chunk($this->mapFaculty($faculty), 2);
+
+            for ($i = 0; $i < count($facultyChunks); $i += 2) {
+                $leftPage = count($pages) + 1;
+                $pages[] = [
+                    'type' => 'faculty',
+                    'side' => 'left',
+                    'faculty' => $facultyChunks[$i] ?? [],
+                    'pageNum' => $leftPage,
+                ];
+                $pages[] = [
+                    'type' => 'faculty',
+                    'side' => 'right',
+                    'faculty' => $facultyChunks[$i + 1] ?? [],
+                    'pageNum' => $leftPage + 1,
+                ];
+            }
         }
 
-        // 6. Stats + closing
-        $allStudents = $sections->flatMap(fn ($s) => $s->students);
-        $pages[] = ['type' => 'stats',   'side' => 'left',  'meta' => $meta, 'studentCount' => $allStudents->count(), 'sectionCount' => $sections->count()];
-        $pages[] = ['type' => 'closing', 'side' => 'right', 'meta' => $meta];
+        // 7. Directory + closing
+        foreach (array_chunk($mappedStudents->toArray(), 18) as $i => $chunk) {
+            $pages[] = ['type' => 'directory', 'side' => $i % 2 === 0 ? 'left' : 'right', 'students' => $chunk, 'meta' => $meta];
+        }
+
+        $pages[] = ['type' => 'closing', 'side' => 'right', 'meta' => $meta, 'stats' => $stats];
         $pages[] = ['type' => 'closing', 'side' => 'left',  'meta' => $meta];
-        $pages[] = ['type' => 'closing', 'side' => 'right', 'meta' => $meta];
+        $pages[] = ['type' => 'back-cover', 'side' => 'right', 'meta' => $meta];
 
         // Pad to even count (react-pageflip requirement)
         if (count($pages) % 2 !== 0) {
             $pages[] = ['type' => 'blank', 'side' => 'right'];
+        }
+
+        $toc = $this->buildTableOfContents($pages);
+        foreach ($tocIndexes as $index) {
+            $pages[$index]['toc'] = $toc;
         }
 
         return response()->json([
@@ -289,22 +393,36 @@ class YearbookController extends Controller
 
         if (!$q) return response()->json([]);
 
-        $students = User::with('section')
-            ->where('role', 'student')
+        $students = Student::with('section')
             ->when($batchId, fn ($query) =>
                 $query->whereHas('section.batch', fn ($q2) => $q2->where('id', $batchId))
             )
             ->where(fn ($query) =>
-                $query->where('name',    'LIKE', "%{$q}%")
-                      ->orWhere('bio',   'LIKE', "%{$q}%")
-                      ->orWhere('course','LIKE', "%{$q}%")
+                $query->where('first_name', 'LIKE', "%{$q}%")
+                      ->orWhere('last_name', 'LIKE', "%{$q}%")
+                      ->orWhere('student_no', 'LIKE', "%{$q}%")
+                      ->orWhere('course', 'LIKE', "%{$q}%")
+                      ->orWhere('student_quote', 'LIKE', "%{$q}%")
+                      ->orWhere('motto', 'LIKE', "%{$q}%")
             )
             ->limit(20)
-            ->get(['id', 'name', 'bio', 'section_id', 'batch_id']);
+            ->get([
+                'id',
+                'first_name',
+                'last_name',
+                'student_no',
+                'course',
+                'student_quote',
+                'motto',
+                'section_id',
+                'batch_id',
+            ]);
 
         return response()->json($students->map(fn ($s) => [
-            'label'     => $s->name,
-            'excerpt'   => $s->bio ? mb_substr($s->bio, 0, 80) . '…' : null,
+            'label'     => trim("{$s->first_name} {$s->last_name}"),
+            'excerpt'   => ($s->student_quote ?? $s->motto)
+                ? mb_substr(($s->student_quote ?? $s->motto), 0, 80) . '...'
+                : null,
             'type'      => 'student',
             'pageIndex' => $batchId
                 ? $this->pageResolver->getPageIndex($s->id, (int) $batchId)
@@ -320,8 +438,50 @@ class YearbookController extends Controller
         return [
             'id'           => $section->id,
             'name'         => $section->name,
-            'strand'       => $section->strand ?? null,
+            'strand'       => $section->course ?? $section->strand ?? null,
+            'year'         => $section->batch?->graduation_year ?? $section->batch_year ?? null,
+            'adviser'      => $section->adviser?->name,
             'studentCount' => $section->students?->count() ?? 0,
+        ];
+    }
+
+    private function mapStudent(Student $student): array
+    {
+        $name = trim("{$student->first_name} {$student->last_name}");
+
+        return [
+            'id'              => $student->id,
+            'name'            => $name,
+            'student_id'      => $student->student_no,
+            'student_no'      => $student->student_no,
+            'course'          => $student->course,
+            'bio'             => $student->student_quote ?? $student->motto,
+            'motto'           => $student->motto,
+            'student_quote'   => $student->student_quote,
+            'middle_name'     => $student->middle_name,
+            'email'           => $student->email,
+            'birthday'        => $student->birthday
+                ? date('F j, Y', strtotime((string) $student->birthday))
+                : null,
+            'hometown'        => $student->hometown,
+            'nickname'        => $student->nickname,
+            'graduation_year' => $student->graduation_year,
+            'honors'          => $student->honors,
+            'organizations'   => $student->organizations,
+            'achievements'    => $student->achievements,
+            'fondest_memory'  => $student->fondest_memory,
+            'ambition'        => $student->ambition,
+            'future_plans'    => $student->future_plans,
+            'message_to_batchmates' => $student->message_to_batchmates,
+            'message_to_parents'    => $student->message_to_parents,
+            'most_likely_to'  => $student->most_likely_to,
+            'facebook_url'    => $student->facebook_url,
+            'instagram_url'   => $student->instagram_url,
+            'linkedin_url'    => $student->linkedin_url,
+            'github_url'      => $student->github_url,
+            'profile_picture' => $student->photo,
+            'photo'           => $student->photo,
+            'section_id'      => $student->section_id,
         ];
     }
 
@@ -342,8 +502,110 @@ class YearbookController extends Controller
         return $faculty->map(fn ($f) => [
             'id'    => $f->id,
             'name'  => $f->name,
-            'role'  => $f->position ?? 'Faculty',
-            'photo' => $f->profile_picture ?? null,
+            'role'  => $f->title ?? $f->department ?? 'Faculty',
+            'title' => $f->title,
+            'department' => $f->department,
+            'bio' => $f->bio,
+            'email' => $f->email,
+            'photo' => $this->resolveFacultyImageUrl($f->image),
+            'image' => $this->resolveFacultyImageUrl($f->image),
         ])->toArray();
+}
+
+    private function resolveFacultyImageUrl(?string $path): ?string
+    {
+        if (empty($path)) {
+            return null;
+        }
+
+        if (str_starts_with($path, 'http')) {
+            return $path;
+        }
+
+        if (str_starts_with($path, '/storage/')) {
+            return url($path);
+        }
+
+        $clean = ltrim(preg_replace('#^(storage|public)/#', '', $path), '/');
+
+        if (Storage::disk('public')->exists($clean)) {
+            $baseUrl = rtrim(config('filesystems.disks.public.url', url('/storage')), '/');
+
+            return "{$baseUrl}/{$clean}";
+        }
+
+        $cloudName = config('cloudinary.cloud_name');
+        if ($cloudName) {
+            return "https://res.cloudinary.com/{$cloudName}/image/upload/{$path}";
+        }
+
+        return url("/storage/{$clean}");
+    }
+
+    private function buildYearbookStats($students, $sections): array
+    {
+        $students = collect($students);
+
+        return [
+            'totalGraduates' => $students->count(),
+            'sectionCount' => $sections->count(),
+            'courseDistribution' => $students->pluck('course')->filter()->countBy()->sortDesc()->toArray(),
+            'honorsDistribution' => $students->pluck('honors')->filter()->countBy()->sortDesc()->toArray(),
+            'honorsCount' => $students->filter(fn ($s) => !empty($s['honors']))->count(),
+            'achievementCount' => $students->filter(fn ($s) => !empty($s['achievements']))->count(),
+            'organizationCount' => $students->filter(fn ($s) => !empty($s['organizations']))->count(),
+            'quoteCount' => $students->filter(fn ($s) => !empty($s['student_quote']) || !empty($s['motto']))->count(),
+        ];
+    }
+
+    private function featuredStudents($students, string $field, int $limit): array
+    {
+        return collect($students)
+            ->filter(fn ($student) => !empty($student[$field]))
+            ->take($limit)
+            ->values()
+            ->toArray();
+    }
+
+    private function buildTableOfContents(array $pages): array
+    {
+        $labels = [
+            'cover' => 'Cover',
+            'dedication' => 'Dedication',
+            'welcome' => 'Welcome Messages',
+            'program-overview' => 'Program Overview',
+            'stats' => 'Class Statistics',
+            'achievements' => 'Achievements',
+            'section-header' => 'Class Sections',
+            'student-profile' => 'Graduate Profiles',
+            'gallery' => 'Memories',
+            'organizations' => 'Organizations',
+            'memories' => 'Campus Memories',
+            'aspirations' => 'Future Aspirations',
+            'faculty' => 'Faculty',
+            'directory' => 'Graduate Directory',
+            'closing' => 'Closing',
+            'back-cover' => 'Back Cover',
+        ];
+
+        $toc = [];
+        foreach ($pages as $index => $page) {
+            $type = $page['type'] ?? null;
+            if (!isset($labels[$type])) {
+                continue;
+            }
+
+            $label = $type === 'section-header'
+                ? ($page['section']['name'] ?? $labels[$type])
+                : $labels[$type];
+
+            if (collect($toc)->contains('label', $label)) {
+                continue;
+            }
+
+            $toc[] = ['label' => $label, 'pageIndex' => $index];
+        }
+
+        return $toc;
     }
 }

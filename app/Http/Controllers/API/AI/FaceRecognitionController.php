@@ -8,6 +8,8 @@ use App\Http\Controllers\Controller;
 use App\Http\Resources\TaggedPhotoResource;
 use App\Jobs\AI\AnalyzePhotoFaces;
 use App\Models\AuditLog;
+use App\Models\GalleryMedia;
+use App\Models\GraduationPhoto;
 use App\Models\Photo;
 use App\Models\Setting;
 use App\Models\TaggedPhoto;
@@ -64,49 +66,35 @@ class FaceRecognitionController extends Controller
         try {
             $threshold = (float) Setting::getValue('face_recognition_threshold', '75');
             $file      = $request->file('face_image');
-            $bytes     = file_get_contents($file->getRealPath());
 
             // Search Rekognition — returns ALL matches (student:X and photo:X)
-            $rekognitionResult = $this->faceRecognition->searchUploadedFace($file, 20, $threshold);
+            $rekognitionResult = $this->faceRecognition->searchIndexedFaces($file, 30, $threshold);
 
-            $matches      = $rekognitionResult['matches'] ?? [];
+            $rawMatches   = collect($rekognitionResult['matches'] ?? []);
+            $matches      = $rawMatches->filter(fn ($m) => filled($m['user_id']))->values()->all();
             $studentIds   = [];
             $photoIds     = [];
+            $galleryMediaIds = [];
+            $graduationPhotoIds = [];
 
-            // Also directly search by photo:X from raw Rekognition result
-            // We need to call searchFacesByImage ourselves to get photo:X hits
-            $client = new \Aws\Rekognition\RekognitionClient([
-                'version'     => 'latest',
-                'region'      => config('services.rekognition.region'),
-                'credentials' => [
-                    'key'    => config('services.rekognition.key'),
-                    'secret' => config('services.rekognition.secret'),
-                ],
-            ]);
+            foreach ($rawMatches as $match) {
+                $extId = (string) ($match['external_image_id'] ?? '');
 
-            try {
-                $raw = $client->searchFacesByImage([
-                    'CollectionId'       => config('services.rekognition.collection'),
-                    'Image'              => ['Bytes' => $bytes],
-                    'FaceMatchThreshold' => $threshold,
-                    'MaxFaces'           => 20,
-                    'QualityFilter'      => 'AUTO',
-                ]);
-
-                foreach ($raw['FaceMatches'] ?? [] as $match) {
-                    $extId = data_get($match, 'Face.ExternalImageId');
-                    if (str_starts_with($extId, 'student:')) {
-                        $studentIds[] = (int) substr($extId, 8);
-                    } elseif (str_starts_with($extId, 'photo:')) {
-                        $photoIds[] = (int) substr($extId, 6);
-                    }
+                if (str_starts_with($extId, 'student:')) {
+                    $studentIds[] = (int) substr($extId, strlen('student:'));
+                } elseif (str_starts_with($extId, 'graduation_photo:')) {
+                    $graduationPhotoIds[] = (int) substr($extId, strlen('graduation_photo:'));
+                } elseif (str_starts_with($extId, 'gallery_media:')) {
+                    $galleryMediaIds[] = (int) substr($extId, strlen('gallery_media:'));
+                } elseif (str_starts_with($extId, 'photo:')) {
+                    $photoIds[] = (int) substr($extId, strlen('photo:'));
                 }
-            } catch (\Exception $e) {
-                // no face detected or error
             }
 
             $studentIds = array_unique($studentIds);
             $photoIds   = array_unique($photoIds);
+            $galleryMediaIds = array_unique($galleryMediaIds);
+            $graduationPhotoIds = array_unique($graduationPhotoIds);
 
             // Get photos directly matched by face
             $directPhotos = Photo::whereIn('id', $photoIds)
@@ -122,6 +110,51 @@ class FaceRecognitionController extends Controller
                         'event_date' => $p->album->event_date,
                     ] : null,
                     'source' => 'direct_match',
+                ])
+                ->values()
+                ->all();
+
+            $directGraduationPhotos = GraduationPhoto::whereIn('id', $graduationPhotoIds)
+                ->with('album:id,title,event_date,category')
+                ->get()
+                ->map(fn ($p) => [
+                    'photo_id' => $p->id,
+                    'graduation_photo_id' => $p->id,
+                    'file_path' => $p->file_path,
+                    'caption' => null,
+                    'album' => $p->album ? [
+                        'id' => $p->album->id,
+                        'title' => $p->album->title,
+                        'event_date' => $p->album->event_date,
+                        'category' => $p->album->category,
+                    ] : null,
+                    'source' => 'graduation_direct_match',
+                ])
+                ->values()
+                ->all();
+
+            $directGalleryMedia = GalleryMedia::whereIn('id', $galleryMediaIds)
+                ->where('resource_type', 'image')
+                ->with([
+                    'gallery' => fn ($q) => $q
+                        ->select(['id', 'album_id', 'user_id', 'caption', 'status', 'visibility'])
+                        ->with('album:id,title,event_date,type'),
+                ])
+                ->get()
+                ->filter(fn ($m) => $m->gallery?->status === 'approved' && $m->gallery?->visibility === 'public')
+                ->map(fn ($m) => [
+                    'photo_id' => $m->gallery_id,
+                    'gallery_media_id' => $m->id,
+                    'gallery_id' => $m->gallery_id,
+                    'file_path' => $m->file_path,
+                    'caption' => $m->gallery?->caption,
+                    'album' => $m->gallery?->album ? [
+                        'id' => $m->gallery->album->id,
+                        'title' => $m->gallery->album->title,
+                        'event_date' => $m->gallery->album->event_date,
+                        'type' => $m->gallery->album->type,
+                    ] : null,
+                    'source' => 'gallery_media_direct_match',
                 ])
                 ->values()
                 ->all();
@@ -148,21 +181,26 @@ class FaceRecognitionController extends Controller
             }
 
             // Merge and deduplicate
-            $allPhotos = collect(array_merge($directPhotos, $taggedPhotos))
-                ->unique('photo_id')
+            $allPhotos = collect(array_merge($directPhotos, $directGraduationPhotos, $directGalleryMedia, $taggedPhotos))
+                ->unique(fn ($p) => ($p['graduation_photo_id'] ?? null)
+                    ? 'graduation:' . $p['graduation_photo_id']
+                    : (($p['gallery_media_id'] ?? null)
+                        ? 'gallery_media:' . $p['gallery_media_id']
+                        : 'photo:' . ($p['photo_id'] ?? '')))
                 ->values()
                 ->all();
 
-            $status = count($allPhotos) > 0 ? 'matched' : 'no_matches';
+            $status = count($matches) > 0 || count($allPhotos) > 0 ? 'matched' : 'no_matches';
 
             AuditLog::record($request, 'Face Search',
-                'Photos found: ' . count($allPhotos)
+                'Students found: ' . count($matches) . ', photos found: ' . count($allPhotos)
             );
 
             return response()->json([
                 'status'  => $status,
+                'matches' => $matches,
                 'photos'  => $allPhotos,
-                'message' => count($allPhotos) > 0 ? null : 'No matching photos found.',
+                'message' => $status === 'matched' ? null : 'No matching faces found.',
             ]);
 
         } catch (\Exception $e) {
@@ -170,6 +208,7 @@ class FaceRecognitionController extends Controller
 
             return response()->json([
                 'status'  => 'error',
+                'matches' => [],
                 'photos'  => [],
                 'message' => $e->getMessage(),
             ], 500);
@@ -177,10 +216,23 @@ class FaceRecognitionController extends Controller
     }
     // ── Return face tags for a single photo ───────────────────────────────
 
-    public function photoTags(Photo $photo): JsonResponse
+    public function photoTags(int $photo): JsonResponse
     {
+        $photo = Photo::find($photo);
+
+        if (! $photo) {
+            return response()->json([
+                'photo_id'    => null,
+                'status'      => 'not_found',
+                'face_count'  => 0,
+                'analyzed_at' => null,
+                'provider'    => 'aws-rekognition',
+                'tags'        => [],
+            ]);
+        }
+
         $tags = $photo->taggedPhotos()
-            ->with('user:id,name,student_id,course,profile_picture')
+            ->with('user:id,name,profile_picture,student_record_id')
             ->orderByDesc('similarity')
             ->get();
 

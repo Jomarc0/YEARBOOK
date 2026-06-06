@@ -1,59 +1,47 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { Link, useNavigate, useParams }              from 'react-router-dom';
-import { useAuth }                                   from '@/features/auth/hooks/useAuth';
-import { studentsApi }                               from '@/api/student.api';
-import Navbar                                        from '@/components/layout/Navbar';
-import { useMessaging }                              from '@/features/messaging/hooks/useMessaging';
-import { imageUrl, avatarUrl }                       from '@/utils/imageUrl';
-
-// ── Helpers ────────────────────────────────────────────────────────────────────
+import { Link, useNavigate, useParams } from 'react-router-dom';
+import { useAuth } from '@/features/auth/hooks/useAuth';
+import { studentsApi } from '@/api/student.api';
+import Navbar from '@/components/layout/Navbar';
+import { useMessaging } from '@/features/messaging/hooks/useMessaging';
+import { imageUrl } from '@/utils/imageUrl';
 
 function formatTime(iso) {
   if (!iso) return '';
-  const d        = new Date(iso);
-  const now      = new Date();
+  const d = new Date(iso);
+  const now = new Date();
   const diffDays = Math.floor((now - d) / 86400000);
   if (diffDays === 0) return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   if (diffDays === 1) return 'Yesterday';
-  if (diffDays < 7)  return d.toLocaleDateString([], { weekday: 'short' });
+  if (diffDays < 7) return d.toLocaleDateString([], { weekday: 'short' });
   return d.toLocaleDateString([], { month: 'short', day: 'numeric' });
 }
 
 function initials(name = '') {
-  return name.trim().split(/\s+/).map(w => w[0]?.toUpperCase() || '').slice(0, 2).join('');
+  return name.trim().split(/\s+/).map((w) => w[0]?.toUpperCase() || '').slice(0, 2).join('');
 }
 
-// ── Avatar ─────────────────────────────────────────────────────────────────────
-// Generates colored initials; falls back to user photo if available.
-
 const PALETTES = [
-  { bg: '#fff3cd', fg: '#1d2b4b' },  // NU gold tint
-  { bg: '#e0e7ff', fg: '#3730a3' },
-  { bg: '#d1fae5', fg: '#065f46' },
-  { bg: '#fce7f3', fg: '#9d174d' },
-  { bg: '#e0f2fe', fg: '#0369a1' },
-  { bg: '#f3e8ff', fg: '#7e22ce' },
+  ['bg-amber-100', 'text-[#1d2b4b]'],
+  ['bg-indigo-100', 'text-indigo-800'],
+  ['bg-emerald-100', 'text-emerald-800'],
+  ['bg-sky-100', 'text-sky-800'],
+  ['bg-violet-100', 'text-violet-800'],
 ];
 
-function getPalette(name = '') {
+function paletteFor(name = '') {
   const code = [...name].reduce((acc, c) => acc + c.charCodeAt(0), 0);
   return PALETTES[code % PALETTES.length];
 }
 
-function Avatar({ src, name, size = 44, radius = 12 }) {
+function Avatar({ src, name, size = 'h-11 w-11', radius = 'rounded-xl' }) {
   const [errored, setErrored] = useState(false);
-  const resolved = (!errored && src) ? imageUrl(src) : null;
-  const palette  = getPalette(name);
+  const resolved = !errored && src ? imageUrl(src) : null;
+  const [bg, fg] = paletteFor(name);
 
   if (!resolved) {
     return (
-      <div style={{
-        width: size, height: size, borderRadius: radius,
-        background: palette.bg, color: palette.fg,
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        fontWeight: 600, fontSize: size * 0.34, flexShrink: 0,
-        fontFamily: "'Figtree', sans-serif", letterSpacing: '0.02em',
-      }}>
+      <div className={`${size} ${radius} ${bg} ${fg} grid shrink-0 place-items-center text-sm font-black`}>
         {initials(name)}
       </div>
     );
@@ -61,42 +49,34 @@ function Avatar({ src, name, size = 44, radius = 12 }) {
 
   return (
     <img
-      src={resolved} alt={name} onError={() => setErrored(true)}
-      style={{ width: size, height: size, borderRadius: radius, objectFit: 'cover', flexShrink: 0 }}
+      src={resolved}
+      alt={name}
+      onError={() => setErrored(true)}
+      className={`${size} ${radius} shrink-0 object-cover`}
     />
   );
 }
 
-function OnlineDot({ online, size = 10, borderColor = '#fff' }) {
+function OnlineDot({ online }) {
   return (
-    <span style={{
-      display: 'inline-block', width: size, height: size,
-      borderRadius: '50%',
-      background: online ? '#22c55e' : '#d1d5db',
-      border: `2px solid ${borderColor}`,
-      flexShrink: 0,
-    }} />
+    <span className={`absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-white ${online ? 'bg-emerald-500' : 'bg-slate-300'}`} />
   );
 }
 
-// ── Page ───────────────────────────────────────────────────────────────────────
-
 export default function MessagesPage() {
   const { id: recipientId } = useParams();
-  const { user }            = useAuth();
-  const navigate            = useNavigate();
+  const { user } = useAuth();
+  const navigate = useNavigate();
 
   const {
     conversations, thread, loading, isTyping,
     onlineUsers, unreadTotal, sendMessage, onKeystroke,
   } = useMessaging(recipientId ? Number(recipientId) : null);
 
-  const [body,      setBody]      = useState('');
+  const [body, setBody] = useState('');
   const [recipient, setRecipient] = useState(null);
-  const [search,    setSearch]    = useState('');
-
+  const [search, setSearch] = useState('');
   const bottomRef = useRef();
-  const inputRef  = useRef();
 
   useEffect(() => {
     if (!recipientId) { setRecipient(null); return; }
@@ -120,377 +100,190 @@ export default function MessagesPage() {
     if (recipientId) onKeystroke(Number(recipientId));
   }, [recipientId, onKeystroke]);
 
-  const filtered = conversations.filter(conv => {
+  const filtered = conversations.filter((conv) => {
     if (!search.trim()) return true;
     const other = conv.sender_id === user?.id ? conv.receiver : conv.sender;
     return other?.name?.toLowerCase().includes(search.toLowerCase());
   });
 
-  // ── CSS ──────────────────────────────────────────────────────────────────────
-
-  const css = `
-    @import url('https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600&display=swap');
-    .nu-msg * { box-sizing: border-box; }
-    .nu-msg {
-      font-family: 'Figtree', -apple-system, sans-serif;
-      display: flex; flex-direction: column; height: 100vh; background: #eef0f5;
-    }
-
-    /* ── Sidebar ── */
-    .nu-sidebar {
-      width: 280px; flex-shrink: 0; background: #fff;
-      border-right: 1px solid #e4e7ed;
-      display: flex; flex-direction: column; overflow: hidden;
-    }
-    .sb-head { padding: 20px 16px 10px; }
-    .sb-title {
-      font-size: 15px; font-weight: 600; color: #1d2b4b;
-      margin: 0 0 12px; letter-spacing: -0.2px;
-      display: flex; align-items: center; gap: 8px;
-    }
-    .sb-title-pip {
-      width: 8px; height: 8px; border-radius: 50%;
-      background: #fdb813; flex-shrink: 0;
-    }
-    .sb-search {
-      display: flex; align-items: center; gap: 8px;
-      background: #f4f6fa; border-radius: 10px; padding: 8px 12px;
-      border: 1px solid transparent; transition: border-color .15s, background .15s;
-    }
-    .sb-search:focus-within { border-color: #fdb813; background: #fff; }
-    .sb-search input {
-      background: none; border: none; outline: none;
-      font-size: 13px; color: #1d2b4b; width: 100%; font-family: inherit;
-    }
-    .sb-search input::placeholder { color: #9aa3b5; }
-
-    .conv-list { flex: 1; overflow-y: auto; }
-    .conv-list::-webkit-scrollbar { width: 3px; }
-    .conv-list::-webkit-scrollbar-thumb { background: #e4e7ed; border-radius: 4px; }
-    .conv-empty { font-size: 12px; color: #9aa3b5; padding: 20px 16px; text-align: center; }
-
-    .conv-item {
-      display: flex; align-items: center; gap: 10px;
-      padding: 11px 16px; cursor: pointer;
-      border-bottom: 1px solid #f2f4f7;
-      text-decoration: none; color: inherit;
-      transition: background .12s;
-      border-left: 3px solid transparent;
-    }
-    .conv-item:hover { background: #f8f9fc; }
-    .conv-item.active { background: #fffbeb; border-left-color: #fdb813; padding-left: 13px; }
-
-    .conv-av-wrap { position: relative; flex-shrink: 0; }
-    .conv-dot { position: absolute; bottom: -2px; right: -2px; }
-    .conv-info { flex: 1; min-width: 0; }
-    .conv-name {
-      font-size: 13px; font-weight: 600; color: #1d2b4b;
-      margin: 0 0 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-    }
-    .conv-preview { font-size: 11.5px; color: #9aa3b5; margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .conv-meta { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; flex-shrink: 0; }
-    .conv-time { font-size: 10.5px; color: #9aa3b5; }
-    .unread-badge {
-      background: #fdb813; color: #1d2b4b;
-      border-radius: 20px; font-size: 10px; font-weight: 700;
-      padding: 1px 6px; min-width: 18px; text-align: center;
-    }
-
-    .sb-footer { padding: 12px 14px; border-top: 1px solid #f2f4f7; flex-shrink: 0; }
-    .find-btn {
-      display: block; text-align: center;
-      background: #1d2b4b; color: #fff; border-radius: 10px;
-      padding: 10px; font-size: 12.5px; font-weight: 600;
-      text-decoration: none; transition: background .15s;
-    }
-    .find-btn:hover { background: #263654; }
-
-    /* ── Chat ── */
-    .nu-chat { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
-
-    .chat-header {
-      background: #fff; border-bottom: 1px solid #e4e7ed;
-      padding: 14px 24px; display: flex; align-items: center; gap: 12px; flex-shrink: 0;
-    }
-    .ch-back {
-      background: none; border: none; cursor: pointer;
-      font-size: 18px; color: #5a6a8a; padding: 0;
-    }
-    .ch-info { flex: 1; }
-    .ch-name { font-size: 14px; font-weight: 600; color: #1d2b4b; margin: 0; }
-    .ch-status { font-size: 12px; margin: 0; display: flex; align-items: center; gap: 5px; }
-    .ch-status-pip { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
-    .ch-actions { display: flex; gap: 8px; }
-    .ch-btn {
-      width: 34px; height: 34px; border-radius: 8px;
-      background: #f4f6fa; border: 1px solid #e4e7ed;
-      cursor: pointer; display: flex; align-items: center; justify-content: center;
-      color: #5a6a8a; font-size: 15px; transition: background .12s, color .12s;
-    }
-    .ch-btn:hover { background: #ebedf2; color: #1d2b4b; }
-
-    /* Messages */
-    .nu-messages {
-      flex: 1; overflow-y: auto; padding: 24px;
-      display: flex; flex-direction: column; gap: 8px; background: #f4f6fa;
-    }
-    .nu-messages::-webkit-scrollbar { width: 3px; }
-    .nu-messages::-webkit-scrollbar-thumb { background: #dde1ea; border-radius: 4px; }
-
-    .day-label {
-      text-align: center; font-size: 11px; color: #9aa3b5;
-      margin: 4px 0 8px; font-weight: 500;
-      display: flex; align-items: center; gap: 8px;
-    }
-    .day-label::before, .day-label::after { content: ''; flex: 1; height: 1px; background: #e4e7ed; }
-
-    .msg-loading { text-align: center; font-size: 13px; color: #9aa3b5; padding: 20px 0; }
-
-    .msg-row { display: flex; }
-    .msg-row.mine { justify-content: flex-end; }
-    .msg-row.theirs { justify-content: flex-start; align-items: flex-end; gap: 7px; }
-
-    .bubble { max-width: 320px; padding: 10px 15px; font-size: 13.5px; line-height: 1.55; word-break: break-word; }
-    .bubble.mine {
-      background: #1d2b4b; color: #fff;
-      border-radius: 18px 18px 4px 18px;
-    }
-    .bubble.mine.optimistic { opacity: 0.6; }
-    .bubble.theirs {
-      background: #fff; color: #1d2b4b;
-      border-radius: 18px 18px 18px 4px;
-      border: 1px solid #e4e7ed;
-    }
-
-    .msg-meta { font-size: 10.5px; color: #9aa3b5; margin: 3px 4px 0; }
-    .msg-meta.right { text-align: right; }
-    .seen-check { color: #fdb813; margin-left: 4px; font-size: 9px; }
-
-    /* Typing */
-    .typing-row { display: flex; align-items: flex-end; gap: 7px; }
-    .typing-bub {
-      background: #fff; border: 1px solid #e4e7ed;
-      border-radius: 18px 18px 18px 4px;
-      padding: 12px 16px; display: flex; gap: 4px; align-items: center;
-    }
-    .t-dot { width: 6px; height: 6px; border-radius: 50%; background: #c8cdd8; animation: tBounce 1.2s ease-in-out infinite; }
-    .t-dot:nth-child(2) { animation-delay: .2s; }
-    .t-dot:nth-child(3) { animation-delay: .4s; }
-    @keyframes tBounce { 0%,60%,100%{transform:translateY(0)} 30%{transform:translateY(-5px)} }
-
-    /* Input */
-    .input-bar {
-      background: #fff; border-top: 1px solid #e4e7ed;
-      padding: 12px 24px; display: flex; gap: 10px; align-items: center; flex-shrink: 0;
-    }
-    .input-wrap {
-      flex: 1; background: #f4f6fa; border-radius: 12px;
-      padding: 9px 14px; display: flex; align-items: center; gap: 8px;
-      border: 1px solid transparent; transition: border-color .15s, background .15s;
-    }
-    .input-wrap:focus-within { border-color: #fdb813; background: #fff; }
-    .input-wrap input {
-      flex: 1; background: none; border: none; outline: none;
-      font-size: 13.5px; color: #1d2b4b; font-family: inherit;
-    }
-    .input-wrap input::placeholder { color: #9aa3b5; }
-    .in-icon { font-size: 16px; color: #9aa3b5; cursor: pointer; flex-shrink: 0; }
-    .in-icon:hover { color: #5a6a8a; }
-
-    .send-btn {
-      width: 40px; height: 40px; border-radius: 11px;
-      background: #fdb813; border: none; cursor: pointer;
-      display: flex; align-items: center; justify-content: center;
-      color: #1d2b4b; font-size: 15px; flex-shrink: 0;
-      transition: background .15s, transform .1s;
-    }
-    .send-btn:hover:not(:disabled) { background: #e6a510; transform: scale(1.05); }
-    .send-btn:disabled { background: #e4e7ed; color: #9aa3b5; cursor: default; }
-
-    /* Empty state */
-    .empty-state {
-      flex: 1; display: flex; flex-direction: column;
-      align-items: center; justify-content: center;
-      color: #9aa3b5; gap: 8px; padding: 40px;
-    }
-    .empty-icon { font-size: 52px; opacity: 0.15; color: #1d2b4b; margin-bottom: 8px; }
-    .empty-heading { font-size: 15px; font-weight: 600; color: #344054; margin: 0; }
-    .empty-sub { font-size: 13px; color: #9aa3b5; margin: 0; }
-    .empty-cta {
-      margin-top: 16px; background: #1d2b4b; color: #fff;
-      padding: 11px 28px; border-radius: 10px;
-      font-weight: 600; font-size: 13px; text-decoration: none;
-      transition: background .15s;
-    }
-    .empty-cta:hover { background: #263654; }
-
-    @media (max-width: 640px) {
-      .nu-sidebar { display: none !important; }
-      .ch-back { display: block !important; }
-    }
-  `;
-
   return (
-    <div className="nu-msg">
-      <style>{css}</style>
+    <div className="flex h-screen flex-col bg-[#eef2f8]">
       <Navbar unreadMessageCount={unreadTotal} />
 
-      <div style={{ display: 'flex', flex: 1, overflow: 'hidden', maxWidth: 1400, width: '100%', margin: '0 auto' }}>
-
-        {/* ── Sidebar ── */}
-        <div className="nu-sidebar">
-          <div className="sb-head">
-            <p className="sb-title">
-              <span className="sb-title-pip" />
-              Messages
-            </p>
-            <div className="sb-search">
-              <i className="fas fa-search" style={{ fontSize: 13, color: '#9aa3b5', flexShrink: 0 }} />
-              <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search conversations…" />
+      <main className="mx-auto grid min-h-0 w-full max-w-[1320px] flex-1 grid-cols-1 overflow-hidden bg-white shadow-sm lg:grid-cols-[320px_minmax(0,1fr)]">
+        <aside className={`${recipientId ? 'hidden lg:flex' : 'flex'} min-h-0 flex-col border-r border-slate-200 bg-white`}>
+          <div className="border-b border-slate-100 p-4">
+            <div className="mb-3 flex items-center justify-between">
+              <h1 className="m-0 flex items-center gap-2 text-base font-black text-[#1d2b4b]">
+                <span className="h-2 w-2 rounded-full bg-[#fdb813]" />
+                Messages
+              </h1>
+              {unreadTotal > 0 && (
+                <span className="rounded-full bg-[#fdb813] px-2 py-0.5 text-[11px] font-black text-[#1d2b4b]">
+                  {unreadTotal}
+                </span>
+              )}
             </div>
+            <label className="flex h-10 items-center gap-2 rounded-xl border border-transparent bg-slate-100 px-3 text-slate-400 transition focus-within:border-[#fdb813] focus-within:bg-white">
+              <i className="fas fa-search text-xs" />
+              <input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search conversations..."
+                className="w-full border-0 bg-transparent text-sm text-[#1d2b4b] outline-none placeholder:text-slate-400"
+              />
+            </label>
           </div>
 
-          <div className="conv-list">
+          <div className="min-h-0 flex-1 overflow-y-auto">
             {filtered.length === 0 && (
-              <p className="conv-empty">{search ? 'No results found.' : 'No conversations yet.'}</p>
+              <div className="px-5 py-10 text-center text-sm text-slate-400">
+                {search ? 'No results found.' : 'No conversations yet.'}
+              </div>
             )}
 
-            {filtered.map(conv => {
-              const other    = conv.sender_id === user?.id ? conv.receiver : conv.sender;
+            {filtered.map((conv) => {
+              const other = conv.sender_id === user?.id ? conv.receiver : conv.sender;
               if (!other) return null;
-              const isActive = String(recipientId) === String(other.id);
-              const isOnline = onlineUsers.has(other.id);
-
+              const active = String(recipientId) === String(other.id);
+              const online = onlineUsers.has(other.id);
               return (
-                <Link key={conv.id} to={`/messages/${other.id}`}
-                  className={`conv-item${isActive ? ' active' : ''}`}
+                <Link
+                  key={conv.id}
+                  to={`/messages/${other.id}`}
+                  className={`flex items-center gap-3 border-b border-slate-100 px-4 py-3 no-underline transition ${active ? 'border-l-4 border-l-[#fdb813] bg-amber-50' : 'border-l-4 border-l-transparent hover:bg-slate-50'}`}
                 >
-                  <div className="conv-av-wrap">
-                    <Avatar src={other.profile_picture} name={other.name} size={42} radius={12} />
-                    <span className="conv-dot">
-                      <OnlineDot online={isOnline} size={9} borderColor={isActive ? '#fffbeb' : '#fff'} />
-                    </span>
+                  <div className="relative">
+                    <Avatar src={other.profile_picture} name={other.name} />
+                    <OnlineDot online={online} />
                   </div>
-                  <div className="conv-info">
-                    <p className="conv-name">{other.name}</p>
-                    <p className="conv-preview">{conv.body}</p>
+                  <div className="min-w-0 flex-1">
+                    <p className="m-0 truncate text-sm font-black text-[#1d2b4b]">{other.name}</p>
+                    <p className="m-0 truncate text-xs text-slate-400">{conv.body}</p>
                   </div>
-                  <div className="conv-meta">
-                    <span className="conv-time">{formatTime(conv.created_at)}</span>
-                    {conv.unread_count > 0 && <span className="unread-badge">{conv.unread_count}</span>}
+                  <div className="flex shrink-0 flex-col items-end gap-1">
+                    <span className="text-[11px] text-slate-400">{formatTime(conv.created_at)}</span>
+                    {conv.unread_count > 0 && (
+                      <span className="min-w-5 rounded-full bg-[#fdb813] px-1.5 py-0.5 text-center text-[10px] font-black text-[#1d2b4b]">
+                        {conv.unread_count}
+                      </span>
+                    )}
                   </div>
                 </Link>
               );
             })}
           </div>
 
-          <div className="sb-footer">
-            <Link to="/directory" className="find-btn">
-              <i className="fas fa-search" style={{ marginRight: 6 }} />Find Students
+          <div className="border-t border-slate-100 p-3">
+            <Link to="/directory" className="flex h-11 items-center justify-center gap-2 rounded-xl bg-[#1d2b4b] text-sm font-black text-white no-underline transition hover:bg-[#263654]">
+              <i className="fas fa-search text-xs" />
+              Find Students
             </Link>
           </div>
-        </div>
+        </aside>
 
-        {/* ── Chat ── */}
-        <div className="nu-chat">
+        <section className={`${recipientId ? 'flex' : 'hidden lg:flex'} min-h-0 flex-col bg-[#f4f7fe]`}>
           {recipientId ? (
             <>
-              <div className="chat-header">
-                <button onClick={() => navigate('/messages')} className="ch-back" style={{ display: 'none' }}>
+              <div className="flex items-center gap-3 border-b border-slate-200 bg-white px-4 py-3">
+                <button
+                  type="button"
+                  onClick={() => navigate('/messages')}
+                  className="grid h-9 w-9 place-items-center rounded-xl border border-slate-200 bg-white text-slate-500 lg:hidden"
+                >
                   <i className="fas fa-arrow-left" />
                 </button>
 
                 {recipient && (
                   <>
-                    <div className="conv-av-wrap">
-                      <Avatar src={recipient.profile_picture} name={recipient.name} size={38} radius={10} />
-                      <span className="conv-dot">
-                        <OnlineDot online={onlineUsers.has(recipient.id)} size={9} />
-                      </span>
+                    <div className="relative">
+                      <Avatar src={recipient.profile_picture} name={recipient.name} size="h-10 w-10" radius="rounded-xl" />
+                      <OnlineDot online={onlineUsers.has(recipient.id)} />
                     </div>
-                    <div className="ch-info">
-                      <p className="ch-name">{recipient.name}</p>
-                      <p className="ch-status" style={{ color: onlineUsers.has(recipient.id) ? '#22c55e' : '#9aa3b5' }}>
-                        <span className="ch-status-pip" style={{ background: onlineUsers.has(recipient.id) ? '#22c55e' : '#d1d5db' }} />
+                    <div className="min-w-0 flex-1">
+                      <p className="m-0 truncate text-sm font-black text-[#1d2b4b]">{recipient.name}</p>
+                      <p className={`m-0 text-xs font-semibold ${onlineUsers.has(recipient.id) ? 'text-emerald-600' : 'text-slate-400'}`}>
                         {onlineUsers.has(recipient.id) ? 'Online' : (recipient.course ?? 'Offline')}
                       </p>
-                    </div>
-                    <div className="ch-actions">
-                      <button className="ch-btn"><i className="fas fa-phone" /></button>
-                      <button className="ch-btn"><i className="fas fa-ellipsis-h" /></button>
                     </div>
                   </>
                 )}
               </div>
 
-              <div className="nu-messages">
-                {loading && <p className="msg-loading">Loading messages…</p>}
-                {thread.length > 0 && <div className="day-label">Today</div>}
-
-                {thread.map(msg => {
-                  const isMine = String(msg.sender_id) === String(user?.id);
-                  return (
-                    <div key={msg.id} className={`msg-row ${isMine ? 'mine' : 'theirs'}`}>
-                      {!isMine && (
-                        <Avatar src={recipient?.profile_picture} name={recipient?.name ?? ''} size={26} radius={7} />
-                      )}
-                      <div>
-                        <div className={`bubble ${isMine ? 'mine' : 'theirs'}${msg._optimistic ? ' optimistic' : ''}`}>
-                          {msg.body}
-                        </div>
-                        <p className={`msg-meta${isMine ? ' right' : ''}`}>
-                          {formatTime(msg.created_at)}
-                          {isMine && msg.is_read && (
-                            <span className="seen-check">
-                              <i className="fas fa-check-double" style={{ fontSize: 9 }} /> Seen
-                            </span>
-                          )}
-                        </p>
-                      </div>
-                    </div>
-                  );
-                })}
-
-                {isTyping && (
-                  <div className="typing-row">
-                    <Avatar src={recipient?.profile_picture} name={recipient?.name ?? ''} size={26} radius={7} />
-                    <div className="typing-bub">
-                      <span className="t-dot" /><span className="t-dot" /><span className="t-dot" />
-                    </div>
+              <div className="min-h-0 flex-1 overflow-y-auto px-4 py-5">
+                {loading && <p className="text-center text-sm text-slate-400">Loading messages...</p>}
+                {thread.length > 0 && (
+                  <div className="mb-4 flex items-center gap-3 text-center text-[11px] font-bold text-slate-400">
+                    <span className="h-px flex-1 bg-slate-200" />
+                    Today
+                    <span className="h-px flex-1 bg-slate-200" />
                   </div>
                 )}
-                <div ref={bottomRef} />
+
+                <div className="flex flex-col gap-3">
+                  {thread.map((msg) => {
+                    const mine = String(msg.sender_id) === String(user?.id);
+                    return (
+                      <div key={msg.id} className={`flex ${mine ? 'justify-end' : 'justify-start'}`}>
+                        <div className={`max-w-[min(78%,520px)] rounded-2xl px-4 py-2.5 text-sm leading-relaxed shadow-sm ${mine ? 'rounded-br-md bg-[#1d2b4b] text-white' : 'rounded-bl-md border border-slate-200 bg-white text-[#1d2b4b]'}`}>
+                          {msg.body}
+                          <div className={`mt-1 text-[10px] ${mine ? 'text-white/45' : 'text-slate-400'}`}>
+                            {formatTime(msg.created_at)}
+                            {mine && msg.is_read && <span className="ml-1 text-[#fdb813]">Seen</span>}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+
+                  {isTyping && (
+                    <div className="flex justify-start">
+                      <div className="flex gap-1 rounded-2xl rounded-bl-md border border-slate-200 bg-white px-4 py-3">
+                        <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-slate-300" />
+                        <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-slate-300 [animation-delay:150ms]" />
+                        <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-slate-300 [animation-delay:300ms]" />
+                      </div>
+                    </div>
+                  )}
+                  <div ref={bottomRef} />
+                </div>
               </div>
 
-              <form onSubmit={handleSend} className="input-bar">
-                <div className="input-wrap">
-                  <i className="far fa-smile in-icon" />
+              <form onSubmit={handleSend} className="flex items-center gap-3 border-t border-slate-200 bg-white p-3">
+                <div className="flex h-11 flex-1 items-center gap-2 rounded-xl border border-transparent bg-slate-100 px-3 transition focus-within:border-[#fdb813] focus-within:bg-white">
+                  <i className="far fa-smile text-slate-400" />
                   <input
-                    ref={inputRef} value={body}
-                    onChange={e => setBody(e.target.value)}
+                    value={body}
+                    onChange={(e) => setBody(e.target.value)}
                     onKeyDown={handleKeyDown}
-                    placeholder="Type a message…"
+                    placeholder="Type a message..."
+                    className="w-full border-0 bg-transparent text-sm text-[#1d2b4b] outline-none placeholder:text-slate-400"
                   />
-                  <i className="fas fa-paperclip in-icon" />
                 </div>
-                <button type="submit" className="send-btn" disabled={!body.trim()}>
+                <button
+                  type="submit"
+                  disabled={!body.trim()}
+                  className="grid h-11 w-11 place-items-center rounded-xl border-0 bg-[#fdb813] text-[#1d2b4b] transition hover:bg-amber-400 disabled:bg-slate-200 disabled:text-slate-400"
+                >
                   <i className="fas fa-paper-plane" />
                 </button>
               </form>
             </>
           ) : (
-            <div className="empty-state">
-              <div className="empty-icon"><i className="fas fa-comment-dots" /></div>
-              <p className="empty-heading">No conversation selected</p>
-              <p className="empty-sub">Pick one from the list or find someone to chat with.</p>
-              <Link to="/directory" className="empty-cta">
-                <i className="fas fa-search" style={{ marginRight: 7 }} />Find Students
+            <div className="flex flex-1 flex-col items-center justify-center px-6 text-center">
+              <div className="mb-4 grid h-16 w-16 place-items-center rounded-full bg-slate-200 text-3xl text-slate-400">
+                <i className="fas fa-comment-dots" />
+              </div>
+              <p className="m-0 text-base font-black text-[#1d2b4b]">No conversation selected</p>
+              <p className="m-0 mt-2 text-sm text-slate-400">Pick one from the list or find someone to chat with.</p>
+              <Link to="/directory" className="mt-6 flex h-11 items-center gap-2 rounded-xl bg-[#1d2b4b] px-6 text-sm font-black text-white no-underline transition hover:bg-[#263654]">
+                <i className="fas fa-search text-xs" />
+                Find Students
               </Link>
             </div>
           )}
-        </div>
-
-      </div>
+        </section>
+      </main>
     </div>
   );
 }

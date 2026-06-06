@@ -1,88 +1,52 @@
-const GOLD = '#fdb813';
-const NAVY = '#1d2b4b';
-
 export default function CopyrightLabel({
   institution = 'National University Lipa',
   year,
-  variant     = 'dark',
-  size        = 'sm',
-  className   = '',
-  style       = {},
+  variant = 'dark',
+  size = 'sm',
+  className = '',
 }) {
   const currentYear = year ?? new Date().getFullYear();
 
-  const SIZES = {
-    xs: { fontSize: '0.55rem', padding: '3px 9px',  icon: 8,  gap: 4, radius: 20 },
-    sm: { fontSize: '0.65rem', padding: '5px 12px', icon: 10, gap: 5, radius: 20 },
-    md: { fontSize: '0.75rem', padding: '7px 16px', icon: 12, gap: 6, radius: 24 },
-    lg: { fontSize: '0.85rem', padding: '9px 20px', icon: 14, gap: 7, radius: 28 },
+  const sizes = {
+    xs: 'gap-1 rounded-full px-2 py-0.5 text-[0.55rem] [&_i]:text-[8px]',
+    sm: 'gap-1.5 rounded-full px-3 py-1 text-[0.65rem] [&_i]:text-[10px]',
+    md: 'gap-1.5 rounded-full px-4 py-1.5 text-xs [&_i]:text-xs',
+    lg: 'gap-2 rounded-full px-5 py-2 text-sm [&_i]:text-sm',
   };
 
-  const VARIANTS = {
-    dark:  { bg: 'rgba(13,22,45,0.88)',  color: 'rgba(255,255,255,0.9)', iconColor: GOLD, border: 'none' },
-    light: { bg: 'rgba(255,255,255,0.92)', color: NAVY, iconColor: NAVY, border: `1px solid rgba(29,43,75,0.12)` },
-    gold:  { bg: GOLD, color: NAVY, iconColor: NAVY, border: 'none' },
-    glass: { bg: 'rgba(255,255,255,0.12)', color: '#fff', iconColor: GOLD, border: '1px solid rgba(255,255,255,0.2)' },
+  const variants = {
+    dark: 'bg-[#0d162d]/90 text-white/90 [&_i]:text-[#fdb813]',
+    light: 'border border-[#1d2b4b]/10 bg-white/90 text-[#1d2b4b] [&_i]:text-[#1d2b4b]',
+    gold: 'bg-[#fdb813] text-[#1d2b4b] [&_i]:text-[#1d2b4b]',
+    glass: 'border border-white/20 bg-white/10 text-white backdrop-blur [&_i]:text-[#fdb813]',
   };
-
-  const s = SIZES[size]    ?? SIZES.sm;
-  const v = VARIANTS[variant] ?? VARIANTS.dark;
 
   return (
-    <div
-      className={className}
-      style={{
-        display: 'inline-flex', alignItems: 'center', gap: s.gap,
-        background: v.bg, backdropFilter: 'blur(8px)',
-        border: v.border, borderRadius: s.radius, padding: s.padding,
-        userSelect: 'none', pointerEvents: 'none',
-        fontFamily: "'Plus Jakarta Sans', sans-serif",
-        ...style,
-      }}
-    >
-      <i className="fas fa-copyright" style={{ color: v.iconColor, fontSize: s.icon }} />
-      <span style={{ fontSize: s.fontSize, fontWeight: 700, color: v.color, letterSpacing: '0.03em', whiteSpace: 'nowrap' }}>
-        {currentYear} {institution} — All Rights Reserved
-      </span>
+    <div className={`pointer-events-none inline-flex select-none items-center whitespace-nowrap font-bold tracking-[0.03em] ${sizes[size] ?? sizes.sm} ${variants[variant] ?? variants.dark} ${className}`}>
+      <i className="fas fa-copyright" />
+      <span>{currentYear} {institution} - All Rights Reserved</span>
     </div>
   );
 }
 
 export function ContentOwnershipBanner({
   institution = 'National University Lipa',
-  message     = 'All media in this gallery is the exclusive property of',
-  style       = {},
+  message = 'All media in this gallery is the exclusive property of',
 }) {
   return (
-    <div style={{
-      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10,
-      background: `linear-gradient(135deg, ${NAVY} 0%, #2a3d66 100%)`,
-      padding: '10px 24px', borderRadius: 14,
-      fontFamily: "'Plus Jakarta Sans', sans-serif",
-      userSelect: 'none', pointerEvents: 'none',
-      ...style,
-    }}>
-      <div style={{
-        width: 32, height: 32, borderRadius: '50%',
-        border: `1.5px solid ${GOLD}`,
-        display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-      }}>
-        <i className="fas fa-shield-halved" style={{ color: GOLD, fontSize: 13 }} />
+    <div className="pointer-events-none flex select-none items-center justify-center gap-2.5 rounded-2xl bg-gradient-to-br from-[#1d2b4b] to-[#2a3d66] px-6 py-2.5">
+      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-[#fdb813]">
+        <i className="fas fa-shield-halved text-[13px] text-[#fdb813]" />
       </div>
       <div>
-        <p style={{ margin: 0, fontSize: '0.62rem', fontWeight: 600, color: 'rgba(255,255,255,0.55)', letterSpacing: '0.04em' }}>
+        <p className="m-0 text-[0.62rem] font-semibold tracking-[0.04em] text-white/55">
           CONTENT OWNERSHIP
         </p>
-        <p style={{ margin: 0, fontSize: '0.72rem', fontWeight: 700, color: '#fff' }}>
-          {message} <span style={{ color: GOLD }}>{institution}</span>
+        <p className="m-0 text-[0.72rem] font-bold text-white">
+          {message} <span className="text-[#fdb813]">{institution}</span>
         </p>
       </div>
-      <div style={{
-        marginLeft: 'auto', background: 'rgba(253,184,19,0.12)',
-        border: '1px solid rgba(253,184,19,0.3)', borderRadius: 8,
-        padding: '4px 10px', fontSize: '0.6rem', fontWeight: 800,
-        color: GOLD, letterSpacing: '0.08em', textTransform: 'uppercase',
-      }}>
+      <div className="ml-auto rounded-lg border border-[#fdb813]/30 bg-[#fdb813]/10 px-2.5 py-1 text-[0.6rem] font-black uppercase tracking-[0.08em] text-[#fdb813]">
         Protected
       </div>
     </div>

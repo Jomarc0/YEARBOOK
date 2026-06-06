@@ -9,42 +9,17 @@ use Illuminate\Support\Facades\DB;
 use App\Models\Setting;
 use Carbon\Carbon;
 
-/**
- * AdminController
- *
- * Handles: dashboard, settings, and student management.
- *
- * NOTE: auditLogs() has been REMOVED from here.
- *       Route /api/admin/audit-logs now points to ReportsController::auditLogs()
- *       so all audit logic lives in one place.
- */
 class AdminController extends Controller
 {
-    // ─── Role constants ───────────────────────────────────────────────────────
-
     private const ROLE_STUDENT = 'student';
     private const ROLE_FACULTY = 'faculty';
-
-    // ─── Subscription constants ───────────────────────────────────────────────
-
     private const SUBSCRIPTION_STATUS_ACTIVE = 'active';
-
-    // ─── Audit log status ─────────────────────────────────────────────────────
-
     private const AUDIT_STATUS_FAILED = 'Failed';
-
-    // ─── Upload type constants ────────────────────────────────────────────────
-
     private const UPLOAD_TYPE_IMAGE = 'image';
-
-    // ─── Query limit constants ────────────────────────────────────────────────
-
     private const LIMIT_RECENT_ACTIVITY  = 10;
     private const LIMIT_RECENT_UPLOADS   = 8;
     private const LIMIT_TRENDING_ALUMNI  = 5;
     private const ENGAGEMENT_WINDOW_DAYS = 7;
-
-    // ─── GET /api/admin/dashboard ─────────────────────────────────────────────
 
     public function dashboard(Request $request): JsonResponse
     {
@@ -52,7 +27,6 @@ class AdminController extends Controller
         $facultyMembers = DB::table('users')->where('role', self::ROLE_FACULTY)->count();
         $galleryPhotos  = DB::table('photos')->count();
 
-        // System alerts: audit log failures today
         $alertCount = DB::table('audit_logs')
             ->where('status', self::AUDIT_STATUS_FAILED)
             ->whereDate('created_at', today())
@@ -60,14 +34,11 @@ class AdminController extends Controller
 
         $activeSubscriptions = DB::table('subscriptions')
             ->where('status', self::SUBSCRIPTION_STATUS_ACTIVE)
-            ->where(fn ($q) =>
+            ->where(fn($q) =>
                 $q->whereNull('expires_at')
                   ->orWhere('expires_at', '>', now())
             )
             ->count();
-
-        // TODO: swap 0 for real sum once file_size column is added to photos
-        $storageUsedGB = 0;
 
         $metrics = [
             'total_students'       => $totalStudents,
@@ -75,18 +46,19 @@ class AdminController extends Controller
             'gallery_photos'       => $galleryPhotos,
             'system_alerts'        => $alertCount,
             'active_subscriptions' => $activeSubscriptions,
-            'storage_used_gb'      => $storageUsedGB,
+            'storage_used_gb'      => 0,
             'storage_total_gb'     => config('storage.limit_gb'),
             'ai_processed_today'   => 0,
         ];
 
         // ── Enrollment by Year ────────────────────────────────────────────────
         $enrollmentByYear = DB::table('users')
-            ->where('role', self::ROLE_STUDENT)
-            ->whereNotNull('graduation_year')
-            ->selectRaw('graduation_year as year, COUNT(*) as total')
-            ->groupBy('graduation_year')
-            ->orderBy('graduation_year')
+            ->join('students', 'users.student_record_id', '=', 'students.id')
+            ->where('users.role', self::ROLE_STUDENT)
+            ->whereNotNull('students.graduation_year')
+            ->selectRaw('students.graduation_year as year, COUNT(*) as total')
+            ->groupBy('students.graduation_year')
+            ->orderBy('students.graduation_year')
             ->get();
 
         // ── Recent Activity ───────────────────────────────────────────────────
@@ -94,7 +66,7 @@ class AdminController extends Controller
             ->orderByDesc('logged_at')
             ->limit(self::LIMIT_RECENT_ACTIVITY)
             ->get()
-            ->map(fn ($log) => [
+            ->map(fn($log) => [
                 'id'      => $log->id,
                 'type'    => $this->mapActionToType($log->action),
                 'title'   => $log->action,
@@ -115,7 +87,7 @@ class AdminController extends Controller
             ->orderByDesc('photos.created_at')
             ->limit(self::LIMIT_RECENT_UPLOADS)
             ->get()
-            ->map(fn ($u) => [
+            ->map(fn($u) => [
                 'id'       => $u->id,
                 'filename' => $u->filename,
                 'uploader' => $u->uploader,
@@ -123,21 +95,22 @@ class AdminController extends Controller
                 'time'     => Carbon::parse($u->created_at)->diffForHumans(),
             ]);
 
-        // ── Trending Alumni ───────────────────────────────────────────────────
-        $trendingAlumni = DB::table('users')
-            ->where('role', self::ROLE_STUDENT)
-            ->whereNotNull('profile_views')
-            ->where('profile_views', '>', 0)
-            ->selectRaw("
-                id,
-                CONCAT(first_name, ' ', last_name) AS name,
-                course AS program,
-                profile_views AS views,
-                UPPER(CONCAT(LEFT(first_name, 1), LEFT(last_name, 1))) AS avatar_initials
-            ")
-            ->orderByDesc('profile_views')
-            ->limit(self::LIMIT_TRENDING_ALUMNI)
-            ->get();
+    // ── Trending Alumni ───────────────────────────────────────────────────
+    $trendingAlumni = DB::table('profile_views')
+        ->join('users', 'profile_views.viewed_user_id', '=', 'users.id')
+        ->leftJoin('students', 'users.student_record_id', '=', 'students.id')
+        ->where('users.role', self::ROLE_STUDENT)
+        ->selectRaw("
+            users.id,
+            CONCAT(users.first_name, ' ', users.last_name) AS name,
+            students.course AS program,
+            COUNT(profile_views.id) AS views,
+            UPPER(CONCAT(LEFT(users.first_name, 1), LEFT(users.last_name, 1))) AS avatar_initials
+        ")
+        ->groupBy('users.id', 'users.first_name', 'users.last_name', 'students.course')
+        ->orderByDesc('views')
+        ->limit(self::LIMIT_TRENDING_ALUMNI)
+        ->get();
 
         // ── Engagement ────────────────────────────────────────────────────────
         $engagementWindowStart = now()->subDays(self::ENGAGEMENT_WINDOW_DAYS);
@@ -170,14 +143,10 @@ class AdminController extends Controller
         ]);
     }
 
-    // ─── GET /api/admin/settings ─────────────────────────────────────────────
-
     public function getSettings(): JsonResponse
     {
         return response()->json(['data' => Setting::pluck('value', 'key')]);
     }
-
-    // ─── POST /api/admin/settings ────────────────────────────────────────────
 
     public function saveSettings(Request $request): JsonResponse
     {
@@ -186,8 +155,6 @@ class AdminController extends Controller
         }
         return response()->json(['message' => 'Settings saved.']);
     }
-
-    // ─── DELETE /api/admin/students/{id} ─────────────────────────────────────
 
     public function deleteStudent(int $id): JsonResponse
     {
@@ -201,12 +168,9 @@ class AdminController extends Controller
             : response()->json(['message' => 'Student not found.'], 404);
     }
 
-    // ─── Private helpers ──────────────────────────────────────────────────────
-
     private function mapActionToType(string $action): string
     {
         $action = strtolower($action);
-
         return match(true) {
             str_contains($action, 'register') || str_contains($action, 'created') => 'register',
             str_contains($action, 'upload')                                        => 'upload',

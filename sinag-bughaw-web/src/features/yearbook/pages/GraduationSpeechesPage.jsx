@@ -229,8 +229,8 @@ export default function GraduationSpeechesPage() {
       const found = data.photos ?? [];
       setFaceMatches(found);
       if (!found.length) alert('No matching photos found.');
-    } catch {
-      alert('Face search failed.');
+    } catch (err) {
+      alert(err?.response?.data?.message || 'Face search failed.');
     } finally {
       setFaceSearching(false);
     }
@@ -307,7 +307,7 @@ export default function GraduationSpeechesPage() {
             <FaceSearchButton
               onFile={handleFaceFile}
               loading={faceSearching}
-              style={{ position: 'relative', right: 'auto', top: 'auto', transform: 'none' }}
+              className="relative right-auto top-auto translate-y-0"
             />
           </div>
         </div>

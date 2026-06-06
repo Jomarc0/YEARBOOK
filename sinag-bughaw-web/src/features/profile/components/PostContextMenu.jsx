@@ -5,7 +5,7 @@ import { useAuth } from '@/features/auth/hooks/useAuth';
 
 const VIS_OPTS = [
   { value: 'public',  icon: 'fa-globe',        label: 'Public'  },
-  { value: 'friends', icon: 'fa-user-friends',  label: 'Friends' },
+  { value: 'batchmates', icon: 'fa-users',     label: 'Batchmates' },
   { value: 'private', icon: 'fa-lock',          label: 'Only Me' },
 ];
 
@@ -21,7 +21,7 @@ export default function PostContextMenu({ post, position, onClose, onDelete, onU
 
   const [view,        setView]        = useState('menu');
   const [caption,     setCaption]     = useState(post?.caption    ?? '');
-  const [visibility,  setVisibility]  = useState(post?.visibility ?? 'public');
+  const [visibility,  setVisibility]  = useState(post?.visibility === 'friends' ? 'batchmates' : (post?.visibility ?? 'public'));
   const [taggedUsers, setTaggedUsers] = useState(post?.tagged_users ?? []);
   const [saving,      setSaving]      = useState(false);
   const [error,       setError]       = useState(null);

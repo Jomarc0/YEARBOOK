@@ -68,7 +68,7 @@ class UserManagementController extends Controller
     {
         $validated = $request->validate([
             'role'               => ['sometimes', Rule::in(['student', 'faculty', 'admin'])],
-            'profile_visibility' => ['sometimes', Rule::in(['public', 'alumni_only', 'private'])],
+            'profile_visibility' => ['sometimes', Rule::in(['public', 'batchmates', 'private'])],
             'first_name'         => 'sometimes|string|max:100',
             'last_name'          => 'sometimes|string|max:100',
             'bio'                => 'sometimes|nullable|string|max:500',

@@ -13,6 +13,7 @@ interface FaceRecognition
     public function syncStudents(iterable $students): array;
     public function analyzePhoto(string $disk, string $path): array;
     public function searchUploadedFace(UploadedFile $file, int $maxMatches = 5, ?float $threshold = null): array;
+    public function searchIndexedFaces(UploadedFile $file, int $maxMatches = 20, ?float $threshold = null): array;
     public function analyzeUploadedImage(UploadedFile $file): array;
     public function searchPhotosByFace(UploadedFile $file, int $maxMatches = 20, ?float $threshold = null): array; 
 }

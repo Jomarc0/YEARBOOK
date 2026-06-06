@@ -4,6 +4,8 @@ import Navbar from '@/components/layout/Navbar';
 import Footer from '@/components/layout/Footer';
 import { COURSE_LABELS } from '@/api/batch.api';
 import { imageUrl } from '@/utils/imageUrl';
+import { recordProfileView } from '@/api/analytics.api';
+import { trackProfileView } from '@/utils/ga4';
 import api from '@/services/api';
 
 const discoveryStudentApi = {
@@ -29,9 +31,9 @@ function formatDate(str) {
 
 function Section({ icon, label, children }) {
   return (
-    <div className="bg-white rounded-2xl p-5 shadow-sm border border-slate-100">
-      <h4 className="flex items-center gap-2 text-[10px] font-black text-[#1d2b4b] uppercase tracking-widest m-0 mb-4">
-        <i className={`${icon} text-[#fdb813] text-[10px]`} />
+    <div className="border border-[#d8c7a2]/45 bg-white/75 p-5 shadow-[0_14px_34px_rgba(7,26,51,0.06)]">
+      <h4 className="flex items-center gap-2 text-[10px] font-black text-[#071a33] uppercase tracking-[0.22em] m-0 mb-4">
+        <i className={`${icon} text-[#c89b3c] text-[10px]`} />
         {label}
       </h4>
       {children}
@@ -42,12 +44,12 @@ function Section({ icon, label, children }) {
 function InfoTile({ icon, label, value }) {
   if (!value) return null;
   return (
-    <div className="bg-slate-50 border border-slate-100 rounded-xl p-4">
+    <div className="bg-[#fbf7ef] border border-[#d8c7a2]/35 p-4">
       <div className="flex items-center gap-1.5 mb-1.5">
-        <i className={`fas ${icon} text-[#fdb813] text-[9px]`} />
-        <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">{label}</span>
+        <i className={`fas ${icon} text-[#c89b3c] text-[9px]`} />
+        <span className="text-[10px] text-[#8f7d55] font-bold uppercase tracking-wider">{label}</span>
       </div>
-      <p className="text-sm font-semibold text-[#1d2b4b] m-0 break-words">{value}</p>
+      <p className="text-sm font-semibold text-[#071a33] m-0 break-words">{value}</p>
     </div>
   );
 }
@@ -60,7 +62,7 @@ function QuoteBlock({ icon, label, text, borderColor = 'border-amber-200' }) {
         <i className={`fas ${icon} text-[#fdb813] text-[10px]`} />
         <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider m-0">{label}</p>
       </div>
-      <p className={`text-sm text-slate-600 italic m-0 leading-relaxed pl-3 border-l-2 ${borderColor}`}>
+      <p className={`text-sm text-[#172033]/75 italic m-0 leading-relaxed pl-3 border-l-2 ${borderColor}`}>
         "{text}"
       </p>
     </div>
@@ -98,10 +100,10 @@ function PageSkeleton() {
 
 // ── Tab definitions ───────────────────────────────────────────────────────────
 const TABS = [
-  { key: 'profile',       label: 'Profile',       icon: 'fas fa-user'              },
-  { key: 'academic',      label: 'Academic',      icon: 'fas fa-graduation-cap'    },
-  { key: 'yearbook',      label: 'Yearbook',      icon: 'fas fa-book-open'         },
-  { key: 'messages',      label: 'Messages',      icon: 'fas fa-envelope-open-text'},
+  { key: 'profile',  label: 'Profile',  icon: 'fas fa-user'               },
+  { key: 'academic', label: 'Academic', icon: 'fas fa-graduation-cap'     },
+  { key: 'yearbook', label: 'Yearbook', icon: 'fas fa-book-open'          },
+  { key: 'messages', label: 'Messages', icon: 'fas fa-envelope-open-text' },
 ];
 
 // ── Main Page ─────────────────────────────────────────────────────────────────
@@ -109,11 +111,11 @@ export default function DiscoveryStudentProfile() {
   const { id }   = useParams();
   const navigate = useNavigate();
 
-  const [student,  setStudent]  = useState(null);
-  const [loading,  setLoading]  = useState(true);
-  const [imgError, setImgError] = useState(false);
-  const [error,    setError]    = useState(null);
-  const [toast,    setToast]    = useState(null);
+  const [student,   setStudent]   = useState(null);
+  const [loading,   setLoading]   = useState(true);
+  const [imgError,  setImgError]  = useState(false);
+  const [error,     setError]     = useState(null);
+  const [toast,     setToast]     = useState(null);
   const [activeTab, setActiveTab] = useState('profile');
 
   useEffect(() => {
@@ -121,7 +123,21 @@ export default function DiscoveryStudentProfile() {
     setError(null);
     setImgError(false);
     discoveryStudentApi.show(id)
-      .then(({ data }) => setStudent(data.data ?? data))
+      .then(({ data }) => {
+        const studentData = data.data ?? data;
+        setStudent(studentData);
+
+        // Record view using users.id (not students.id)
+        if (studentData.user_id) {
+          recordProfileView(studentData.user_id);
+          trackProfileView({
+            id:     studentData.user_id,
+            name:   `${studentData.first_name} ${studentData.last_name}`.trim(),
+            course: studentData.course ?? '',
+            batch:  studentData.graduation_year ?? '',
+          });
+        }
+      })
       .catch(() => setError('Student not found.'))
       .finally(() => setLoading(false));
   }, [id]);
@@ -177,12 +193,11 @@ export default function DiscoveryStudentProfile() {
     </div>
   );
 
-  // ── Tab content ───────────────────────────────────────────────────────────
+  // ── Tab content ────────────────────────────────────────────────────────────
   const tabContent = {
 
     profile: (
       <div className="flex flex-col gap-3">
-        {/* Basic Information */}
         <Section icon="fas fa-id-card" label="Basic Information">
           <div className="grid grid-cols-2 gap-3">
             <InfoTile icon="fa-hashtag"        label="Student No."  value={student.student_no} />
@@ -196,7 +211,6 @@ export default function DiscoveryStudentProfile() {
           </div>
         </Section>
 
-        {/* Social Links */}
         {hasSocials && (
           <Section icon="fas fa-share-nodes" label="Social Links">
             <div className="flex flex-wrap gap-2">
@@ -222,7 +236,6 @@ export default function DiscoveryStudentProfile() {
 
     academic: (
       <div className="flex flex-col gap-3">
-        {/* Honors */}
         <Section icon="fas fa-medal" label="Honors & Awards">
           {honors.length === 0 ? (
             <EmptyState icon="fa-medal" title="No Honors Yet" subtitle="This student hasn't added any honors yet." />
@@ -239,7 +252,6 @@ export default function DiscoveryStudentProfile() {
           )}
         </Section>
 
-        {/* Organizations */}
         <Section icon="fas fa-people-group" label="Organizations">
           {organizations.length === 0 ? (
             <EmptyState icon="fa-people-group" title="No Organizations" subtitle="This student hasn't added any organizations yet." />
@@ -256,7 +268,6 @@ export default function DiscoveryStudentProfile() {
           )}
         </Section>
 
-        {/* Achievements */}
         <Section icon="fas fa-trophy" label="Achievements">
           {achievements.length === 0 ? (
             <EmptyState icon="fa-award" title="No Achievements Yet" subtitle="This student hasn't added any achievements yet." />
@@ -339,47 +350,32 @@ export default function DiscoveryStudentProfile() {
   };
 
   return (
-    <div className="min-h-screen bg-[#f4f7fe] flex flex-col font-sans">
-      <style>{`
-        @keyframes fadeUp  { from{opacity:0;transform:translateY(10px)} to{opacity:1;transform:translateY(0)} }
-        @keyframes toastIn { from{opacity:0;transform:translateX(-50%) translateY(-8px)} to{opacity:1;transform:translateX(-50%) translateY(0)} }
-        @keyframes tabFade { from{opacity:0;transform:translateY(4px)} to{opacity:1;transform:translateY(0)} }
-      `}</style>
-
+    <div className="min-h-screen bg-[#f7f1e6] flex flex-col font-sans text-[#071a33]">
       <Navbar />
 
       {/* Toast */}
       {toast && (
         <div
-          className={`fixed top-20 left-1/2 z-[9000] px-5 py-2.5 rounded-xl text-sm font-semibold shadow-xl
+          className={`fixed top-20 left-1/2 z-[9000] -translate-x-1/2 animate-[fadeIn_0.2s_ease] px-5 py-2.5 rounded-xl text-sm font-semibold shadow-xl
                        whitespace-nowrap flex items-center gap-2
                        ${toast.type === 'error' ? 'bg-red-600 text-white' : 'bg-[#1d2b4b] text-white'}`}
-          style={{ transform: 'translateX(-50%)', animation: 'toastIn 0.25s ease' }}
         >
           <i className={`fas ${toast.type === 'error' ? 'fa-circle-xmark' : 'fa-circle-check'} text-[#fdb813]`} />
           {toast.msg}
         </div>
       )}
 
-      <main
-        className="flex-1 max-w-[900px] mx-auto w-full px-4 sm:px-6 py-8 flex flex-col gap-3"
-        style={{ animation: 'fadeUp 0.35s ease' }}
-      >
-
+      <main className="flex-1 max-w-[980px] mx-auto w-full px-4 sm:px-6 py-8 flex flex-col gap-3 animate-[fadeIn_0.25s_ease]">
         {/* ── PROFILE CARD ── */}
-        <div className="bg-white rounded-2xl overflow-hidden shadow-sm border border-slate-100">
+        <div className="bg-white overflow-hidden shadow-[0_24px_60px_rgba(7,26,51,0.12)] border border-[#d8c7a2]/50">
 
-          {/* Cover — fixed readability: dark overlay + text uses white with solid bg pill */}
-          <div className="h-28 sm:h-36 relative overflow-hidden bg-gradient-to-br from-[#0f172a] via-[#1d2b4b] to-[#2d3f6b]">
-            {/* subtle dot pattern */}
-            <div
-              className="absolute inset-0 opacity-[0.06]"
-              style={{ backgroundImage: 'radial-gradient(circle, #fdb813 1.5px, transparent 1.5px)', backgroundSize: '22px 22px' }}
-            />
-            {/* decorative orb */}
-            <div className="absolute -top-16 -right-16 w-52 h-52 rounded-full bg-[#fdb813]/5" />
+          {/* Cover */}
+          <div className="h-32 sm:h-44 relative overflow-hidden bg-[#071a33]">
+            <img src="/images/NU-building.jpg" alt="" className="absolute inset-0 h-full w-full object-cover opacity-35" />
+            <div className="absolute inset-0 bg-gradient-to-r from-[#031225]/95 via-[#071a33]/86 to-[#071a33]/68" />
+            <div className="absolute inset-5 border border-[#c89b3c]/45" />
+            <div className="absolute inset-8 border border-white/10" />
 
-            {/* Back button */}
             <button
               onClick={() => navigate('/discover')}
               className="absolute top-4 left-5 flex items-center gap-1.5 text-white/80 hover:text-white
@@ -389,7 +385,6 @@ export default function DiscoveryStudentProfile() {
               <i className="fas fa-arrow-left text-[10px]" /> Back
             </button>
 
-            {/* Cover meta — now readable: each pill has its own semi-opaque bg */}
             <div className="absolute bottom-3 left-5 flex flex-wrap items-center gap-1.5">
               <span className="text-[10px] font-bold text-white bg-white/10 backdrop-blur-sm
                                border border-white/15 rounded-md px-2 py-0.5 uppercase tracking-widest">
@@ -451,7 +446,7 @@ export default function DiscoveryStudentProfile() {
 
             {/* Name + badges */}
             <div className="flex flex-wrap items-center gap-2 mb-1">
-              <h1 className="text-xl font-black text-[#1d2b4b] m-0 leading-none">{displayName}</h1>
+              <h1 className="font-serif text-3xl font-black text-[#071a33] m-0 leading-none">{displayName}</h1>
               {student.graduation_year ? (
                 <PillBadge
                   text={<><i className="fas fa-graduation-cap text-[8px]" /> GRADUATE {batchYear}</>}
@@ -487,7 +482,7 @@ export default function DiscoveryStudentProfile() {
 
             {/* Motto */}
             {student.motto ? (
-              <p className="text-sm text-slate-500 leading-relaxed italic m-0 mb-3 pl-3 border-l-[3px] border-[#fdb813]">
+              <p className="text-sm text-[#172033]/70 leading-relaxed italic m-0 mb-3 pl-3 border-l-[3px] border-[#c89b3c]">
                 "{student.motto}"
               </p>
             ) : (
@@ -541,7 +536,6 @@ export default function DiscoveryStudentProfile() {
 
         {/* ── TABS ── */}
         <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
-          {/* Tab bar */}
           <div className="flex border-b border-slate-100 overflow-x-auto scrollbar-none">
             {TABS.map(tab => (
               <button
@@ -562,8 +556,7 @@ export default function DiscoveryStudentProfile() {
             ))}
           </div>
 
-          {/* Tab content */}
-          <div className="p-4" key={activeTab} style={{ animation: 'tabFade 0.2s ease' }}>
+          <div className="p-4 animate-[fadeIn_0.2s_ease]" key={activeTab}>
             {tabContent[activeTab]}
           </div>
         </div>

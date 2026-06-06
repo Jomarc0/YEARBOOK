@@ -178,4 +178,32 @@ class ReportsController extends Controller
             $query->paginate($request->integer('per_page', 15))
         );
     }
+
+    public function aiLogs(Request $request): JsonResponse
+    {
+        $search = $request->get('search');
+
+        $query = AuditLog::query()
+            ->where(function ($q) {
+                $q->where('action', 'like', '%AI%')
+                  ->orWhere('action', 'like', '%Face%')
+                  ->orWhere('action', 'like', '%Transcript%')
+                  ->orWhere('details', 'like', '%AI%')
+                  ->orWhere('details', 'like', '%face%')
+                  ->orWhere('details', 'like', '%transcript%');
+            })
+            ->when($search, function ($q, string $term) {
+                $q->where(function ($inner) use ($term) {
+                    $inner->where('user_name', 'like', "%{$term}%")
+                        ->orWhere('action', 'like', "%{$term}%")
+                        ->orWhere('details', 'like', "%{$term}%")
+                        ->orWhere('subject_name', 'like', "%{$term}%");
+                });
+            })
+            ->orderByDesc('logged_at');
+
+        return response()->json(
+            $query->paginate($request->integer('per_page', 15))
+        );
+    }
 }

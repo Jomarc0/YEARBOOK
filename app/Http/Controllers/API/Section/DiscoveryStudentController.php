@@ -11,12 +11,16 @@ class DiscoveryStudentController extends Controller
 {
     public function show(Request $request, int $id): JsonResponse
     {
-        $student = Student::with(['section:id,name', 'batch:id,name,graduation_year,department'])
-            ->findOrFail($id);
+        $student = Student::with([
+            'section:id,name',
+            'batch:id,name,graduation_year,department',
+            'user:id,student_record_id',
+        ])->findOrFail($id);
 
         $data = [
             // Identity
             'id'                    => $student->id,
+            'user_id'               => $student->user?->id ?? null,
             'first_name'            => $student->first_name,
             'last_name'             => $student->last_name,
             'middle_name'           => $student->middle_name,

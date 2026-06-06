@@ -38,18 +38,62 @@ function studentPhoto(s) {
   return s.profile_picture ?? s.photo_url ?? s.photo ?? null;
 }
 
+function usableFaceMatches(matches = []) {
+  const validMatches = matches.filter(m =>
+    m?.user_id && (m.student_id || m.course || m.profile_picture)
+  );
+  const source = validMatches.length ? validMatches : matches.filter(m => m?.user_id);
+  return Array.from(new Map(source.map(m => [m.user_id, m])).values());
+}
+
 function getInitials(name = '') {
   return name.trim().split(/\s+/).map(w => w[0]?.toUpperCase() || '').slice(0, 2).join('');
 }
 
 // ── GenerateYearbookButton ─────────────────────────────────────────────────────
 
-function GenerateYearbookButton({ batchId, label }) {
+async function findYearbookBatchId(year, course = null) {
+  if (!year) return null;
+
+  const { data } = await batchApi.index();
+  const raw = data?.data ?? data ?? [];
+  const batches = Array.isArray(raw)
+    ? raw
+    : Object.values(raw).flatMap(group => Array.isArray(group) ? group : []);
+
+  const sameYear = batches.filter(batch =>
+    Number(batch.graduation_year ?? batch.year) === Number(year)
+  );
+
+  const normalizedCourse = String(course ?? '').trim().toLowerCase();
+  const exactCourse = normalizedCourse
+    ? sameYear.find(batch => String(batch.course ?? '').trim().toLowerCase() === normalizedCourse)
+    : null;
+
+  return (exactCourse ?? sameYear[0])?.id ?? null;
+}
+
+function GenerateYearbookButton({ batchId, course, label }) {
   const navigate = useNavigate();
+  const [opening, setOpening] = useState(false);
   if (!batchId) return null;
+
+  const openYearbook = async () => {
+    setOpening(true);
+    try {
+      const resolvedBatchId = await findYearbookBatchId(batchId, course);
+      navigate(resolvedBatchId ? `/yearbook/${resolvedBatchId}/view` : `/yearbook?year=${batchId}`);
+    } catch {
+      navigate(`/yearbook?year=${batchId}`);
+    } finally {
+      setOpening(false);
+    }
+  };
+
   return (
     <button
-      onClick={() => navigate(`/yearbook/${batchId}`)}
+      onClick={openYearbook}
+      disabled={opening}
       title={`Open yearbook for Batch ${batchId}`}
       className="inline-flex items-center gap-2 shrink-0 px-4 py-2 rounded-xl border border-amber-400/50 text-[0.72rem] font-extrabold tracking-wide whitespace-nowrap bg-amber-400/10 text-amber-400 hover:bg-amber-400 hover:text-[#1d2b4b] hover:border-amber-400 hover:-translate-y-px hover:shadow-[0_6px_20px_rgba(253,184,19,0.3)] transition-all duration-200"
     >
@@ -57,7 +101,7 @@ function GenerateYearbookButton({ batchId, label }) {
         <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>
         <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
       </svg>
-      {label ?? `Generate Yearbook · Batch ${batchId}`}
+      {opening ? 'Opening Yearbook…' : (label ?? `Generate Yearbook · Batch ${batchId}`)}
     </button>
   );
 }
@@ -77,15 +121,15 @@ function useFaceSearch() {
       const formData = new FormData();
       formData.append('face_image', file);
       const { data } = await faceApi.search(formData);
-      const matches  = data.matches ?? [];
+      const matches  = usableFaceMatches(data.matches ?? []);
       if (!matches.length) {
         alert('No matching student found. Ensure the photo shows a clear face.');
         return;
       }
       setFaceMatches(matches);
       setMatchedIds(new Set(matches.map(m => m.user_id)));
-    } catch {
-      alert('Face search failed. Please try again.');
+    } catch (err) {
+      alert(err?.response?.data?.message || 'Face search failed. Please try again.');
     } finally {
       setFaceSearching(false);
     }
@@ -364,7 +408,7 @@ function ResultCount({ matchedSize, displayedLength, total, hasQuery, resultsLen
 
 // ── BatchView ──────────────────────────────────────────────────────────────────
 
-function BatchView({ isPremium, userYear }) {
+function BatchView({ isPremium, userYear, userCourse }) {
   const [students, setStudents] = useState([]);
   const [loading,  setLoading]  = useState(true);
   const [filters,  setFilters]  = useState({ course: null, year: null });
@@ -394,6 +438,7 @@ function BatchView({ isPremium, userYear }) {
 
   const displayed  = matchedIds.size > 0 ? results.filter(s => matchedIds.has(s.id)) : results;
   const activeYear = filters.year ?? userYear ?? null;
+  const activeCourse = filters.course ?? userCourse ?? null;
 
   return (
     <div>
@@ -411,6 +456,7 @@ function BatchView({ isPremium, userYear }) {
         <div className="ml-auto">
           <GenerateYearbookButton
             batchId={activeYear}
+            course={activeCourse}
             label={activeYear ? `Generate Yearbook · Batch ${activeYear}` : undefined}
           />
         </div>
@@ -807,18 +853,17 @@ export default function DiscoveryPage() {
       <Navbar />
 
       {/* ── Hero ── */}
-      <header className="bg-gradient-to-br from-[#1d2b4b] to-indigo-600 px-[8%] pt-[60px] pb-[110px] rounded-b-[60px] text-white text-center relative overflow-hidden">
+      <header className="bg-gradient-to-br from-[#1d2b4b] to-indigo-600 px-[8%] pt-10 pb-16 rounded-b-[28px] text-white text-center relative overflow-hidden">
         {/* Decorative */}
-        <div className="absolute top-0 right-0 w-[350px] h-[350px] rounded-full bg-white/[0.03] -translate-y-1/2 translate-x-1/3 pointer-events-none" />
-        <div className="absolute bottom-0 left-0 w-[200px] h-[200px] rounded-full bg-amber-400/5 translate-y-1/2 -translate-x-1/4 pointer-events-none" />
+        <div className="absolute top-0 right-0 w-[220px] h-[220px] rounded-full bg-white/[0.03] -translate-y-1/2 translate-x-1/3 pointer-events-none" />
 
-        <p className="text-xs font-bold uppercase tracking-widest mb-3 opacity-60 relative">
+        <p className="text-[11px] font-bold uppercase tracking-widest mb-2 opacity-60 relative">
           National University Lipa
         </p>
-        <h1 className="font-extrabold mb-3 text-[2.8rem] tracking-tight relative">
+        <h1 className="font-extrabold mb-2 text-3xl sm:text-4xl tracking-tight relative">
           Student <span className="text-amber-400">Discovery</span>
         </h1>
-        <p className="font-light opacity-75 mx-auto text-base max-w-[500px] relative">
+        <p className="font-light opacity-75 mx-auto text-sm max-w-[500px] relative">
           Find classmates, explore other programs, and connect with the NU Lipa community.
         </p>
 
@@ -842,7 +887,7 @@ export default function DiscoveryPage() {
       </header>
 
       {/* ── View mode tabs ── */}
-      <div className="flex justify-center -mt-10 relative z-10 px-[8%]">
+      <div className="flex justify-center -mt-8 relative z-10 px-[8%]">
         <div className="flex flex-wrap gap-2 justify-center p-2 rounded-2xl bg-white shadow-[0_10px_40px_rgba(0,0,0,0.1)]">
           {VIEW_MODES.map(mode => (
             <button
@@ -879,7 +924,7 @@ export default function DiscoveryPage() {
           </div>
         </div>
 
-        {viewMode === 'batch'         && <BatchView        isPremium={isPremium} userYear={user?.graduation_year ?? user?.student?.graduation_year} />}
+        {viewMode === 'batch'         && <BatchView        isPremium={isPremium} userYear={user?.graduation_year ?? user?.student?.graduation_year} userCourse={user?.course ?? user?.student?.course} />}
         {viewMode === 'section'       && <SectionView      isPremium={isPremium} />}
         {viewMode === 'school'        && <SchoolView       isPremium={isPremium} />}
         {viewMode === 'cross_program' && <CrossProgramView isPremium={isPremium} />}

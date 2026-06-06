@@ -11,8 +11,11 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Yearbook\BulkUploadRequest;
 use App\Http\Requests\Yearbook\UploadVideoRequest;
 use App\Http\Resources\MediaResource;
+use App\Jobs\AI\AnalyzePhotoFaces;
 use App\Models\Album;
-use App\Models\Photo;
+use App\Models\Gallery;
+use App\Models\GalleryMedia;
+use App\Models\Subscription;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Gate;
@@ -31,6 +34,10 @@ class MediaController extends Controller
      */
     public function bulkUpload(BulkUploadRequest $request): JsonResponse
     {
+        if ($response = $this->requireSubscribed()) {
+            return $response;
+        }
+
         $album = Album::findOrFail($request->validated('album_id'));
 
         try {
@@ -43,25 +50,46 @@ class MediaController extends Controller
             $uploaded = collect($results)->filter(fn ($r) => $r['success']);
             $failed   = collect($results)->filter(fn ($r) => ! $r['success']);
 
-            $uploaded->map(function ($result) use ($album) {
-                return $album->photos()->create([
-                    'user_id'     => Auth::id(),         // ← fix: always stamp uploader
-                    'file_path'   => $result['secure_url'],
-                    'public_id'   => $result['public_id'],
-                    'caption'     => null,
+            $savedGalleries = $uploaded->map(function ($result) use ($album) {
+
+                // 1️⃣ Create the Gallery (logical item) row
+                $gallery = Gallery::create([
+                    'album_id'    => $album->id,
+                    'user_id'     => Auth::id(),
+                    'status'      => 'pending',
+                    'visibility'  => 'public',
+                    'sort_order'  => 0,
                     'ai_metadata' => [
-                        'resource_type' => $result['resource_type'],
-                        'bytes'         => $result['bytes'],
-                        'width'         => $result['width'],
-                        'height'        => $result['height'],
+                        'resource_type' => $result['resource_type'] ?? 'image',
+                        'bytes'         => $result['bytes']         ?? 0,
+                        'width'         => $result['width']         ?? null,
+                        'height'        => $result['height']        ?? null,
                     ],
                 ]);
+
+                // 2️⃣ Create the GalleryMedia (physical file) row
+                GalleryMedia::create([
+                    'gallery_id'    => $gallery->id,
+                    'file_path'     => $result['secure_url'],
+                    'public_id'     => $result['public_id']     ?? null,
+                    'resource_type' => $result['resource_type'] ?? 'image',
+                    'bytes'         => $result['bytes']         ?? 0,
+                    'width'         => $result['width']         ?? null,
+                    'height'        => $result['height']        ?? null,
+                    'sort_order'    => 0,
+                ]);
+
+                if (($result['resource_type'] ?? 'image') === 'image') {
+                    AnalyzePhotoFaces::dispatch($gallery)->delay(now()->addSeconds(3));
+                }
+
+                return $gallery;
             });
 
             return $this->success(
                 message: "{$uploaded->count()} photo(s) uploaded, {$failed->count()} failed.",
                 data: [
-                    'uploaded' => MediaResource::collection($uploaded->values()),
+                    'uploaded' => MediaResource::collection($savedGalleries->values()),
                     'failed'   => $failed->values(),
                 ],
                 status: 201
@@ -81,6 +109,10 @@ class MediaController extends Controller
      */
     public function uploadVideo(UploadVideoRequest $request): JsonResponse
     {
+        if ($response = $this->requireSubscribed()) {
+            return $response;
+        }
+
         $album = Album::findOrFail($request->validated('album_id'));
 
         try {
@@ -90,17 +122,30 @@ class MediaController extends Controller
                 folder: "albums/{$album->id}/videos",
             );
 
-            $album->photos()->create([
-                'user_id'     => Auth::id(),             // ← fix: always stamp uploader
-                'file_path'   => $result['secure_url'],
-                'public_id'   => $result['public_id'],
-                'caption'     => $request->validated('caption'),
+            // 1️⃣ Create the Gallery (logical item) row
+            $gallery = Gallery::create([
+                'album_id'    => $album->id,
+                'user_id'     => Auth::id(),
+                'status'      => 'pending',
+                'visibility'  => 'public',
+                'sort_order'  => 0,
                 'ai_metadata' => [
                     'resource_type' => 'video',
-                    'public_id'     => $result['public_id'],
-                    'bytes'         => $result['bytes'],
-                    'duration'      => $result['duration'],
+                    'bytes'         => $result['bytes']    ?? 0,
+                    'duration'      => $result['duration'] ?? null,
                 ],
+            ]);
+
+            // 2️⃣ Create the GalleryMedia (physical file) row
+            GalleryMedia::create([
+                'gallery_id'    => $gallery->id,
+                'file_path'     => $result['secure_url'],
+                'public_id'     => $result['public_id'] ?? null,
+                'resource_type' => 'video',
+                'bytes'         => $result['bytes']     ?? 0,
+                'width'         => null,
+                'height'        => null,
+                'sort_order'    => 0,
             ]);
 
             return $this->success(
@@ -120,12 +165,56 @@ class MediaController extends Controller
 
     /**
      * DELETE /api/media/photo/{id}
+     *
+     * Deletes a GalleryMedia row (and its parent Gallery if it has no
+     * remaining media files) plus the physical file from storage.
      */
     public function deletePhoto(int $id): JsonResponse
     {
-        $photo = Photo::with('album')->findOrFail($id);
+        // Try GalleryMedia first (new architecture)
+        $media = GalleryMedia::with('gallery')->find($id);
 
-        Log::info('deletePhoto debug', [
+        if ($media) {
+            $gallery = $media->gallery;
+
+            Log::info('deletePhoto (GalleryMedia) debug', [
+                'auth_user_id'    => Auth::id(),
+                'gallery_user_id' => $gallery?->user_id,
+                'media_id'        => $media->id,
+                'gallery_id'      => $gallery?->id,
+            ]);
+
+            // Authorize against the parent Gallery
+            if ($gallery) {
+                Gate::authorize('delete', $gallery);
+            }
+
+            try {
+                if ($media->public_id) {
+                    $this->storage->deletePhoto(
+                        publicId:     $media->public_id,
+                        resourceType: $media->resource_type ?? 'image',
+                    );
+                }
+
+                $media->delete();
+
+                // Clean up the parent Gallery row if no media files remain
+                if ($gallery && $gallery->media()->count() === 0) {
+                    $gallery->delete();
+                }
+
+                return $this->success(message: 'Photo deleted successfully.');
+
+            } catch (StorageUploadException $e) {
+                return $this->error(message: $e->getMessage(), status: 500);
+            }
+        }
+
+        // Fallback: legacy Photo model (old architecture rows still in DB)
+        $photo = \App\Models\Photo::with('album')->findOrFail($id);
+
+        Log::info('deletePhoto (legacy Photo) debug', [
             'auth_user_id'  => Auth::id(),
             'photo_user_id' => $photo->user_id,
             'album_user_id' => $photo->album?->user_id,
@@ -166,32 +255,55 @@ class MediaController extends Controller
 
         $tier = $subscription?->tier ?? 'free';
 
-        $limitBytes = match($tier) {
-            'premium'          => 50 * 1024 * 1024 * 1024,
-            'premium_standard' => 10 * 1024 * 1024 * 1024,
-            'standard'         => 2  * 1024 * 1024 * 1024,
+        $limitBytes = match ($tier) {
+            'premium'          => 50  * 1024 * 1024 * 1024,
+            'premium_standard' => 10  * 1024 * 1024 * 1024,
+            'standard'         => 2   * 1024 * 1024 * 1024,
             default            => 500 * 1024 * 1024,
         };
 
-        $label = match($tier) {
+        $label = match ($tier) {
             'premium'          => 'Premium HD',
             'premium_standard' => 'Premium Standard',
             'standard'         => 'Standard',
             default            => 'Free',
         };
 
+        // Sum actual bytes used from gallery_media for this user
+        $usedBytes = GalleryMedia::whereHas(
+            'gallery',
+            fn ($q) => $q->where('user_id', $userId)
+        )->sum('bytes');
+
         return $this->success(data: [
-            'used_bytes'  => 0,
+            'used_bytes'  => (int) $usedBytes,
             'limit_bytes' => $limitBytes,
             'tier'        => $tier,
             'label'       => $label,
-            'percent'     => 0,
+            'percent'     => $limitBytes > 0
+                ? round(($usedBytes / $limitBytes) * 100, 2)
+                : 0,
         ]);
     }
 
     // =========================================================================
     // Response helpers
     // =========================================================================
+
+    private function requireSubscribed(): ?JsonResponse
+    {
+        $sub = Subscription::where('user_id', Auth::id())->latest()->first();
+
+        if (! $sub?->isStandard()) {
+            return $this->error(
+                message: 'Gallery uploads require a Standard or Premium subscription.',
+                errors: ['code' => 'UPGRADE_REQUIRED'],
+                status: 403
+            );
+        }
+
+        return null;
+    }
 
     private function success(string $message = 'OK', mixed $data = [], int $status = 200): JsonResponse
     {

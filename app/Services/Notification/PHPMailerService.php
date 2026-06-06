@@ -22,6 +22,7 @@ class PHPMailerService
         $this->mailer->Password   = config('phpmailer.password');
         $this->mailer->SMTPSecure = config('phpmailer.encryption', PHPMailer::ENCRYPTION_STARTTLS);
         $this->mailer->Port       = config('phpmailer.port', 587);
+        $this->mailer->Timeout    = 10;
 
         $this->mailer->setFrom(
             config('phpmailer.from_address'),

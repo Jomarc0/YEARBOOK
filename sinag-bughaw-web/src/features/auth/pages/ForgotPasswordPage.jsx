@@ -156,7 +156,7 @@ export default function ForgotPasswordPage() {
       </div>
 
       {/* ── RIGHT PANEL ────────────────────────────────────────────────────── */}
-      <div className="w-full lg:w-[55%] flex flex-col bg-[#f8fafc] animate-[slideRight_0.6s_ease]">
+      <div className="w-full lg:w-[55%] flex flex-col bg-[#f3f6fc] animate-[slideRight_0.6s_ease]">
 
         {/* Top bar */}
         <div className="px-8 sm:px-14 lg:px-16 pt-8">
@@ -181,7 +181,7 @@ export default function ForgotPasswordPage() {
         </div>
 
         {/* Center */}
-        <div className="flex-1 flex flex-col items-center justify-center px-8 sm:px-14 lg:px-16 py-10">
+        <div className="flex-1 flex flex-col items-center justify-center px-5 sm:px-10 lg:px-14 py-8">
 
           {/* Mobile logo */}
           <div className="flex items-center gap-3 mb-8 lg:hidden self-start">
@@ -194,7 +194,7 @@ export default function ForgotPasswordPage() {
 
           {/* Progress dots */}
           {step !== 'done' && (
-            <div className="flex items-center gap-2 mb-8 self-start w-full max-w-[400px]">
+            <div className="flex items-center gap-2 mb-4 w-full max-w-[440px] px-1">
               {['email','otp','reset'].map((s, i) => {
                 const steps = ['email','otp','reset'];
                 const current = steps.indexOf(step);
@@ -220,7 +220,7 @@ export default function ForgotPasswordPage() {
             </div>
           )}
 
-          <div className="w-full max-w-[400px]">
+          <div className="w-full max-w-[440px] bg-white border border-slate-200 rounded-2xl p-6 sm:p-8 shadow-xl shadow-slate-200/70">
 
             {/* ── STEP 1: Email ─────────────────────────────────────────────── */}
             {step === 'email' && (
@@ -250,7 +250,7 @@ export default function ForgotPasswordPage() {
                   </div>
 
                   <button type="submit" disabled={loading}
-                    className="w-full bg-[#1d2b4b] hover:bg-[#162038] disabled:opacity-60 text-white font-bold py-3.5 rounded-xl transition-all flex items-center justify-center gap-2.5 shadow-lg cursor-pointer border-none text-sm">
+                    className="w-full bg-[#1d2b4b] hover:bg-[#162038] disabled:opacity-60 disabled:cursor-not-allowed text-white font-bold py-3.5 rounded-xl transition-all flex items-center justify-center gap-2.5 shadow-lg cursor-pointer border-none text-sm">
                     {loading
                       ? <><span>Sending Code…</span><Spinner /></>
                       : <><span>Send Reset Code</span><i className="fas fa-paper-plane text-xs" aria-hidden="true" /></>}
@@ -308,7 +308,7 @@ export default function ForgotPasswordPage() {
                   </div>
 
                   <button type="submit" disabled={loading}
-                    className="w-full bg-[#1d2b4b] hover:bg-[#162038] disabled:opacity-60 text-white font-bold py-3.5 rounded-xl transition-all flex items-center justify-center gap-2.5 shadow-lg cursor-pointer border-none text-sm">
+                    className="w-full bg-[#1d2b4b] hover:bg-[#162038] disabled:opacity-60 disabled:cursor-not-allowed text-white font-bold py-3.5 rounded-xl transition-all flex items-center justify-center gap-2.5 shadow-lg cursor-pointer border-none text-sm">
                     {loading
                       ? <><span>Verifying…</span><Spinner /></>
                       : <><span>Verify Code</span><i className="fas fa-check text-xs" aria-hidden="true" /></>}
@@ -401,7 +401,7 @@ export default function ForgotPasswordPage() {
                   </div>
 
                   <button type="submit" disabled={loading}
-                    className="w-full bg-[#1d2b4b] hover:bg-[#162038] disabled:opacity-60 text-white font-bold py-3.5 rounded-xl transition-all flex items-center justify-center gap-2.5 shadow-lg cursor-pointer border-none text-sm">
+                    className="w-full bg-[#1d2b4b] hover:bg-[#162038] disabled:opacity-60 disabled:cursor-not-allowed text-white font-bold py-3.5 rounded-xl transition-all flex items-center justify-center gap-2.5 shadow-lg cursor-pointer border-none text-sm">
                     {loading
                       ? <><span>Updating…</span><Spinner /></>
                       : <><span>Reset Password</span><i className="fas fa-shield-check text-xs" aria-hidden="true" /></>}

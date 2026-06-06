@@ -2,52 +2,88 @@
  * YearbookPageRenderer.jsx
  * src/features/yearbook/components/flipbook/YearbookPageRenderer.jsx
  *
- * Fixed imports: FacultyPage, StatsPage, ClosingPage, BlankPage
- * are all named exports from GalleryPage.jsx — no separate files needed.
- * Delete the stub re-export files if you created them.
+ * FIXES applied:
+ *   1. DedicationPage no longer exports TOCPage/SectionHeader — each has its own file.
+ *      Updated imports accordingly.
+ *   2. BlankPage was previously imported from DedicationPage (wrong); now from GalleryPage.
+ *   3. Passes onPortraitClick through to StudentGridPage
+ *      so yearbook profiles can open discovery student profiles.
+ *   4. Wrapped in forwardRef (required by react-pageflip).
  */
 import React, { forwardRef } from 'react';
 
 import CoverPage        from '../pages/CoverPage';
-import DedicationPage   from '../pages/DedicationPage';
-import TOCPage          from '../pages/TOCPage';
-import SectionHeader    from '../pages/SectionHeader';
+import DedicationPage   from '../pages/DedicationPage';   // FIX: only DedicationPage now
+import TOCPage          from '../pages/TOCPage';           // FIX: own file
+import SectionHeader    from '../pages/SectionHeader';    // FIX: own file
 import StudentGridPage  from '../pages/StudentGridPage';
-import StudentQuotePage from '../pages/StudentQuotePage';
-
-// All four come from the same barrel — no separate files required
 import GalleryPage, {
+  WelcomePage,
+  ProgramOverviewPage,
+  AchievementsPage,
+  OrganizationsPage,
+  MemoriesPage,
+  AspirationsPage,
+  DirectoryPage,
   FacultyPage,
   StatsPage,
   ClosingPage,
-  BlankPage,
+  BackCoverPage,
+  BlankPage,             // FIX: comes from GalleryPage barrel, not DedicationPage
 } from '../pages/GalleryPage';
 
-const YearbookPageRenderer = forwardRef(({ page, pageIndex, onNavigate }, ref) => {
-  const props = { page, pageIndex, onNavigate };
+const YearbookPageRenderer = forwardRef(
+  ({ page, pageIndex, onNavigate, onPortraitClick }, ref) => {
 
-  const content = (() => {
-    switch (page?.type) {
-      case 'cover':           return <CoverPage        {...props} />;
-      case 'dedication':      return <DedicationPage   {...props} />;
-      case 'toc':             return <TOCPage          {...props} />;
-      case 'section-header':  return <SectionHeader    {...props} />;
-      case 'student-grid':    return <StudentGridPage  {...props} />;
-      case 'student-quotes':  return <StudentQuotePage {...props} />;
-      case 'gallery':         return <GalleryPage      {...props} />;
-      case 'faculty':         return <FacultyPage      {...props} />;
-      case 'stats':           return <StatsPage        {...props} />;
-      case 'closing':         return <ClosingPage      {...props} />;
-      default:                return <BlankPage        {...props} />;
-    }
-  })();
+    const sharedProps = { page, pageIndex, onNavigate };
 
-  return (
-    <div ref={ref} className="yearbook-page-slot">
-      {content}
-    </div>
-  );
-});
+    const content = (() => {
+      switch (page?.type) {
+        case 'cover':           return <CoverPage        {...sharedProps} />;
+        case 'dedication':      return <DedicationPage   {...sharedProps} />;
+        case 'toc':             return <TOCPage          {...sharedProps} />;
+        case 'section-header':  return <SectionHeader    {...sharedProps} />;
+
+        case 'student-grid':
+        case 'student-profile':
+          return (
+            <StudentGridPage
+              {...sharedProps}
+              onPortraitClick={onPortraitClick}
+            />
+          );
+
+        case 'welcome':          return <WelcomePage         {...sharedProps} />;
+        case 'program-overview': return <ProgramOverviewPage {...sharedProps} />;
+        case 'achievements':     return <AchievementsPage    {...sharedProps} />;
+        case 'organizations':    return <OrganizationsPage   {...sharedProps} />;
+        case 'memories':         return <MemoriesPage        {...sharedProps} />;
+        case 'aspirations':      return <AspirationsPage     {...sharedProps} />;
+        case 'directory':        return <DirectoryPage       {...sharedProps} />;
+        case 'gallery':          return <GalleryPage         {...sharedProps} />;
+        case 'faculty':          return <FacultyPage         {...sharedProps} />;
+        case 'stats':            return <StatsPage           {...sharedProps} />;
+        case 'closing':          return <ClosingPage         {...sharedProps} />;
+        case 'back-cover':       return <BackCoverPage       {...sharedProps} />;
+        default:                 return <BlankPage           {...sharedProps} />;
+      }
+    })();
+
+    return (
+      <div
+        ref={ref}
+        style={{
+          width:    '100%',
+          height:   '100%',
+          overflow: 'hidden',
+          display:  'flex',
+        }}
+      >
+        {content}
+      </div>
+    );
+  }
+);
 
 YearbookPageRenderer.displayName = 'YearbookPageRenderer';
 export default YearbookPageRenderer;

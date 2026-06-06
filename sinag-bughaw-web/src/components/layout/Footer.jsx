@@ -35,13 +35,13 @@ export default function Footer() {
     <footer className="bg-[#0e1628] text-slate-400 mt-auto">
 
       {/* Main footer content */}
-      <div className="max-w-[1400px] mx-auto px-5 sm:px-8 lg:px-10 pt-14 pb-10">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-10">
+      <div className="max-w-[1400px] mx-auto px-5 sm:px-8 lg:px-10 py-8">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-7">
 
           {/* Brand */}
           <div className="sm:col-span-2 lg:col-span-1">
-            <Link to="/dashboard" className="no-underline inline-flex items-center gap-2.5 mb-4">
-              <img src="/images/NU_logo.png" alt="NU Lipa" className="w-9 h-9 object-contain" />
+            <Link to="/dashboard" className="no-underline inline-flex items-center gap-2.5 mb-3">
+              <img src="/images/NU_logo.png" alt="NU Lipa" className="w-8 h-8 object-contain" />
               <div className="flex flex-col gap-0.5 leading-none">
                 <span className="text-white font-black text-[13px] uppercase tracking-widest">Sinag-Bughaw</span>
                 <span className="text-[#fdb813] text-[9px] font-semibold uppercase tracking-[0.18em]">Digital Yearbook</span>
@@ -52,11 +52,11 @@ export default function Footer() {
             </p>
 
             {/* Social placeholder icons */}
-            <div className="flex gap-2 mt-5">
+            <div className="flex gap-2 mt-4">
               {['fa-facebook-f', 'fa-twitter', 'fa-instagram'].map(icon => (
                 <span
                   key={icon}
-                  className="w-8 h-8 rounded-lg bg-white/5 border border-white/8 flex items-center justify-center
+                  className="w-7 h-7 rounded-lg bg-white/5 border border-white/8 flex items-center justify-center
                              text-slate-500 hover:text-white hover:bg-white/10 hover:border-white/15
                              transition-all cursor-pointer text-[12px]"
                   aria-hidden="true"
@@ -69,10 +69,10 @@ export default function Footer() {
 
           {/* Quick Links */}
           <div>
-            <h4 className="text-white text-[13px] font-semibold mb-4 mt-0 pl-3 border-l-[3px] border-[#fdb813] leading-none">
+            <h4 className="text-white text-[13px] font-semibold mb-3 mt-0 pl-3 border-l-[3px] border-[#fdb813] leading-none">
               Quick Links
             </h4>
-            <ul className="list-none p-0 m-0 flex flex-col gap-2">
+            <ul className="list-none p-0 m-0 flex flex-col gap-1.5">
               {quickLinks.map(({ to, label }) => (
                 <li key={to}>
                   <Link
@@ -88,10 +88,10 @@ export default function Footer() {
 
           {/* Platform */}
           <div>
-            <h4 className="text-white text-[13px] font-semibold mb-4 mt-0 pl-3 border-l-[3px] border-[#fdb813] leading-none">
+            <h4 className="text-white text-[13px] font-semibold mb-3 mt-0 pl-3 border-l-[3px] border-[#fdb813] leading-none">
               Platform
             </h4>
-            <ul className="list-none p-0 m-0 flex flex-col gap-2">
+            <ul className="list-none p-0 m-0 flex flex-col gap-1.5">
               {platformLinks.map(({ to, label }) => (
                 <li key={to}>
                   <Link
@@ -107,7 +107,7 @@ export default function Footer() {
 
           {/* Contact */}
           <div>
-            <h4 className="text-white text-[13px] font-semibold mb-4 mt-0 pl-3 border-l-[3px] border-[#fdb813] leading-none">
+            <h4 className="text-white text-[13px] font-semibold mb-3 mt-0 pl-3 border-l-[3px] border-[#fdb813] leading-none">
               Contact
             </h4>
             <div className="flex flex-col gap-3 text-[12px]">
@@ -126,7 +126,7 @@ export default function Footer() {
 
       {/* Bottom bar */}
       <div className="border-t border-white/[0.05]">
-        <div className="max-w-[1400px] mx-auto px-5 sm:px-8 lg:px-10 py-5 flex flex-col sm:flex-row items-center justify-between gap-3">
+        <div className="max-w-[1400px] mx-auto px-5 sm:px-8 lg:px-10 py-3 flex flex-col sm:flex-row items-center justify-between gap-3">
           <p className="text-[11px] text-slate-600 m-0">
             &copy; {new Date().getFullYear()} National University Lipa. Sinag-Bughaw Project.
           </p>

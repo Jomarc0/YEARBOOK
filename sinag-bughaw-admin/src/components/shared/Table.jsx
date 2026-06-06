@@ -1,29 +1,19 @@
-import { T } from "../../tokens/design";
+import Icon from "./Icon";
 
-export function TH({ children, style = {} }) {
+export function TH({ children, className = "", style }) {
   return (
-    <th style={{
-      textAlign: "left", padding: "13px 22px",
-      color: "#6d7b96", fontSize: "0.83rem",
-      letterSpacing: "0.05em", textTransform: "uppercase",
-      borderBottom: "1px solid #dfe7f2",
-      background: "#fbfcff", fontWeight: 700,
-      whiteSpace: "nowrap", ...style,
-    }}>
+    <th
+      className={`whitespace-nowrap border-b border-slate-200 bg-slate-50 px-5 py-3 text-left text-xs font-black uppercase tracking-wider text-slate-500 ${className}`}
+      style={style}
+    >
       {children}
     </th>
   );
 }
 
-export function TD({ children, style = {} }) {
+export function TD({ children, className = "", style }) {
   return (
-    <td style={{
-      padding: "15px 22px",
-      borderBottom: "1px solid #eef2f8",
-      verticalAlign: "middle",
-      fontSize: "0.93rem",
-      color: T.text, ...style,
-    }}>
+    <td className={`border-b border-slate-100 px-5 py-4 align-middle text-sm text-slate-700 ${className}`} style={style}>
       {children}
     </td>
   );
@@ -31,50 +21,39 @@ export function TD({ children, style = {} }) {
 
 export function Pager({ from, to, total, hasPrev, hasNext, onPrev, onNext }) {
   return (
-    <div style={{
-      padding: "13px 18px", display: "flex",
-      justifyContent: "space-between", alignItems: "center",
-      borderTop: "1px solid #e5ebf5",
-      color: "#6f7f9c", fontSize: "0.88rem",
-    }}>
+    <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 px-5 py-3 text-sm text-slate-500">
       <span>
-        {total > 0
-          ? `Showing ${from} to ${to} of ${total} entries`
-          : "Showing 0 entries"}
+        {total > 0 ? `Showing ${from} to ${to} of ${total} entries` : "Showing 0 entries"}
       </span>
-      <div style={{ display: "flex", gap: 8 }}>
-        {["Prev", "Next"].map((label, i) => {
-          const active = i === 0 ? hasPrev : hasNext;
-          return (
-            <button
-              key={label}
-              onClick={i === 0 ? onPrev : onNext}
-              disabled={!active}
-              style={{
-                minWidth: 58, height: 34, borderRadius: 8,
-                border: "1px solid #d8e0ee", background: "#fff",
-                color: "#71809d", cursor: active ? "pointer" : "not-allowed",
-                opacity: active ? 1 : 0.5, fontSize: "0.88rem",
-                fontFamily: "inherit",
-              }}
-            >
-              {label}
-            </button>
-          );
-        })}
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          onClick={onPrev}
+          disabled={!hasPrev}
+          className="inline-flex h-9 items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 text-sm font-bold text-slate-600 transition hover:border-indigo-200 hover:text-indigo-600 disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          <Icon name="chevronLeft" className="h-4 w-4" />
+          Prev
+        </button>
+        <button
+          type="button"
+          onClick={onNext}
+          disabled={!hasNext}
+          className="inline-flex h-9 items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 text-sm font-bold text-slate-600 transition hover:border-indigo-200 hover:text-indigo-600 disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          Next
+          <Icon name="chevronRight" className="h-4 w-4" />
+        </button>
       </div>
     </div>
   );
 }
 
-export function TableWrapper({ children }) {
+export function TableWrapper({ children, className = "" }) {
   return (
-    <div style={{
-      background: T.surface, border: `1px solid ${T.border}`,
-      borderRadius: 18, boxShadow: T.shadow, overflow: "hidden",
-    }}>
-      <div style={{ overflowX: "auto" }}>
-        <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 780 }}>
+    <div className={`admin-shell-card overflow-hidden ${className}`}>
+      <div className="overflow-x-auto">
+        <table className="min-w-[780px] w-full border-collapse">
           {children}
         </table>
       </div>

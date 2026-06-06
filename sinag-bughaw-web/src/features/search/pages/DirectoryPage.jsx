@@ -6,23 +6,16 @@ import { studentsApi } from '@/api/student.api';
 import { faceApi } from '@/api/gallery.api';
 import FaceSearchButton from '@/components/ui/FaceSearchButton';
 import { imageUrl, avatarUrl } from '@/utils/imageUrl';
+import { COURSE_FILTERS, getCourseShort } from '@/utils/courseShort';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
-const COURSE_FILTERS = [
-  { label: 'All Programs', value: 'All Programs' },
-  { label: 'BSCS',         value: 'Bachelor of Science in Computer Science'       },
-  { label: 'BSIT',         value: 'Bachelor of Science in Information Technology' },
-  { label: 'BSCE',         value: 'Bachelor of Science in Civil Engineering'      },
-  { label: 'BSME',         value: 'Bachelor of Science in Mechanical Engineering' },
-  { label: 'Nursing',      value: 'Bachelor of Science in Nursing'                },
-  { label: 'Accountancy',  value: 'Bachelor of Science in Accountancy'            },
-  { label: 'Psychology',   value: 'Bachelor of Science in Psychology'             },
-  { label: 'Education',    value: 'Bachelor of Education'                         },
-];
-
-const SHORT_MAP = Object.fromEntries(
-  COURSE_FILTERS.slice(1).map(({ label, value }) => [value, label])
-);
+const usableFaceMatches = (matches = []) => {
+  const validMatches = matches.filter(m =>
+    m?.user_id && (m.student_id || m.course || m.profile_picture)
+  );
+  const source = validMatches.length ? validMatches : matches.filter(m => m?.user_id);
+  return Array.from(new Map(source.map(m => [m.user_id, m])).values());
+};
 
 const getInitials = (name = '') =>
   name.trim().split(/\s+/).map(w => w[0]?.toUpperCase() || '').slice(0, 2).join('');
@@ -101,7 +94,7 @@ function StudentCard({ student, index, isMatched, matchData }) {
   const [imgError, setImgError] = useState(false);
   const batchYear   = student.batch_year || new Date().getFullYear();
   const hasPhoto    = !!student.profile_picture && !imgError;
-  const courseShort = SHORT_MAP[student.course] || student.course_short || 'Student';
+  const courseShort = student.course_short || getCourseShort(student.course);
 
   return (
     <Link
@@ -265,7 +258,7 @@ export default function DirectoryPage() {
       const fd = new FormData();
       fd.append('face_image', file);
       const { data }  = await faceApi.search(fd);
-      const matches   = data.matches ?? [];
+      const matches   = usableFaceMatches(data.matches ?? []);
       if (!matches.length) {
         alert('No matching student found. Ensure the photo shows a clear face.');
         return;
@@ -274,8 +267,8 @@ export default function DirectoryPage() {
       setMatchedIds(new Set(matches.map(m => m.user_id)));
       const topName = matches[0]?.name ?? '';
       if (topName) { fetchStudents(topName, 'All Programs', 1); setQuery(topName); }
-    } catch {
-      alert('Face search failed. Please try again.');
+    } catch (err) {
+      alert(err?.response?.data?.message || 'Face search failed. Please try again.');
     } finally {
       setFaceSearching(false);
     }
@@ -292,7 +285,7 @@ export default function DirectoryPage() {
 
       {/* ── Hero / Search Header ── */}
       <header
-        className="px-5 sm:px-[8%] py-20 sm:py-24 text-center text-white rounded-b-[48px] shadow-lg overflow-hidden"
+        className="relative px-5 sm:px-[8%] py-10 sm:py-12 text-center text-white rounded-b-[28px] shadow-lg overflow-hidden"
         style={{ background: "linear-gradient(135deg,rgba(29,43,75,0.95),rgba(63,81,181,0.88)), url('/images/NU-building.jpg') center/cover no-repeat" }}
       >
         {/* Dot pattern */}
@@ -301,13 +294,13 @@ export default function DirectoryPage() {
 
         <div className="relative z-10">
           <span className="inline-flex items-center gap-2 bg-[#fdb813]/15 border border-[#fdb813]/30 text-[#fdb813]
-                           text-[10px] font-bold uppercase tracking-widest px-4 py-1.5 rounded-full mb-5">
+                           text-[10px] font-bold uppercase tracking-widest px-3 py-1 rounded-full mb-3">
             <i className="fas fa-users text-[9px]" /> Student Directory
           </span>
-          <h1 className="text-4xl sm:text-5xl font-black tracking-tight mb-3">
+          <h1 className="text-3xl sm:text-4xl font-black tracking-tight mb-2">
             Sinag-Bughaw <span className="text-[#fdb813]">Pioneers</span>
           </h1>
-          <p className="text-white/70 text-sm sm:text-base max-w-md mx-auto mb-10 leading-relaxed font-light">
+          <p className="text-white/70 text-sm max-w-md mx-auto mb-5 leading-relaxed font-light">
             Connecting the innovators of National University Lipa. Built by Pioneers, for Pioneers.
           </p>
 

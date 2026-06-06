@@ -9,8 +9,8 @@
  */
 import React, { Suspense } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { useSelector } from 'react-redux';
-import { useYearbook } from '../hooks/useYearbook';
+import { useYearbook } from '../../hooks/useYearbook';
+import { useAuth } from '@/features/auth/hooks/useAuth';
 
 // Lazy-load the heavy flipbook engine
 const FlipbookViewer = React.lazy(() =>
@@ -23,7 +23,7 @@ const BG   = '#0a0a14';
 export default function FlipbookViewerPage() {
   const { batchId }  = useParams();
   const navigate     = useNavigate();
-  const currentUser  = useSelector((s) => s.auth.user);
+  const { user: currentUser } = useAuth();
 
   const {
     loading, error,

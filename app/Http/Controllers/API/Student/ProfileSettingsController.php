@@ -16,7 +16,7 @@ class ProfileSettingsController extends Controller
     public function updateVisibility(Request $request): JsonResponse
     {
         $request->validate([
-            'visibility' => 'required|in:public,private,alumni_only',
+            'visibility' => 'required|in:public,private,batchmates',
         ]);
 
         $request->user()->update(['profile_visibility' => $request->visibility]);
@@ -28,7 +28,15 @@ class ProfileSettingsController extends Controller
     public function updateMotto(Request $request): JsonResponse
     {
         $request->validate(['motto' => 'nullable|string|max:255']);
-        $request->user()->update(['motto' => $request->motto]);
+
+        $user = $request->user()->loadMissing('studentRecord');
+
+        if ($user->studentRecord) {
+            $user->studentRecord->update(['motto' => $request->motto]);
+        } else {
+            $user->update(['motto' => $request->motto]);
+        }
+
         return response()->json(['message' => 'Motto updated.']);
     }
 
@@ -42,15 +50,39 @@ class ProfileSettingsController extends Controller
             'batch'           => 'nullable|string|max:255',
         ]);
 
-        if (isset($validated['graduation_year'])) {
+        if (array_key_exists('graduation_year', $validated) && $validated['graduation_year'] !== null) {
             $validated['graduation_year'] = (int) $validated['graduation_year'];
         }
 
-        $request->user()->update($validated);
+        $user = $request->user()->loadMissing('studentRecord');
+
+        if ($user->studentRecord) {
+            $studentPayload = [];
+
+            if (array_key_exists('student_id', $validated)) {
+                $studentPayload['student_no'] = $validated['student_id'];
+            }
+
+            foreach (['course', 'graduation_year'] as $field) {
+                if (array_key_exists($field, $validated)) {
+                    $studentPayload[$field] = $validated[$field];
+                }
+            }
+
+            if ($studentPayload) {
+                $user->studentRecord->update($studentPayload);
+            }
+        } else {
+            $user->update($validated);
+        }
 
         AuditLog::record($request, 'API Update Academic', 'Updated academic info for ' . $request->user()->email);
 
-        return response()->json(['success' => true, 'message' => 'Academic info updated.']);
+        return response()->json([
+            'success' => true,
+            'message' => 'Academic info updated.',
+            'user' => $user->fresh()->load('studentRecord', 'section'),
+        ]);
     }
 
     // ── Update achievements ───────────────────────────────────────────────────
@@ -129,8 +161,8 @@ class ProfileSettingsController extends Controller
 
         ProfileView::create([
             'viewed_user_id' => $id,
-            'viewer_id'      => $request->user()?->id,
-            'ip_address'     => $request->ip(),
+            'viewer_user_id' => $request->user()?->id,
+            'viewer_ip'      => $request->ip(),
         ]);
 
         $profile->increment('profile_views');

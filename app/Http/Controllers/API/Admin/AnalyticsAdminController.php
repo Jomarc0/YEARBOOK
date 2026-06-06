@@ -18,7 +18,6 @@ use Carbon\Carbon;
 
 class AnalyticsAdminController extends Controller
 {
-    // ── GET /api/admin/analytics/overview ─────────────────────────────────────
     public function overview(): JsonResponse
     {
         return response()->json([
@@ -32,7 +31,6 @@ class AnalyticsAdminController extends Controller
         ]);
     }
 
-    // ── GET /api/admin/analytics/views-trend   ?days=30 ───────────────────────
     public function viewsTrend(Request $request): JsonResponse
     {
         $days = max(7, min((int) $request->get('days', 30), 90));
@@ -48,7 +46,6 @@ class AnalyticsAdminController extends Controller
                 'value' => (int) $row->value,
             ]);
 
-        // Fill in missing days with 0
         $filled = [];
         for ($i = $days - 1; $i >= 0; $i--) {
             $date  = now()->subDays($i)->format('Y-m-d');
@@ -60,7 +57,6 @@ class AnalyticsAdminController extends Controller
         return response()->json(['data' => $filled]);
     }
 
-    // ── GET /api/admin/analytics/top-profiles   ?limit=10 ────────────────────
     public function topProfiles(Request $request): JsonResponse
     {
         $limit = max(1, min((int) $request->get('limit', 10), 50));
@@ -70,24 +66,38 @@ class AnalyticsAdminController extends Controller
             ->groupBy('viewed_user_id')
             ->orderByDesc('view_count')
             ->limit($limit)
-            ->with('viewedUser:id,first_name,last_name,profile_picture,course,graduation_year')
-            ->get()
-            ->map(fn($row) => [
-                'id'              => $row->viewed_user_id,
-                'name'            => $row->viewedUser
-                    ? "{$row->viewedUser->first_name} {$row->viewedUser->last_name}"
-                    : 'Unknown',
-                'profile_picture' => $row->viewedUser?->profile_picture,
-                'course'          => $row->viewedUser?->course,
-                'graduation_year' => $row->viewedUser?->graduation_year,
-                'view_count'      => (int) $row->view_count,
-            ]);
+            ->get();
 
-        return response()->json(['data' => $data]);
+        $userIds = $data->pluck('viewed_user_id');
+
+        $users = DB::table('users')
+            ->leftJoin('students', 'users.student_record_id', '=', 'students.id')
+            ->whereIn('users.id', $userIds)
+            ->select(
+                'users.id',
+                'users.first_name',
+                'users.last_name',
+                'users.profile_picture',
+                'students.course',
+                'students.graduation_year'
+            )
+            ->get()
+            ->keyBy('id');
+
+        $result = $data->map(fn($row) => [
+            'id'              => $row->viewed_user_id,
+            'name'            => isset($users[$row->viewed_user_id])
+                ? trim("{$users[$row->viewed_user_id]->first_name} {$users[$row->viewed_user_id]->last_name}")
+                : 'Unknown',
+            'profile_picture' => $users[$row->viewed_user_id]?->profile_picture ?? null,
+            'course'          => $users[$row->viewed_user_id]?->course ?? null,
+            'graduation_year' => $users[$row->viewed_user_id]?->graduation_year ?? null,
+            'view_count'      => (int) $row->view_count,
+        ]);
+
+        return response()->json(['data' => $result]);
     }
 
-    // ── GET /api/admin/analytics/trending   ?limit=10 ────────────────────────
-    // Trending = most views in the last 7 days
     public function trending(Request $request): JsonResponse
     {
         $limit = max(1, min((int) $request->get('limit', 10), 50));
@@ -101,14 +111,25 @@ class AnalyticsAdminController extends Controller
             ->get();
 
         $userIds = $data->pluck('viewed_user_id');
-        $users   = User::whereIn('id', $userIds)
-            ->get(['id', 'first_name', 'last_name', 'profile_picture', 'course', 'graduation_year'])
+
+        $users = DB::table('users')
+            ->leftJoin('students', 'users.student_record_id', '=', 'students.id')
+            ->whereIn('users.id', $userIds)
+            ->select(
+                'users.id',
+                'users.first_name',
+                'users.last_name',
+                'users.profile_picture',
+                'students.course',
+                'students.graduation_year'
+            )
+            ->get()
             ->keyBy('id');
 
         $result = $data->map(fn($row) => [
             'id'              => $row->viewed_user_id,
             'name'            => isset($users[$row->viewed_user_id])
-                ? "{$users[$row->viewed_user_id]->first_name} {$users[$row->viewed_user_id]->last_name}"
+                ? trim("{$users[$row->viewed_user_id]->first_name} {$users[$row->viewed_user_id]->last_name}")
                 : 'Unknown',
             'profile_picture' => $users[$row->viewed_user_id]?->profile_picture ?? null,
             'course'          => $users[$row->viewed_user_id]?->course ?? null,
@@ -119,8 +140,6 @@ class AnalyticsAdminController extends Controller
         return response()->json(['data' => $result]);
     }
 
-    // ── GET /api/admin/analytics/engagement ──────────────────────────────────
-    // Content volume breakdown across media types
     public function engagement(): JsonResponse
     {
         return response()->json([
@@ -132,8 +151,6 @@ class AnalyticsAdminController extends Controller
         ]);
     }
 
-    // ── GET /api/admin/analytics/presence ────────────────────────────────────
-    // Recent online/offline users
     public function presence(Request $request): JsonResponse
     {
         $items = UserPresence::query()
@@ -143,13 +160,13 @@ class AnalyticsAdminController extends Controller
             ->limit(50)
             ->get()
             ->map(fn($p) => [
-                'user_id'           => $p->user_id,
-                'name'              => $p->user
-                    ? "{$p->user->first_name} {$p->user->last_name}"
+                'user_id'            => $p->user_id,
+                'name'               => $p->user
+                    ? trim("{$p->user->first_name} {$p->user->last_name}")
                     : 'Unknown',
-                'profile_picture'   => $p->user?->profile_picture,
-                'is_online'         => $p->is_online,
-                'last_seen_at'      => $p->last_seen_at,
+                'profile_picture'    => $p->user?->profile_picture,
+                'is_online'          => $p->is_online,
+                'last_seen_at'       => $p->last_seen_at,
                 'last_seen_at_human' => $p->last_seen_at
                     ? Carbon::parse($p->last_seen_at)->diffForHumans()
                     : null,

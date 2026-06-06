@@ -31,18 +31,21 @@ class EngagementAnalyticsService
 
     public function batchmateStats(User $user): array
     {
+        // FIX: course/profile_picture are accessors — load via Eloquent with
+        // studentRecord so the accessors resolve correctly. No raw column list.
         $topProfiles = User::where('batch_id', $user->batch_id)
             ->where('role', 'student')
             ->where('profile_visibility', 'public')
             ->where('id', '!=', $user->id)
             ->orderByDesc('profile_views')
             ->take(5)
-            ->get(['id', 'name', 'profile_picture', 'course', 'profile_views'])
+            ->with('studentRecord:id,course,photo')
+            ->get(['id', 'name', 'profile_picture', 'profile_views', 'student_record_id'])
             ->map(fn($u) => [
                 'id'              => $u->id,
                 'name'            => $u->name,
-                'profile_picture' => $u->profile_picture,
-                'course'          => $u->course,
+                'profile_picture' => $u->profile_picture, // accessor resolves correctly
+                'course'          => $u->course,           // accessor → studentRecord.course
                 'views'           => $u->profile_views,
             ]);
 
@@ -54,18 +57,21 @@ class EngagementAnalyticsService
 
     public function topViewed(int $limit = 10): array
     {
+        // FIX: course/batch/graduation_year are accessors, not real columns.
+        // Use Eloquent + eager-load studentRecord so accessors work.
         return User::where('role', 'student')
             ->where('profile_visibility', 'public')
             ->orderByDesc('profile_views')
             ->take($limit)
-            ->get(['id', 'name', 'profile_picture', 'course', 'batch', 'graduation_year', 'profile_views'])
+            ->with('studentRecord:id,course,graduation_year,photo')
+            ->get(['id', 'name', 'profile_picture', 'profile_views', 'student_record_id'])
             ->map(fn($u) => [
                 'id'              => $u->id,
                 'name'            => $u->name,
-                'profile_picture' => $u->profile_picture,
-                'course'          => $u->course,
-                'batch'           => $u->batch,
-                'graduation_year' => $u->graduation_year,
+                'profile_picture' => $u->profile_picture,  // accessor
+                'course'          => $u->course,            // accessor → studentRecord.course
+                'batch'           => $u->batch,             // accessor → studentRecord.graduation_year
+                'graduation_year' => $u->graduation_year,   // accessor → studentRecord.graduation_year
                 'views'           => $u->profile_views,
             ])
             ->toArray();
@@ -73,28 +79,32 @@ class EngagementAnalyticsService
 
     public function trending(int $limit = 10): array
     {
+        // FIX: course/batch/graduation_year/profile_picture don't exist on users table.
+        // Join students table (via student_record_id) to get the real columns,
+        // and use users.profile_picture which now exists after the migration.
         return DB::table('profile_views')
             ->select(
-                'viewed_user_id as id',
+                'profile_views.viewed_user_id as id',
                 DB::raw('COUNT(*) as views_this_week'),
                 'users.name',
                 'users.profile_picture',
-                'users.course',
-                'users.batch',
-                'users.graduation_year',
+                'students.course',
+                'students.graduation_year as batch',
+                'students.graduation_year',
                 'users.profile_views as total_views'
             )
             ->join('users', 'users.id', '=', 'profile_views.viewed_user_id')
+            ->leftJoin('students', 'students.id', '=', 'users.student_record_id')
             ->where('profile_views.created_at', '>=', now()->subDays(7))
             ->where('users.profile_visibility', 'public')
             ->where('users.role', 'student')
+            ->whereNull('users.deleted_at')
             ->groupBy(
-                'viewed_user_id',
+                'profile_views.viewed_user_id',
                 'users.name',
                 'users.profile_picture',
-                'users.course',
-                'users.batch',
-                'users.graduation_year',
+                'students.course',
+                'students.graduation_year',
                 'users.profile_views'
             )
             ->orderByDesc('views_this_week')
@@ -106,12 +116,10 @@ class EngagementAnalyticsService
     // ── Core record logic ─────────────────────────────────────────────────────
     public function recordView(int $viewedUserId, ?int $viewerUserId, string $ipAddress): void
     {
-        // Skip self-views
         if ($viewerUserId && $viewerUserId === $viewedUserId) {
             return;
         }
 
-        // Dedup: same viewer + same profile within 1 hour = skip
         $alreadyViewed = ProfileView::where('viewed_user_id', $viewedUserId)
             ->where(function ($q) use ($viewerUserId, $ipAddress) {
                 if ($viewerUserId) {
@@ -133,7 +141,6 @@ class EngagementAnalyticsService
             'viewer_ip'      => $ipAddress,
         ]);
 
-        // Increment denormalized counter
         User::where('id', $viewedUserId)->increment('profile_views');
     }
 
@@ -147,7 +154,6 @@ class EngagementAnalyticsService
             ->pluck('views', 'date')
             ->toArray();
 
-        // Fill in missing days with 0 for a continuous x-axis
         $filled = [];
         for ($i = $days - 1; $i >= 0; $i--) {
             $date          = now()->subDays($i)->toDateString();

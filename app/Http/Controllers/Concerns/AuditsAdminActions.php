@@ -40,8 +40,17 @@ trait AuditsAdminActions
     private function resolveAdminName(?object $user): string
     {
         if (! $user) return 'system';
-        if (isset($user->username))   return $user->username;
-        if (isset($user->first_name)) return trim("{$user->first_name} {$user->last_name}");
-        return $user->email ?? 'admin';
+
+        $name = $user->name
+            ?? $user->username
+            ?? (isset($user->first_name) ? trim("{$user->first_name} {$user->last_name}") : null)
+            ?? $user->email
+            ?? 'admin';
+
+        return match ($user->role ?? null) {
+            'super_admin' => "{$name} (Super Admin)",
+            'admin'       => "{$name} (Admin)",
+            default       => $name,
+        };
     }
 }

@@ -12,8 +12,9 @@ import LoginPage          from '@/features/auth/pages/LoginPage';
 import RegisterPage       from '@/features/auth/pages/RegisterPage';
 import SSOCallbackPage    from '@/features/auth/pages/SSOCallbackPage';
 import ForgotPasswordPage from '@/features/auth/pages/ForgotPasswordPage';
+
 // ── Dashboard ─────────────────────────────────────────────────────────────────
-import DashboardPage      from '@/pages/DashboardPage';
+import DashboardPage from '@/pages/DashboardPage';
 
 // ── Profile ───────────────────────────────────────────────────────────────────
 import ProfilePage        from '@/features/profile/pages/ProfilePage';
@@ -21,20 +22,20 @@ import StudentProfileView from '@/features/profile/pages/StudentProfileView';
 import SettingsPage       from '@/features/profile/pages/SettingsPage';
 
 // ── Yearbook ──────────────────────────────────────────────────────────────────
-import FlipbookPage           from '@/features/yearbook/pages/FlipbookPage';
-import YearbookHomePage        from '@/features/yearbook/pages/YearbookHomePage';
-import FlipbookViewerPage      from "@/features/yearbook/components/flipbook/FlipbookViewer";
-import GalleryPage             from '@/features/yearbook/pages/GalleryPage';
-import GalleryShowPage         from '@/features/yearbook/pages/GalleryShowPage';
-import GraduationPage          from '@/features/yearbook/pages/GraduationPage';
-import GraduationArchivePage   from '@/features/yearbook/pages/GraduationArchivePage';
-import GraduationSpeechesPage  from '@/features/yearbook/pages/GraduationSpeechesPage';
+import FlipbookPage          from '@/features/yearbook/pages/FlipbookPage';
+import YearbookHomePage      from '@/features/yearbook/pages/YearbookHomePage';
+import FlipbookViewerPage    from '@/features/yearbook/pages/FlipbookViewerPage'; // ← FIXED (was pointing to FlipbookViewer component directly)
+import GalleryPage           from '@/features/yearbook/pages/GalleryPage';
+import GalleryShowPage       from '@/features/yearbook/pages/GalleryShowPage';
+import GraduationPage        from '@/features/yearbook/pages/GraduationPage';
+import GraduationArchivePage from '@/features/yearbook/pages/GraduationArchivePage';
+import GraduationSpeechesPage from '@/features/yearbook/pages/GraduationSpeechesPage';
 
 // ── Batch ─────────────────────────────────────────────────────────────────────
-import BatchmatesPage    from '@/features/batch/pages/BatchmatesPage';
-import SectionsPage      from '@/features/batch/pages/SectionsPage';
-import SectionDetailPage from '@/features/batch/pages/SectionDetailPage';
-import DiscoveryPage     from '@/features/batch/pages/DiscoveryPage';
+import BatchmatesPage          from '@/features/batch/pages/BatchmatesPage';
+import SectionsPage            from '@/features/batch/pages/SectionsPage';
+import SectionDetailPage       from '@/features/batch/pages/SectionDetailPage';
+import DiscoveryPage           from '@/features/batch/pages/DiscoveryPage';
 import DiscoveryStudentProfile from '@/features/batch/pages/DiscoveryStudentProfile';
 
 // ── Messaging ─────────────────────────────────────────────────────────────────
@@ -58,14 +59,14 @@ import FacultyPage from '@/features/faculty/pages/FacultyPage';
 // ── Analytics ─────────────────────────────────────────────────────────────────
 import AnalyticsPage from '@/features/analytics/pages/AnalyticsPage';
 
-// ── Alumni Tracker ─────────────────────────────────────────────── ← NEW ──────
+// ── Alumni Tracker ────────────────────────────────────────────────────────────
 import AlumniTrackerPage from '@/features/alumni/pages/AlumniTrackerPage';
 
 // ── Fallback ──────────────────────────────────────────────────────────────────
 import NotFoundPage from '@/pages/NotFoundPage';
 
 // ─────────────────────────────────────────────────────────────────────────────
-// GUARDS (unchanged)
+// ROUTE GUARDS
 // ─────────────────────────────────────────────────────────────────────────────
 
 function ConsentWrapper({ children }) {
@@ -87,29 +88,13 @@ function ConsentWrapper({ children }) {
 function ProtectedRoute({ children }) {
   const { user, loading } = useAuth();
 
-  if (loading) return (
-    <div className="min-h-screen flex items-center justify-center" style={{ background: '#f4f7fe' }}>
-      <div>
-        <div
-          className="w-10 h-10 rounded-full border-4 mx-auto mb-3"
-          style={{
-            borderColor:    'rgba(63,81,181,0.2)',
-            borderTopColor: '#3f51b5',
-            animation:      'spin 0.8s linear infinite',
-          }}
-        />
-        <p className="text-sm text-center" style={{ color: '#94a3b8' }}>Loading...</p>
-        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
-      </div>
-    </div>
-  );
-
+  if (loading) return <FullPageSpinner />;
   if (!user) return <Navigate to="/login" replace />;
   return <ConsentWrapper>{children}</ConsentWrapper>;
 }
 
 function GuestRoute({ children }) {
-  const { user, loading } = useAuth();
+  const { user, loading }              = useAuth();
   const { isOn, loading: configLoading } = useAppConfig();
   if (loading || configLoading) return null;
   if (isOn('maintenance_mode')) return <Navigate to="/maintenance" replace />;
@@ -125,35 +110,26 @@ function MaintenanceLayout() {
 }
 
 function SubscriberRoute({ children }) {
-  const { user, loading } = useAuth();
+  const { user, loading }              = useAuth();
   const { isOn, loading: configLoading } = useAppConfig();
   if (loading || configLoading) return null;
   if (!user) return <Navigate to="/login" replace />;
   if (!isOn('enable_premium_subscription')) {
     return <ConsentWrapper>{children}</ConsentWrapper>;
   }
-  if (!user.is_premium) return <Navigate to="/premium" replace />;
+  if (!(user.is_subscribed || user.is_premium || user.tier === 'standard' || user.tier === 'premium')) {
+    return <Navigate to="/premium" replace />;
+  }
   return <ConsentWrapper>{children}</ConsentWrapper>;
 }
 
 function OwnProfileRoute({ children }) {
   const { user, loading } = useAuth();
-  const params            = useParams();
-  const id                = params.id;
+  const { id }            = useParams();
 
-  if (loading) return (
-    <div className="min-h-screen flex items-center justify-center" style={{ background: '#f4f7fe' }}>
-      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
-      <div style={{ width: 32, height: 32, borderRadius: '50%', border: '3px solid rgba(63,81,181,0.2)', borderTopColor: '#3f51b5', animation: 'spin 0.8s linear infinite' }} />
-    </div>
-  );
-
-  if (!user) return <Navigate to="/login" replace />;
-
-  if (id && parseInt(id) !== user.id) {
-    return <Navigate to={`/students/${id}`} replace />;
-  }
-
+  if (loading) return <FullPageSpinner />;
+  if (!user)   return <Navigate to="/login" replace />;
+  if (id && parseInt(id) !== user.id) return <Navigate to={`/students/${id}`} replace />;
   return <ConsentWrapper>{children}</ConsentWrapper>;
 }
 
@@ -170,143 +146,139 @@ export default function App() {
             <Route path="/maintenance" element={<MaintenancePage />} />
 
             <Route element={<MaintenanceLayout />}>
-          {/* ── Public ───────────────────────────────────────────────────── */}
-          <Route path="/"         element={<GuestRoute><LandingPage /></GuestRoute>} />
-          <Route path="/login"    element={<GuestRoute><LoginPage /></GuestRoute>} />
-          <Route path="/register" element={<GuestRoute><RegisterPage /></GuestRoute>} />
-          <Route path="/forgot-password" element={<GuestRoute><ForgotPasswordPage /></GuestRoute>} />
-          <Route path="/sso/callback" element={<SSOCallbackPage />} />
 
-          {/* ── Protected ────────────────────────────────────────────────── */}
-          <Route path="/dashboard" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
+              {/* ── Public ─────────────────────────────────────────────── */}
+              <Route path="/"               element={<GuestRoute><LandingPage /></GuestRoute>} />
+              <Route path="/login"          element={<GuestRoute><LoginPage /></GuestRoute>} />
+              <Route path="/register"       element={<GuestRoute><RegisterPage /></GuestRoute>} />
+              <Route path="/forgot-password" element={<GuestRoute><ForgotPasswordPage /></GuestRoute>} />
+              <Route path="/sso/callback"   element={<SSOCallbackPage />} />
 
-          <Route path="/profile"     element={<OwnProfileRoute><ProfilePage /></OwnProfileRoute>} />
-          <Route path="/profile/:id" element={<OwnProfileRoute><ProfilePage /></OwnProfileRoute>} />
-          <Route path="/settings"    element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />
+              {/* ── Dashboard ──────────────────────────────────────────── */}
+              <Route path="/dashboard" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
 
-          <Route path="/students/:id" element={<ProtectedRoute><StudentProfileView /></ProtectedRoute>} />
+              {/* ── Profile ────────────────────────────────────────────── */}
+              <Route path="/profile"     element={<OwnProfileRoute><ProfilePage /></OwnProfileRoute>} />
+              <Route path="/profile/:id" element={<OwnProfileRoute><ProfilePage /></OwnProfileRoute>} />
+              <Route path="/settings"    element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />
+              <Route path="/students/:id" element={<ProtectedRoute><StudentProfileView /></ProtectedRoute>} />
 
-          <Route
-            path="/directory"
-            element={
-              <ProtectedRoute>
-                <FeatureRoute features="enable_student_directory_search">
-                  <DirectoryPage />
-                </FeatureRoute>
-              </ProtectedRoute>
-            }
-          />
+              {/* ── Directory ──────────────────────────────────────────── */}
+              <Route
+                path="/directory"
+                element={
+                  <ProtectedRoute>
+                    <FeatureRoute features="enable_student_directory_search">
+                      <DirectoryPage />
+                    </FeatureRoute>
+                  </ProtectedRoute>
+                }
+              />
 
-          {/* ── Gallery ───────────────────────────────────────────────────── */}
-          <Route path="/gallery"     element={<ProtectedRoute><GalleryPage /></ProtectedRoute>} />
-          <Route path="/gallery/:id" element={<ProtectedRoute><GalleryShowPage /></ProtectedRoute>} />
+              {/* ── Gallery ────────────────────────────────────────────── */}
+              <Route path="/gallery"     element={<ProtectedRoute><GalleryPage /></ProtectedRoute>} />
+              <Route path="/gallery/:id" element={<ProtectedRoute><GalleryShowPage /></ProtectedRoute>} />
 
-          {/* ── Graduation ────────────────────────────────────────────────── */}
-          <Route path="/graduation"             element={<ProtectedRoute><GraduationPage /></ProtectedRoute>} />
-          <Route path="/graduation/archive/:id" element={<ProtectedRoute><GraduationArchivePage /></ProtectedRoute>} />
-          <Route path="/graduation/speeches"    element={<SubscriberRoute><GraduationSpeechesPage /></SubscriberRoute>} />
+              {/* ── Graduation ─────────────────────────────────────────── */}
+              <Route path="/graduation"             element={<ProtectedRoute><GraduationPage /></ProtectedRoute>} />
+              <Route path="/graduation/archive/:id" element={<ProtectedRoute><GraduationArchivePage /></ProtectedRoute>} />
+              <Route path="/graduation/speeches"    element={<SubscriberRoute><GraduationSpeechesPage /></SubscriberRoute>} />
 
-          {/* ── Flipbook / Yearbook ───────────────────────────────────────── */}
-          <Route
-            path="/flipbook"
-            element={
-              <ProtectedRoute>
-                <FeatureRoute features={['enable_flipbook_viewer', 'publish_yearbook']}>
-                  <FlipbookPage />
-                </FeatureRoute>
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/yearbook"
-            element={
-              <ProtectedRoute>
-                <FeatureRoute features="publish_yearbook">
-                  <YearbookHomePage />
-                </FeatureRoute>
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/yearbook/:batchId"
-            element={
-              <ProtectedRoute>
-                <FeatureRoute features="publish_yearbook">
-                  <YearbookHomePage />
-                </FeatureRoute>
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/yearbook/:batchId/view"
-            element={
-              <ProtectedRoute>
-                <FeatureRoute features={['enable_flipbook_viewer', 'publish_yearbook']}>
-                  <FlipbookViewerPage />
-                </FeatureRoute>
-              </ProtectedRoute>
-            }
-          />
+              {/* ── Yearbook / Flipbook ─────────────────────────────────── */}
+              <Route
+                path="/flipbook"
+                element={
+                  <ProtectedRoute>
+                    <FeatureRoute features={['enable_flipbook_viewer', 'publish_yearbook']}>
+                      <FlipbookPage />
+                    </FeatureRoute>
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/yearbook"
+                element={
+                  <ProtectedRoute>
+                    <FeatureRoute features="publish_yearbook">
+                      <YearbookHomePage />
+                    </FeatureRoute>
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/yearbook/:batchId"
+                element={
+                  <ProtectedRoute>
+                    <FeatureRoute features="publish_yearbook">
+                      <YearbookHomePage />
+                    </FeatureRoute>
+                  </ProtectedRoute>
+                }
+              />
+              {/*
+               * /yearbook/:batchId/view
+               * Uses FlipbookViewerPage (the page wrapper that runs useYearbook
+               * and passes data into FlipbookViewer).
+               * Previously this imported FlipbookViewer directly — that skipped
+               * the data hook entirely and crashed on the alumni link import.
+               */}
+              <Route
+                path="/yearbook/:batchId/view"
+                element={
+                  <ProtectedRoute>
+                    <FeatureRoute features="enable_flipbook_viewer">
+                      <FlipbookViewerPage />
+                    </FeatureRoute>
+                  </ProtectedRoute>
+                }
+              />
 
-          {/* ── Batch ────────────────────────────────────────────────────── */}
-          <Route path="/batchmates"   element={<ProtectedRoute><BatchmatesPage /></ProtectedRoute>} />
-          <Route path="/sections"     element={<ProtectedRoute><SectionsPage /></ProtectedRoute>} />
-          <Route path="/sections/:id" element={<ProtectedRoute><SectionDetailPage /></ProtectedRoute>} />
-          <Route path="/discover"     element={<ProtectedRoute><DiscoveryPage /></ProtectedRoute>} />
-          <Route path="/discover/students/:id" element={<ProtectedRoute><DiscoveryStudentProfile /></ProtectedRoute>} />
+              {/* ── Batch ──────────────────────────────────────────────── */}
+              <Route path="/batchmates"            element={<ProtectedRoute><BatchmatesPage /></ProtectedRoute>} />
+              <Route path="/sections"              element={<ProtectedRoute><SectionsPage /></ProtectedRoute>} />
+              <Route path="/sections/:id"          element={<ProtectedRoute><SectionDetailPage /></ProtectedRoute>} />
+              <Route path="/discover"              element={<ProtectedRoute><DiscoveryPage /></ProtectedRoute>} />
+              <Route path="/discover/students/:id" element={<ProtectedRoute><DiscoveryStudentProfile /></ProtectedRoute>} />
 
-          {/* ── Faculty ───────────────────────────────────────────────────── */}
-          <Route path="/faculty" element={<ProtectedRoute><FacultyPage /></ProtectedRoute>} />
+              {/* ── Faculty ────────────────────────────────────────────── */}
+              <Route path="/faculty" element={<ProtectedRoute><FacultyPage /></ProtectedRoute>} />
 
-          {/* ── Messaging ─────────────────────────────────────────────────── */}
-          <Route path="/messages"     element={<ProtectedRoute><MessagesPage /></ProtectedRoute>} />
-          <Route path="/messages/:id" element={<ProtectedRoute><MessagesPage /></ProtectedRoute>} />
-          <Route path="/voice-notes"  element={<ProtectedRoute><VoiceNotesPage /></ProtectedRoute>} />
+              {/* ── Messaging ──────────────────────────────────────────── */}
+              <Route path="/messages"     element={<ProtectedRoute><MessagesPage /></ProtectedRoute>} />
+              <Route path="/messages/:id" element={<ProtectedRoute><MessagesPage /></ProtectedRoute>} />
+              <Route path="/voice-notes"  element={<ProtectedRoute><VoiceNotesPage /></ProtectedRoute>} />
 
-          {/* ── Payment ───────────────────────────────────────────────────── */}
-          <Route
-            path="/premium"
-            element={
-              <ProtectedRoute>
-                <FeatureRoute features="enable_premium_subscription">
-                  <PaymentPage />
-                </FeatureRoute>
-              </ProtectedRoute>
-            }
-          />
-          <Route path="/payment/success" element={<ProtectedRoute><PaymentSuccessPage /></ProtectedRoute>} />
-          <Route path="/payment/cancel"  element={<ProtectedRoute><PaymentCancelPage /></ProtectedRoute>} />
+              {/* ── Payment ────────────────────────────────────────────── */}
+              <Route
+                path="/premium"
+                element={
+                  <ProtectedRoute>
+                    <FeatureRoute features="enable_premium_subscription">
+                      <PaymentPage />
+                    </FeatureRoute>
+                  </ProtectedRoute>
+                }
+              />
+              <Route path="/payment/success" element={<ProtectedRoute><PaymentSuccessPage /></ProtectedRoute>} />
+              <Route path="/payment/cancel"  element={<ProtectedRoute><PaymentCancelPage /></ProtectedRoute>} />
 
-          {/* ── Premium-only ──────────────────────────────────────────────── */}
-          <Route path="/transcripts" element={<SubscriberRoute><TranscriptsPage /></SubscriberRoute>} />
+              {/* ── Premium-only ───────────────────────────────────────── */}
+              <Route path="/transcripts" element={<ProtectedRoute><TranscriptsPage /></ProtectedRoute>} />
 
-          {/* ── Analytics ─────────────────────────────────────────────────── */}
-          <Route
-            path="/analytics"
-            element={
-              <ProtectedRoute>
-                <AnalyticsPageWrapper />
-              </ProtectedRoute>
-            }
-          />
+              {/* ── Analytics ──────────────────────────────────────────── */}
+              <Route
+                path="/analytics"
+                element={<ProtectedRoute><AnalyticsPageWrapper /></ProtectedRoute>}
+              />
 
-          {/* ── Alumni Tracker ─────────────────────────────────── ← NEW ─── */}
-          {/*
-           *  Supports deep-link from YearbookHomePage:
-           *    /alumni-tracker                          → all alumni
-           *    /alumni-tracker?batch_id=2024            → filtered to batch
-           *    /alumni-tracker?batch_id=2024&highlight=42 → scroll to alumni #42
-           *
-           *  Supports reverse deep-link from AlumniTrackerPage:
-           *    AlumniCard "View in Yearbook" → /yearbook/:batchId/view?page=N
-           */}
-          <Route
-            path="/alumni-tracker"
-            element={<ProtectedRoute><AlumniTrackerPage /></ProtectedRoute>}
-          />
+              {/* ── Alumni Tracker ─────────────────────────────────────── */}
+              <Route
+                path="/alumni-tracker"
+                element={<ProtectedRoute><AlumniTrackerPage /></ProtectedRoute>}
+              />
 
-          {/* ── Fallback ──────────────────────────────────────────────────── */}
-          <Route path="*" element={<NotFoundPage />} />
+              {/* ── Fallback ───────────────────────────────────────────── */}
+              <Route path="*" element={<NotFoundPage />} />
 
             </Route>
           </Routes>
@@ -316,7 +288,22 @@ export default function App() {
   );
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// SHARED HELPERS
+// ─────────────────────────────────────────────────────────────────────────────
+
 function AnalyticsPageWrapper() {
   const { user } = useAuth();
   return <AnalyticsPage isAuthenticated={!!user} currentUser={user} />;
+}
+
+function FullPageSpinner() {
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-[#f4f7fe]">
+      <div>
+        <div className="w-10 h-10 rounded-full border-4 border-indigo-100 border-t-[#3f51b5] mx-auto mb-3 animate-spin" />
+        <p className="text-sm text-center text-slate-400">Loading...</p>
+      </div>
+    </div>
+  );
 }

@@ -175,14 +175,14 @@ export default function AnalyticsPage({ isAuthenticated = true, currentUser = nu
       <Navbar />
 
       {/* ── Hero ── */}
-      <div className="bg-gradient-to-br from-slate-900 via-indigo-950 to-indigo-900 pt-12 px-10 pb-14 relative overflow-hidden">
+      <div className="bg-gradient-to-br from-slate-900 via-indigo-950 to-indigo-900 pt-8 px-6 sm:px-10 pb-8 relative overflow-hidden">
         {/* Decorative blobs */}
         <div className="absolute -top-20 -right-20 w-[360px] h-[360px] rounded-full bg-indigo-500/10 pointer-events-none blur-3xl" />
         <div className="absolute -bottom-16 -left-10 w-[280px] h-[280px] rounded-full bg-yellow-400/5 pointer-events-none blur-2xl" />
 
         <div className="max-w-[900px] mx-auto relative z-10">
           {/* Breadcrumb */}
-          <div className="flex items-center gap-2 mb-5">
+          <div className="flex items-center gap-2 mb-3">
             <span className="text-xs text-white/40 font-semibold tracking-widest uppercase">Sinag-Bughaw</span>
             <ChevronRight className="w-3 h-3 text-white/25" />
             <span className="text-xs text-yellow-400 font-bold tracking-widest uppercase">Analytics</span>
@@ -191,7 +191,7 @@ export default function AnalyticsPage({ isAuthenticated = true, currentUser = nu
           <div className="flex items-end justify-between gap-6 flex-wrap">
             <div>
               {/* Badge */}
-              <div className="inline-flex items-center gap-2 mb-4 bg-yellow-400/10 border border-yellow-400/30 rounded-full px-4 py-1.5">
+              <div className="inline-flex items-center gap-2 mb-3 bg-yellow-400/10 border border-yellow-400/30 rounded-full px-3 py-1">
                 <span className="text-[11px] font-bold text-yellow-400 tracking-widest uppercase">
                   National University Lipa
                 </span>
@@ -200,7 +200,7 @@ export default function AnalyticsPage({ isAuthenticated = true, currentUser = nu
               <h1 className="m-0 mb-2.5 text-[clamp(1.8rem,4vw,2.6rem)] font-black text-white tracking-tight leading-[1.1]">
                 Alumni <span className="text-yellow-400">Analytics</span>
               </h1>
-              <p className="m-0 text-[15px] text-white/55 leading-[1.7] max-w-md">
+              <p className="m-0 text-sm text-white/55 leading-relaxed max-w-md">
                 Discover trending profiles and engagement stats across your batch.
               </p>
             </div>

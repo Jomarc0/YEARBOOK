@@ -4,6 +4,7 @@ namespace App\Http\Controllers\API\Auth;
 
 use App\Http\Controllers\Controller;
 use App\Jobs\Notification\SendOtpEmail;
+use App\Models\Batch;
 use App\Models\Consent;
 use App\Models\OtpVerification;
 use App\Models\Student;
@@ -35,28 +36,50 @@ class AuthController extends Controller
             'password'         => 'required|min:8|confirmed',
             // student_id here is the student NUMBER string (e.g. "2021-00123")
             // used only for lookup — not stored in users anymore
-            'student_id'       => 'required|string|max:255',
+            'student_id'       => 'required|string|max:255|unique:users,student_id',
+            'course'           => 'required|string|max:255',
+            'graduation_year'  => 'required|integer|min:1990|max:2100',
+            'batch'            => 'nullable|string|max:255',
             'consent_accepted' => 'required|accepted',
         ]);
 
         // ── Try to find a matching student record ──────────────────────────
         // Match on student_no + first_name + last_name (case-insensitive)
-        $studentRecord = Student::where('student_no', $request->student_id)
-            ->whereRaw('LOWER(TRIM(first_name)) = ?', [strtolower(trim($request->first_name))])
-            ->whereRaw('LOWER(TRIM(last_name)) = ?',  [strtolower(trim($request->last_name))])
-            ->first();
+        $studentRecord = $this->findMatchingStudentRecord($request);
+
+        if ($studentRecord && $studentRecord->hasRegistered()) {
+            throw ValidationException::withMessages([
+                'student_id' => ['A user account is already linked to this student record.'],
+            ]);
+        }
 
         // ── Create user — lean, no yearbook data copied ────────────────────
+        $course = $studentRecord?->course ?: $request->course;
+        $graduationYear = $studentRecord?->graduation_year ?: (int) $request->graduation_year;
+        $batch = (string) ($studentRecord?->graduation_year ?: ($request->batch ?: $request->graduation_year));
+        $batchId = $studentRecord?->batch_id
+            ?: Batch::where('graduation_year', $graduationYear)
+                ->where(function ($query) use ($course) {
+                    $query->where('course', $course)->orWhereNull('course');
+                })
+                ->value('id');
+
         $user = User::create([
-            'first_name'        => $request->first_name,
-            'last_name'         => $request->last_name,
-            'name'              => trim($request->first_name . ' ' . $request->last_name),
+            'first_name'        => $studentRecord?->first_name ?? $request->first_name,
+            'last_name'         => $studentRecord?->last_name ?? $request->last_name,
+            'name'              => $studentRecord
+                ? trim($studentRecord->first_name . ' ' . $studentRecord->last_name)
+                : trim($request->first_name . ' ' . $request->last_name),
             'email'             => $request->email,
             'password'          => Hash::make($request->password),
             'student_record_id' => $studentRecord?->id,   // null = browse account
-            // Pull section/batch from student record if matched
+            'student_id'         => $studentRecord?->student_no ?? $request->student_id,
+            'course'             => $course,
+            'graduation_year'    => $graduationYear,
+            'batch'              => $batch,
             'section_id'        => $studentRecord?->section_id,
-            'batch_id'          => $studentRecord?->batch_id,
+            'batch_id'          => $batchId,
+            'profile_picture'   => $studentRecord?->photo,
             'consent_accepted'  => true,
         ]);
 
@@ -142,10 +165,19 @@ class AuthController extends Controller
             'last_name'  => 'required|string',
         ]);
 
-        $student = Student::where('student_no', $request->student_no)
-            ->whereRaw('LOWER(TRIM(first_name)) = ?', [strtolower(trim($request->first_name))])
-            ->whereRaw('LOWER(TRIM(last_name)) = ?',  [strtolower(trim($request->last_name))])
-            ->first();
+        $typedName = $this->normalizePersonName($request->first_name . ' ' . $request->last_name);
+        $student = Student::where('student_no', trim((string) $request->student_no))
+            ->get()
+            ->first(function (Student $student) use ($typedName, $request) {
+                $recordName = $this->normalizePersonName($student->first_name . ' ' . $student->last_name);
+                $exactFirst = strtolower(trim($student->first_name)) === strtolower(trim($request->first_name));
+                $exactLast = strtolower(trim($student->last_name)) === strtolower(trim($request->last_name));
+
+                return ($exactFirst && $exactLast)
+                    || $recordName === $typedName
+                    || ($typedName !== '' && str_contains($recordName, $typedName))
+                    || ($recordName !== '' && str_contains($typedName, $recordName));
+            });
 
         if (! $student) {
             return response()->json(['found' => false]);
@@ -176,6 +208,52 @@ class AuthController extends Controller
     }
 
     // ── OTP ────────────────────────────────────────────────────────────────
+
+    private function findMatchingStudentRecord(Request $request): ?Student
+    {
+        $studentNo = trim((string) $request->student_id);
+        $email = strtolower(trim((string) $request->email));
+        $firstName = trim((string) $request->first_name);
+        $lastName = trim((string) $request->last_name);
+        $typedName = $this->normalizePersonName($firstName . ' ' . $lastName);
+
+        $exact = Student::where('student_no', $studentNo)
+            ->whereRaw('LOWER(TRIM(first_name)) = ?', [strtolower($firstName)])
+            ->whereRaw('LOWER(TRIM(last_name)) = ?', [strtolower($lastName)])
+            ->first();
+
+        if ($exact) {
+            return $exact;
+        }
+
+        $nameMatch = Student::where('student_no', $studentNo)
+            ->get()
+            ->first(function (Student $student) use ($typedName) {
+                $recordName = $this->normalizePersonName($student->first_name . ' ' . $student->last_name);
+
+                return $recordName === $typedName
+                    || ($typedName !== '' && str_contains($recordName, $typedName))
+                    || ($recordName !== '' && str_contains($typedName, $recordName));
+            });
+
+        if ($nameMatch) {
+            return $nameMatch;
+        }
+
+        if ($email !== '') {
+            $emailMatch = Student::whereRaw('LOWER(TRIM(email)) = ?', [$email])->first();
+            if ($emailMatch && ($studentNo === '' || $emailMatch->student_no === $studentNo)) {
+                return $emailMatch;
+            }
+        }
+
+        return null;
+    }
+
+    private function normalizePersonName(string $name): string
+    {
+        return preg_replace('/[^a-z0-9]+/', '', strtolower($name)) ?: '';
+    }
 
     public function sendOtp(Request $request)
     {
@@ -326,11 +404,14 @@ class AuthController extends Controller
     {
         $user = $request->user()->load('studentRecord', 'section');
         $sub  = \App\Models\Subscription::where('user_id', $user->id)->latest()->first();
+        $activeSub = $sub?->isActive() ? $sub : null;
 
         return response()->json([
             ...$user->toArray(),
-            'is_premium' => $sub?->isActive() ?? false,
-            'tier'       => $sub ? ($sub->isActive() ? 'premium' : 'free') : 'free',
+            'is_subscribed' => (bool) $activeSub,
+            'is_premium'    => $activeSub?->isPremium() ?? false,
+            'tier'          => $activeSub?->tier ?? 'free',
+            'plan'          => $activeSub?->plan ?? 'free',
         ]);
     }
 }

@@ -9,44 +9,74 @@ import {
 } from "../config/dashboard.config";
 
 const fmt = (n) => (n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n));
-const cx = (...v) => v.filter(Boolean).join(" ");
+const cx  = (...v) => v.filter(Boolean).join(" ");
 
+// ─── Skeleton ─────────────────────────────────────────────────────────────────
+const Skeleton = ({ className = "", style }) => (
+  <div
+    style={style}
+    className={cx(
+      "animate-pulse rounded-md bg-gradient-to-r from-slate-200 via-slate-100 to-slate-200 bg-[length:200%_100%]",
+      className,
+    )}
+  />
+);
+
+// ─── Card shell ───────────────────────────────────────────────────────────────
 const Card = ({ className = "", children }) => (
-  <div className={cx("rounded-2xl border border-slate-200 bg-white shadow-sm", className)}>{children}</div>
+  <div className={cx("rounded-2xl border border-slate-200 bg-white", className)}>
+    {children}
+  </div>
 );
 
-const Skeleton = ({ className = "" }) => (
-  <div className={cx("animate-pulse rounded-md bg-gradient-to-r from-slate-200 via-slate-100 to-slate-200 bg-[length:200%_100%]", className)} />
+// ─── Section heading ──────────────────────────────────────────────────────────
+const SectionHeading = ({ icon, title, subtitle, action }) => (
+  <div className="mb-4 flex items-center justify-between gap-3">
+    <div className="flex items-center gap-2">
+      {icon && <i className={cx("fas", icon, "text-sm text-indigo-400")} aria-hidden="true" />}
+      <div>
+        <h3 className="text-sm font-bold text-slate-800">{title}</h3>
+        {subtitle && <p className="text-xs text-slate-400">{subtitle}</p>}
+      </div>
+    </div>
+    {action}
+  </div>
 );
 
-function MetricCard({ label, value, sub, subColorClass, subBgClass, icon, iconBgClass, loading }) {
+// ─── Metric Cards ─────────────────────────────────────────────────────────────
+function MetricCard({ label, value, sub, icon, iconBg, iconColor, subBg, subColor, loading }) {
   return (
-    <Card className="p-5">
-      <div className="flex items-start justify-between gap-4">
-        <div className="min-w-0 flex-1">
-          <p className="mb-2 text-sm font-medium text-slate-500">{label}</p>
-          {loading ? (
-            <>
-              <Skeleton className="mb-3 h-8 w-2/3" />
-              <Skeleton className="h-5 w-4/5" />
-            </>
-          ) : (
-            <>
-              <p className="mb-2 text-3xl font-extrabold leading-none text-slate-800">{value}</p>
-              <span className={cx("inline-flex rounded-md px-2.5 py-1 text-xs font-semibold", subBgClass, subColorClass)}>
-                {sub}
-              </span>
-            </>
-          )}
-        </div>
-        <div className={cx("grid h-11 w-11 place-items-center rounded-xl text-xs font-bold", iconBgClass)}>
-          {icon}
-        </div>
+    <Card className="p-5 flex items-center gap-4">
+      <div
+        className="grid h-11 w-11 shrink-0 place-items-center rounded-xl text-base"
+        style={{ background: iconBg, color: iconColor }}
+      >
+        <i className={cx("fas", icon)} aria-hidden="true" />
+      </div>
+      <div className="min-w-0 flex-1">
+        <p className="mb-1 text-[11px] font-semibold text-slate-400 leading-tight">{label}</p>
+        {loading ? (
+          <>
+            <Skeleton className="mb-2 h-7 w-16" />
+            <Skeleton className="h-4 w-24" />
+          </>
+        ) : (
+          <>
+            <p className="mb-1.5 text-2xl font-black leading-none text-slate-800">{value}</p>
+            <span
+              className="inline-flex rounded-md px-2 py-0.5 text-[10px] font-bold"
+              style={{ background: subBg, color: subColor }}
+            >
+              {sub}
+            </span>
+          </>
+        )}
       </div>
     </Card>
   );
 }
 
+// ─── Enrollment Chart ─────────────────────────────────────────────────────────
 function EnrollmentChart({ data, loading }) {
   const canvasRef = useRef(null);
   const chartRef  = useRef(null);
@@ -56,45 +86,45 @@ function EnrollmentChart({ data, loading }) {
 
     const loadChart = () => {
       if (!window.Chart || !canvasRef.current) return;
-      if (chartRef.current) {
-        chartRef.current.destroy();
-        chartRef.current = null;
-      }
+      if (chartRef.current) { chartRef.current.destroy(); chartRef.current = null; }
 
       chartRef.current = new window.Chart(canvasRef.current, {
         type: "bar",
         data: {
           labels: data.map((d) => d.year),
-          datasets: [
-            {
-              label: "Enrolled Students",
-              data: data.map((d) => d.total),
-              backgroundColor: "rgba(79,70,229,0.15)",
-              borderColor: "#4f46e5",
-              borderWidth: 2,
-              borderRadius: 8,
-              borderSkipped: false,
-              hoverBackgroundColor: "rgba(79,70,229,0.30)",
-            },
-          ],
+          datasets: [{
+            label: "Enrolled Students",
+            data: data.map((d) => d.total),
+            backgroundColor: "rgba(79,70,229,0.12)",
+            borderColor: "#4f46e5",
+            borderWidth: 2,
+            borderRadius: 8,
+            borderSkipped: false,
+            hoverBackgroundColor: "rgba(79,70,229,0.25)",
+          }],
         },
         options: {
           responsive: true,
           maintainAspectRatio: false,
           plugins: {
             legend: { display: false },
-            tooltip: { callbacks: { label: (ctx) => ` ${ctx.parsed.y.toLocaleString()} students` } },
+            tooltip: {
+              backgroundColor: "#1e293b",
+              padding: 10,
+              cornerRadius: 8,
+              callbacks: { label: (ctx) => ` ${ctx.parsed.y.toLocaleString()} students` },
+            },
           },
           scales: {
             x: {
               grid: { display: false },
-              ticks: { color: "#64748b", font: { size: 12, weight: "600" } },
+              ticks: { color: "#94a3b8", font: { size: 11, weight: "600" } },
               border: { display: false },
             },
             y: {
               beginAtZero: true,
-              grid: { color: "#e2e8f0", lineWidth: 1 },
-              ticks: { color: "#64748b", font: { size: 11 }, callback: (v) => v.toLocaleString() },
+              grid: { color: "#f1f5f9", lineWidth: 1 },
+              ticks: { color: "#94a3b8", font: { size: 11 }, callback: (v) => v.toLocaleString() },
               border: { display: false },
             },
           },
@@ -105,38 +135,35 @@ function EnrollmentChart({ data, loading }) {
     if (window.Chart) {
       loadChart();
     } else {
-      const script = document.createElement("script");
-      script.src = "https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js";
-      script.onload = loadChart;
-      document.head.appendChild(script);
+      const s = document.createElement("script");
+      s.src = "https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js";
+      s.onload = loadChart;
+      document.head.appendChild(s);
     }
 
-    return () => {
-      if (chartRef.current) {
-        chartRef.current.destroy();
-        chartRef.current = null;
-      }
-    };
+    return () => { if (chartRef.current) { chartRef.current.destroy(); chartRef.current = null; } };
   }, [data, loading]);
 
   return (
     <Card className="p-5">
-      <div className="mb-5 flex items-center justify-between">
-        <div>
-          <h3 className="text-base font-extrabold text-slate-800">Enrollment Analytics</h3>
-          <p className="text-xs text-slate-500">Students per batch year</p>
-        </div>
-        <button
-          className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-semibold text-indigo-600 transition hover:bg-indigo-50"
-          onClick={() => window.print()}
-        >
-          Export
-        </button>
-      </div>
+      <SectionHeading
+        icon="fa-chart-bar"
+        title="Enrollment analytics"
+        subtitle="Students per batch year"
+        action={
+          <button
+            onClick={() => window.print()}
+            className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-bold text-indigo-600 transition hover:border-indigo-200 hover:bg-indigo-50"
+          >
+            <i className="fas fa-download text-[10px]" aria-hidden="true" />
+            Export
+          </button>
+        }
+      />
       {loading ? (
-        <Skeleton className="h-60 w-full rounded-xl" />
+        <Skeleton className="h-56 w-full rounded-xl" />
       ) : (
-        <div className="relative h-60">
+        <div className="relative h-56">
           <canvas ref={canvasRef} role="img" aria-label="Bar chart showing enrolled students per batch year" />
         </div>
       )}
@@ -144,203 +171,272 @@ function EnrollmentChart({ data, loading }) {
   );
 }
 
+// ─── Trending Alumni ──────────────────────────────────────────────────────────
 function TrendingAlumni({ items, loading }) {
   return (
     <Card className="p-5">
-      <h3 className="mb-4 text-base font-extrabold text-slate-800">Trending Alumni</h3>
+      <SectionHeading icon="fa-fire" title="Trending alumni" />
 
-      {loading
-        ? Array.from({ length: 4 }).map((_, i) => (
-            <div key={i} className="mb-3 flex items-center gap-3 last:mb-0">
-              <Skeleton className="h-9 w-9 rounded-full" />
+      <div className="flex flex-col gap-2.5">
+        {loading ? (
+          Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} className="flex items-center gap-3">
+              <Skeleton className="h-9 w-9 rounded-full flex-shrink-0" />
               <div className="flex-1">
-                <Skeleton className="mb-2 h-3 w-3/5" />
+                <Skeleton className="mb-1.5 h-3 w-3/5" />
                 <Skeleton className="h-3 w-2/5" />
               </div>
-              <Skeleton className="h-5 w-12 rounded-md" />
+              <Skeleton className="h-5 w-14 rounded-full" />
             </div>
           ))
-        : items.length === 0
-          ? <p className="py-5 text-center text-sm text-slate-500">No trending alumni yet.</p>
-          : items.map((a, i) => (
-              <div key={a.id ?? i} className="mb-3 flex items-center gap-3 last:mb-0">
-                <div className="grid h-9 w-9 place-items-center rounded-full border border-indigo-100 bg-indigo-50 text-xs font-bold text-indigo-700">
-                  {a.avatar_initials ?? a.name?.slice(0, 2).toUpperCase()}
-                </div>
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-bold text-slate-800">{a.name}</p>
-                  <p className="text-xs text-slate-500">{a.program}</p>
-                </div>
-                <span className="rounded-md bg-emerald-50 px-2 py-0.5 text-xs font-bold text-emerald-700">
-                  {fmt(a.views)} views
-                </span>
+        ) : items.length === 0 ? (
+          <div className="py-8 text-center">
+            <i className="fas fa-user-slash mb-2 text-2xl text-slate-200" aria-hidden="true" />
+            <p className="text-sm text-slate-400">No trending alumni yet.</p>
+          </div>
+        ) : (
+          items.map((a, i) => (
+            <div key={a.id ?? i} className="flex items-center gap-3 rounded-xl p-2 transition hover:bg-slate-50">
+              <div className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-indigo-50 text-xs font-bold text-indigo-700 border border-indigo-100">
+                {a.avatar_initials ?? a.name?.slice(0, 2).toUpperCase()}
               </div>
-            ))}
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-bold text-slate-800">{a.name}</p>
+                <p className="truncate text-xs text-slate-400">{a.program}</p>
+              </div>
+              <span className="rounded-full bg-emerald-50 px-2.5 py-0.5 text-[10px] font-bold text-emerald-700 border border-emerald-100 whitespace-nowrap">
+                {fmt(a.views)} views
+              </span>
+            </div>
+          ))
+        )}
+      </div>
     </Card>
   );
 }
 
+// ─── Recent Uploads ───────────────────────────────────────────────────────────
 const TYPE_STYLES = {
-  image: { bgClass: "bg-indigo-50",  textClass: "text-indigo-700",  label: "IMG" },
-  video: { bgClass: "bg-amber-50",   textClass: "text-amber-700",   label: "VID" },
-  audio: { bgClass: "bg-emerald-50", textClass: "text-emerald-700", label: "AUD" },
-  doc:   { bgClass: "bg-violet-50",  textClass: "text-violet-700",  label: "DOC" },
+  image: { bg: "#ede9fe", color: "#4338ca", icon: "fa-image",      label: "IMG" },
+  video: { bg: "#fef3c7", color: "#92400e", icon: "fa-video",      label: "VID" },
+  audio: { bg: "#d1fae5", color: "#065f46", icon: "fa-music",      label: "AUD" },
+  doc:   { bg: "#f0f9ff", color: "#0369a1", icon: "fa-file-lines", label: "DOC" },
 };
 
 function RecentUploads({ items, loading }) {
   return (
     <Card className="p-5">
-      <h3 className="mb-4 text-base font-extrabold text-slate-800">Recent Uploads</h3>
+      <SectionHeading icon="fa-upload" title="Recent uploads" />
 
-      {loading
-        ? Array.from({ length: 4 }).map((_, i) => (
-            <div key={i} className="mb-3 flex items-center gap-3 last:mb-0">
-              <Skeleton className="h-9 w-9 rounded-lg" />
+      <div className="flex flex-col gap-2.5">
+        {loading ? (
+          Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} className="flex items-center gap-3">
+              <Skeleton className="h-9 w-9 rounded-lg flex-shrink-0" />
               <div className="flex-1">
-                <Skeleton className="mb-2 h-3 w-2/3" />
+                <Skeleton className="mb-1.5 h-3 w-2/3" />
                 <Skeleton className="h-3 w-2/5" />
               </div>
             </div>
           ))
-        : items.length === 0
-          ? <p className="py-5 text-center text-sm text-slate-500">No recent uploads.</p>
-          : items.map((u, i) => {
-              const s = TYPE_STYLES[u.type] ?? TYPE_STYLES.doc;
-              return (
-                <div key={u.id ?? i} className="mb-3 flex items-center gap-3 last:mb-0">
-                  <div className={cx("grid h-9 w-9 place-items-center rounded-lg text-[11px] font-bold", s.bgClass, s.textClass)}>
-                    {s.label}
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-semibold text-slate-800">{u.filename}</p>
-                    <p className="text-xs text-slate-500">{u.uploader} · {u.time}</p>
-                  </div>
+        ) : items.length === 0 ? (
+          <div className="py-8 text-center">
+            <i className="fas fa-inbox mb-2 text-2xl text-slate-200" aria-hidden="true" />
+            <p className="text-sm text-slate-400">No recent uploads.</p>
+          </div>
+        ) : (
+          items.map((u, i) => {
+            const s = TYPE_STYLES[u.type] ?? TYPE_STYLES.doc;
+            return (
+              <div key={u.id ?? i} className="flex items-center gap-3 rounded-xl p-2 transition hover:bg-slate-50">
+                <div
+                  className="grid h-9 w-9 shrink-0 place-items-center rounded-lg text-xs font-bold"
+                  style={{ background: s.bg, color: s.color }}
+                >
+                  <i className={cx("fas", s.icon)} aria-hidden="true" />
                 </div>
-              );
-            })}
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-semibold text-slate-800">{u.filename}</p>
+                  <p className="truncate text-xs text-slate-400">{u.uploader} · {u.time}</p>
+                </div>
+              </div>
+            );
+          })
+        )}
+      </div>
     </Card>
   );
 }
 
+// ─── Activity Feed ────────────────────────────────────────────────────────────
 const ACTIVITY_COLORS = {
-  register: "bg-emerald-500",
-  upload:   "bg-blue-500",
-  update:   "bg-amber-500",
-  delete:   "bg-red-500",
-  settings: "bg-violet-500",
-  login:    "bg-cyan-500",
-  default:  "bg-slate-400",
+  register: { dot: "bg-emerald-500", bg: "bg-emerald-50",  text: "text-emerald-700", icon: "fa-user-plus"   },
+  upload:   { dot: "bg-blue-500",    bg: "bg-blue-50",     text: "text-blue-700",    icon: "fa-upload"      },
+  update:   { dot: "bg-amber-500",   bg: "bg-amber-50",    text: "text-amber-700",   icon: "fa-pen"         },
+  delete:   { dot: "bg-red-500",     bg: "bg-red-50",      text: "text-red-700",     icon: "fa-trash"       },
+  settings: { dot: "bg-violet-500",  bg: "bg-violet-50",   text: "text-violet-700",  icon: "fa-gear"        },
+  login:    { dot: "bg-cyan-500",    bg: "bg-cyan-50",     text: "text-cyan-700",    icon: "fa-right-to-bracket" },
+  default:  { dot: "bg-slate-400",   bg: "bg-slate-100",   text: "text-slate-600",   icon: "fa-circle-dot"  },
 };
 
 function ActivityFeed({ items, loading, onViewAll }) {
   return (
     <Card className="p-5">
-      <div className="mb-4 flex items-center justify-between">
-        <h3 className="text-base font-extrabold text-slate-800">Recent Audit Activity</h3>
-        <span className="inline-flex items-center gap-2 text-xs font-semibold text-emerald-600">
-          <span className="h-2 w-2 animate-pulse rounded-full bg-emerald-500" />
-          Live
-        </span>
-      </div>
+      <SectionHeading
+        icon="fa-bolt"
+        title="Recent audit activity"
+        action={
+          <span className="inline-flex items-center gap-1.5 text-[10px] font-bold text-emerald-600">
+            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-500" />
+            Live
+          </span>
+        }
+      />
 
-      <div className="grid gap-3">
-        {loading
-          ? Array.from({ length: 5 }).map((_, i) => (
-              <div key={i} className="flex items-start gap-3">
-                <Skeleton className="mt-1.5 h-2 w-2 rounded-full" />
-                <div className="flex-1">
-                  <Skeleton className="mb-2 h-3 w-3/4" />
-                  <Skeleton className="h-3 w-1/2" />
+      <div className="flex flex-col gap-2">
+        {loading ? (
+          Array.from({ length: 5 }).map((_, i) => (
+            <div key={i} className="flex items-start gap-3 rounded-xl p-2">
+              <Skeleton className="mt-1 h-7 w-7 rounded-lg flex-shrink-0" />
+              <div className="flex-1">
+                <Skeleton className="mb-1.5 h-3 w-3/4" />
+                <Skeleton className="h-3 w-1/2" />
+              </div>
+            </div>
+          ))
+        ) : items.length === 0 ? (
+          <div className="py-8 text-center">
+            <i className="fas fa-list-check mb-2 text-2xl text-slate-200" aria-hidden="true" />
+            <p className="text-sm text-slate-400">No recent activity.</p>
+          </div>
+        ) : (
+          items.map((a, i) => {
+            const s = ACTIVITY_COLORS[a.type] ?? ACTIVITY_COLORS.default;
+            return (
+              <div key={a.id ?? i} className="flex items-start gap-3 rounded-xl p-2 transition hover:bg-slate-50">
+                <div
+                  className={cx(
+                    "grid h-7 w-7 shrink-0 place-items-center rounded-lg text-xs",
+                    s.bg, s.text,
+                  )}
+                >
+                  <i className={cx("fas", s.icon)} aria-hidden="true" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-semibold text-slate-800 leading-snug">{a.title}</p>
+                  <div className="mt-0.5 flex flex-wrap gap-x-2 text-[11px] text-slate-400">
+                    <span>{a.subject}</span>
+                    <span>·</span>
+                    <span>{a.time}</span>
+                  </div>
                 </div>
               </div>
-            ))
-          : items.length === 0
-            ? <p className="py-4 text-center text-sm text-slate-500">No recent activity.</p>
-            : items.map((a, i) => {
-                const dot = ACTIVITY_COLORS[a.type] ?? ACTIVITY_COLORS.default;
-                return (
-                  <div key={a.id ?? i} className="flex items-start gap-3">
-                    <div className={cx("mt-1.5 h-2 w-2 rounded-full", dot)} />
-                    <div>
-                      <p className="mb-0.5 text-sm font-semibold text-slate-800">{a.title}</p>
-                      <div className="flex flex-wrap gap-x-3 text-xs text-slate-500">
-                        <span>{a.subject}</span>
-                        <span>{a.time}</span>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
+            );
+          })
+        )}
       </div>
+
       <button
         onClick={onViewAll}
-        className="mt-4 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm font-bold text-indigo-600 transition hover:bg-indigo-50"
+        className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-xs font-bold text-indigo-600 transition hover:border-indigo-200 hover:bg-indigo-50"
       >
-        View Full Log
+        <i className="fas fa-arrow-right text-[10px]" aria-hidden="true" />
+        View full log
       </button>
     </Card>
   );
 }
 
-function EngagementBar({ label, value, max, colorClass, loading }) {
+// ─── Engagement Card ──────────────────────────────────────────────────────────
+function EngagementBar({ label, value, max, barColor, loading }) {
   const pct = max > 0 ? Math.min(100, Math.round((value / max) * 100)) : 0;
   return (
-    <div className="mb-3 last:mb-0">
-      <div className="mb-1.5 flex justify-between">
-        <span className="text-sm font-medium text-slate-500">{label}</span>
+    <div className="mb-4 last:mb-0">
+      <div className="mb-1.5 flex items-center justify-between">
+        <span className="text-xs font-semibold text-slate-500">{label}</span>
         {loading
           ? <Skeleton className="h-3 w-10" />
-          : <span className="text-sm font-bold text-slate-800">{value.toLocaleString()}</span>
+          : <span className="text-xs font-bold text-slate-800">{value.toLocaleString()}</span>
         }
       </div>
-      <div className="h-1.5 overflow-hidden rounded-full bg-slate-200">
-        {!loading && <div className={cx("h-full rounded-full transition-all duration-500", colorClass)} style={{ width: `${pct}%` }} />}
+      <div className="h-1.5 overflow-hidden rounded-full bg-slate-100">
+        {!loading && (
+          <div
+            className="h-full rounded-full transition-all duration-700"
+            style={{ width: `${pct}%`, background: barColor }}
+          />
+        )}
+        {loading && <Skeleton className="h-full w-full" />}
       </div>
     </div>
   );
 }
 
 function EngagementCard({ data, loading }) {
-  const maxVal = data ? Math.max(data.weekly_visits, data.returning_alumni, data.new_registrations, 1) : 1;
+  const maxVal = data
+    ? Math.max(data.weekly_visits ?? 0, data.returning_alumni ?? 0, data.new_registrations ?? 0, 1)
+    : 1;
+
+  const bars = [
+    { label: "Weekly visits",      key: "weekly_visits",      color: "#4f46e5" },
+    { label: "Returning alumni",   key: "returning_alumni",   color: "#10b981" },
+    { label: "New registrations",  key: "new_registrations",  color: "#f59e0b" },
+  ];
+
   return (
     <Card className="p-5">
-      <h3 className="mb-4 text-base font-extrabold text-slate-800">Engagement Overview</h3>
-      <EngagementBar label="Weekly Visits"      value={data?.weekly_visits      ?? 0} max={maxVal} colorClass="bg-indigo-600" loading={loading} />
-      <EngagementBar label="Returning Alumni"   value={data?.returning_alumni   ?? 0} max={maxVal} colorClass="bg-emerald-500" loading={loading} />
-      <EngagementBar label="New Registrations"  value={data?.new_registrations  ?? 0} max={maxVal} colorClass="bg-amber-500" loading={loading} />
+      <SectionHeading icon="fa-chart-line" title="Engagement overview" />
+      {bars.map(b => (
+        <EngagementBar
+          key={b.key}
+          label={b.label}
+          value={data?.[b.key] ?? 0}
+          max={maxVal}
+          barColor={b.color}
+          loading={loading}
+        />
+      ))}
     </Card>
   );
 }
 
+// ─── Page Header ──────────────────────────────────────────────────────────────
 function PageHeader({ lastRefresh, onRefresh, refreshing }) {
+  const today = new Date().toLocaleDateString("en-PH", {
+    weekday: "long", year: "numeric", month: "long", day: "numeric",
+  });
+
   return (
     <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
       <div>
-        <h1 className="text-3xl font-black tracking-tight text-slate-800">Dashboard</h1>
-        <p className="mt-1 text-sm text-slate-500">
+        <p className="mb-0.5 text-xs font-semibold text-indigo-400 uppercase tracking-wider">{today}</p>
+        <h1 className="text-2xl font-black tracking-tight text-slate-800">Dashboard</h1>
+        <p className="mt-0.5 text-sm text-slate-400">
           Manage your yearbook system data efficiently.
-          {lastRefresh && <span className="ml-2">Last updated: {lastRefresh}</span>}
+          {lastRefresh && <span className="ml-1.5">· Last updated: {lastRefresh}</span>}
         </p>
       </div>
       <button
         onClick={onRefresh}
         disabled={refreshing}
-        className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-indigo-600 transition hover:bg-indigo-50 disabled:cursor-not-allowed disabled:opacity-60"
+        className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-indigo-600 transition hover:border-indigo-200 hover:bg-indigo-50 disabled:cursor-not-allowed disabled:opacity-60"
       >
-        <span className={cx(refreshing && "animate-spin")}>↻</span>
+        <i className={cx("fas fa-rotate-right text-xs", refreshing && "animate-spin")} aria-hidden="true" />
         Refresh
       </button>
     </div>
   );
 }
 
+// ─── Main Page ────────────────────────────────────────────────────────────────
 export default function DashboardPage() {
   const navigate = useNavigate();
-  const [data,       setData]       = useState(null);
-  const [loading,    setLoading]    = useState(true);
-  const [error,      setError]      = useState(null);
-  const [refreshing, setRefreshing] = useState(false);
-  const [lastRefresh,setLastRefresh]= useState(null);
+
+  const [data,        setData]        = useState(null);
+  const [loading,     setLoading]     = useState(true);
+  const [error,       setError]       = useState(null);
+  const [refreshing,  setRefreshing]  = useState(false);
+  const [lastRefresh, setLastRefresh] = useState(null);
 
   const load = useCallback(async (isRefresh = false) => {
     if (isRefresh) setRefreshing(true);
@@ -350,55 +446,87 @@ export default function DashboardPage() {
       const res = await api.get(DASHBOARD_API_PATH);
       setData(res.data);
     } catch (err) {
-      const msg = err.response?.data?.message
-        ?? err.response?.data?.error
-        ?? err.message
-        ?? "Failed to load dashboard data.";
+      const msg =
+        err.response?.data?.message ??
+        err.response?.data?.error ??
+        err.message ??
+        "Failed to load dashboard data.";
       setError(msg);
     } finally {
       setLoading(false);
       setRefreshing(false);
       setLastRefresh(
-        new Date().toLocaleTimeString(LOCALE, { hour: "2-digit", minute: "2-digit" })
+        new Date().toLocaleTimeString(LOCALE, { hour: "2-digit", minute: "2-digit" }),
       );
     }
   }, []);
 
   useEffect(() => { load(); }, [load]);
 
+  // Enrich metric cards with icon/color config matching the design system
+  const ICON_MAP = {
+    "Total Students":       { icon: "fa-user-graduate", iconBg: "#d1fae5", iconColor: "#065f46", subBg: "#d1fae5", subColor: "#065f46" },
+    "Faculty Members":      { icon: "fa-chalkboard-user",iconBg: "#ede9fe", iconColor: "#4338ca", subBg: "#ede9fe", subColor: "#4338ca" },
+    "Gallery Photos":       { icon: "fa-images",        iconBg: "#fef3c7", iconColor: "#92400e", subBg: "#fef3c7", subColor: "#92400e" },
+    "Active Subscriptions": { icon: "fa-crown",         iconBg: "#ede9fe", iconColor: "#4338ca", subBg: "#ede9fe", subColor: "#4338ca" },
+    "System Alerts":        { icon: "fa-triangle-exclamation", iconBg: "#fee2e2", iconColor: "#991b1b", subBg: "#fee2e2", subColor: "#991b1b" },
+  };
+
   const metricCards = buildMetricCards(data?.metrics).map((card) => ({
     ...card,
     value: typeof card.value === "number" ? fmt(card.value) : card.value,
+    ...(ICON_MAP[card.label] ?? {
+      icon: "fa-circle-info",
+      iconBg: "#f1f5f9",
+      iconColor: "#475569",
+      subBg: "#f1f5f9",
+      subColor: "#475569",
+    }),
   }));
 
   return (
-    <div className="min-h-screen bg-slate-50 px-6 py-7 animate-[fadeIn_.3s_ease]">
-      <PageHeader lastRefresh={lastRefresh} onRefresh={() => load(true)} refreshing={refreshing} />
+    <div className="min-h-screen bg-[#f4f6fb] px-6 py-7">
+      <PageHeader
+        lastRefresh={lastRefresh}
+        onRefresh={() => load(true)}
+        refreshing={refreshing}
+      />
 
+      {/* Error banner */}
       {error && (
         <div className="mb-5 flex items-center justify-between gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
-          <span>{error}</span>
-          <button onClick={() => load()} className="rounded-lg bg-red-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-red-700">
+          <div className="flex items-center gap-2">
+            <i className="fas fa-circle-exclamation text-red-500" aria-hidden="true" />
+            {error}
+          </div>
+          <button
+            onClick={() => load()}
+            className="shrink-0 rounded-lg bg-red-600 px-3 py-1.5 text-xs font-bold text-white transition hover:bg-red-700"
+          >
             Retry
           </button>
         </div>
       )}
 
-      <div className="mb-5 grid grid-cols-[repeat(auto-fit,minmax(220px,1fr))] gap-4">
+      {/* Metric cards */}
+      <div className="mb-5 grid grid-cols-[repeat(auto-fit,minmax(200px,1fr))] gap-4">
         {metricCards.map((card) => (
           <MetricCard key={card.label} {...card} loading={loading} />
         ))}
       </div>
 
+      {/* Engagement */}
       <div className="mb-5">
         <EngagementCard data={data?.engagement} loading={loading} />
       </div>
 
-      <div className="mb-5 grid grid-cols-1 gap-4 xl:grid-cols-[1fr_320px]">
+      {/* Chart + Trending */}
+      <div className="mb-5 grid grid-cols-1 gap-4 xl:grid-cols-[1fr_300px]">
         <EnrollmentChart data={data?.enrollment_by_year} loading={loading} />
-        <TrendingAlumni items={data?.trending_alumni ?? []} loading={loading} />
+        <TrendingAlumni  items={data?.trending_alumni ?? []} loading={loading} />
       </div>
 
+      {/* Uploads + Activity */}
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
         <RecentUploads items={data?.recent_uploads ?? []} loading={loading} />
         <ActivityFeed

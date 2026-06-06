@@ -133,19 +133,15 @@ export function useYearbook(batchId) {
    * batch yearbook, but keeps the per-student & certificate flows here
    * for backward compatibility with onDownload prop in FlipbookViewer.
    */
-  const downloadPdf = useCallback(async (userId) => {
+  const downloadPdf = useCallback(async () => {
     try {
-      const { data } = userId
-        ? await yearbookApi.exportStudentPdf(userId)
-        : await yearbookApi.exportCertificate();
+      const { data } = await yearbookApi.exportBatchPdf(batchId);
 
       const blob   = new Blob([data], { type: 'application/pdf' });
       const url    = URL.createObjectURL(blob);
       const anchor = document.createElement('a');
       anchor.href     = url;
-      anchor.download = userId
-        ? `profile-${userId}.pdf`
-        : 'graduation-certificate.pdf';
+      anchor.download = `yearbook-${batchId}.pdf`;
       document.body.appendChild(anchor);
       anchor.click();
       anchor.remove();
@@ -153,7 +149,7 @@ export function useYearbook(batchId) {
     } catch (err) {
       console.error('PDF download failed:', err);
     }
-  }, []);
+  }, [batchId]);
 
   return {
     ...state,
@@ -193,7 +189,7 @@ function tocEntry(page, idx) {
     'toc':            { label: 'Contents',                       icon: 'list'      },
     'section-header': { label: page.section?.name ?? 'Section',  icon: 'users'     },
     'student-grid':   null,
-    'student-quotes': null,
+    'student-profile': null,
     'gallery':        { label: page.gallery?.name ?? 'Gallery',  icon: 'photo'     },
     'faculty':        { label: 'Faculty',                        icon: 'school'    },
     'stats':          { label: 'At a Glance',                    icon: 'chart-bar' },

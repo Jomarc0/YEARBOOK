@@ -11,8 +11,6 @@ const TABS = [
   { key: 'photos',     label: 'Photos',        icon: 'fa-images' },
   { key: 'videos',     label: 'Videos',        icon: 'fa-film' },
   { key: 'program',    label: 'Program',       icon: 'fa-file-pdf' },
-  { key: 'archive',    label: 'Archive',       icon: 'fa-box-archive' },
-  { key: 'toga',       label: 'Toga Gallery',  icon: 'fa-user-graduate' },
   { key: 'invitation', label: 'Invitation',    icon: 'fa-envelope-open-text' },
   { key: 'song',       label: 'Grad Song',     icon: 'fa-music' },
   { key: 'mass',       label: 'Baccalaureate', icon: 'fa-church' },
@@ -254,8 +252,6 @@ function EmptyState({ tab }) {
     photos:     { icon: 'fa-images',             text: 'No graduation photos yet.' },
     videos:     { icon: 'fa-film',               text: 'No graduation videos yet.' },
     program:    { icon: 'fa-file-pdf',           text: 'No graduation program uploaded yet.' },
-    archive:    { icon: 'fa-box-archive',        text: 'No archived records yet.' },
-    toga:       { icon: 'fa-user-graduate',      text: 'No toga gallery photos yet.' },
     invitation: { icon: 'fa-envelope-open-text', text: 'No invitations uploaded yet.' },
     song:       { icon: 'fa-music',              text: 'No graduation songs uploaded yet.' },
     mass:       { icon: 'fa-church',             text: 'No Baccalaureate Mass videos yet.' },
@@ -307,15 +303,15 @@ export default function GraduationPage() {
       const found = data.photos ?? [];
       setMatches(found);
       if (!found.length) alert('No matching photos found.');
-    } catch {
-      alert('Face search failed.');
+    } catch (err) {
+      alert(err?.response?.data?.message || 'Face search failed.');
     } finally {
       setSearching(false);
     }
   };
 
-  const primaryTabs   = TABS.slice(0, 4);
-  const secondaryTabs = TABS.slice(4);
+  const primaryTabs   = TABS.slice(0, 3);
+  const secondaryTabs = TABS.slice(3);
 
   return (
     <div className="min-h-screen flex flex-col" style={{ background: '#f8fafc', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
@@ -415,7 +411,7 @@ export default function GraduationPage() {
           <EmptyState tab={activeTab} />
         ) : (
           <>
-            {['photos', 'archive', 'toga'].includes(activeTab) && (
+            {activeTab === 'photos' && (
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(280px,1fr))', gap: '24px' }}>
                 {data.map(a => <AlbumCard key={a.id} album={a} />)}
               </div>

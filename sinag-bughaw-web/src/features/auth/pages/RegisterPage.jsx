@@ -47,6 +47,11 @@ const SCHOOLS = [
   },
 ];
 
+const BATCH_YEARS = Array.from(
+  { length: new Date().getFullYear() + 5 - 1990 + 1 },
+  (_, i) => String(new Date().getFullYear() + 5 - i)
+);
+
 // ── Styles ───────────────────────────────────────────────────────────────────
 const INPUT_CLS =
   'w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-[#1d2b4b] ' +
@@ -78,6 +83,8 @@ export default function RegisterPage() {
     student_id:            '',
     email:                 '',
     course:                '',
+    graduation_year:       '',
+    batch:                 '',
     password:              '',
     password_confirmation: '',
   });
@@ -109,7 +116,11 @@ export default function RegisterPage() {
   // ── Field change ─────────────────────────────────────────────────────────────
   const handleChange = (e) => {
     const { name, value } = e.target;
-    setForm((prev) => ({ ...prev, [name]: value }));
+    setForm((prev) => ({
+      ...prev,
+      [name]: value,
+      ...(name === 'graduation_year' ? { batch: value } : {}),
+    }));
     setErrors((prev) => ({ ...prev, [name]: '' }));
 
     if (['student_id', 'first_name', 'last_name'].includes(name)) {
@@ -134,11 +145,13 @@ export default function RegisterPage() {
       if (data.found) {
         setVerifyState('found');
         setVerifiedStudent(data.student);
-        // Pre-fill email / course from yearbook record if fields are still empty
+        // Pre-fill email, course, and batch from yearbook record if fields are still empty
         setForm((prev) => ({
           ...prev,
-          email:  prev.email  || data.student.email  || '',
-          course: prev.course || data.student.course || '',
+          email:           prev.email           || data.student.email || '',
+          course:          prev.course          || data.student.course || '',
+          graduation_year: prev.graduation_year || String(data.student.graduation_year || ''),
+          batch:           prev.batch           || String(data.student.graduation_year || ''),
         }));
       } else {
         setVerifyState('not_found');
@@ -164,6 +177,7 @@ export default function RegisterPage() {
     if (!form.student_id.trim())  newErrors.student_id = 'Student ID is required.';
     if (!form.email.trim())       newErrors.email      = 'Email is required.';
     if (!form.course)             newErrors.course     = 'Please select a course.';
+    if (!form.graduation_year)    newErrors.graduation_year = 'Please select your batch.';
     if (!form.password)           newErrors.password   = 'Password is required.';
     if (form.password.length < 8) newErrors.password   = 'At least 8 characters.';
     if (form.password !== form.password_confirmation)
@@ -552,6 +566,27 @@ export default function RegisterPage() {
                         ))}
                       </select>
                       {errors.course && <p className="text-red-500 text-xs mt-1">{errors.course}</p>}
+                    </div>
+
+                    <div>
+                      <label className="text-xs font-medium text-[#1d2b4b] mb-1 block">
+                        Batch <span className="text-red-400">*</span>
+                        {verifyState === 'found' && (
+                          <span className="ml-1.5 font-normal text-emerald-500 text-[10px]">pre-filled from yearbook</span>
+                        )}
+                      </label>
+                      <select
+                        name="graduation_year"
+                        value={form.graduation_year}
+                        onChange={handleChange}
+                        className={[fieldCls('graduation_year'), !form.graduation_year ? 'text-slate-400' : ''].join(' ')}
+                      >
+                        <option value="" disabled>Select your batch year...</option>
+                        {BATCH_YEARS.map((year) => (
+                          <option key={year} value={year}>Batch {year}</option>
+                        ))}
+                      </select>
+                      {errors.graduation_year && <p className="text-red-500 text-xs mt-1">{errors.graduation_year}</p>}
                     </div>
 
                     <div>

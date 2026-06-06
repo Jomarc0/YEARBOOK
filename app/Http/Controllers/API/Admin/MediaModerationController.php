@@ -5,6 +5,8 @@ namespace App\Http\Controllers\API\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\Album;
 use App\Models\AuditLog;
+use App\Models\Gallery;
+use App\Models\GalleryMedia;
 use App\Models\Photo;
 use App\Models\PostMedia;
 use App\Models\VoiceNote;
@@ -47,8 +49,9 @@ class MediaModerationController extends Controller
     {
         $query = Album::with([
             'user:id,first_name,last_name,profile_picture',
-            'photos' => fn ($q) => $q->whereNotNull('user_id')
-                                     ->orderBy('created_at', 'desc'),
+            'galleries' => fn ($q) => $q->with('media')
+                                         ->whereNotNull('user_id')
+                                         ->orderBy('created_at', 'desc'),
         ])
         ->whereNotNull('user_id')
         ->where('type', 'general')
@@ -65,9 +68,9 @@ class MediaModerationController extends Controller
         $albums = $query->paginate($request->get('per_page', 18));
 
         $albums->getCollection()->transform(function (Album $album) {
-            $photos = $album->photos->map(fn (Photo $p) => [
+            $photos = $album->galleries->map(fn ($p) => [
                 'id'               => $p->id,
-                'url'              => $this->resolveUrl($p->file_path),
+                'url'              => $this->mediaItemUrl($p),
                 'caption'          => $p->caption,
                 'visibility'       => $p->visibility ?? 'public',
                 'status'           => $p->status,
@@ -113,7 +116,7 @@ class MediaModerationController extends Controller
         return response()->json([
             'photo'    => Album::whereNotNull('user_id')
                             ->where('type', 'general')
-                            ->whereHas('photos', fn ($q) => $q->where('status', 'pending')
+                            ->whereHas('galleries', fn ($q) => $q->where('status', 'pending')
                                 ->whereNotNull('user_id'))
                             ->count(),
 
@@ -149,20 +152,21 @@ class MediaModerationController extends Controller
     {
         $albums = Album::with([
             'user:id,first_name,last_name,profile_picture',
-            'photos' => fn ($q) => $q->where('status', $status)
-                                     ->whereNotNull('user_id')
-                                     ->orderBy('created_at', 'desc'),
+            'galleries' => fn ($q) => $q->with('media')
+                                         ->where('status', $status)
+                                         ->whereNotNull('user_id')
+                                         ->orderBy('created_at', 'desc'),
         ])
         ->whereNotNull('user_id')
         ->where('type', 'general')
-        ->whereHas('photos', fn ($q) => $q->where('status', $status)->whereNotNull('user_id'))
+        ->whereHas('galleries', fn ($q) => $q->where('status', $status)->whereNotNull('user_id'))
         ->orderByDesc('updated_at')
         ->paginate($request->get('per_page', 12));
 
         $albums->getCollection()->transform(function (Album $album) use ($status) {
-            $photos = $album->photos->map(fn (Photo $p) => [
+            $photos = $album->galleries->map(fn ($p) => [
                 'id'               => $p->id,
-                'url'              => $this->resolveUrl($p->file_path),
+                'url'              => $this->mediaItemUrl($p),
                 'caption'          => $p->caption,
                 'status'           => $p->status ?? 'pending',
                 'rejection_reason' => $p->rejection_reason,
@@ -271,16 +275,17 @@ class MediaModerationController extends Controller
         if ($type === 'photo') {
             $album = Album::with([
                 'user:id,first_name,last_name,profile_picture',
-                'photos' => fn ($q) => $q->whereNotNull('user_id')
+                'photos' => fn ($q) => $q->with('media')
+                                         ->whereNotNull('user_id')
                                          ->orderBy('created_at', 'desc'),
             ])
             ->whereNotNull('user_id')
             ->where('type', 'general')
             ->findOrFail($id);
 
-            $photos = $album->photos->map(fn (Photo $p) => [
+            $photos = $album->photos->map(fn ($p) => [
                 'id'               => $p->id,
-                'url'              => $this->resolveUrl($p->file_path),
+                'url'              => $this->mediaItemUrl($p),
                 'caption'          => $p->caption,
                 'status'           => $p->status ?? 'pending',
                 'rejection_reason' => $p->rejection_reason,
@@ -400,14 +405,14 @@ class MediaModerationController extends Controller
         $update = ['status' => 'approved', 'rejection_reason' => null];
 
         try {
-            Photo::where('album_id', $albumId)
+            Gallery::where('album_id', $albumId)
                 ->where('status', 'pending')
                 ->update(array_merge($update, [
                     'approved_at' => now(),
                     'approved_by' => auth('sanctum')->id(),
                 ]));
         } catch (\Exception) {
-            Photo::where('album_id', $albumId)->where('status', 'pending')->update($update);
+            Gallery::where('album_id', $albumId)->where('status', 'pending')->update($update);
         }
 
         $this->log('album', $albumId, 'approved');
@@ -424,14 +429,14 @@ class MediaModerationController extends Controller
         $update = ['status' => 'rejected', 'rejection_reason' => $request->reason];
 
         try {
-            Photo::where('album_id', $albumId)
+            Gallery::where('album_id', $albumId)
                 ->where('status', 'pending')
                 ->update(array_merge($update, [
                     'rejected_at' => now(),
                     'rejected_by' => auth('sanctum')->id(),
                 ]));
         } catch (\Exception) {
-            Photo::where('album_id', $albumId)->where('status', 'pending')->update($update);
+            Gallery::where('album_id', $albumId)->where('status', 'pending')->update($update);
         }
 
         $this->log('album', $albumId, 'rejected', $request->reason);
@@ -474,9 +479,9 @@ class MediaModerationController extends Controller
             }
 
             try {
-                Photo::where('album_id', $album->id)->update($photoUpdate);
+                Gallery::where('album_id', $album->id)->update($photoUpdate);
             } catch (\Exception) {
-                Photo::where('album_id', $album->id)->update([
+                Gallery::where('album_id', $album->id)->update([
                     'status'           => $photoUpdate['status'],
                     'rejection_reason' => $photoUpdate['rejection_reason'],
                 ]);
@@ -497,7 +502,7 @@ class MediaModerationController extends Controller
 
     public function approvePhoto(int $id): JsonResponse
     {
-        $photo = Photo::findOrFail($id);
+        $photo = Gallery::find($id) ?? Photo::findOrFail($id);
 
         try {
             $photo->update([
@@ -518,7 +523,7 @@ class MediaModerationController extends Controller
     {
         $request->validate(['reason' => 'required|string|max:255']);
 
-        $photo = Photo::findOrFail($id);
+        $photo = Gallery::find($id) ?? Photo::findOrFail($id);
 
         try {
             $photo->update([
@@ -546,7 +551,7 @@ class MediaModerationController extends Controller
             'note'   => 'nullable|string|max:500',
         ]);
 
-        $photo      = Photo::findOrFail($id);
+        $photo      = Gallery::find($id) ?? Photo::findOrFail($id);
         $fromStatus = $photo->status ?? 'pending';
         $toStatus   = $request->status;
 
@@ -695,7 +700,7 @@ class MediaModerationController extends Controller
         ]);
 
         if ($request->type === 'photo') {
-            Photo::whereIn('album_id', $request->ids)
+            Gallery::whereIn('album_id', $request->ids)
                 ->where('status', 'pending')
                 ->whereNotNull('user_id')
                 ->update([
@@ -740,7 +745,7 @@ class MediaModerationController extends Controller
         ]);
 
         if ($request->type === 'photo') {
-            Photo::whereIn('album_id', $request->ids)
+            Gallery::whereIn('album_id', $request->ids)
                 ->where('status', 'pending')
                 ->whereNotNull('user_id')
                 ->update([
@@ -838,7 +843,9 @@ class MediaModerationController extends Controller
                                 ->where('type', 'general')
                                 ->count(),
 
-            'photos'        => Photo::whereNotNull('user_id')->count(),
+            'photos'        => Gallery::whereNotNull('user_id')
+                                ->whereHas('media', fn ($q) => $q->where('resource_type', 'image'))
+                                ->count(),
 
             'videos'        => PostMedia::where('resource_type', 'video')
                                 ->whereNotNull('photo_id')
@@ -858,7 +865,8 @@ class MediaModerationController extends Controller
     {
         $query = Album::query()
             ->with('user:id,first_name,last_name')
-            ->withCount('photos')
+            ->withCount(['galleries as photos_count' => fn ($q) => $q
+                ->whereHas('media', fn ($mq) => $mq->where('resource_type', 'image'))])
             ->whereNotNull('user_id')
             ->where('type', 'general')
             ->orderByDesc('created_at');
@@ -892,9 +900,10 @@ class MediaModerationController extends Controller
             ->where('type', 'general')
             ->findOrFail($id);
 
-        $query = Photo::where('album_id', $album->id)
+        $query = Gallery::where('album_id', $album->id)
             ->whereNotNull('user_id')
-            ->with('user:id,first_name,last_name')
+            ->whereHas('media', fn ($q) => $q->where('resource_type', 'image'))
+            ->with(['user:id,first_name,last_name', 'media' => fn ($q) => $q->where('resource_type', 'image')->orderBy('sort_order')])
             ->orderBy('created_at', 'desc');
 
         if ($request->filled('status')) {
@@ -907,10 +916,11 @@ class MediaModerationController extends Controller
 
         $photos = $query->paginate($request->get('per_page', 48));
 
-        $photos->getCollection()->transform(fn (Photo $p) => [
-            'id'               => $p->id,
-            'url'              => $this->resolveUrl($p->file_path),
-            'file_path'        => $this->resolveUrl($p->file_path),
+        $photos->getCollection()->transform(fn (Gallery $p) => [
+            'id'               => $p->media->first()?->id ?? $p->id,
+            'gallery_id'       => $p->id,
+            'url'              => $this->mediaItemUrl($p),
+            'file_path'        => $this->mediaItemUrl($p),
             'caption'          => $p->caption,
             'visibility'       => $p->visibility ?? 'public',
             'status'           => $p->status ?? 'pending',
@@ -979,30 +989,37 @@ class MediaModerationController extends Controller
 
     public function mediaPhotos(Request $request): JsonResponse
     {
-        $query = Photo::query()
-            ->with('user:id,first_name,last_name')
-            ->whereNotNull('user_id')
+        $query = GalleryMedia::query()
+            ->where('resource_type', 'image')
+            ->whereHas('gallery', fn ($q) => $q->whereNotNull('user_id'))
+            ->with([
+                'gallery' => fn ($q) => $q
+                    ->select(['id', 'album_id', 'user_id', 'caption', 'visibility', 'status', 'ai_metadata', 'created_at'])
+                    ->with('user:id,first_name,last_name'),
+            ])
             ->orderByDesc('created_at');
 
         if ($request->filled('album_id')) {
-            $query->where('album_id', $request->album_id);
+            $query->whereHas('gallery', fn ($q) => $q->where('album_id', $request->album_id));
         }
 
         if ($request->filled('visibility')) {
-            $query->where('visibility', $request->visibility);
+            $query->whereHas('gallery', fn ($q) => $q->where('visibility', $request->visibility));
         }
 
         $items = $query->paginate($request->get('per_page', 24));
 
-        $items->getCollection()->transform(fn ($photo) => [
+        $items->getCollection()->transform(fn (GalleryMedia $photo) => [
             'id'               => $photo->id,
+            'gallery_id'       => $photo->gallery_id,
             'file_path'        => $this->resolveUrl($photo->file_path),
-            'caption'          => $photo->caption,
-            'visibility'       => $photo->visibility ?? 'public',
-            'is_profile_post'  => $photo->is_profile_post,
-            'ai_metadata'      => $photo->ai_metadata,
-            'uploader'         => $photo->user
-                ? "{$photo->user->first_name} {$photo->user->last_name}" : 'Unknown',
+            'caption'          => $photo->gallery?->caption,
+            'visibility'       => $photo->gallery?->visibility ?? 'public',
+            'status'           => $photo->gallery?->status ?? 'pending',
+            'is_profile_post'  => false,
+            'ai_metadata'      => $photo->gallery?->ai_metadata,
+            'uploader'         => $photo->gallery?->user
+                ? "{$photo->gallery->user->first_name} {$photo->gallery->user->last_name}" : 'Unknown',
             'created_at_human' => Carbon::parse($photo->created_at)->diffForHumans(),
         ]);
 
@@ -1015,6 +1032,23 @@ class MediaModerationController extends Controller
      */
     public function destroyPhoto(int $id): JsonResponse
     {
+        if ($media = GalleryMedia::with('gallery')->find($id)) {
+            $gallery = $media->gallery;
+            $media->delete();
+
+            if ($gallery && $gallery->media()->count() === 0) {
+                $gallery->delete();
+            }
+
+            return response()->json(['message' => 'Photo moved to trash.']);
+        }
+
+        if ($gallery = Gallery::find($id)) {
+            $gallery->delete();
+
+            return response()->json(['message' => 'Photo moved to trash.']);
+        }
+
         Photo::findOrFail($id)->delete(); // soft delete
 
         return response()->json(['message' => 'Photo moved to trash.']);
@@ -1172,6 +1206,17 @@ class MediaModerationController extends Controller
         return str_starts_with($path, 'http')
             ? $path
             : asset('storage/' . $path);
+    }
+
+    private function mediaItemUrl($item): ?string
+    {
+        $path = $item->file_path ?? $item->cover ?? null;
+
+        if (! $path && method_exists($item, 'relationLoaded') && $item->relationLoaded('media')) {
+            $path = $item->media->first()?->file_path;
+        }
+
+        return $this->resolveUrl($path);
     }
 
     private function resolveType(string $type): array

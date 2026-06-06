@@ -1,108 +1,42 @@
-/**
- * CoverPage.jsx
- * src/features/yearbook/components/pages/CoverPage.jsx
- *
- * Left-side cover leaf. Uses meta.coverUrl as background if available,
- * otherwise renders the dark illustrated cover.
- */
 import React from 'react';
-import { pageBase, GOLD, DARK, DARKER } from './pageStyles';
+import { DarkImageLayer, GoldFrame, GoldRule, NUSeal } from '../editorial/EditorialPrimitives';
+import { YEARBOOK_ASSETS } from '../../theme/yearbookTheme';
 
 export default function CoverPage({ page }) {
   const { meta = {} } = page;
-  const { title = 'Senior Yearbook', year = '2025', school = '', coverUrl } = meta;
+  const title = meta.title || 'Sinag-Bughaw';
+  const year = meta.year || '2025';
+  const school = meta.school || 'National University Lipa';
+  const theme = meta.theme || 'Celebrating Excellence, Leadership & Legacy';
+  const cover = meta.coverUrl || YEARBOOK_ASSETS.building;
 
   return (
-    <div
-      style={{
-        ...pageBase(DARK, { justifyContent: 'flex-end' }),
-        ...(coverUrl
-          ? {
-              backgroundImage: `linear-gradient(to top, rgba(10,10,20,.95) 0%, rgba(10,10,20,.4) 60%, rgba(10,10,20,.2) 100%), url(${coverUrl})`,
-              backgroundSize:  'cover',
-              backgroundPosition: 'center',
-            }
-          : {}),
-      }}
-    >
-      {/* Decorative background text */}
-      {!coverUrl && (
-        <div
-          aria-hidden="true"
-          style={{
-            position:   'absolute',
-            top: '50%', left: '50%',
-            transform:  'translate(-50%,-50%)',
-            fontFamily: 'Cormorant Garamond, Georgia, serif',
-            fontSize:   160,
-            color:      'rgba(255,255,255,.025)',
-            userSelect: 'none',
-            lineHeight: 1,
-            whiteSpace: 'nowrap',
-          }}
-        >
-          {year}
+    <section className="relative flex h-full w-full flex-col items-center justify-center overflow-hidden bg-[#071a33] px-10 py-8 text-center text-[#f7f1e6]">
+      <DarkImageLayer src={cover} opacity="opacity-50" />
+      <GoldFrame />
+      <NUSeal faint className="absolute -left-8 top-10 h-44 w-44" />
+
+      <div className="relative z-10 flex max-w-[34rem] flex-col items-center">
+        <NUSeal className="mb-4 h-16 w-16 drop-shadow-[0_10px_24px_rgba(0,0,0,0.35)]" />
+        <p className="font-sans text-[9px] font-black uppercase tracking-[0.32em] text-[#e4c36a]">{school}</p>
+        <h1 className="mt-5 font-serif text-[44px] font-bold uppercase leading-[0.9] tracking-[0.07em] text-[#e4c36a] drop-shadow-[0_8px_18px_rgba(0,0,0,0.45)]">
+          {title}
+        </h1>
+        <GoldRule className="mt-4" />
+        <p className="mt-4 max-w-[24rem] font-sans text-[9px] font-semibold uppercase leading-5 tracking-[0.34em] text-white/82">
+          {theme}
+        </p>
+        <p className="mt-6 font-serif text-2xl italic leading-none text-white">Class of</p>
+        <div className="mt-1 font-serif text-[68px] font-bold leading-[0.78] text-[#e4c36a]">{year}</div>
+        <div className="mt-5 border-y border-[#c89b3c]/55 px-8 py-1.5 font-sans text-[9px] font-black uppercase tracking-[0.34em] text-[#e4c36a]">
+          Senior Yearbook
         </div>
-      )}
-
-      {/* Emblem */}
-      <div
-        style={{
-          width:  60, height: 60,
-          border: `1.5px solid ${GOLD}`,
-          borderRadius: '50%',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          color: GOLD,
-          marginBottom: '1.1rem',
-          flexShrink: 0,
-        }}
-      >
-        <svg width="26" height="26" viewBox="0 0 24 24" fill="none"
-          stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"
-          strokeLinejoin="round" aria-hidden="true">
-          <path d="M22 10v6M2 10l10-5 10 5-10 5z"/>
-          <path d="M6 12v5c3 3 9 3 12 0v-5"/>
-        </svg>
       </div>
 
-      {/* Text */}
-      <div
-        style={{
-          fontFamily:  'Cormorant Garamond, Georgia, serif',
-          fontSize:    16,
-          fontStyle:   'italic',
-          color:       'rgba(255,255,255,.85)',
-          marginBottom: 6,
-        }}
-      >
-        {title}
+      <div className="absolute bottom-6 left-10 z-10 border-l border-[#c89b3c] pl-4 text-left">
+        <p className="font-sans text-[8px] uppercase tracking-[0.22em] text-white/70">Academic Year</p>
+        <p className="mt-1 font-serif text-xl text-[#e4c36a]">{meta.academic_year || `${Number(year) - 1}-${year}`}</p>
       </div>
-
-      <div
-        style={{
-          fontFamily:  'Cormorant Garamond, Georgia, serif',
-          fontSize:    64,
-          fontWeight:  700,
-          color:       GOLD,
-          lineHeight:  1,
-          marginBottom: 4,
-        }}
-      >
-        {year}
-      </div>
-
-      {/* Rule + school */}
-      <div style={{ height: 0.5, background: 'rgba(255,255,255,.12)', marginTop: 'auto', marginBottom: 14 }} />
-      <div
-        style={{
-          fontSize:      9,
-          letterSpacing: '0.22em',
-          textTransform: 'uppercase',
-          color:         'rgba(255,255,255,.3)',
-        }}
-      >
-        {school}
-      </div>
-    </div>
+    </section>
   );
 }

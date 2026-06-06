@@ -1,157 +1,103 @@
-import { useNavigate, useLocation } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
+import Icon from "../shared/Icon";
 
 const NAV_GROUPS = [
   {
     label: "Main",
     items: [
-      { id: "dashboard",       label: "Dashboard"          },
-      { id: "analytics",       label: "Analytics"          },
+      { id: "dashboard", label: "Dashboard", icon: "dashboard" },
+      { id: "analytics", label: "Analytics", icon: "analytics" },
     ],
   },
   {
     label: "Users",
     items: [
-      { id: "faculty",         label: "Faculty"            },
-      { id: "users",           label: "User Management"    },
-      { id: "subscriptions",   label: "Subscriptions"      },
+      { id: "faculty", label: "Faculty", icon: "user" },
+      { id: "users", label: "User Management", icon: "users" },
+      { id: "subscriptions", label: "Subscriptions", icon: "crown" },
     ],
   },
   {
     label: "Content",
     items: [
-      { id: "media-library",   label: "Media & Moderation" },
+      { id: "media-library", label: "Media", icon: "gallery" },
+      { id: "announcements", label: "Announcements", icon: "bell" },
     ],
   },
   {
     label: "Yearbook",
     items: [
-      { id: "graduation",      label: "Graduation"         },
-      { id: "batches",         label: "Batches"            },
+      { id: "graduation", label: "Graduation", icon: "graduation" },
+      { id: "batches", label: "Batches", icon: "book" },
     ],
   },
   {
     label: "System",
     items: [
-      { id: "trash",           label: "Trash"              },
-      { id: "settings",        label: "Settings"           },
+      { id: "trash", label: "Trash", icon: "trash" },
+      { id: "settings", label: "Settings", icon: "settings" },
     ],
   },
 ];
 
-// Only rendered when the logged-in admin is a super_admin
 const SUPER_ADMIN_GROUP = {
   label: "Super Admin",
   items: [
-    { id: "reports",          label: "Reports"        },
-    { id: "admin-management", label: "Admin Accounts" },
+    { id: "reports", label: "Reports", icon: "reports" },
+    { id: "admin-management", label: "Admin Accounts", icon: "shield" },
   ],
 };
 
 export default function Sidebar({ onLogout }) {
-  const navigate   = useNavigate();
-  const location   = useLocation();
+  const navigate = useNavigate();
+  const location = useLocation();
   const { isSuperAdmin } = useAuth();
 
   const currentPath = location.pathname.replace("/", "");
-  const getIsActive = (id) => {
-    if (id === "media-library") {
-      return currentPath === "media-library" || currentPath === "content-moderation";
-    }
-    return currentPath === id;
-  };
+  const groups = isSuperAdmin ? [...NAV_GROUPS, SUPER_ADMIN_GROUP] : NAV_GROUPS;
 
-  const groups = isSuperAdmin
-    ? [...NAV_GROUPS, SUPER_ADMIN_GROUP]
-    : NAV_GROUPS;
+  const getIsActive = (id) => id === "media-library"
+    ? currentPath === "media-library" || currentPath === "content-moderation"
+    : currentPath === id;
 
   return (
-    <aside style={{
-      background: "linear-gradient(180deg, #0c1e4a 0%, #0a1a43 100%)",
-      color: "#dbe5ff",
-      padding: "22px 12px 16px",
-      display: "flex",
-      flexDirection: "column",
-      height: "100vh",
-      width: 236,
-      position: "fixed",
-      left: 0,
-      top: 0,
-      bottom: 0,
-      overflowY: "auto",
-      overflowX: "hidden",
-      borderRight: "1px solid rgba(147, 174, 255, .12)",
-      zIndex: 30,
-    }}>
-      <div style={{
-        display: "flex", alignItems: "center", gap: 10,
-        padding: "8px 10px 20px", color: "#fff",
-        fontWeight: 700, fontSize: "1rem",
-        whiteSpace: "nowrap",
-        overflow: "hidden",
-      }}>
-        <div style={{
-          width: 32, height: 32, borderRadius: 10,
-          background: "linear-gradient(135deg,#3d62ff,#3553cc)",
-          border: "1px solid rgba(173,191,255,.34)",
-          display: "grid", placeItems: "center",
-          fontSize: 15, flexShrink: 0,
-        }}>
-          🎓
+    <aside className="fixed inset-y-0 left-0 z-30 flex w-[240px] flex-col overflow-y-auto overflow-x-hidden border-r border-white/10 bg-[#081b49] px-3 py-4 text-slate-100">
+      <div className="mb-4 flex items-center gap-3 border-b border-white/10 px-2 pb-4">
+        <img src="/images/NU_logo.png" alt="NU Logo" className="h-9 w-9 shrink-0 object-contain" />
+        <div className="min-w-0">
+          <p className="truncate text-base font-black leading-tight text-white">NU Admin</p>
+          <p className="truncate text-[10px] font-black uppercase tracking-[0.18em] text-blue-200/50">Portal</p>
         </div>
-        <span style={{ fontSize: "1.03rem", fontWeight: 800, letterSpacing: "-.01em" }}>NU Admin Portal</span>
       </div>
 
-      <nav style={{ display: "flex", flexDirection: "column", gap: 18, flex: 1 }}>
-        {groups.map(group => {
+      <nav className="flex flex-1 flex-col gap-3">
+        {groups.map((group) => {
           const isSuperGroup = group.label === "Super Admin";
           return (
             <div key={group.label}>
-              <div style={{
-                fontSize: "0.64rem", fontWeight: 800, letterSpacing: ".15em",
-                color: isSuperGroup ? "#a78bfa" : "#6f87ba",
-                textTransform: "uppercase",
-                padding: "0 10px", marginBottom: 7,
-                whiteSpace: "nowrap",
-              }}>
-                {isSuperGroup ? "★  Super Admin" : group.label}
-              </div>
-              <div style={{ display: "grid", gap: 3 }}>
-                {group.items.map(n => {
-                  const isActive = getIsActive(n.id);
+              <p className={`mb-1.5 px-2 text-[10px] font-black uppercase tracking-[0.18em] ${isSuperGroup ? "text-violet-300" : "text-blue-200/55"}`}>
+                {group.label}
+              </p>
+              <div className="grid gap-1">
+                {group.items.map((item) => {
+                  const active = getIsActive(item.id);
                   return (
                     <button
-                      key={n.id}
-                      onClick={() => navigate(`/${n.id}`)}
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: 8,
-                        padding: "10px 12px",
-                        borderRadius: 12,
-                        border: "none",
-                        cursor: "pointer",
-                        fontWeight: isActive ? 700 : 600,
-                        fontSize: "0.88rem",
-                        textAlign: "left",
-                        transition: "all 0.16s ease",
-                        background: isActive
-                          ? (isSuperGroup ? "#6d3fcf" : "#4458ca")
-                          : "transparent",
-                        color: isActive ? "#ffffff" : "#d2def8",
-                        boxShadow: isActive
-                          ? (isSuperGroup
-                              ? "0 10px 22px rgba(109,63,207,.36)"
-                              : "0 10px 22px rgba(56,76,182,.36)")
-                          : "none",
-                        fontFamily: "inherit",
-                        width: "100%",
-                        whiteSpace: "nowrap",
-                        overflow: "hidden",
-                        textOverflow: "ellipsis",
-                      }}
+                      key={item.id}
+                      type="button"
+                      onClick={() => navigate(`/${item.id}`)}
+                      className={[
+                        "group flex h-11 w-full items-center gap-3 rounded-xl px-3 text-left text-sm font-extrabold transition",
+                        active
+                          ? isSuperGroup
+                            ? "bg-violet-600 text-white shadow-lg shadow-violet-950/30"
+                            : "bg-indigo-600 text-white shadow-lg shadow-blue-950/30"
+                          : "text-blue-50/85 hover:bg-white/10 hover:text-white",
+                      ].join(" ")}
                     >
-                      {n.label}
+                      <Icon name={item.icon} className={`h-4 w-4 shrink-0 ${active ? "text-white" : "text-blue-200/60 group-hover:text-white"}`} />
+                      <span className="truncate">{item.label}</span>
                     </button>
                   );
                 })}
@@ -161,31 +107,14 @@ export default function Sidebar({ onLogout }) {
         })}
       </nav>
 
-      <div style={{
-        paddingTop: 16,
-        borderTop: "1px solid rgba(219,229,255,.08)",
-        marginTop: 10,
-      }}>
-        <button
-          onClick={onLogout}
-          style={{
-            display: "flex", alignItems: "center", gap: 10,
-            color: "#ff8e97", background: "transparent",
-            border: 0, padding: "8px 6px",
-            fontSize: "0.84rem", cursor: "pointer",
-            fontWeight: 600, fontFamily: "inherit",
-            width: "100%", whiteSpace: "nowrap",
-          }}
-        >
-          ← Sign Out
-        </button>
-        <div style={{
-          marginTop: 10, paddingLeft: 6,
-          color: "#6378a5", fontSize: "0.68rem",
-          whiteSpace: "nowrap",
-        }}>
-        </div>
-      </div>
+      <button
+        type="button"
+        onClick={onLogout}
+        className="mt-4 flex h-11 items-center gap-3 border-t border-white/10 px-2 pt-4 text-left text-sm font-extrabold text-rose-300 transition hover:text-rose-100"
+      >
+        <Icon name="logout" className="h-4 w-4" />
+        Sign Out
+      </button>
     </aside>
   );
 }

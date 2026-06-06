@@ -6,6 +6,7 @@
 
 import { useEffect, useState, useCallback, useRef } from "react";
 import api from "../services/api";
+import Icon from "../components/shared/Icon";
 
 // ─── Theme ────────────────────────────────────────────────────────────────────
 const C = {
@@ -261,21 +262,25 @@ function Card({ onClick, accent = C.blue, children, actions }) {
 
 function SmallBtn({ onClick, children, danger }) {
   return (
-    <button onClick={onClick} style={{
-      padding: "5px 12px", borderRadius: 8, fontSize: "0.77rem", fontWeight: 600,
-      cursor: "pointer", fontFamily: "inherit",
-      background: danger ? C.redBg : "none",
-      color: danger ? C.red : C.muted,
-      border: danger ? "none" : `1px solid ${C.border}`,
-    }}>{children}</button>
+    <button
+      onClick={onClick}
+      className={[
+        "inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold transition",
+        danger
+          ? "border border-rose-100 bg-rose-50 text-rose-700 hover:bg-rose-100"
+          : "border border-slate-200 bg-white text-slate-600 hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-700",
+      ].join(" ")}
+    >
+      {children}
+    </button>
   );
 }
 
 // ─── Step Bar (3 steps now) ───────────────────────────────────────────────────
 const STEPS = [
-  { key: "batches",  icon: "🎓", label: "Batches"  },
-  { key: "sections", icon: "📋", label: "Sections" },
-  { key: "students", icon: "👤", label: "Students" },
+  { key: "batches", icon: "graduation", label: "Batches" },
+  { key: "sections", icon: "book", label: "Sections" },
+  { key: "students", icon: "students", label: "Students" },
 ];
 
 function StepBar({ current }) {
@@ -295,8 +300,9 @@ function StepBar({ current }) {
                 : "text-slate-400"
             }`}
           >
-            <span>{s.icon}</span><span>{s.label}</span>
-            {done && <span className="text-[11px] opacity-70">✓</span>}
+            <Icon name={s.icon} className="h-4 w-4" />
+            <span>{s.label}</span>
+            {done && <Icon name="check" className="h-3.5 w-3.5 opacity-70" />}
           </div>
         );
       })}
@@ -309,7 +315,7 @@ function Breadcrumb({ crumbs }) {
     <div className="mb-5 flex flex-wrap items-center gap-1.5">
       {crumbs.map((c, i) => (
         <span key={i} className="flex items-center gap-1.5">
-          {i > 0 && <span className="text-sm text-slate-400">›</span>}
+          {i > 0 && <span className="text-sm text-slate-400">/</span>}
           {c.onClick
             ? <button onClick={c.onClick} className="bg-transparent p-0 text-sm font-bold text-indigo-600">{c.label}</button>
             : <span className="text-sm font-extrabold text-slate-800">{c.label}</span>}
@@ -801,8 +807,12 @@ function BatchesView({ toast, onSelect }) {
           {batches.map(b => (
             <Card key={b.id} accent={C.blue} onClick={() => onSelect(b)}
               actions={<>
-                <SmallBtn onClick={e => { e.stopPropagation(); setModal(b); }}>✏ Edit</SmallBtn>
-                <SmallBtn danger onClick={e => { e.stopPropagation(); setDelTarget(b); }}>🗑 Delete</SmallBtn>
+                <SmallBtn onClick={e => { e.stopPropagation(); setModal(b); }}>
+                  <Icon name="edit" className="h-3.5 w-3.5" /> Edit
+                </SmallBtn>
+                <SmallBtn danger onClick={e => { e.stopPropagation(); setDelTarget(b); }}>
+                  <Icon name="trash" className="h-3.5 w-3.5" /> Delete
+                </SmallBtn>
               </>}>
               <div className="mb-2.5 flex items-start justify-between gap-2">
                 <div>
@@ -976,8 +986,12 @@ function SectionsView({ batch, toast, onSelect }) {
                 {grouped[dept].map(s => (
                   <Card key={s.id} accent={color} onClick={() => onSelect(s)}
                     actions={<>
-                      <SmallBtn onClick={e => { e.stopPropagation(); setModal(s); }}>✏ Edit</SmallBtn>
-                      <SmallBtn danger onClick={e => { e.stopPropagation(); setDelTarget(s); }}>🗑 Delete</SmallBtn>
+                      <SmallBtn onClick={e => { e.stopPropagation(); setModal(s); }}>
+                        <Icon name="edit" className="h-3.5 w-3.5" /> Edit
+                      </SmallBtn>
+                      <SmallBtn danger onClick={e => { e.stopPropagation(); setDelTarget(s); }}>
+                        <Icon name="trash" className="h-3.5 w-3.5" /> Delete
+                      </SmallBtn>
                     </>}>
                     <div className="mb-1.5 flex items-start justify-between">
                       <div className="text-base font-extrabold text-slate-800">{s.name}</div>
@@ -1163,8 +1177,12 @@ function StudentsView({ batch, section, toast }) {
                         </td>
                         <td className="whitespace-nowrap border-b border-slate-200 px-3.5 py-3">
                           <div className="flex gap-1.5">
-                            <SmallBtn onClick={() => setModal(s)}>Edit</SmallBtn>
-                            <SmallBtn danger onClick={() => setDelTarget(s)}>Remove</SmallBtn>
+                            <SmallBtn onClick={() => setModal(s)}>
+                              <Icon name="edit" className="h-3.5 w-3.5" /> Edit
+                            </SmallBtn>
+                            <SmallBtn danger onClick={() => setDelTarget(s)}>
+                              <Icon name="trash" className="h-3.5 w-3.5" /> Remove
+                            </SmallBtn>
                           </div>
                         </td>
                       </tr>

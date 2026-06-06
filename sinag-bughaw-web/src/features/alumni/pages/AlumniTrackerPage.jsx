@@ -343,7 +343,7 @@ export default function AlumniTrackerPage() {
         {batchFromYearbook && (
           <div style={{ marginTop: 24 }}>
             <Link
-              to={`/yearbook/${batchFromYearbook}`}
+              to={`/yearbook/${batchFromYearbook}/view`}
               style={{
                 display: 'inline-flex', alignItems: 'center', gap: 8,
                 background: 'rgba(253,184,19,0.15)', border: '1.5px solid rgba(253,184,19,0.4)',
