@@ -38,7 +38,6 @@ RUN composer install \
 COPY . .
 
 RUN cp .env.example .env \
-    && php artisan key:generate \
     && composer dump-autoload --optimize \
     && mkdir -p storage/framework/cache storage/framework/sessions storage/framework/views storage/logs bootstrap/cache \
     && chown -R www-data:www-data storage bootstrap/cache \
