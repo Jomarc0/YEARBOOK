@@ -3,6 +3,9 @@ set -e
 
 mkdir -p storage/framework/cache storage/framework/sessions storage/framework/views storage/logs bootstrap/cache
 
+# Fix permissions
+chmod -R 777 storage bootstrap/cache
+
 cat > .env << EOF
 APP_NAME="${APP_NAME}"
 APP_ENV="${APP_ENV}"
@@ -80,7 +83,8 @@ php artisan config:clear
 php artisan route:clear
 php artisan view:clear
 
-php artisan migrate --force || true
+php artisan migrate --force 2>/dev/null || echo "Migration skipped"
+php artisan db:seed --class=SettingsSeeder --force 2>/dev/null || echo "Seeder skipped"
 
 php artisan config:cache
 php artisan route:cache
