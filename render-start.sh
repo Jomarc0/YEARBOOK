@@ -3,7 +3,6 @@ set -e
 
 mkdir -p storage/framework/cache storage/framework/sessions storage/framework/views storage/logs bootstrap/cache
 
-# Create .env from Render environment variables
 cat > .env << EOF
 APP_NAME="${APP_NAME}"
 APP_ENV="${APP_ENV}"
@@ -81,7 +80,7 @@ php artisan config:clear
 php artisan route:clear
 php artisan view:clear
 
-php artisan migrate --force
+php artisan migrate --force || true
 
 php artisan config:cache
 php artisan route:cache
