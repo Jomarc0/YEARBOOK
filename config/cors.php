@@ -16,6 +16,8 @@ return [
             'http://127.0.0.1:5173',
             'http://localhost:5174',
             'http://127.0.0.1:5174',
+            'https://sinag-bughaw.vercel.app',
+            'https://sinagbughawadmin.vercel.app',
         ],
         array_map('trim', explode(',', env('CORS_ALLOWED_ORIGINS', '')))
     )),
