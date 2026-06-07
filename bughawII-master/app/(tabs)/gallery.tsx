@@ -5,7 +5,7 @@ import { StatusBar } from 'expo-status-bar';
 import { FontAwesome } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import * as ImagePicker from 'expo-image-picker';
-import { faceSearch, getErrorMessage, getGallery, getGalleryAlbum, getGraduationAlbum, getGraduationGallery, getProfileStorageUsage, imageUrl, paginationMeta, unwrap } from '../../lib/api';
+import { faceSearch, getAppConfig, getErrorMessage, getGallery, getGalleryAlbum, getGraduationAlbum, getGraduationGallery, getProfileStorageUsage, imageUrl, paginationMeta, unwrap } from '../../lib/api';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import FilterDropdown from '../../components/FilterDropdown';
 
@@ -65,6 +65,12 @@ const mediaCountLabel = (category?: string | null) => {
   if (category === 'videos' || category === 'mass') return 'videos';
   return 'photos';
 };
+const normalizeFaceScore = (value: any) => {
+  const score = Number(value || 0);
+  if (!Number.isFinite(score) || score <= 0) return 0;
+  return score <= 1 ? score * 100 : score;
+};
+const faceScore = (item: any) => normalizeFaceScore(item?.similarity ?? item?.confidence ?? item?.score ?? item?.Similarity);
 const formatBytes = (bytes?: number) => {
   const value = Number(bytes || 0);
   if (value >= 1024 * 1024 * 1024) return `${(value / 1024 / 1024 / 1024).toFixed(1)} GB`;
@@ -91,9 +97,11 @@ export default function GalleryScreen() {
   const [isFaceVisible, setIsFaceVisible] = useState(false);
   const [faceLoading, setFaceLoading] = useState(false);
   const [storageUsage, setStorageUsage] = useState<any>(null);
+  const [appConfig, setAppConfig] = useState<any>(null);
 
   const tab = useMemo(() => TABS.find((item) => item.key === activeTab) || TABS[0], [activeTab]);
   const isGraduation = tab.type === 'graduation';
+  const schoolName = appConfig?.school_name || 'National University Lipa';
 
   const loadAlbums = useCallback(async (nextPage = 1, append = false) => {
     try {
@@ -130,9 +138,18 @@ export default function GalleryScreen() {
   }, [loadAlbums]);
 
   useEffect(() => {
-    getProfileStorageUsage()
-      .then((payload) => setStorageUsage(unwrap(payload)))
-      .catch(() => setStorageUsage(null));
+    let active = true;
+
+    Promise.all([
+      getProfileStorageUsage().catch(() => null),
+      getAppConfig().catch(() => null),
+    ]).then(([storagePayload, configPayload]) => {
+      if (!active) return;
+      setStorageUsage(storagePayload ? unwrap(storagePayload) : null);
+      setAppConfig(configPayload ? unwrap(configPayload) : null);
+    });
+
+    return () => { active = false; };
   }, []);
 
   const switchTab = (key: string) => {
@@ -199,7 +216,9 @@ export default function GalleryScreen() {
       const payload = await faceSearch(form);
       const data = unwrap(payload);
       const results = Array.isArray(data) ? data : data?.photos || data?.matches || [];
-      setFaceResults(Array.isArray(results) ? results : []);
+      const normalizedResults = Array.isArray(results) ? results : [];
+      setFaceResults(normalizedResults);
+      Haptics.notificationAsync(normalizedResults.length ? Haptics.NotificationFeedbackType.Success : Haptics.NotificationFeedbackType.Warning);
     } catch (requestError: any) {
       Alert.alert('Face search failed', getErrorMessage(requestError, 'Unable to run face search.'));
     } finally {
@@ -210,7 +229,7 @@ export default function GalleryScreen() {
   const heroSubtitle = isGraduation
     ? 'Photos, videos, programs, ceremonies, and memories all in one place.'
     : 'Relive the milestones and pioneer memories through our AI-powered digital gallery.';
-  const heroLabel = isGraduation ? 'CLASS MILESTONES' : 'NATIONAL UNIVERSITY LIPA';
+  const heroLabel = isGraduation ? 'CLASS MILESTONES' : schoolName.toUpperCase();
 
   const renderAlbum = ({ item }: { item: any }) => {
     const media = isGraduation ? graduationMedia(item, tab.category) : albumPhotos(item);
@@ -275,7 +294,7 @@ export default function GalleryScreen() {
                   <View style={styles.ownershipTextWrap}>
                     <Text style={styles.ownershipKicker}>CONTENT OWNERSHIP</Text>
                     <Text style={styles.ownershipText}>
-                      All media in this gallery is the exclusive property of <Text style={styles.ownershipGold}>National University Lipa</Text>
+                      All media in this gallery is the exclusive property of <Text style={styles.ownershipGold}>{schoolName}</Text>
                     </Text>
                   </View>
                   <View style={styles.protectedPill}>
@@ -454,7 +473,7 @@ export default function GalleryScreen() {
                 {photoUrl(item) ? <Image source={photoUrl(item)} style={styles.faceImage} /> : <View style={styles.faceImageFallback} />}
                 <View style={styles.faceInfo}>
                   <Text style={styles.faceName}>{item?.student?.name || item?.name || item?.title || 'Matched photo'}</Text>
-                  <Text style={styles.faceMeta}>{item?.similarity || item?.confidence ? `${Math.round(item.similarity || item.confidence)}% match` : item?.album?.title || 'Gallery match'}</Text>
+                  <Text style={styles.faceMeta}>{faceScore(item) ? `${Math.round(faceScore(item))}% match` : item?.album?.title || 'Gallery match'}</Text>
                 </View>
                 <FontAwesome name="chevron-right" size={14} color="#94a3b8" />
               </TouchableOpacity>

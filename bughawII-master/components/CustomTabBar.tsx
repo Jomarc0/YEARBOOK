@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import {
+  AppState,
   ScrollView,
   StyleSheet,
   Text,
@@ -10,8 +11,10 @@ import { BottomTabBarProps } from "@react-navigation/bottom-tabs";
 import { FontAwesome } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { useRouter } from "expo-router";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { useFocusEffect } from "@react-navigation/native";
 import { colors } from "./webTheme";
-import { getMessagesUnreadCount, getNotifications, unwrap } from "../lib/api";
+import { getAppConfig, getMessagesUnreadCount, getNotifications, unwrap } from "../lib/api";
 
 const VISIBLE_TABS = ["home", "directory", "faculty", "gallery", "sections", "discovery", "analytics"];
 const TAB_ICONS: Record<string, any> = {
@@ -30,49 +33,75 @@ export const CustomTabBar = ({
   navigation,
 }: BottomTabBarProps) => {
   const router = useRouter();
-  const visibleRoutes = state.routes.filter((route) => VISIBLE_TABS.includes(route.name));
   const [unreadMessages, setUnreadMessages] = useState(0);
   const [unreadNotifications, setUnreadNotifications] = useState(0);
+  const [config, setConfig] = useState<any>(null);
+  const features = config?.features || {};
+  const directoryEnabled = features.enable_student_directory_search !== false;
+  const yearbookName = config?.yearbook_name || "Sinag-Bughaw";
+  const schoolName = config?.school_name || "National University Lipa";
+  const visibleRoutes = state.routes.filter((route) => {
+    if (!VISIBLE_TABS.includes(route.name)) return false;
+    if (route.name === "directory") return directoryEnabled;
+    return true;
+  });
+
+  const loadBadges = React.useCallback(async () => {
+    try {
+      const [messagePayload, notificationPayload] = await Promise.allSettled([
+        getMessagesUnreadCount(),
+        getNotifications(),
+      ]);
+
+      if (messagePayload.status === "fulfilled") {
+        const data = unwrap(messagePayload.value);
+        setUnreadMessages(Number(data?.count ?? data?.unread_count ?? data ?? 0) || 0);
+      }
+
+      if (notificationPayload.status === "fulfilled") {
+        const data = unwrap(notificationPayload.value);
+        const list = Array.isArray(data) ? data : data?.data || [];
+        setUnreadNotifications(
+          list.filter((item: any) => !item?.read_at && item?.read !== true && item?.is_read !== true).length
+        );
+      }
+    } catch {
+      setUnreadMessages(0);
+      setUnreadNotifications(0);
+    }
+  }, []);
+
+  useFocusEffect(
+    React.useCallback(() => {
+      loadBadges();
+    }, [loadBadges])
+  );
+
+  useEffect(() => {
+    loadBadges();
+    const timer = setInterval(loadBadges, 45000);
+    const subscription = AppState.addEventListener("change", (status) => {
+      if (status === "active") loadBadges();
+    });
+
+    return () => {
+      clearInterval(timer);
+      subscription.remove();
+    };
+  }, [loadBadges]);
 
   useEffect(() => {
     let active = true;
 
-    const loadBadges = async () => {
-      try {
-        const [messagePayload, notificationPayload] = await Promise.allSettled([
-          getMessagesUnreadCount(),
-          getNotifications(),
-        ]);
+    getAppConfig()
+      .then((payload) => {
+        if (active) setConfig(unwrap(payload));
+      })
+      .catch(() => {
+        if (active) setConfig(null);
+      });
 
-        if (!active) return;
-
-        if (messagePayload.status === "fulfilled") {
-          const data = unwrap(messagePayload.value);
-          setUnreadMessages(Number(data?.count ?? data?.unread_count ?? data ?? 0) || 0);
-        }
-
-        if (notificationPayload.status === "fulfilled") {
-          const data = unwrap(notificationPayload.value);
-          const list = Array.isArray(data) ? data : data?.data || [];
-          setUnreadNotifications(
-            list.filter((item: any) => !item?.read_at && item?.read !== true && item?.is_read !== true).length
-          );
-        }
-      } catch {
-        if (active) {
-          setUnreadMessages(0);
-          setUnreadNotifications(0);
-        }
-      }
-    };
-
-    loadBadges();
-    const timer = setInterval(loadBadges, 45000);
-
-    return () => {
-      active = false;
-      clearInterval(timer);
-    };
+    return () => { active = false; };
   }, []);
 
   const renderBadge = (count: number) => {
@@ -85,12 +114,49 @@ export const CustomTabBar = ({
   };
 
   return (
-    <View style={styles.tabBarContainer}>
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.navContent}
-      >
+    <SafeAreaView style={styles.navbar} edges={["top", "left", "right"]}>
+      <View style={styles.topRow}>
+        <TouchableOpacity
+          style={styles.brand}
+          activeOpacity={0.86}
+          onPress={() => navigation.navigate("home")}
+        >
+          <View style={styles.logoMark}>
+            <Text style={styles.logoText}>NU</Text>
+          </View>
+          <View>
+            <Text style={styles.brandTitle} numberOfLines={1}>{yearbookName.replace(/\s*Digital Yearbook/i, "").toUpperCase()}</Text>
+            <Text style={styles.brandSub} numberOfLines={1}>{schoolName.toUpperCase()}</Text>
+          </View>
+        </TouchableOpacity>
+
+        <View style={styles.actions}>
+          <TouchableOpacity
+            style={styles.actionButton}
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              router.push("/notifications");
+            }}
+            activeOpacity={0.86}
+          >
+            <FontAwesome name="bell" size={15} color={colors.navy} />
+            {renderBadge(unreadNotifications)}
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.actionButton}
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              router.push("/messages");
+            }}
+            activeOpacity={0.86}
+          >
+            <FontAwesome name="commenting" size={15} color={colors.navy} />
+            {renderBadge(unreadMessages)}
+          </TouchableOpacity>
+        </View>
+      </View>
+
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.navContent}>
         {visibleRoutes.map((route) => {
           const routeIndex = state.routes.findIndex((item) => item.key === route.key);
           const { options } = descriptors[route.key];
@@ -135,70 +201,88 @@ export const CustomTabBar = ({
           );
         })}
       </ScrollView>
-
-      <View style={styles.actions}>
-        <TouchableOpacity
-          style={styles.actionButton}
-          onPress={() => {
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-            router.push("/notifications");
-          }}
-          activeOpacity={0.86}
-        >
-          <FontAwesome name="bell" size={15} color="rgba(255,255,255,0.7)" />
-          {renderBadge(unreadNotifications)}
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.actionButton}
-          onPress={() => {
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-            router.push("/messages");
-          }}
-          activeOpacity={0.86}
-        >
-          <FontAwesome name="commenting" size={15} color="rgba(255,255,255,0.7)" />
-          {renderBadge(unreadMessages)}
-        </TouchableOpacity>
-      </View>
-    </View>
+    </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
-  tabBarContainer: {
+  navbar: {
+    backgroundColor: colors.navy,
+    shadowColor: "#0f172a",
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.16,
+    shadowRadius: 16,
+    elevation: 12,
+  },
+  topRow: {
+    minHeight: 58,
     flexDirection: "row",
     alignItems: "center",
-    height: 60,
-    backgroundColor: colors.navy,
-    borderTopWidth: 0,
-    paddingLeft: 10,
-    paddingRight: 12,
-    shadowColor: "#0f172a",
-    shadowOffset: { width: 0, height: -5 },
-    shadowOpacity: 0.14,
-    shadowRadius: 14,
-    elevation: 12,
+    justifyContent: "space-between",
+    paddingHorizontal: 14,
+    paddingTop: 8,
+  },
+  brand: {
+    flex: 1,
+    minWidth: 0,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 9,
+  },
+  logoMark: {
+    width: 34,
+    height: 34,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "rgba(253,184,19,0.45)",
+    backgroundColor: "rgba(255,255,255,0.08)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  logoText: {
+    color: colors.gold,
+    fontSize: 11,
+    fontWeight: "900",
+  },
+  brandTitle: {
+    color: "#ffffff",
+    fontSize: 13,
+    fontWeight: "900",
+    letterSpacing: 0.8,
+  },
+  brandSub: {
+    color: colors.gold,
+    fontSize: 8,
+    fontWeight: "900",
+    letterSpacing: 1.2,
+    marginTop: 1,
   },
   navContent: {
     alignItems: "center",
-    gap: 5,
-    paddingRight: 10,
+    gap: 7,
+    paddingHorizontal: 12,
+    paddingTop: 6,
+    paddingBottom: 10,
   },
   tabItem: {
-    minWidth: 64,
-    height: 50,
-    paddingHorizontal: 10,
-    borderRadius: 12,
+    minWidth: 78,
+    height: 40,
+    paddingHorizontal: 12,
+    borderRadius: 13,
     justifyContent: "center",
     alignItems: "center",
-    gap: 3,
+    flexDirection: "row",
+    gap: 7,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
   },
   tabItemActive: {
-    backgroundColor: "rgba(255,255,255,0.11)",
+    backgroundColor: "rgba(255,255,255,0.14)",
+    borderColor: "rgba(253,184,19,0.32)",
   },
   label: {
     color: "rgba(255,255,255,0.68)",
-    fontSize: 10,
+    fontSize: 11,
     fontWeight: "800",
   },
   labelActive: {
@@ -208,14 +292,14 @@ const styles = StyleSheet.create({
   actions: {
     flexDirection: "row",
     alignItems: "center",
-    paddingLeft: 8,
-    borderLeftWidth: 1,
-    borderLeftColor: "rgba(255,255,255,0.12)",
+    gap: 8,
+    marginLeft: 10,
   },
   actionButton: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
+    width: 39,
+    height: 39,
+    borderRadius: 20,
+    backgroundColor: "#f8fafc",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -229,7 +313,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
     backgroundColor: colors.gold,
     borderWidth: 2,
-    borderColor: colors.navy,
+    borderColor: "#f8fafc",
     alignItems: "center",
     justifyContent: "center",
   },

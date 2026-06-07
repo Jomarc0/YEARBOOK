@@ -1,12 +1,28 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { useRouter } from 'expo-router';
 import { FontAwesome } from '@expo/vector-icons';
+import { getAppConfig, unwrap } from '../lib/api';
 
 export default function NotFoundScreen() {
   const router = useRouter();
+  const [config, setConfig] = useState<any>(null);
+  const schoolName = config?.school_name || 'National University Lipa';
+  const yearbookName = config?.yearbook_name || 'Sinag-Bughaw Digital Yearbook';
+
+  useEffect(() => {
+    let active = true;
+
+    getAppConfig()
+      .then((payload) => {
+        if (active) setConfig(unwrap(payload));
+      })
+      .catch(() => {});
+
+    return () => { active = false; };
+  }, []);
 
   return (
     <SafeAreaView style={styles.screen}>
@@ -20,7 +36,7 @@ export default function NotFoundScreen() {
           <Text style={styles.buttonText}>Go Back Home</Text>
         </TouchableOpacity>
       </View>
-      <Text style={styles.footer}>© 2026 National University Lipa - Sinag-Bughaw</Text>
+      <Text style={styles.footer}>(c) 2026 {schoolName} - {yearbookName.replace(/\s*Digital Yearbook/i, '')}</Text>
     </SafeAreaView>
   );
 }

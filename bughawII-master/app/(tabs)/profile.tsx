@@ -1,10 +1,10 @@
 import React, { useCallback, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, Animated, Dimensions, FlatList, KeyboardAvoidingView, Modal, Platform, RefreshControl, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, Animated, Dimensions, FlatList, KeyboardAvoidingView, Linking, Modal, Platform, RefreshControl, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
 import { FontAwesome } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import * as Haptics from 'expo-haptics';
 import { useFocusEffect } from '@react-navigation/native';
@@ -12,9 +12,11 @@ import { createAudioPlayer } from 'expo-audio';
 import {
   clearSession,
   fetchCurrentUser,
+  getAppConfig,
   getBatchmates,
   getCurrentUser,
   getErrorMessage,
+  getProfileStorageUsage,
   getStudent,
   getStudentAchievements,
   getStudentPosts,
@@ -74,6 +76,27 @@ const listFromPayload = (payload: any) => {
 };
 const formatDuration = (seconds?: number) => seconds ? `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}` : null;
 const audioUrl = (note: any) => imageUrl(note?.audio_url || note?.audio_path);
+const isVideoPath = (uri?: string | null) => Boolean(uri && /\.(mp4|mov|webm|avi|mkv)(\?|$)/i.test(uri));
+const isVideoMedia = (media: any) => {
+  const resource = String(media?.resource_type || '').toLowerCase();
+  const mime = String(media?.mimeType || media?.mime_type || '').toLowerCase();
+  const path = String(media?.file_path || media?.url || media?.uri || '').toLowerCase();
+  return resource === 'video' || mime.startsWith('video/') || isVideoPath(path);
+};
+const postMediaItems = (post: any) => {
+  if (Array.isArray(post?.media) && post.media.length) return post.media;
+  const path = post?.file_path || post?.url || post?.path;
+  return path ? [{ file_path: path, resource_type: post?.ai_metadata?.resource_type }] : [];
+};
+const mediaSource = (media: any) => imageUrl(media?.file_path || media?.url || media?.path || media?.uri);
+const formatBytes = (bytes?: number) => {
+  const value = Number(bytes || 0);
+  if (value >= 1024 * 1024 * 1024) return `${(value / 1024 / 1024 / 1024).toFixed(1)} GB`;
+  if (value >= 1024 * 1024) return `${(value / 1024 / 1024).toFixed(1)} MB`;
+  if (value >= 1024) return `${(value / 1024).toFixed(1)} KB`;
+  return `${value} B`;
+};
+const storagePercent = (usage: any) => Math.min(100, Math.round((Number(usage?.used_bytes || 0) / Math.max(Number(usage?.limit_bytes || 1), 1)) * 100));
 
 const normalizeAchievement = (item: any) => {
   let meta: any = {};
@@ -99,12 +122,17 @@ function Avatar({ user, size = 104 }: { user: any; size?: number }) {
 
 export default function ProfileScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams();
+  const requestedTab = typeof params.tab === 'string' ? params.tab : '';
+  const requestedPhotoId = typeof params.photoId === 'string' ? params.photoId : '';
+  const requestedPhotoUrl = typeof params.photoUrl === 'string' ? params.photoUrl : '';
   const [user, setUser] = useState<any>(null);
   const [posts, setPosts] = useState<any[]>([]);
   const [taggedPhotos, setTaggedPhotos] = useState<any[]>([]);
   const [achievements, setAchievements] = useState<any[]>([]);
   const [voiceNotes, setVoiceNotes] = useState<any[]>([]);
-  const [activeTab, setActiveTab] = useState('posts');
+  const [activeTab, setActiveTab] = useState(requestedTab || 'posts');
+  const [storageUsage, setStorageUsage] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -116,6 +144,7 @@ export default function ProfileScreen() {
   const [postOpen, setPostOpen] = useState(false);
   const [selectedPost, setSelectedPost] = useState<any>(null);
   const [playingVoice, setPlayingVoice] = useState<any>(null);
+  const [appConfig, setAppConfig] = useState<any>(null);
   const playerRef = useRef<any>(null);
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(height)).current;
@@ -144,6 +173,12 @@ export default function ProfileScreen() {
   const [taggedAsset, setTaggedAsset] = useState<any>(null);
   const [taggedCaption, setTaggedCaption] = useState('');
   const [postForm, setPostForm] = useState({ caption: '', visibility: 'public' });
+  const features = appConfig?.features || {};
+  const postsEnabled = features.allow_student_posts !== false;
+  const premiumEnabled = features.enable_premium_subscription !== false;
+  const premiumBadgeEnabled = features.premium_badge_display !== false;
+  const yearbookEnabled = features.enable_flipbook_viewer !== false && features.publish_yearbook !== false;
+  const schoolName = appConfig?.school_name || 'National University Lipa';
 
   const hydrateForms = useCallback((nextUser: any, nextAchievements: any[]) => {
     setForm({
@@ -170,7 +205,11 @@ export default function ProfileScreen() {
       const cached = await getCurrentUser();
       if (cached) setUser(cached);
 
-      const fresh = await fetchCurrentUser();
+      const [fresh, configPayload] = await Promise.all([
+        fetchCurrentUser(),
+        getAppConfig().catch(() => null),
+      ]);
+      if (configPayload) setAppConfig(unwrap(configPayload));
       const userId = fresh?.id || cached?.id;
       const profilePayload = userId ? await getStudent(userId).catch(() => fresh) : fresh;
       const profile = unwrap(profilePayload) || fresh || cached;
@@ -197,6 +236,9 @@ export default function ProfileScreen() {
       setAchievements(nextAchievements);
       setVoiceNotes(nextVoice);
       hydrateForms(mergedProfile, nextAchievements);
+      getProfileStorageUsage()
+        .then((payload) => setStorageUsage(unwrap(payload)))
+        .catch(() => setStorageUsage(null));
     } catch (requestError: any) {
       setError(getErrorMessage(requestError, 'Unable to load your profile.'));
     } finally {
@@ -207,8 +249,9 @@ export default function ProfileScreen() {
 
   useFocusEffect(
     React.useCallback(() => {
+      if (requestedTab && TABS.some((item) => item.key === requestedTab)) setActiveTab(requestedTab);
       loadProfile();
-    }, [loadProfile])
+    }, [loadProfile, requestedTab])
   );
 
   const openSheet = (type: 'settings' | 'password') => {
@@ -266,6 +309,11 @@ export default function ProfileScreen() {
   };
 
   const handlePickPostMedia = async () => {
+    if (!postsEnabled) {
+      Alert.alert('Posts disabled', 'Student posts are currently disabled by platform settings.');
+      return;
+    }
+
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!permission.granted) {
       Alert.alert('Permission needed', 'Allow photo access to upload a post.');
@@ -273,7 +321,7 @@ export default function ProfileScreen() {
     }
 
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images'],
+      mediaTypes: ['images', 'videos'],
       allowsEditing: false,
       allowsMultipleSelection: true,
       selectionLimit: 10,
@@ -293,6 +341,11 @@ export default function ProfileScreen() {
   };
 
   const submitPostUpload = async () => {
+    if (!postsEnabled) {
+      Alert.alert('Posts disabled', 'Student posts are currently disabled by platform settings.');
+      return;
+    }
+
     const assets = uploadAssets.length ? uploadAssets : uploadAsset ? [uploadAsset] : [];
     if (!assets.length) return;
     try {
@@ -310,6 +363,9 @@ export default function ProfileScreen() {
       uploadTaggedUsers.forEach((student) => data.append('tagged_user_ids[]', String(student.id)));
 
       await uploadProfileMedia(data);
+      getProfileStorageUsage()
+        .then((payload) => setStorageUsage(unwrap(payload)))
+        .catch(() => {});
       setUploadOpen(false);
       setUploadAsset(null);
       setUploadAssets([]);
@@ -566,21 +622,23 @@ export default function ProfileScreen() {
 
           <View style={styles.nameRow}>
             <Text style={styles.name}>{fullName(user)}</Text>
-            {isPremium(user) && (
+            {premiumBadgeEnabled && isPremium(user) && (
               <View style={styles.tierBadge}>
                 <FontAwesome name="star" size={10} color="#1d2b4b" />
                 <Text style={styles.tierText}>{user?.tier === 'standard' ? 'Standard' : 'Premium'}</Text>
               </View>
             )}
           </View>
-          <Text style={styles.meta}>{course(user)} · National University Lipa</Text>
+          <Text style={styles.meta}>{course(user)} - {schoolName}</Text>
           {isGraduate(user) ? <Text style={styles.gradBadge}>GRADUATE {graduationYear(user)}</Text> : null}
 
           <View style={styles.actionRow}>
-            <TouchableOpacity style={styles.primaryButton} onPress={() => isPremium(user) ? router.push('/yearbook') : router.push('/payment' as any)}>
-              <FontAwesome name={isPremium(user) ? 'book' : 'star'} size={14} color="#fdb813" />
-              <Text style={styles.primaryButtonText}>{isPremium(user) ? 'View Yearbook' : 'Go Premium'}</Text>
-            </TouchableOpacity>
+            {(premiumEnabled && !isPremium(user)) || (isPremium(user) && yearbookEnabled) ? (
+              <TouchableOpacity style={styles.primaryButton} onPress={() => isPremium(user) ? router.push('/yearbook') : router.push('/payment' as any)}>
+                <FontAwesome name={isPremium(user) ? 'book' : 'star'} size={14} color="#fdb813" />
+                <Text style={styles.primaryButtonText}>{isPremium(user) ? 'View Yearbook' : 'Go Premium'}</Text>
+              </TouchableOpacity>
+            ) : null}
             <TouchableOpacity style={styles.iconButton} onPress={() => openSheet('settings')}>
               <FontAwesome name="pencil" size={16} color="#1d2b4b" />
             </TouchableOpacity>
@@ -621,19 +679,37 @@ export default function ProfileScreen() {
     if (activeTab === 'posts') {
       return (
         <>
-          <View style={styles.postActionRow}>
-            <TouchableOpacity style={styles.uploadButton} onPress={handlePickPostMedia} disabled={saving}>
-              <FontAwesome name="plus" size={13} color="#fdb813" />
-              <Text style={styles.uploadButtonText}>Upload Post</Text>
-            </TouchableOpacity>
-          </View>
+          {postsEnabled ? (
+            <View style={styles.postActionRow}>
+              <TouchableOpacity style={styles.uploadButton} onPress={handlePickPostMedia} disabled={saving}>
+                <FontAwesome name="plus" size={13} color="#fdb813" />
+                <Text style={styles.uploadButtonText}>Upload Post</Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <View style={styles.featureNotice}>
+              <FontAwesome name="lock" size={13} color="#92590e" />
+              <Text style={styles.featureNoticeText}>Student posts are currently disabled.</Text>
+            </View>
+          )}
           {posts.length ? (
             <View style={styles.postGrid}>
               {posts.map((post) => {
-                const media = post?.file_path || post?.media?.[0]?.file_path || post?.media?.[0]?.url;
+                const media = postMediaItems(post)[0];
+                const uri = mediaSource(media);
+                const video = isVideoMedia(media);
                 return (
                   <TouchableOpacity key={String(post?.id)} style={styles.postCell} onPress={() => openPostManager(post)} activeOpacity={0.88}>
-                    {media ? <Image source={imageUrl(media)} style={styles.postImage} contentFit="cover" /> : <FontAwesome name="camera" size={26} color="#cbd5e1" />}
+                    {uri && !video ? (
+                      <Image source={uri} style={styles.postImage} contentFit="cover" />
+                    ) : uri && video ? (
+                      <View style={styles.videoTile}>
+                        <FontAwesome name="video-camera" size={22} color="#fdb813" />
+                        <Text style={styles.videoTileText}>Video</Text>
+                      </View>
+                    ) : (
+                      <FontAwesome name="camera" size={26} color="#cbd5e1" />
+                    )}
                     {!!post?.caption && <View style={styles.captionStrip}><Text style={styles.captionStripText} numberOfLines={1}>{post.caption}</Text></View>}
                   </TouchableOpacity>
                 );
@@ -647,6 +723,15 @@ export default function ProfileScreen() {
     if (activeTab === 'tagged') {
       return (
         <>
+          {requestedPhotoUrl ? (
+            <View style={styles.deepLinkPreview}>
+              <FontAwesome name="image" size={14} color="#fdb813" />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.deepLinkPreviewTitle}>Tagged photo from notification</Text>
+                <Text style={styles.deepLinkPreviewText} numberOfLines={1}>{requestedPhotoUrl}</Text>
+              </View>
+            </View>
+          ) : null}
           <View style={styles.postActionRow}>
             <TouchableOpacity style={styles.uploadButton} onPress={handlePickTaggedPhoto} disabled={saving}>
               <FontAwesome name="tag" size={13} color="#fdb813" />
@@ -657,8 +742,9 @@ export default function ProfileScreen() {
             <View style={styles.taggedGrid}>
               {taggedPhotos.map((photo) => {
                 const photoSource = imageUrl(photo?.photo_url || photo?.photo_path || photo?.file_path);
+                const highlighted = requestedPhotoId && String(photo?.id || photo?.photo_id) === requestedPhotoId;
                 return (
-                  <TouchableOpacity key={String(photo?.id)} style={styles.taggedCell} onLongPress={() => confirmDeleteTaggedPhoto(photo)} activeOpacity={0.9}>
+                  <TouchableOpacity key={String(photo?.id)} style={[styles.taggedCell, highlighted && styles.taggedCellHighlighted]} onLongPress={() => confirmDeleteTaggedPhoto(photo)} activeOpacity={0.9}>
                     {photoSource ? <Image source={photoSource} style={styles.postImage} contentFit="cover" /> : <FontAwesome name="image" size={26} color="#cbd5e1" />}
                     <View style={styles.taggedOverlay}>
                       <FontAwesome name="tag" size={10} color="#fdb813" />
@@ -801,8 +887,10 @@ export default function ProfileScreen() {
       <PostEditorModal
         visible={uploadOpen}
         title="Upload Post"
+        storageUsage={storageUsage}
         imageUri={uploadAsset?.uri}
         imageUris={uploadAssets.map((asset) => asset.uri)}
+        mediaItems={uploadAssets.length ? uploadAssets : uploadAsset ? [uploadAsset] : []}
         postForm={postForm}
         setPostForm={setPostForm}
         tagOptions={uploadTagOptions}
@@ -829,7 +917,8 @@ export default function ProfileScreen() {
       <PostEditorModal
         visible={postOpen}
         title="Edit Post"
-        imageUri={imageUrl(selectedPost?.file_path || selectedPost?.media?.[0]?.file_path || selectedPost?.media?.[0]?.url)}
+        imageUri={mediaSource(postMediaItems(selectedPost)[0])}
+        mediaItems={postMediaItems(selectedPost)}
         postForm={postForm}
         setPostForm={setPostForm}
         tagOptions={uploadTagOptions}
@@ -902,8 +991,10 @@ function PostEditorModal(props: any) {
   const {
     visible,
     title,
+    storageUsage,
     imageUri,
     imageUris = [],
+    mediaItems = [],
     postForm,
     setPostForm,
     tagOptions = [],
@@ -919,7 +1010,13 @@ function PostEditorModal(props: any) {
   } = props;
   const uploadMode = !onDelete;
   const canEditTags = Boolean(setTaggedUsers);
-  const previewUris = imageUris.length ? imageUris : imageUri ? [imageUri] : [];
+  const normalizedMediaItems = mediaItems.length
+    ? mediaItems
+    : (imageUris.length ? imageUris.map((uri: string) => ({ uri })) : imageUri ? [{ uri: imageUri }] : []);
+  const previewUris = normalizedMediaItems.map((item: any) => mediaSource(item)).filter(Boolean);
+  const firstMedia = normalizedMediaItems[0];
+  const firstUri = previewUris[0];
+  const firstIsVideo = isVideoMedia(firstMedia);
   const filteredTags = tagOptions.filter((student: any) => {
     const needle = tagQuery.trim().toLowerCase();
     if (!needle) return true;
@@ -942,20 +1039,56 @@ function PostEditorModal(props: any) {
           <TouchableOpacity onPress={onClose}><FontAwesome name="times" size={20} color="#94a3b8" /></TouchableOpacity>
         </View>
         <ScrollView style={styles.modalBody} contentContainerStyle={{ paddingBottom: 34 }}>
-          {previewUris[0] ? (
+          {uploadMode && storageUsage ? (
+            <View style={styles.storageCard}>
+              <View style={styles.storageTop}>
+                <View style={styles.storageTier}>
+                  <FontAwesome name={storageUsage.tier === 'premium' ? 'star' : storageUsage.tier === 'standard' ? 'bolt' : 'user'} size={12} color="#1d2b4b" />
+                  <Text style={styles.storageTierText}>{storageUsage.tier_label || storageUsage.tier || 'Free'}</Text>
+                </View>
+                <Text style={styles.storagePercentText}>{storagePercent(storageUsage)}% used</Text>
+              </View>
+              <View style={styles.storageTrack}>
+                <View style={[styles.storageFill, { width: `${storagePercent(storageUsage)}%` }]} />
+              </View>
+              <Text style={styles.storageText}>{formatBytes(storageUsage.used_bytes)} of {formatBytes(storageUsage.limit_bytes)} used before this upload.</Text>
+            </View>
+          ) : null}
+          {firstUri ? (
             <>
-              <Image source={previewUris[0]} style={styles.postPreview} contentFit="cover" />
+              {firstIsVideo ? (
+                <View style={styles.videoPreview}>
+                  <FontAwesome name="video-camera" size={30} color="#fdb813" />
+                  <Text style={styles.videoPreviewTitle}>Video post</Text>
+                  <Text style={styles.videoPreviewText} numberOfLines={1}>{String(firstMedia?.fileName || firstMedia?.file_path || firstMedia?.uri || 'Attached video').split('/').pop()}</Text>
+                  {!uploadMode ? (
+                    <TouchableOpacity style={styles.openMediaButton} onPress={() => Linking.openURL(firstUri)}>
+                      <FontAwesome name="external-link" size={12} color="#1d2b4b" />
+                      <Text style={styles.openMediaButtonText}>Open Video</Text>
+                    </TouchableOpacity>
+                  ) : null}
+                </View>
+              ) : (
+                <Image source={firstUri} style={styles.postPreview} contentFit="cover" />
+              )}
               {previewUris.length > 1 ? (
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.previewStrip}>
-                  {previewUris.map((uri: string, index: number) => (
+                  {normalizedMediaItems.map((item: any, index: number) => {
+                    const uri = mediaSource(item);
+                    const video = isVideoMedia(item);
+                    return (
                     <View key={`${uri}-${index}`} style={styles.previewThumbWrap}>
-                      <Image source={uri} style={styles.previewThumb} contentFit="cover" />
+                      {uri && !video ? <Image source={uri} style={styles.previewThumb} contentFit="cover" /> : (
+                        <View style={styles.previewVideoThumb}>
+                          <FontAwesome name="video-camera" size={16} color="#fdb813" />
+                        </View>
+                      )}
                       <Text style={styles.previewThumbBadge}>{index + 1}</Text>
                     </View>
-                  ))}
+                  );})}
                 </ScrollView>
               ) : null}
-              {uploadMode ? <Text style={styles.helperText}>{previewUris.length} photo{previewUris.length === 1 ? '' : 's'} selected.</Text> : null}
+              {uploadMode ? <Text style={styles.helperText}>{previewUris.length} media file{previewUris.length === 1 ? '' : 's'} selected.</Text> : null}
             </>
           ) : null}
           <Text style={styles.inputLabel}>CAPTION</Text>
@@ -1186,20 +1319,34 @@ const styles = StyleSheet.create({
   infoValue: { color: '#1d2b4b', fontSize: 14, fontWeight: '700', marginTop: 3 },
   postGrid: { marginHorizontal: 14, flexDirection: 'row', flexWrap: 'wrap', gap: 3, borderRadius: 18, overflow: 'hidden' },
   postActionRow: { marginHorizontal: 14, marginBottom: 12, alignItems: 'flex-end' },
+  featureNotice: { marginHorizontal: 14, marginBottom: 12, borderRadius: 14, backgroundColor: '#fffbeb', borderWidth: 1, borderColor: '#fde68a', paddingHorizontal: 13, paddingVertical: 11, flexDirection: 'row', alignItems: 'center', gap: 8 },
+  featureNoticeText: { color: '#92590e', fontSize: 12, fontWeight: '900' },
   uploadButton: { height: 42, borderRadius: 13, backgroundColor: '#1d2b4b', flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 15 },
   uploadButtonText: { color: '#ffffff', fontSize: 12, fontWeight: '900' },
   postCell: { width: '32.8%', aspectRatio: 1, backgroundColor: '#e2e8f0', alignItems: 'center', justifyContent: 'center' },
   postImage: { width: '100%', height: '100%' },
+  videoTile: { width: '100%', height: '100%', backgroundColor: '#1d2b4b', alignItems: 'center', justifyContent: 'center', gap: 7 },
+  videoTileText: { color: '#ffffff', fontSize: 11, fontWeight: '900' },
   captionStrip: { position: 'absolute', left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(29,43,75,0.78)', paddingHorizontal: 6, paddingVertical: 4 },
   captionStripText: { color: '#ffffff', fontSize: 10, fontWeight: '800' },
   taggedGrid: { marginHorizontal: 14, flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   taggedCell: { width: '31.9%', aspectRatio: 1, borderRadius: 15, overflow: 'hidden', backgroundColor: '#e2e8f0', alignItems: 'center', justifyContent: 'center' },
+  taggedCellHighlighted: { borderWidth: 3, borderColor: '#fdb813' },
   taggedOverlay: { position: 'absolute', left: 6, right: 6, bottom: 6, minHeight: 24, borderRadius: 9, backgroundColor: 'rgba(29,43,75,0.82)', flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 7 },
   taggedOverlayText: { flex: 1, color: '#ffffff', fontSize: 9, fontWeight: '800' },
+  deepLinkPreview: { marginHorizontal: 14, marginBottom: 12, borderRadius: 16, borderWidth: 1, borderColor: 'rgba(253,184,19,0.45)', backgroundColor: '#fffdf5', padding: 13, flexDirection: 'row', alignItems: 'center', gap: 11 },
+  deepLinkPreviewTitle: { color: '#1d2b4b', fontSize: 13, fontWeight: '900' },
+  deepLinkPreviewText: { color: '#94a3b8', fontSize: 11, marginTop: 2 },
   postPreview: { width: '100%', aspectRatio: 1, borderRadius: 18, backgroundColor: '#e2e8f0', marginBottom: 10 },
+  videoPreview: { width: '100%', aspectRatio: 1, borderRadius: 18, backgroundColor: '#1d2b4b', marginBottom: 10, alignItems: 'center', justifyContent: 'center', padding: 20 },
+  videoPreviewTitle: { color: '#ffffff', fontSize: 18, fontWeight: '900', marginTop: 12 },
+  videoPreviewText: { color: '#cbd5e1', fontSize: 12, marginTop: 6, textAlign: 'center' },
+  openMediaButton: { minHeight: 40, borderRadius: 12, backgroundColor: '#fdb813', paddingHorizontal: 14, flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 16 },
+  openMediaButtonText: { color: '#1d2b4b', fontSize: 12, fontWeight: '900' },
   previewStrip: { gap: 8, paddingBottom: 8 },
   previewThumbWrap: { width: 58, height: 58, borderRadius: 14, overflow: 'hidden', backgroundColor: '#e2e8f0' },
   previewThumb: { width: '100%', height: '100%' },
+  previewVideoThumb: { width: '100%', height: '100%', backgroundColor: '#1d2b4b', alignItems: 'center', justifyContent: 'center' },
   previewThumbBadge: { position: 'absolute', top: 4, right: 4, minWidth: 18, height: 18, borderRadius: 9, overflow: 'hidden', backgroundColor: 'rgba(29,43,75,0.82)', color: '#ffffff', fontSize: 9, fontWeight: '900', textAlign: 'center', lineHeight: 18 },
   audienceRow: { gap: 9, marginBottom: 12 },
   audienceOption: { minHeight: 48, borderRadius: 13, borderWidth: 1, borderColor: '#e2e8f0', flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 13, backgroundColor: '#ffffff' },
@@ -1246,6 +1393,14 @@ const styles = StyleSheet.create({
   input: { minHeight: 46, borderRadius: 13, borderWidth: 1, borderColor: '#e2e8f0', backgroundColor: '#f8fafc', color: '#1d2b4b', paddingHorizontal: 14, fontSize: 14, marginBottom: 10 },
   textArea: { minHeight: 86, textAlignVertical: 'top', paddingTop: 12 },
   helperText: { color: '#94a3b8', fontSize: 12, lineHeight: 18, marginBottom: 2 },
+  storageCard: { margin: 18, marginBottom: 0, borderRadius: 16, borderWidth: 1, borderColor: '#e2e8f0', backgroundColor: '#ffffff', padding: 14 },
+  storageTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 },
+  storageTier: { flexDirection: 'row', alignItems: 'center', gap: 7, borderRadius: 999, backgroundColor: '#fdb813', paddingHorizontal: 10, paddingVertical: 6 },
+  storageTierText: { color: '#1d2b4b', fontSize: 11, fontWeight: '900', textTransform: 'capitalize' },
+  storagePercentText: { color: '#64748b', fontSize: 12, fontWeight: '900' },
+  storageTrack: { height: 8, borderRadius: 999, backgroundColor: '#e2e8f0', overflow: 'hidden' },
+  storageFill: { height: '100%', borderRadius: 999, backgroundColor: '#fdb813' },
+  storageText: { color: '#64748b', fontSize: 12, marginTop: 9 },
   visibilityOption: { borderRadius: 13, borderWidth: 1, borderColor: '#e2e8f0', padding: 13, flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 8 },
   visibilityActive: { borderColor: '#1d2b4b', backgroundColor: '#f8fafc' },
   visibilityTitle: { color: '#1d2b4b', fontSize: 13, fontWeight: '900' },

@@ -14,7 +14,9 @@ return new class extends Migration
         Schema::table('users', function (Blueprint $table) {
             // Idadagdag natin ang profile_picture column.
             // Nullable ito para hindi mag-error ang mga lumang users na wala pang photo.
-            $table->string('profile_picture')->nullable()->after('email');
+            if (! Schema::hasColumn('users', 'profile_picture')) {
+                $table->string('profile_picture')->nullable()->after('email');
+            }
         });
     }
 
@@ -25,7 +27,9 @@ return new class extends Migration
     {
         Schema::table('users', function (Blueprint $table) {
             // Tatanggalin ang column kapag nag-rollback (php artisan migrate:rollback)
-            $table->dropColumn('profile_picture');
+            if (Schema::hasColumn('users', 'profile_picture')) {
+                $table->dropColumn('profile_picture');
+            }
         });
     }
 };

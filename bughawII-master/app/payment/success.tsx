@@ -5,16 +5,31 @@ import { StatusBar } from 'expo-status-bar';
 import { FontAwesome } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { colors, shadows } from '../../components/webTheme';
+import { getAppConfig, unwrap } from '../../lib/api';
 
 export default function PaymentSuccessScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ tier?: string }>();
   const tier = params.tier === 'standard' ? 'Standard' : 'Premium';
+  const [config, setConfig] = React.useState<any>(null);
+  const yearbookName = config?.yearbook_name?.replace(/\s*Digital Yearbook/i, '') || 'Sinag-Bughaw';
 
   useEffect(() => {
     const timer = setTimeout(() => router.replace('/(tabs)/home' as any), 5000);
     return () => clearTimeout(timer);
   }, [router]);
+
+  useEffect(() => {
+    let active = true;
+
+    getAppConfig()
+      .then((payload) => {
+        if (active) setConfig(unwrap(payload));
+      })
+      .catch(() => {});
+
+    return () => { active = false; };
+  }, []);
 
   return (
     <SafeAreaView style={styles.container}>
@@ -24,7 +39,7 @@ export default function PaymentSuccessScreen() {
           <FontAwesome name="check-circle" size={60} color="#22c55e" />
         </View>
         <Text style={styles.title}>Payment Successful!</Text>
-        <Text style={styles.copy}>Your Sinag-Bughaw {tier} access is now active.</Text>
+        <Text style={styles.copy}>Your {yearbookName} {tier} access is now active.</Text>
         <TouchableOpacity style={styles.button} onPress={() => router.replace('/(tabs)/home' as any)}>
           <FontAwesome name="home" size={14} color="#ffffff" />
           <Text style={styles.buttonText}>Go to Home</Text>

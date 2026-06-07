@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Alert, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
@@ -7,7 +7,7 @@ import * as WebBrowser from 'expo-web-browser';
 import { Stack, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { FontAwesome } from '@expo/vector-icons';
-import { acceptConsent, fetchCurrentUser, forgotPassword, getConsentStatus, getErrorMessage, login, resetPassword, saveToken, sendOtp, STORAGE_BASE_URL, verifyOtp, verifyResetOtp } from '../lib/api';
+import { acceptConsent, fetchCurrentUser, forgotPassword, getAppConfig, getConsentStatus, getErrorMessage, login, resetPassword, saveToken, sendOtp, STORAGE_BASE_URL, unwrap, verifyOtp, verifyResetOtp } from '../lib/api';
 
 const emptyOtp = ['', '', '', '', '', ''];
 
@@ -23,6 +23,25 @@ export default function Login() {
   const [loading, setLoading] = useState(false);
   const [showConsent, setShowConsent] = useState(false);
   const [consentChecked, setConsentChecked] = useState(false);
+  const [appConfig, setAppConfig] = useState(null);
+
+  const yearbookName = appConfig?.yearbook_name || 'Sinag-Bughaw Digital Yearbook';
+  const brandName = (yearbookName.replace(/\s*Digital Yearbook/i, '') || 'Sinag-Bughaw').toUpperCase();
+  const schoolName = appConfig?.school_name || 'NU Lipa';
+
+  useEffect(() => {
+    let active = true;
+
+    getAppConfig()
+      .then((response) => {
+        if (active) setAppConfig(unwrap(response));
+      })
+      .catch(() => {});
+
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const handleLogin = async () => {
     if (!email || !password) {
@@ -223,7 +242,7 @@ export default function Login() {
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.flex}>
         <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
           <View style={styles.header}>
-            <Text style={styles.brandKicker}>SINAG-BUGHAW</Text>
+            <Text style={styles.brandKicker}>{brandName}</Text>
             <View style={styles.iconContainer}>
               <FontAwesome name={step === 'otp' ? 'envelope-open-o' : 'lock'} size={30} color="#1d2b4b" />
             </View>
@@ -236,8 +255,8 @@ export default function Login() {
                   : step === 'resetOtp'
                     ? `Enter the reset code sent to ${email}.`
                     : step === 'resetPassword'
-                      ? 'Choose a new password for your Sinag-Bughaw account.'
-                  : 'Sign in to your Sinag-Bughaw account.'}
+                      ? `Choose a new password for your ${brandName} account.`
+                  : `Sign in to your ${brandName} account.`}
             </Text>
           </View>
 
@@ -245,7 +264,7 @@ export default function Login() {
             <View style={styles.consentCard}>
               <Text style={styles.consentTitle}>Data Privacy Act of 2012</Text>
               <Text style={styles.consentText}>
-                NU Lipa may process your name, photograph, course, academic details, and uploaded content for the Sinag-Bughaw Digital Yearbook. Your data is stored securely and used only for yearbook platform features.
+                {schoolName} may process your name, photograph, course, academic details, and uploaded content for the {yearbookName}. Your data is stored securely and used only for yearbook platform features.
               </Text>
               <TouchableOpacity style={styles.checkRow} onPress={() => setConsentChecked((value) => !value)}>
                 <FontAwesome name={consentChecked ? 'check-square' : 'square-o'} size={20} color="#1d2b4b" />

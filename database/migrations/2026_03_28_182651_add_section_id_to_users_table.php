@@ -10,15 +10,19 @@ return new class extends Migration
     {
         Schema::table('users', function (Blueprint $table) {
             // Ito ang magkakabit sa User at Section
-            $table->foreignId('section_id')->nullable()->constrained()->onDelete('set null');
+            if (! Schema::hasColumn('users', 'section_id')) {
+                $table->foreignId('section_id')->nullable()->constrained()->onDelete('set null');
+            }
         });
     }
 
     public function down(): void
     {
         Schema::table('users', function (Blueprint $table) {
-            $table->dropForeign(['section_id']);
-            $table->dropColumn('section_id');
+            if (Schema::hasColumn('users', 'section_id')) {
+                $table->dropForeign(['section_id']);
+                $table->dropColumn('section_id');
+            }
         });
     }
 };

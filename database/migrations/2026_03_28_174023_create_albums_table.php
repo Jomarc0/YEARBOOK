@@ -17,6 +17,27 @@ return new class extends Migration
 {
     public function up(): void
     {
+        if (! Schema::hasTable('albums')) {
+            Schema::create('albums', function (Blueprint $table) {
+                $table->id();
+                $table->foreignId('user_id')
+                    ->nullable()
+                    ->constrained('users')
+                    ->nullOnDelete();
+                $table->string('title');
+                $table->text('description')->nullable();
+                $table->string('cover_image')->nullable();
+                $table->date('event_date')->nullable();
+                $table->string('type')->default('general');
+                $table->string('category')->nullable();
+                $table->text('media_url')->nullable();
+                $table->string('cloudinary_public_id')->nullable();
+                $table->timestamps();
+            });
+
+            return;
+        }
+
         Schema::table('albums', function (Blueprint $table) {
             if (! Schema::hasColumn('albums', 'user_id')) {
                 $table->foreignId('user_id')
@@ -37,21 +58,34 @@ return new class extends Migration
             if (! Schema::hasColumn('albums', 'cloudinary_public_id')) {
                 $table->string('cloudinary_public_id')->nullable()->after('media_url');
             }
-            // Make cover_image nullable so albums can exist before a cover is set
-            $table->string('cover_image')->nullable()->change();
-            // Make event_date nullable
-            $table->date('event_date')->nullable()->change();
+            if (Schema::hasColumn('albums', 'cover_image')) {
+                $table->string('cover_image')->nullable()->change();
+            }
+            if (Schema::hasColumn('albums', 'event_date')) {
+                $table->date('event_date')->nullable()->change();
+            }
         });
     }
 
     public function down(): void
     {
+        if (! Schema::hasTable('albums')) {
+            return;
+        }
+
         Schema::table('albums', function (Blueprint $table) {
-            $table->dropForeign(['user_id']);
-            $table->dropColumn([
-                'user_id', 'type', 'category',
-                'media_url', 'cloudinary_public_id',
-            ]);
+            if (Schema::hasColumn('albums', 'user_id')) {
+                $table->dropForeign(['user_id']);
+            }
+
+            $columns = array_filter(
+                ['user_id', 'type', 'category', 'media_url', 'cloudinary_public_id'],
+                fn ($column) => Schema::hasColumn('albums', $column)
+            );
+
+            if ($columns) {
+                $table->dropColumn($columns);
+            }
         });
     }
 };

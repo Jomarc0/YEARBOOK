@@ -3,11 +3,12 @@ import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { FontAwesome } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { colors, shadows } from '../../components/webTheme';
 
 export default function PaymentCancelScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams<{ plan?: string }>();
 
   return (
     <SafeAreaView style={styles.container}>
@@ -18,7 +19,7 @@ export default function PaymentCancelScreen() {
         </View>
         <Text style={styles.title}>Payment Cancelled</Text>
         <Text style={styles.copy}>Your payment was not completed.</Text>
-        <TouchableOpacity style={styles.button} onPress={() => router.replace('/payment' as any)}>
+        <TouchableOpacity style={styles.button} onPress={() => router.replace({ pathname: '/payment', params: params.plan ? { plan: params.plan } : undefined } as any)}>
           <FontAwesome name="refresh" size={14} color="#ffffff" />
           <Text style={styles.buttonText}>Try Again</Text>
         </TouchableOpacity>

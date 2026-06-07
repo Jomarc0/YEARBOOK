@@ -8,31 +8,55 @@ return new class extends Migration
 {
     public function up(): void
     {
+        if (! Schema::hasTable('photos')) {
+            return;
+        }
+
         Schema::table('photos', function (Blueprint $table) {
             // Who uploaded this photo (nullable so existing album-only photos are unaffected)
-            $table->foreignId('user_id')
-                  ->nullable()
-                  ->after('album_id')
-                  ->constrained('users')
-                  ->nullOnDelete();
+            if (! Schema::hasColumn('photos', 'user_id')) {
+                $table->foreignId('user_id')
+                      ->nullable()
+                      ->after('album_id')
+                      ->constrained('users')
+                      ->nullOnDelete();
+            }
 
             // public | friends | private
-            $table->enum('visibility', ['public', 'friends', 'private'])
-                  ->default('public')
-                  ->after('caption');
+            if (! Schema::hasColumn('photos', 'visibility')) {
+                $table->enum('visibility', ['public', 'friends', 'private'])
+                      ->default('public')
+                      ->after('caption');
+            }
 
             // true = uploaded from Profile page, false = uploaded from Gallery
-            $table->boolean('is_profile_post')
-                  ->default(false)
-                  ->after('visibility');
+            if (! Schema::hasColumn('photos', 'is_profile_post')) {
+                $table->boolean('is_profile_post')
+                      ->default(false)
+                      ->after('visibility');
+            }
         });
     }
 
     public function down(): void
     {
+        if (! Schema::hasTable('photos')) {
+            return;
+        }
+
         Schema::table('photos', function (Blueprint $table) {
-            $table->dropForeign(['user_id']);
-            $table->dropColumn(['user_id', 'visibility', 'is_profile_post']);
+            if (Schema::hasColumn('photos', 'user_id')) {
+                $table->dropForeign(['user_id']);
+            }
+
+            $columns = array_filter(
+                ['user_id', 'visibility', 'is_profile_post'],
+                fn ($column) => Schema::hasColumn('photos', $column)
+            );
+
+            if ($columns) {
+                $table->dropColumn($columns);
+            }
         });
     }
 };

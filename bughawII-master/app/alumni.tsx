@@ -1,12 +1,12 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Alert, FlatList, RefreshControl, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, FlatList, Modal, RefreshControl, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { Image } from 'expo-image';
 import { FontAwesome } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
-import { getAlumni, getAlumniYearbookEntry, getErrorMessage, imageUrl, paginationMeta, unwrap } from '../lib/api';
+import { getAlumni, getAlumniMe, getAlumniYearbookEntry, getAppConfig, getBatches, getErrorMessage, imageUrl, paginationMeta, unwrap, updateAlumniCareer } from '../lib/api';
 import { colors, shadows } from '../components/webTheme';
 
 const FIELDS = ['All Fields', 'Engineering', 'Business', 'Education', 'Health Sciences', 'Technology', 'Arts', 'Law', 'Other'];
@@ -15,12 +15,28 @@ const alumniName = (item: any) => item?.name || `${item?.first_name || ''} ${ite
 const alumniPhoto = (item: any) => imageUrl(item?.profile_picture || item?.avatar || item?.photo);
 const career = (item: any) => item?.career || {};
 const initials = (name = '') => name.trim().split(/\s+/).slice(0, 2).map((part) => part[0]?.toUpperCase()).join('') || 'NU';
+const batchId = (item: any) => item?.id || item?.batch_id;
+const batchLabel = (item: any) => item?.title || item?.name || `Batch ${item?.year || item?.batch_year || ''}`.trim();
+const flattenBatches = (payload: any) => {
+  const data = unwrap(payload);
+  if (Array.isArray(data)) return data;
+  if (Array.isArray(data?.data)) return data.data;
+  if (!data || typeof data !== 'object') return [];
+  return Object.values(data).flatMap((group: any) => Array.isArray(group) ? group : []);
+};
+const firstParam = (value: string | string[] | undefined) => Array.isArray(value) ? value[0] : value;
 
 export default function AlumniScreen() {
   const router = useRouter();
+  const routeParams = useLocalSearchParams();
+  const requestedBatchParam = firstParam(routeParams.batchId as string | string[] | undefined) || firstParam(routeParams.batch_id as string | string[] | undefined);
+  const highlightedAlumniId = firstParam(routeParams.highlight as string | string[] | undefined) || firstParam(routeParams.highlightId as string | string[] | undefined) || firstParam(routeParams.alumniId as string | string[] | undefined);
   const [alumni, setAlumni] = useState<any[]>([]);
   const [query, setQuery] = useState('');
   const [field, setField] = useState('All Fields');
+  const [selectedBatch, setSelectedBatch] = useState<any>(null);
+  const [batches, setBatches] = useState<any[]>([]);
+  const [batchOpen, setBatchOpen] = useState(false);
   const [page, setPage] = useState(1);
   const [lastPage, setLastPage] = useState(1);
   const [total, setTotal] = useState(0);
@@ -28,11 +44,26 @@ export default function AlumniScreen() {
   const [loadingMore, setLoadingMore] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
+  const [me, setMe] = useState<any>(null);
+  const [careerOpen, setCareerOpen] = useState(false);
+  const [careerSaving, setCareerSaving] = useState(false);
+  const [appConfig, setAppConfig] = useState<any>(null);
+  const [careerForm, setCareerForm] = useState({
+    job_title: '',
+    company: '',
+    location: '',
+    field: '',
+    bio: '',
+  });
 
   const params = useMemo(() => ({
     q: query.trim() || undefined,
     field: field === 'All Fields' ? undefined : field,
-  }), [field, query]);
+    batch_id: selectedBatch ? batchId(selectedBatch) : undefined,
+  }), [field, query, selectedBatch]);
+  const schoolName = appConfig?.school_name || 'National University Lipa';
+  const features = appConfig?.features || {};
+  const yearbookEnabled = features.enable_flipbook_viewer !== false && features.publish_yearbook !== false;
 
   const loadAlumni = useCallback(async (nextPage = 1, append = false) => {
     try {
@@ -63,37 +94,141 @@ export default function AlumniScreen() {
     return () => clearTimeout(timer);
   }, [loadAlumni]);
 
+  useEffect(() => {
+    let active = true;
+
+    getAppConfig()
+      .then((payload) => {
+        if (active) setAppConfig(unwrap(payload));
+      })
+      .catch(() => {
+        if (active) setAppConfig(null);
+      });
+
+    return () => { active = false; };
+  }, []);
+
+  const loadBatches = useCallback(async () => {
+    try {
+      const payload = await getBatches();
+      const nextBatches = flattenBatches(payload);
+      setBatches(nextBatches);
+      if (requestedBatchParam && !selectedBatch) {
+        const matchingBatch = nextBatches.find((item: any) => String(batchId(item)) === String(requestedBatchParam));
+        if (matchingBatch) setSelectedBatch(matchingBatch);
+      }
+    } catch {
+      setBatches([]);
+    }
+  }, [requestedBatchParam, selectedBatch]);
+
+  useEffect(() => {
+    loadBatches();
+  }, [loadBatches]);
+
+  const loadMyAlumniProfile = useCallback(async () => {
+    try {
+      const payload = await getAlumniMe();
+      const profile = unwrap(payload);
+      setMe(profile);
+      const careerProfile = profile?.career || {};
+      setCareerForm({
+        job_title: careerProfile.job_title || '',
+        company: careerProfile.company || '',
+        location: careerProfile.location || '',
+        field: careerProfile.field || '',
+        bio: careerProfile.bio || '',
+      });
+    } catch {
+      setMe(null);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadMyAlumniProfile();
+  }, [loadMyAlumniProfile]);
+
   const cycleField = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     const index = FIELDS.indexOf(field);
     setField(FIELDS[(index + 1) % FIELDS.length]);
   };
 
+  const chooseBatch = (batch: any | null) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setSelectedBatch(batch);
+    setBatchOpen(false);
+  };
+
   const openYearbook = async (item: any) => {
+    if (!yearbookEnabled) {
+      Alert.alert('Yearbook unavailable', 'The digital yearbook is not published yet.');
+      return;
+    }
+
     try {
       const payload = await getAlumniYearbookEntry(item.id);
       const entry = unwrap(payload);
       if (!entry?.batch_id) throw new Error('No yearbook entry found.');
-      router.push({ pathname: '/yearbook', params: { batchId: String(entry.batch_id) } } as any);
+      router.push({
+        pathname: '/yearbook',
+        params: {
+          batchId: String(entry.batch_id),
+          ...(entry.page_index !== undefined && entry.page_index !== null ? { pageIndex: String(entry.page_index) } : {}),
+        },
+      } as any);
     } catch (requestError: any) {
       Alert.alert('Yearbook unavailable', getErrorMessage(requestError, 'No yearbook entry was found for this alumni.'));
     }
   };
 
-  const openProfile = (item: any) => {
+  const openStudentProfile = (item: any) => {
+    router.push({ pathname: '/student/[id]', params: { id: String(item.id), source: 'alumni' } } as any);
+  };
+
+  const openMessage = (item: any) => {
     router.push({ pathname: '/messages', params: { userId: String(item.id), name: alumniName(item) } } as any);
   };
+
+  const updateCareerField = (key: keyof typeof careerForm, value: string) => {
+    setCareerForm((current) => ({ ...current, [key]: value }));
+  };
+
+  const saveCareer = async () => {
+    try {
+      setCareerSaving(true);
+      await updateAlumniCareer(careerForm);
+      setCareerOpen(false);
+      await loadMyAlumniProfile();
+      await loadAlumni(1);
+      Alert.alert('Career updated', 'Your alumni tracker profile has been updated.');
+    } catch (requestError: any) {
+      Alert.alert('Unable to save', getErrorMessage(requestError, 'Please check your details and try again.'));
+    } finally {
+      setCareerSaving(false);
+    }
+  };
+
+  const myCareer = career(me);
 
   const renderHeader = () => (
     <>
       <View style={styles.hero}>
-        <Text style={styles.eyebrow}>National University Lipa</Text>
+        <Text style={styles.eyebrow}>{schoolName}</Text>
         <Text style={styles.heroTitle}>Alumni <Text style={styles.gold}>Tracker</Text></Text>
         <Text style={styles.heroText}>Find batchmates, careers, locations, and their yearbook entries.</Text>
         <View style={styles.statsPill}>
           <FontAwesome name="graduation-cap" size={13} color={colors.gold} />
           <Text style={styles.statsText}>{loading ? 'Loading alumni...' : `${total} alumni`}</Text>
         </View>
+        {requestedBatchParam || highlightedAlumniId ? (
+          <View style={styles.deepLinkPill}>
+            <FontAwesome name="link" size={10} color={colors.gold} />
+            <Text style={styles.deepLinkText}>
+              {highlightedAlumniId ? 'Opened from yearbook link' : 'Filtered from yearbook'}
+            </Text>
+          </View>
+        ) : null}
       </View>
 
       <View style={styles.filters}>
@@ -112,6 +247,29 @@ export default function AlumniScreen() {
           <Text style={styles.fieldText}>{field}</Text>
           <FontAwesome name="refresh" size={11} color="#94a3b8" />
         </TouchableOpacity>
+        <TouchableOpacity style={styles.fieldButton} onPress={() => setBatchOpen(true)}>
+          <FontAwesome name="calendar" size={12} color={colors.gold} />
+          <Text style={styles.fieldText}>{selectedBatch ? batchLabel(selectedBatch) : 'All Batches'}</Text>
+          <FontAwesome name="chevron-down" size={11} color="#94a3b8" />
+        </TouchableOpacity>
+      </View>
+      <View style={styles.myCareerCard}>
+        <View style={styles.myCareerIcon}>
+          <FontAwesome name="briefcase" size={15} color={colors.gold} />
+        </View>
+        <View style={styles.myCareerBody}>
+          <Text style={styles.myCareerLabel}>My alumni profile</Text>
+          <Text style={styles.myCareerTitle} numberOfLines={1}>
+            {myCareer?.job_title || 'Add your career details'}
+          </Text>
+          <Text style={styles.myCareerMeta} numberOfLines={1}>
+            {[myCareer?.company, myCareer?.location, myCareer?.field].filter(Boolean).join(' • ') || 'Help batchmates know where you are now.'}
+          </Text>
+        </View>
+        <TouchableOpacity style={styles.editCareerButton} onPress={() => setCareerOpen(true)}>
+          <FontAwesome name="pencil" size={11} color={colors.navy} />
+          <Text style={styles.editCareerText}>Edit</Text>
+        </TouchableOpacity>
       </View>
       {!!error && <Text style={styles.errorText}>{error}</Text>}
     </>
@@ -124,7 +282,7 @@ export default function AlumniScreen() {
         data={alumni}
         keyExtractor={(item, index) => String(item?.id || index)}
         renderItem={({ item }) => (
-          <View style={styles.card}>
+          <View style={[styles.card, highlightedAlumniId && String(item?.id) === String(highlightedAlumniId) && styles.cardHighlighted]}>
             <View style={styles.avatarWrap}>
               {alumniPhoto(item) ? (
                 <Image source={alumniPhoto(item)} style={styles.avatar} contentFit="cover" />
@@ -141,7 +299,13 @@ export default function AlumniScreen() {
             </View>
             <View style={styles.cardBody}>
               <Text style={styles.name} numberOfLines={1}>{alumniName(item)}</Text>
-              <Text style={styles.meta} numberOfLines={1}>{item?.section || item?.course || 'NU Lipa Alumni'}</Text>
+              {highlightedAlumniId && String(item?.id) === String(highlightedAlumniId) ? (
+                <View style={styles.highlightPill}>
+                  <FontAwesome name="bookmark" size={9} color={colors.navy} />
+                  <Text style={styles.highlightText}>Highlighted</Text>
+                </View>
+              ) : null}
+              <Text style={styles.meta} numberOfLines={1}>{item?.section || item?.course || `${schoolName} Alumni`}</Text>
               <View style={styles.batchPill}>
                 <FontAwesome name="graduation-cap" size={9} color={colors.gold} />
                 <Text style={styles.batchText}>Batch {item?.batch_year || item?.graduation_year || 'NU'}</Text>
@@ -157,15 +321,21 @@ export default function AlumniScreen() {
               )}
 
               <View style={styles.actions}>
-                <TouchableOpacity style={styles.primaryAction} onPress={() => openYearbook(item)}>
-                  <FontAwesome name="book" size={12} color={colors.gold} />
-                  <Text style={styles.primaryActionText}>Yearbook</Text>
+                <TouchableOpacity style={styles.primaryAction} onPress={() => openStudentProfile(item)}>
+                  <FontAwesome name="user" size={12} color={colors.gold} />
+                  <Text style={styles.primaryActionText}>Profile</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.secondaryAction} onPress={() => openProfile(item)}>
-                  <FontAwesome name="comment" size={12} color={colors.indigo} />
-                  <Text style={styles.secondaryActionText}>Message</Text>
-                </TouchableOpacity>
+                {yearbookEnabled ? (
+                  <TouchableOpacity style={styles.secondaryAction} onPress={() => openYearbook(item)}>
+                    <FontAwesome name="book" size={12} color={colors.gold} />
+                    <Text style={styles.secondaryActionText}>Yearbook</Text>
+                  </TouchableOpacity>
+                ) : null}
               </View>
+              <TouchableOpacity style={styles.messageAction} onPress={() => openMessage(item)}>
+                <FontAwesome name="comment" size={12} color={colors.indigo} />
+                <Text style={styles.messageActionText}>Send message</Text>
+              </TouchableOpacity>
             </View>
           </View>
         )}
@@ -185,6 +355,99 @@ export default function AlumniScreen() {
         }}
         onEndReachedThreshold={0.35}
       />
+      <Modal visible={careerOpen} transparent animationType="slide" onRequestClose={() => setCareerOpen(false)}>
+        <View style={styles.modalBackdrop}>
+          <View style={styles.careerSheet}>
+            <View style={styles.sheetHandle} />
+            <View style={styles.sheetHeader}>
+              <View>
+                <Text style={styles.sheetTitle}>Career Profile</Text>
+                <Text style={styles.sheetSub}>This appears in Alumni Tracker.</Text>
+              </View>
+              <TouchableOpacity style={styles.closeButton} onPress={() => setCareerOpen(false)}>
+                <FontAwesome name="times" size={14} color={colors.navy} />
+              </TouchableOpacity>
+            </View>
+
+            <TextInput
+              style={styles.formInput}
+              placeholder="Job title"
+              placeholderTextColor="#94a3b8"
+              value={careerForm.job_title}
+              onChangeText={(value) => updateCareerField('job_title', value)}
+            />
+            <TextInput
+              style={styles.formInput}
+              placeholder="Company"
+              placeholderTextColor="#94a3b8"
+              value={careerForm.company}
+              onChangeText={(value) => updateCareerField('company', value)}
+            />
+            <TextInput
+              style={styles.formInput}
+              placeholder="Location"
+              placeholderTextColor="#94a3b8"
+              value={careerForm.location}
+              onChangeText={(value) => updateCareerField('location', value)}
+            />
+            <TextInput
+              style={styles.formInput}
+              placeholder="Career field"
+              placeholderTextColor="#94a3b8"
+              value={careerForm.field}
+              onChangeText={(value) => updateCareerField('field', value)}
+            />
+            <TextInput
+              style={[styles.formInput, styles.bioInput]}
+              placeholder="Short bio"
+              placeholderTextColor="#94a3b8"
+              value={careerForm.bio}
+              onChangeText={(value) => updateCareerField('bio', value)}
+              multiline
+              textAlignVertical="top"
+            />
+
+            <TouchableOpacity style={[styles.saveCareerButton, careerSaving && styles.disabledButton]} onPress={saveCareer} disabled={careerSaving}>
+              {careerSaving ? <ActivityIndicator color="#ffffff" /> : <Text style={styles.saveCareerText}>Save career profile</Text>}
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+      <Modal visible={batchOpen} transparent animationType="slide" onRequestClose={() => setBatchOpen(false)}>
+        <View style={styles.modalBackdrop}>
+          <View style={styles.batchSheet}>
+            <View style={styles.sheetHandle} />
+            <View style={styles.sheetHeader}>
+              <View>
+                <Text style={styles.sheetTitle}>Filter by Batch</Text>
+                <Text style={styles.sheetSub}>Show alumni from one graduation batch.</Text>
+              </View>
+              <TouchableOpacity style={styles.closeButton} onPress={() => setBatchOpen(false)}>
+                <FontAwesome name="times" size={14} color={colors.navy} />
+              </TouchableOpacity>
+            </View>
+            <TouchableOpacity style={[styles.batchOption, !selectedBatch && styles.batchOptionActive]} onPress={() => chooseBatch(null)}>
+              <Text style={[styles.batchOptionText, !selectedBatch && styles.batchOptionTextActive]}>All Batches</Text>
+              {!selectedBatch ? <FontAwesome name="check" size={13} color={colors.gold} /> : null}
+            </TouchableOpacity>
+            <FlatList
+              data={batches}
+              keyExtractor={(item, index) => String(batchId(item) || index)}
+              renderItem={({ item }) => {
+                const active = selectedBatch && String(batchId(selectedBatch)) === String(batchId(item));
+                return (
+                  <TouchableOpacity style={[styles.batchOption, active && styles.batchOptionActive]} onPress={() => chooseBatch(item)}>
+                    <Text style={[styles.batchOptionText, active && styles.batchOptionTextActive]}>{batchLabel(item)}</Text>
+                    {active ? <FontAwesome name="check" size={13} color={colors.gold} /> : <Text style={styles.batchYear}>{item?.year || item?.batch_year || ''}</Text>}
+                  </TouchableOpacity>
+                );
+              }}
+              ListEmptyComponent={<Text style={styles.noBatches}>No batches available yet.</Text>}
+              style={styles.batchList}
+            />
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -199,13 +462,24 @@ const styles = StyleSheet.create({
   heroText: { color: 'rgba(255,255,255,0.72)', fontSize: 13, textAlign: 'center', lineHeight: 20, marginTop: 8 },
   statsPill: { alignSelf: 'center', marginTop: 16, borderRadius: 999, borderWidth: 1, borderColor: 'rgba(253,184,19,0.34)', backgroundColor: 'rgba(253,184,19,0.12)', paddingHorizontal: 14, paddingVertical: 8, flexDirection: 'row', alignItems: 'center', gap: 8 },
   statsText: { color: '#ffffff', fontSize: 12, fontWeight: '900' },
+  deepLinkPill: { alignSelf: 'center', marginTop: 10, borderRadius: 999, backgroundColor: 'rgba(255,255,255,0.1)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.16)', paddingHorizontal: 12, paddingVertical: 7, flexDirection: 'row', alignItems: 'center', gap: 7 },
+  deepLinkText: { color: 'rgba(255,255,255,0.82)', fontSize: 11, fontWeight: '900' },
   filters: { padding: 18, gap: 10 },
   searchBox: { minHeight: 50, borderRadius: 15, backgroundColor: '#ffffff', borderWidth: 1, borderColor: colors.border, paddingHorizontal: 14, flexDirection: 'row', alignItems: 'center', gap: 10 },
   searchInput: { flex: 1, color: colors.navy, fontSize: 14 },
   fieldButton: { minHeight: 46, borderRadius: 14, backgroundColor: '#ffffff', borderWidth: 1, borderColor: colors.border, paddingHorizontal: 14, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
   fieldText: { color: colors.navy, fontSize: 12, fontWeight: '900' },
+  myCareerCard: { marginHorizontal: 18, marginBottom: 14, backgroundColor: '#ffffff', borderRadius: 18, borderWidth: 1, borderColor: colors.border, padding: 14, flexDirection: 'row', alignItems: 'center', gap: 12, ...shadows.card },
+  myCareerIcon: { width: 42, height: 42, borderRadius: 13, backgroundColor: colors.navy, alignItems: 'center', justifyContent: 'center' },
+  myCareerBody: { flex: 1, minWidth: 0 },
+  myCareerLabel: { color: colors.muted, fontSize: 10, fontWeight: '900', textTransform: 'uppercase', letterSpacing: 0.8 },
+  myCareerTitle: { color: colors.navy, fontSize: 14, fontWeight: '900', marginTop: 3 },
+  myCareerMeta: { color: colors.muted, fontSize: 11, fontWeight: '700', marginTop: 3 },
+  editCareerButton: { height: 36, borderRadius: 12, backgroundColor: colors.gold, paddingHorizontal: 13, flexDirection: 'row', alignItems: 'center', gap: 6 },
+  editCareerText: { color: colors.navy, fontSize: 12, fontWeight: '900' },
   errorText: { color: colors.danger, fontSize: 12, fontWeight: '800', textAlign: 'center', paddingHorizontal: 18, marginBottom: 8 },
   card: { marginHorizontal: 18, marginBottom: 14, backgroundColor: '#ffffff', borderRadius: 20, borderWidth: 1, borderColor: colors.border, padding: 15, flexDirection: 'row', gap: 14, ...shadows.card },
+  cardHighlighted: { borderColor: colors.gold, borderWidth: 2, backgroundColor: '#fffaf0' },
   avatarWrap: { width: 62, height: 62 },
   avatar: { width: 62, height: 62, borderRadius: 18 },
   avatarFallback: { width: 62, height: 62, borderRadius: 18, backgroundColor: colors.navy, alignItems: 'center', justifyContent: 'center' },
@@ -213,6 +487,8 @@ const styles = StyleSheet.create({
   verified: { position: 'absolute', right: -3, bottom: -3, width: 20, height: 20, borderRadius: 10, backgroundColor: colors.indigo, borderWidth: 2, borderColor: '#ffffff', alignItems: 'center', justifyContent: 'center' },
   cardBody: { flex: 1, minWidth: 0 },
   name: { color: colors.navy, fontSize: 16, fontWeight: '900' },
+  highlightPill: { alignSelf: 'flex-start', marginTop: 6, borderRadius: 999, backgroundColor: colors.gold, paddingHorizontal: 8, paddingVertical: 4, flexDirection: 'row', alignItems: 'center', gap: 5 },
+  highlightText: { color: colors.navy, fontSize: 10, fontWeight: '900' },
   meta: { color: colors.muted, fontSize: 12, fontWeight: '700', marginTop: 2 },
   batchPill: { alignSelf: 'flex-start', marginTop: 9, borderRadius: 999, backgroundColor: 'rgba(253,184,19,0.12)', borderWidth: 1, borderColor: 'rgba(253,184,19,0.25)', paddingHorizontal: 9, paddingVertical: 5, flexDirection: 'row', alignItems: 'center', gap: 5 },
   batchText: { color: '#92590e', fontSize: 10, fontWeight: '900' },
@@ -225,6 +501,28 @@ const styles = StyleSheet.create({
   primaryActionText: { color: '#ffffff', fontSize: 12, fontWeight: '900' },
   secondaryAction: { flex: 1, height: 40, borderRadius: 12, backgroundColor: colors.softIndigo, borderWidth: 1, borderColor: '#dbe4ff', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7 },
   secondaryActionText: { color: colors.indigo, fontSize: 12, fontWeight: '900' },
+  messageAction: { height: 36, borderRadius: 11, backgroundColor: '#ffffff', borderWidth: 1, borderColor: colors.border, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7, marginTop: 9 },
+  messageActionText: { color: colors.indigo, fontSize: 12, fontWeight: '900' },
+  modalBackdrop: { flex: 1, backgroundColor: 'rgba(15,23,42,0.42)', justifyContent: 'flex-end' },
+  careerSheet: { backgroundColor: '#ffffff', borderTopLeftRadius: 26, borderTopRightRadius: 26, padding: 20, paddingBottom: 28 },
+  batchSheet: { maxHeight: '72%', backgroundColor: '#ffffff', borderTopLeftRadius: 26, borderTopRightRadius: 26, padding: 20, paddingBottom: 28 },
+  sheetHandle: { alignSelf: 'center', width: 42, height: 5, borderRadius: 999, backgroundColor: '#e2e8f0', marginBottom: 16 },
+  sheetHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 },
+  sheetTitle: { color: colors.navy, fontSize: 20, fontWeight: '900' },
+  sheetSub: { color: colors.muted, fontSize: 12, fontWeight: '700', marginTop: 3 },
+  closeButton: { width: 38, height: 38, borderRadius: 13, backgroundColor: '#f1f5f9', alignItems: 'center', justifyContent: 'center' },
+  formInput: { minHeight: 48, borderRadius: 14, borderWidth: 1, borderColor: colors.border, backgroundColor: '#f8fafc', paddingHorizontal: 14, color: colors.navy, fontSize: 14, fontWeight: '700', marginBottom: 10 },
+  bioInput: { minHeight: 92, paddingTop: 13 },
+  saveCareerButton: { height: 50, borderRadius: 15, backgroundColor: colors.navy, alignItems: 'center', justifyContent: 'center', marginTop: 4 },
+  saveCareerText: { color: '#ffffff', fontSize: 14, fontWeight: '900' },
+  disabledButton: { opacity: 0.65 },
+  batchList: { marginTop: 4 },
+  batchOption: { minHeight: 48, borderRadius: 14, borderWidth: 1, borderColor: colors.border, backgroundColor: '#f8fafc', paddingHorizontal: 14, marginBottom: 9, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  batchOptionActive: { backgroundColor: colors.navy, borderColor: colors.navy },
+  batchOptionText: { color: colors.navy, fontSize: 14, fontWeight: '900' },
+  batchOptionTextActive: { color: '#ffffff' },
+  batchYear: { color: colors.muted, fontSize: 12, fontWeight: '800' },
+  noBatches: { color: colors.muted, fontSize: 13, fontWeight: '700', textAlign: 'center', paddingVertical: 18 },
   empty: { alignItems: 'center', paddingHorizontal: 28, paddingTop: 40 },
   emptyTitle: { color: colors.navy, fontSize: 18, fontWeight: '900', marginTop: 12 },
   emptyText: { color: colors.muted, textAlign: 'center', fontSize: 13, marginTop: 5 },

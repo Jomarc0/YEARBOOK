@@ -45,6 +45,11 @@ export default function MessagesScreen() {
   const [sending, setSending] = useState(false);
   const [error, setError] = useState('');
   const typingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const selectedRef = useRef<any>(null);
+
+  useEffect(() => {
+    selectedRef.current = selected;
+  }, [selected]);
 
   const filteredConversations = useMemo(() => {
     const term = search.trim().toLowerCase();
@@ -76,6 +81,26 @@ export default function MessagesScreen() {
     }
   }, [refreshing]);
 
+  const refreshConversationsQuietly = useCallback(async () => {
+    try {
+      const payload = await getConversations();
+      const data = unwrap(payload);
+      const nextConversations = Array.isArray(data) ? data : [];
+      setConversations(nextConversations);
+
+      const ids = Array.from(new Set([
+        ...nextConversations.map((item) => personId(item, currentUser?.id)),
+        selectedRef.current ? personId(selectedRef.current, currentUser?.id) : null,
+      ].filter(Boolean)));
+      if (ids.length) {
+        const presencePayload = await getPresenceBulk(ids).catch(() => ({}));
+        setPresence(presencePayload || {});
+      }
+    } catch {
+      // Keep the current view stable during background refresh failures.
+    }
+  }, [currentUser?.id]);
+
   useEffect(() => {
     loadConversations();
   }, [loadConversations]);
@@ -104,6 +129,39 @@ export default function MessagesScreen() {
       Alert.alert('Thread unavailable', getErrorMessage(requestError, 'Unable to load this message thread.'));
     }
   }, [currentUser?.id]);
+
+  const refreshThreadQuietly = useCallback(async () => {
+    const conversation = selectedRef.current;
+    const id = conversation ? personId(conversation, currentUser?.id) : null;
+    if (!id) return;
+
+    try {
+      const payload = await getMessageThread(id);
+      const data = unwrap(payload);
+      const messages = Array.isArray(data) ? data : data?.messages || [];
+      setThread((current) => {
+        const currentIds = current.map((item) => String(item?.id));
+        const nextIds = messages.map((item: any) => String(item?.id));
+        const same = currentIds.length === nextIds.length && currentIds.every((item, index) => item === nextIds[index]);
+        return same ? current : messages;
+      });
+      messages
+        .filter((item: any) => !item.is_read && item.receiver_id === currentUser?.id && item.id)
+        .forEach((item: any) => markMessageRead(item.id).catch(() => {}));
+    } catch {
+      // Avoid interrupting active chat while polling.
+    }
+  }, [currentUser?.id]);
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      updatePresence(true).catch(() => {});
+      refreshConversationsQuietly();
+      refreshThreadQuietly();
+    }, selected ? 4500 : 9000);
+
+    return () => clearInterval(timer);
+  }, [refreshConversationsQuietly, refreshThreadQuietly, selected]);
 
   useEffect(() => {
     if (!directUserId) return;
@@ -224,10 +282,12 @@ export default function MessagesScreen() {
             <View style={styles.threadTitleWrap}>
               <Text style={styles.threadTitle} numberOfLines={1}>{personName(selected, currentUser?.id)}</Text>
               <Text style={styles.threadMeta} numberOfLines={1}>
-                {presence[String(personId(selected, currentUser?.id))]?.is_online ? 'Online' : personCourse(selected, currentUser?.id)}
+                {presence[String(personId(selected, currentUser?.id))]?.is_online ? 'Online now' : personCourse(selected, currentUser?.id)} - Live sync
               </Text>
             </View>
-            <View style={{ width: 20 }} />
+            <TouchableOpacity style={styles.refreshThreadButton} onPress={refreshThreadQuietly}>
+              <FontAwesome name="refresh" size={15} color="#1d2b4b" />
+            </TouchableOpacity>
           </View>
           <FlatList
             data={thread}
@@ -288,6 +348,7 @@ const styles = StyleSheet.create({
   threadTitleWrap: { flex: 1, alignItems: 'center', paddingHorizontal: 12 },
   threadTitle: { color: '#1C1C1E', fontWeight: 'bold', fontSize: 18 },
   threadMeta: { color: '#94a3b8', fontSize: 11, fontWeight: '800', marginTop: 2 },
+  refreshThreadButton: { width: 36, height: 36, borderRadius: 12, backgroundColor: '#f4f7fe', alignItems: 'center', justifyContent: 'center' },
   threadContent: { padding: 20 },
   bubble: { alignSelf: 'flex-start', backgroundColor: '#FFFFFF', padding: 12, borderRadius: 16, marginBottom: 10, maxWidth: '82%' },
   mineBubble: { alignSelf: 'flex-end', backgroundColor: '#1d2b4b' },

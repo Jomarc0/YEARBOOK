@@ -26,6 +26,12 @@ const STATUS = {
 
 const transcriptText = (item: any) => item?.transcript_text || item?.transcript || item?.text || item?.content || '';
 const notesText = (item: any) => item?.notes || item?.ai_notes || item?.summary || '';
+const STATUS_FILTERS = [
+  { key: 'all', label: 'All' },
+  { key: 'done', label: 'Ready' },
+  { key: 'processing', label: 'Processing' },
+  { key: 'failed', label: 'Failed' },
+];
 
 export default function TranscriptsScreen() {
   const [items, setItems] = useState<any[]>([]);
@@ -41,9 +47,21 @@ export default function TranscriptsScreen() {
   const [uploadTitle, setUploadTitle] = useState('');
   const [uploadFile, setUploadFile] = useState<any>(null);
   const [detailTab, setDetailTab] = useState<'transcript' | 'notes'>('transcript');
+  const [statusFilter, setStatusFilter] = useState('all');
   const [error, setError] = useState('');
 
   const hasProcessing = useMemo(() => items.some((item) => ['pending', 'processing'].includes(item?.status)), [items]);
+  const filteredItems = useMemo(() => {
+    if (statusFilter === 'all') return items;
+    if (statusFilter === 'processing') return items.filter((item) => ['pending', 'processing'].includes(item?.status));
+    return items.filter((item) => item?.status === statusFilter);
+  }, [items, statusFilter]);
+  const summary = useMemo(() => ({
+    total: items.length,
+    ready: items.filter((item) => item?.status === 'done').length,
+    processing: items.filter((item) => ['pending', 'processing'].includes(item?.status)).length,
+    failed: items.filter((item) => item?.status === 'failed').length,
+  }), [items]);
 
   const loadTranscripts = useCallback(async (nextPage = 1, append = false) => {
     try {
@@ -199,10 +217,26 @@ export default function TranscriptsScreen() {
 
   const renderHeader = () => (
     <View style={styles.listHeader}>
+      <View style={styles.summaryRow}>
+        <SummaryTile label="Total" value={summary.total} icon="files-o" />
+        <SummaryTile label="Ready" value={summary.ready} icon="check" />
+        <SummaryTile label="Working" value={summary.processing} icon="spinner" />
+        <SummaryTile label="Failed" value={summary.failed} icon="warning" />
+      </View>
       <View style={styles.searchContainer}>
         <FontAwesome name="search" size={16} color="#94a3b8" style={styles.searchIcon} />
         <TextInput style={styles.searchInput} placeholder="Search speeches, transcripts, notes..." placeholderTextColor="#94a3b8" value={query} onChangeText={setQuery} />
       </View>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRow}>
+        {STATUS_FILTERS.map((item) => {
+          const active = statusFilter === item.key;
+          return (
+            <TouchableOpacity key={item.key} style={[styles.filterChip, active && styles.filterChipActive]} onPress={() => setStatusFilter(item.key)}>
+              <Text style={[styles.filterChipText, active && styles.filterChipTextActive]}>{item.label}</Text>
+            </TouchableOpacity>
+          );
+        })}
+      </ScrollView>
       <TouchableOpacity style={styles.uploadButton} onPress={() => setUploadOpen(true)}>
         <FontAwesome name="microphone" size={14} color="#fdb813" />
         <Text style={styles.uploadButtonText}>Upload Speech Audio</Text>
@@ -221,7 +255,7 @@ export default function TranscriptsScreen() {
       </View>
 
       <FlatList
-        data={items}
+        data={filteredItems}
         keyExtractor={(item, index) => String(item?.id || index)}
         ListHeaderComponent={renderHeader}
         renderItem={({ item }) => <TranscriptCard item={item} onPress={() => openTranscript(item)} onDelete={() => confirmDelete(item)} />}
@@ -351,6 +385,16 @@ function MetaPill({ icon, text }: { icon: any; text: string }) {
   );
 }
 
+function SummaryTile({ label, value, icon }: { label: string; value: number; icon: any }) {
+  return (
+    <View style={styles.summaryTile}>
+      <FontAwesome name={icon} size={13} color="#fdb813" />
+      <Text style={styles.summaryValue}>{value}</Text>
+      <Text style={styles.summaryLabel}>{label}</Text>
+    </View>
+  );
+}
+
 function TranscriptCard({ item, onPress, onDelete }: { item: any; onPress: () => void; onDelete: () => void }) {
   return (
     <TouchableOpacity style={styles.card} onPress={onPress} activeOpacity={0.88}>
@@ -382,9 +426,18 @@ const styles = StyleSheet.create({
   headerText: { color: '#cbd5e1', fontSize: 13, lineHeight: 20, marginTop: 6 },
   content: { padding: 16, paddingBottom: 40 },
   listHeader: { marginBottom: 12 },
+  summaryRow: { flexDirection: 'row', gap: 8, marginBottom: 12 },
+  summaryTile: { flex: 1, minHeight: 76, borderRadius: 15, backgroundColor: '#ffffff', borderWidth: 1, borderColor: '#e2e8f0', alignItems: 'center', justifyContent: 'center', gap: 3 },
+  summaryValue: { color: '#1d2b4b', fontSize: 18, fontWeight: '900' },
+  summaryLabel: { color: '#94a3b8', fontSize: 10, fontWeight: '900' },
   searchContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#ffffff', borderRadius: 16, paddingHorizontal: 15, height: 52, borderWidth: 1, borderColor: '#e2e8f0', marginBottom: 12 },
   searchIcon: { marginRight: 10 },
   searchInput: { flex: 1, color: '#1d2b4b', fontSize: 14 },
+  filterRow: { gap: 8, paddingBottom: 12 },
+  filterChip: { minHeight: 36, borderRadius: 12, borderWidth: 1, borderColor: '#e2e8f0', backgroundColor: '#ffffff', paddingHorizontal: 14, alignItems: 'center', justifyContent: 'center' },
+  filterChipActive: { backgroundColor: '#1d2b4b', borderColor: '#1d2b4b' },
+  filterChipText: { color: '#64748b', fontSize: 12, fontWeight: '900' },
+  filterChipTextActive: { color: '#fdb813' },
   uploadButton: { height: 48, borderRadius: 15, backgroundColor: '#1d2b4b', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 9 },
   uploadButtonText: { color: '#ffffff', fontSize: 13, fontWeight: '900' },
   processingHint: { color: '#64748b', fontSize: 12, textAlign: 'center', marginTop: 10 },

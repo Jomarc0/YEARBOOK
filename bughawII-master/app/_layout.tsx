@@ -39,6 +39,7 @@ export default function RootLayout() {
       <Stack.Screen name="(tabs)" />
       <Stack.Screen name="messages" />
       <Stack.Screen name="notifications" />
+      <Stack.Screen name="student/[id]" />
       <Stack.Screen name="alumni" />
       <Stack.Screen name="payment" />
       <Stack.Screen name="voice-notes" />

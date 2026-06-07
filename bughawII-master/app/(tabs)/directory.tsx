@@ -7,7 +7,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import * as ImagePicker from 'expo-image-picker';
 import { createAudioPlayer, RecordingPresets, requestRecordingPermissionsAsync, setAudioModeAsync, useAudioRecorder, useAudioRecorderState } from 'expo-audio';
-import { faceSearch, getErrorMessage, getSearchFilters, getStudent, getStudentAchievements, getStudentSuggestions, getStudents, getVoiceNotesForProfile, imageUrl, paginationMeta, sendVoiceNote, unwrap } from '../../lib/api';
+import { getAppConfig, getErrorMessage, getSearchFilters, getStudent, getStudentAchievements, getStudentSuggestions, getStudents, getVoiceNotesForProfile, imageUrl, paginationMeta, searchFace, sendVoiceNote, unwrap } from '../../lib/api';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import FilterDropdown from '../../components/FilterDropdown';
 
@@ -46,6 +46,13 @@ const getStudentYear = (student: any) => student?.batch_year || student?.year_le
 const getStudentPhoto = (student: any) => imageUrl(student?.profile_picture || student?.profile_pic || student?.photo || student?.avatar);
 const getInitials = (name = '') => name.trim().split(/\s+/).map((word) => word[0]?.toUpperCase() || '').slice(0, 2).join('') || 'NU';
 const getRecipientId = (student: any) => student?.user_id || student?.user?.id || student?.id;
+const faceMatchId = (match: any) => match?.user_id || match?.student_id || match?.id;
+const normalizeFaceScore = (value: any) => {
+  const score = Number(value || 0);
+  if (!Number.isFinite(score) || score <= 0) return 0;
+  return score <= 1 ? score * 100 : score;
+};
+const faceScore = (match: any) => normalizeFaceScore(match?.similarity ?? match?.confidence ?? match?.score ?? match?.Similarity);
 const getAudioUrl = (note: any) => imageUrl(note?.audio_url || note?.audio_path || note?.url);
 const formatDuration = (seconds?: number) => {
   if (!seconds) return null;
@@ -77,6 +84,7 @@ export default function DirectoryScreen() {
   const [faceSearching, setFaceSearching] = useState(false);
   const [faceMatches, setFaceMatches] = useState<any[]>([]);
   const [matchedIds, setMatchedIds] = useState<Set<any>>(new Set());
+  const [matchedScores, setMatchedScores] = useState<Record<string, number>>({});
   const [error, setError] = useState('');
   const [selectedStudent, setSelectedStudent] = useState<any>(null);
   const [selectedAchievements, setSelectedAchievements] = useState<any[]>([]);
@@ -87,12 +95,32 @@ export default function DirectoryScreen() {
   const [playingVoiceId, setPlayingVoiceId] = useState<any>(null);
   const [recordedUri, setRecordedUri] = useState<string | null>(null);
   const [isModalVisible, setIsModalVisible] = useState(false);
+  const [appConfig, setAppConfig] = useState<any>(null);
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(height)).current;
   const audioPlayerRef = useRef<any>(null);
   const suggestionTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
   const recorderState = useAudioRecorderState(recorder, 300);
+  const directoryEnabled = appConfig?.features?.enable_student_directory_search !== false;
+  const schoolName = appConfig?.school_name || 'National University Lipa';
+  const yearbookName = appConfig?.yearbook_name || 'Sinag-Bughaw Digital Yearbook';
+
+  useEffect(() => {
+    let mounted = true;
+
+    getAppConfig()
+      .then((payload) => {
+        if (mounted) setAppConfig(unwrap(payload));
+      })
+      .catch(() => {
+        if (mounted) setAppConfig(null);
+      });
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   useEffect(() => {
     if (filter && typeof filter === 'string') setActiveFilter(filter);
@@ -101,6 +129,7 @@ export default function DirectoryScreen() {
   const clearFaceResults = () => {
     setFaceMatches([]);
     setMatchedIds(new Set());
+    setMatchedScores({});
   };
 
   useEffect(() => {
@@ -158,6 +187,15 @@ export default function DirectoryScreen() {
   }, []);
 
   const loadStudents = useCallback(async (nextPage = 1, append = false) => {
+    if (!directoryEnabled) {
+      setStudents([]);
+      setTotal(0);
+      setLoading(false);
+      setRefreshing(false);
+      setLoadingMore(false);
+      return;
+    }
+
     try {
       if (append) setLoadingMore(true);
       else if (!refreshing) setLoading(true);
@@ -185,7 +223,7 @@ export default function DirectoryScreen() {
       setRefreshing(false);
       setLoadingMore(false);
     }
-  }, [activeBatchYear, activeFilter, query, refreshing]);
+  }, [activeBatchYear, activeFilter, directoryEnabled, query, refreshing]);
 
   useEffect(() => {
     const timer = setTimeout(() => loadStudents(1), 350);
@@ -193,15 +231,26 @@ export default function DirectoryScreen() {
   }, [loadStudents]);
 
   const handleFaceSearch = async () => {
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images'],
-      allowsEditing: true,
-      quality: 0.8,
-    });
-
-    if (result.canceled || !result.assets?.[0]) return;
+    if (!directoryEnabled) {
+      Alert.alert('Directory unavailable', 'Student directory search is currently disabled.');
+      return;
+    }
 
     try {
+      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!permission.granted) {
+        Alert.alert('Permission needed', 'Allow photo access to search by face.');
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        allowsEditing: true,
+        quality: 0.85,
+      });
+
+      if (result.canceled || !result.assets?.[0]) return;
+
       setFaceSearching(true);
       clearFaceResults();
       setSuggestions([]);
@@ -214,10 +263,11 @@ export default function DirectoryScreen() {
         type: asset.mimeType || 'image/jpeg',
       } as any);
 
-      const payload = await faceSearch(form);
-      const matches = (payload?.matches || payload?.data?.matches || []).filter((match: any) => match?.user_id || match?.id);
+      const payload = await searchFace(form);
+      const matches = (payload?.matches || payload?.data?.matches || []).filter((match: any) => faceMatchId(match));
       setFaceMatches(matches);
-      setMatchedIds(new Set(matches.map((match: any) => match.user_id || match.id)));
+      setMatchedIds(new Set(matches.map(faceMatchId)));
+      setMatchedScores(Object.fromEntries(matches.map((match: any) => [String(faceMatchId(match)), faceScore(match)])));
 
       const topName = matches[0]?.name;
       if (topName) setQuery(topName);
@@ -370,6 +420,7 @@ export default function DirectoryScreen() {
     const name = getStudentName(item);
     const photo = getStudentPhoto(item);
     const matched = matchedIds.has(getStudentId(item)) || matchedIds.has(item?.user_id);
+    const score = matchedScores[String(getRecipientId(item))] || matchedScores[String(getStudentId(item))];
 
     return (
       <TouchableOpacity
@@ -377,7 +428,12 @@ export default function DirectoryScreen() {
         activeOpacity={0.88}
         onPress={() => {
           Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-          toggleModal(true, item);
+          const id = getRecipientId(item);
+          if (id) {
+            router.push({ pathname: '/student/[id]', params: { id: String(id) } } as any);
+          } else {
+            toggleModal(true, item);
+          }
         }}
       >
         <View style={styles.photoArea}>
@@ -393,7 +449,7 @@ export default function DirectoryScreen() {
           {matched ? (
             <View style={styles.matchBadge}>
               <FontAwesome name="camera" size={9} color="#1d2b4b" />
-              <Text style={styles.matchText}>match</Text>
+              <Text style={styles.matchText}>{score ? `${Math.round(score)}%` : 'match'}</Text>
             </View>
           ) : null}
         </View>
@@ -406,6 +462,27 @@ export default function DirectoryScreen() {
       </TouchableOpacity>
     );
   };
+
+  if (!directoryEnabled) {
+    return (
+      <SafeAreaView style={styles.container} edges={['left', 'right']}>
+        <StatusBar style="dark" />
+        <View style={styles.unavailableWrap}>
+          <View style={styles.unavailableIcon}>
+            <FontAwesome name="lock" size={24} color="#fdb813" />
+          </View>
+          <Text style={styles.unavailableTitle}>Directory Unavailable</Text>
+          <Text style={styles.unavailableText}>
+            Student directory search is currently disabled by platform settings.
+          </Text>
+          <TouchableOpacity style={styles.unavailableButton} onPress={() => router.replace('/(tabs)/home' as any)}>
+            <FontAwesome name="home" size={14} color="#1d2b4b" />
+            <Text style={styles.unavailableButtonText}>Go Home</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container} edges={['left', 'right']}>
@@ -426,8 +503,8 @@ export default function DirectoryScreen() {
                   <FontAwesome name="users" size={10} color="#fdb813" />
                   <Text style={styles.heroBadgeText}>STUDENT DIRECTORY</Text>
                 </View>
-                <Text style={styles.heroTitle}>Sinag-Bughaw <Text style={styles.heroTitleGold}>Pioneers</Text></Text>
-                <Text style={styles.heroSubtitle}>Connecting the innovators of National University Lipa. Built by Pioneers, for Pioneers.</Text>
+                <Text style={styles.heroTitle}>{yearbookName.replace(/\s*Digital Yearbook/i, '')} <Text style={styles.heroTitleGold}>Pioneers</Text></Text>
+                <Text style={styles.heroSubtitle}>Connecting the innovators of {schoolName}. Built by Pioneers, for Pioneers.</Text>
                 <View style={styles.searchShell}>
                   <View style={styles.searchContainer}>
                     <FontAwesome name="search" size={16} color="#fdb813" style={styles.searchIcon} />
@@ -748,6 +825,12 @@ const styles = StyleSheet.create({
   emptyContainer: { marginHorizontal: 18, backgroundColor: '#ffffff', borderRadius: 18, borderWidth: 1, borderColor: '#e2e8f0', paddingVertical: 54, alignItems: 'center' },
   emptyTitle: { color: '#1d2b4b', fontSize: 18, fontWeight: '900', marginTop: 16 },
   emptyText: { color: '#8E8E93', fontSize: 14, textAlign: 'center', marginTop: 6 },
+  unavailableWrap: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 28 },
+  unavailableIcon: { width: 66, height: 66, borderRadius: 20, backgroundColor: '#1d2b4b', alignItems: 'center', justifyContent: 'center', marginBottom: 18 },
+  unavailableTitle: { color: '#1d2b4b', fontSize: 22, fontWeight: '900', textAlign: 'center' },
+  unavailableText: { color: '#64748b', fontSize: 14, lineHeight: 21, textAlign: 'center', marginTop: 8, marginBottom: 20 },
+  unavailableButton: { minHeight: 46, borderRadius: 14, backgroundColor: '#fdb813', paddingHorizontal: 18, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
+  unavailableButtonText: { color: '#1d2b4b', fontSize: 13, fontWeight: '900' },
   modalOverlay: { flex: 1, justifyContent: 'flex-end' },
   absoluteFill: { ...StyleSheet.absoluteFillObject },
   modalContainer: { backgroundColor: 'white', borderTopLeftRadius: 16, borderTopRightRadius: 16, height: height * 0.9, overflow: 'hidden' },

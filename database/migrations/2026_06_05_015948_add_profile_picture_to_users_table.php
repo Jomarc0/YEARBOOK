@@ -9,15 +9,26 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('users', function (Blueprint $table) {
-            $table->string('profile_picture')->nullable()->after('avatar');
-            $table->string('profile_picture_public_id')->nullable()->after('profile_picture');
+            if (! Schema::hasColumn('users', 'profile_picture')) {
+                $table->string('profile_picture')->nullable()->after('avatar');
+            }
+            if (! Schema::hasColumn('users', 'profile_picture_public_id')) {
+                $table->string('profile_picture_public_id')->nullable()->after('profile_picture');
+            }
         });
     }
 
     public function down(): void
     {
         Schema::table('users', function (Blueprint $table) {
-            $table->dropColumn(['profile_picture', 'profile_picture_public_id']);
+            $columns = array_filter(
+                ['profile_picture', 'profile_picture_public_id'],
+                fn ($column) => Schema::hasColumn('users', $column)
+            );
+
+            if ($columns) {
+                $table->dropColumn($columns);
+            }
         });
     }
 };

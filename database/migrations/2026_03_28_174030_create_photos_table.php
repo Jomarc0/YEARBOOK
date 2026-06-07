@@ -15,6 +15,29 @@ return new class extends Migration
 {
     public function up(): void
     {
+        if (! Schema::hasTable('photos')) {
+            Schema::create('photos', function (Blueprint $table) {
+                $table->id();
+                $table->foreignId('album_id')
+                    ->nullable()
+                    ->constrained('albums')
+                    ->nullOnDelete();
+                $table->foreignId('user_id')
+                    ->nullable()
+                    ->constrained('users')
+                    ->nullOnDelete();
+                $table->string('file_path');
+                $table->string('public_id')->nullable();
+                $table->text('caption')->nullable();
+                $table->json('ai_metadata')->nullable();
+                $table->string('visibility')->default('public');
+                $table->boolean('is_profile_post')->default(false);
+                $table->timestamps();
+            });
+
+            return;
+        }
+
         Schema::table('photos', function (Blueprint $table) {
             if (! Schema::hasColumn('photos', 'user_id')) {
                 $table->foreignId('user_id')
@@ -37,9 +60,23 @@ return new class extends Migration
 
     public function down(): void
     {
+        if (! Schema::hasTable('photos')) {
+            return;
+        }
+
         Schema::table('photos', function (Blueprint $table) {
-            $table->dropForeign(['user_id']);
-            $table->dropColumn(['user_id', 'public_id', 'visibility', 'is_profile_post']);
+            if (Schema::hasColumn('photos', 'user_id')) {
+                $table->dropForeign(['user_id']);
+            }
+
+            $columns = array_filter(
+                ['user_id', 'public_id', 'visibility', 'is_profile_post'],
+                fn ($column) => Schema::hasColumn('photos', $column)
+            );
+
+            if ($columns) {
+                $table->dropColumn($columns);
+            }
         });
     }
 };

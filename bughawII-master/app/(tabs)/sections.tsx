@@ -4,7 +4,7 @@ import { StatusBar } from 'expo-status-bar';
 import { useRouter } from 'expo-router';
 import { FontAwesome } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
-import { getBatches, getErrorMessage, getSections, unwrap } from '../../lib/api';
+import { getAppConfig, getBatches, getErrorMessage, getSections, unwrap } from '../../lib/api';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import FilterDropdown from '../../components/FilterDropdown';
 
@@ -54,12 +54,21 @@ export default function SectionsScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
+  const [appConfig, setAppConfig] = useState<any>(null);
+  const features = appConfig?.features || {};
+  const yearbookEnabled = features.enable_flipbook_viewer !== false && features.publish_yearbook !== false;
+  const directoryEnabled = features.enable_student_directory_search !== false;
 
   const loadData = useCallback(async () => {
     try {
       setError('');
       if (!refreshing) setLoading(true);
-      const [sectionPayload, batchPayload] = await Promise.all([getSections(), getBatches()]);
+      const [configPayload, sectionPayload, batchPayload] = await Promise.all([
+        getAppConfig().catch(() => null),
+        getSections(),
+        getBatches(),
+      ]);
+      if (configPayload) setAppConfig(unwrap(configPayload));
       const nextSections = unwrap(sectionPayload);
       setSections(Array.isArray(nextSections) ? nextSections : []);
       setBatches(flattenBatches(batchPayload));
@@ -163,20 +172,34 @@ export default function SectionsScreen() {
           </View>
         </View>
         <View style={styles.divider} />
+        {directoryEnabled ? (
         <TouchableOpacity
           style={styles.batchmateButton}
           onPress={() => router.push({ pathname: '/directory', params: { batch: String(id || batchYear(item)) } } as any)}
         >
           <Text style={styles.batchmateText}>View Batchmates →</Text>
         </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.viewYearbookButton}
-          onPress={() => router.push({ pathname: '/yearbook', params: { batchId: String(id) } } as any)}
-          disabled={!id}
-        >
-          <FontAwesome name="eye" size={12} color="#1d2b4b" />
-          <Text style={styles.viewYearbookText}>View Yearbook</Text>
-        </TouchableOpacity>
+        ) : (
+          <View style={styles.directoryDisabledPill}>
+            <FontAwesome name="lock" size={11} color="#475569" />
+            <Text style={styles.directoryDisabledText}>Directory disabled</Text>
+          </View>
+        )}
+        {yearbookEnabled ? (
+          <TouchableOpacity
+            style={styles.viewYearbookButton}
+            onPress={() => router.push({ pathname: '/yearbook', params: { batchId: String(id) } } as any)}
+            disabled={!id}
+          >
+            <FontAwesome name="eye" size={12} color="#1d2b4b" />
+            <Text style={styles.viewYearbookText}>View Yearbook</Text>
+          </TouchableOpacity>
+        ) : (
+          <View style={styles.yearbookDisabledPill}>
+            <FontAwesome name="lock" size={11} color="#92590e" />
+            <Text style={styles.yearbookDisabledText}>Yearbook unpublished</Text>
+          </View>
+        )}
       </View>
     );
   };
@@ -313,8 +336,12 @@ const styles = StyleSheet.create({
   divider: { height: 1, backgroundColor: '#e2e8f0', marginVertical: 16 },
   batchmateButton: { alignSelf: 'flex-start', backgroundColor: '#eef2ff', paddingHorizontal: 16, paddingVertical: 11, borderRadius: 10, marginBottom: 12 },
   batchmateText: { color: '#3f51b5', fontSize: 12, fontWeight: '900' },
+  directoryDisabledPill: { alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center', gap: 7, backgroundColor: '#f8fafc', borderWidth: 1, borderColor: '#e2e8f0', paddingHorizontal: 13, paddingVertical: 9, borderRadius: 10, marginBottom: 12 },
+  directoryDisabledText: { color: '#475569', fontSize: 12, fontWeight: '900' },
   viewYearbookButton: { alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#fdb813', paddingHorizontal: 16, paddingVertical: 11, borderRadius: 10, marginBottom: 12 },
   viewYearbookText: { color: '#1d2b4b', fontSize: 12, fontWeight: '900' },
+  yearbookDisabledPill: { alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center', gap: 7, backgroundColor: '#fffbeb', borderWidth: 1, borderColor: '#fde68a', paddingHorizontal: 13, paddingVertical: 9, borderRadius: 10, marginBottom: 12 },
+  yearbookDisabledText: { color: '#92590e', fontSize: 12, fontWeight: '900' },
   generateButton: { alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#1d2b4b', paddingHorizontal: 16, paddingVertical: 11, borderRadius: 10 },
   generateText: { color: '#fdb813', fontSize: 12, fontWeight: '900' },
   errorText: { color: '#dc2626', textAlign: 'center', marginBottom: 14 },

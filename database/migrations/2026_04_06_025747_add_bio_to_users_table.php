@@ -13,7 +13,9 @@ return new class extends Migration
     {
         Schema::table('users', function (Blueprint $table) {
             // Idadagdag natin ang 'bio' column pagkatapos ng email
-            $table->text('bio')->nullable()->after('email');
+            if (! Schema::hasColumn('users', 'bio')) {
+                $table->text('bio')->nullable()->after('email');
+            }
         });
     }
 
@@ -24,7 +26,9 @@ return new class extends Migration
     {
         Schema::table('users', function (Blueprint $table) {
             // Tatanggalin ang column kapag ni-rollback ang migration
-            $table->dropColumn('bio');
+            if (Schema::hasColumn('users', 'bio')) {
+                $table->dropColumn('bio');
+            }
         });
     }
 };

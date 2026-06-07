@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { ImageBackground, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import { Stack, useRouter } from 'expo-router';
@@ -7,6 +7,7 @@ import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { FontAwesome } from '@expo/vector-icons';
 import { colors } from '../components/webTheme';
+import { getAppConfig, unwrap } from '../lib/api';
 
 const STATS = [
   { icon: 'graduation-cap', value: '12,500+', label: 'Graduates', color: '#3f51b5', bg: '#eef2ff' },
@@ -41,8 +42,8 @@ const EXPLORE = [
   },
 ];
 
-const FEATURES = [
-  { icon: 'shield', title: 'Private & Secure', desc: 'Your data stays within the NU Lipa community.' },
+const FEATURE_TEMPLATES = [
+  { icon: 'shield', title: 'Private & Secure', desc: (schoolName: string) => `Your data stays within the ${schoolName} community.` },
   { icon: 'mobile', title: 'Works Everywhere', desc: 'Browse cleanly on desktop, tablet, or mobile.' },
   { icon: 'refresh', title: 'Always Up to Date', desc: 'New batches and galleries are added automatically.' },
   { icon: 'comments', title: 'Stay Connected', desc: 'Message classmates and exchange voice notes.' },
@@ -50,6 +51,28 @@ const FEATURES = [
 
 export default function LandingPage() {
   const router = useRouter();
+  const [config, setConfig] = useState<any>(null);
+
+  useEffect(() => {
+    let active = true;
+
+    getAppConfig()
+      .then((payload) => {
+        if (active) setConfig(unwrap(payload));
+      })
+      .catch(() => {
+        if (active) setConfig(null);
+      });
+
+    return () => { active = false; };
+  }, []);
+
+  const schoolName = config?.school_name || 'National University Lipa';
+  const yearbookName = config?.yearbook_name || 'Sinag-Bughaw Digital Yearbook';
+  const features = FEATURE_TEMPLATES.map((item) => ({
+    ...item,
+    desc: typeof item.desc === 'function' ? item.desc(schoolName) : item.desc,
+  }));
 
   const go = (route: string) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -67,8 +90,8 @@ export default function LandingPage() {
             <View style={styles.brandRow}>
               <Image source={require('../assets/images/nuicon.svg')} style={styles.logo} contentFit="contain" />
               <View>
-                <Text style={styles.brandName}>Sinag-Bughaw</Text>
-                <Text style={styles.brandMeta}>Digital Yearbook</Text>
+                <Text style={styles.brandName}>{yearbookName.replace(/\s*Digital Yearbook/i, '')}</Text>
+                <Text style={styles.brandMeta}>{schoolName}</Text>
               </View>
             </View>
 
@@ -79,7 +102,7 @@ export default function LandingPage() {
               </View>
               <Text style={styles.heroTitle}>Your Legacy,{'\n'}<Text style={styles.goldText}>Digitally Preserved.</Text></Text>
               <Text style={styles.heroCopy}>
-                The official NU Lipa Digital Yearbook. Connect with classmates, explore stories, and relive your university memories.
+                The official {yearbookName} of {schoolName}. Connect with classmates, explore stories, and relive your university memories.
               </Text>
               <View style={styles.heroActions}>
                 <TouchableOpacity style={styles.primaryButton} onPress={() => go('/(tabs)/directory')}>
@@ -112,7 +135,7 @@ export default function LandingPage() {
         <View style={styles.section}>
           <Text style={styles.sectionKicker}>EXPLORE</Text>
           <Text style={styles.sectionTitle}>Explore the Yearbook</Text>
-          <Text style={styles.sectionCopy}>Discover the vibrant community of NU Lipa through our curated sections.</Text>
+          <Text style={styles.sectionCopy}>Discover the vibrant community of {schoolName} through our curated sections.</Text>
 
           {EXPLORE.map((item) => (
             <TouchableOpacity key={item.title} activeOpacity={0.9} style={styles.exploreCard} onPress={() => go(item.route)}>
@@ -135,10 +158,10 @@ export default function LandingPage() {
         </View>
 
         <View style={styles.featureSection}>
-          <Text style={styles.sectionKicker}>WHY SINAG-BUGHAW</Text>
+          <Text style={styles.sectionKicker}>WHY {yearbookName.replace(/\s*Digital Yearbook/i, '').toUpperCase()}</Text>
           <Text style={styles.sectionTitle}>Built for Pioneers</Text>
           <View style={styles.featureGrid}>
-            {FEATURES.map((item) => (
+            {features.map((item) => (
               <View key={item.title} style={styles.featureCard}>
                 <View style={styles.featureIcon}>
                   <FontAwesome name={item.icon as any} size={18} color={colors.indigo} />
@@ -153,7 +176,7 @@ export default function LandingPage() {
         <View style={styles.quoteSection}>
           <FontAwesome name="quote-left" size={36} color="#e0e7ff" />
           <Text style={styles.quoteText}>
-            Sinag-Bughaw brought back memories I thought were lost forever. Seeing classmates I had not spoken to in years is priceless.
+            {yearbookName} brought back memories I thought were lost forever. Seeing classmates I had not spoken to in years is priceless.
           </Text>
           <View style={styles.quoteAuthor}>
             <View style={styles.authorAvatar}>
@@ -170,7 +193,7 @@ export default function LandingPage() {
           <View style={styles.ctaCard}>
             <Text style={styles.ctaBadge}>GET STARTED TODAY</Text>
             <Text style={styles.ctaTitle}>Ready to Relive{'\n'}Your Memories?</Text>
-            <Text style={styles.ctaCopy}>Join thousands of NU Lipa alumni who have already created their digital legacy.</Text>
+            <Text style={styles.ctaCopy}>Join alumni from {schoolName} who have already created their digital legacy.</Text>
             <TouchableOpacity style={styles.ctaButton} onPress={() => go('/signup')}>
               <Text style={styles.ctaButtonText}>Get Started - It&apos;s Free</Text>
             </TouchableOpacity>

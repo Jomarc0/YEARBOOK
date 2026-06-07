@@ -27,16 +27,20 @@ return new class extends Migration
             }
         });
 
-        DB::statement(
-            "ALTER TABLE users MODIFY profile_visibility ENUM('public','batchmates','alumni_only','private') NOT NULL DEFAULT 'public'"
-        );
+        if (DB::getDriverName() === 'mysql') {
+            DB::statement(
+                "ALTER TABLE users MODIFY profile_visibility ENUM('public','batchmates','alumni_only','private') NOT NULL DEFAULT 'public'"
+            );
+        }
     }
 
     public function down(): void
     {
-        DB::statement(
-            "ALTER TABLE users MODIFY profile_visibility ENUM('public','alumni_only','private') NOT NULL DEFAULT 'public'"
-        );
+        if (DB::getDriverName() === 'mysql') {
+            DB::statement(
+                "ALTER TABLE users MODIFY profile_visibility ENUM('public','alumni_only','private') NOT NULL DEFAULT 'public'"
+            );
+        }
 
         Schema::table('users', function (Blueprint $table) {
             if (Schema::hasColumn('users', 'student_id')) {

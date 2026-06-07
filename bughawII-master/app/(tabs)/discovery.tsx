@@ -8,6 +8,7 @@ import { StatusBar } from 'expo-status-bar';
 import { useRouter } from 'expo-router';
 import {
   fetchCurrentUser,
+  getAppConfig,
   getBatchmates,
   getBatches,
   getCurrentUser,
@@ -56,6 +57,17 @@ const studentSection = (item: any) => item?.section?.name || item?.section_name 
 const studentYear = (item: any) => String(item?.graduation_year || item?.batch_year || item?.batch || item?.year || item?.student?.graduation_year || '');
 const studentNo = (item: any) => item?.student_no || item?.student_number || item?.student_id || item?.student?.student_no || '';
 const studentPhoto = (item: any) => imageUrl(item?.profile_picture || item?.profile_pic || item?.photo || item?.student?.profile_picture);
+const studentRouteParams = (item: any) => ({
+  id: String(item?.id),
+  source: 'discovery',
+  ...(item?.user_id || item?.user?.id ? { userId: String(item?.user_id || item?.user?.id) } : {}),
+});
+const normalizeFaceScore = (value: any) => {
+  const score = Number(value || 0);
+  if (!Number.isFinite(score) || score <= 0) return 0;
+  return score <= 1 ? score * 100 : score;
+};
+const faceScore = (match: any) => normalizeFaceScore(match?.similarity ?? match?.confidence ?? match?.score ?? match?.Similarity);
 
 const initials = (name: string) => name.split(' ').filter(Boolean).slice(0, 2).map((part) => part[0]).join('').toUpperCase() || 'NU';
 
@@ -101,6 +113,7 @@ export default function DiscoveryScreen() {
   const [yearFilters, setYearFilters] = useState(years);
   const [students, setStudents] = useState<any[]>([]);
   const [matchedIds, setMatchedIds] = useState<Set<string | number>>(new Set());
+  const [matchedScores, setMatchedScores] = useState<Record<string, number>>({});
   const [user, setUser] = useState<any>(null);
   const [page, setPage] = useState(1);
   const [lastPage, setLastPage] = useState(1);
@@ -110,9 +123,13 @@ export default function DiscoveryScreen() {
   const [faceSearching, setFaceSearching] = useState(false);
   const [openingYearbook, setOpeningYearbook] = useState(false);
   const [error, setError] = useState('');
+  const [appConfig, setAppConfig] = useState<any>(null);
 
   const currentMode = useMemo(() => MODE_CONFIG.find((item) => item.key === mode) || MODE_CONFIG[0], [mode]);
   const premium = hasPremium(user);
+  const premiumEnabled = appConfig?.features?.enable_premium_subscription !== false;
+  const yearbookEnabled = appConfig?.features?.enable_flipbook_viewer !== false && appConfig?.features?.publish_yearbook !== false;
+  const schoolName = appConfig?.school_name || 'National University Lipa';
 
   const visibleStudents = useMemo(() => {
     if (!matchedIds.size) return students;
@@ -182,6 +199,20 @@ export default function DiscoveryScreen() {
   }, [loadCurrentUser]);
 
   useEffect(() => {
+    let active = true;
+
+    getAppConfig()
+      .then((payload) => {
+        if (active) setAppConfig(unwrap(payload));
+      })
+      .catch(() => {
+        if (active) setAppConfig(null);
+      });
+
+    return () => { active = false; };
+  }, []);
+
+  useEffect(() => {
     getSearchFilters()
       .then((payload) => {
         const courses = Array.isArray(payload?.courses) ? payload.courses : payload?.data?.courses || [];
@@ -243,6 +274,7 @@ export default function DiscoveryScreen() {
       const ids = new Set((Array.isArray(matches) ? matches : []).map((match: any) => match?.user_id || match?.student_id || match?.id).filter(Boolean));
 
       setMatchedIds(ids);
+      setMatchedScores(Object.fromEntries((Array.isArray(matches) ? matches : []).map((match: any) => [String(match?.user_id || match?.student_id || match?.id), faceScore(match)])));
       Alert.alert('Face search complete', ids.size ? `${ids.size} possible match${ids.size === 1 ? '' : 'es'} found.` : 'No matching profiles were found.');
     } catch (requestError: any) {
       Alert.alert('Face search failed', getErrorMessage(requestError, 'Unable to search by face.'));
@@ -252,6 +284,11 @@ export default function DiscoveryScreen() {
   };
 
   const handleOpenYearbook = async () => {
+    if (!yearbookEnabled) {
+      Alert.alert('Yearbook unavailable', 'The digital yearbook is not published yet.');
+      return;
+    }
+
     try {
       setOpeningYearbook(true);
       const payload = await getBatches({ year: year || undefined, course: course || undefined });
@@ -275,16 +312,18 @@ export default function DiscoveryScreen() {
     <>
       <View style={styles.hero}>
         <View style={styles.heroOrb} />
-        <Text style={styles.eyebrow}>NATIONAL UNIVERSITY LIPA</Text>
+        <Text style={styles.eyebrow}>{schoolName.toUpperCase()}</Text>
         <Text style={styles.heroTitle}>
           Student <Text style={styles.gold}>Discovery</Text>
         </Text>
-        <Text style={styles.heroCopy}>Find classmates, explore other programs, and connect with the NU Lipa community.</Text>
+        <Text style={styles.heroCopy}>Find classmates, explore other programs, and connect with the {schoolName} community.</Text>
         <View style={styles.heroActions}>
-          <TouchableOpacity style={styles.upgradePill} onPress={() => router.push('/payment' as any)}>
-            <FontAwesome name="lock" size={12} color="#fdb813" />
-            <Text style={styles.upgradeText}>Upgrade to Premium</Text>
-          </TouchableOpacity>
+          {premiumEnabled && !premium ? (
+            <TouchableOpacity style={styles.upgradePill} onPress={() => router.push('/payment' as any)}>
+              <FontAwesome name="lock" size={12} color="#fdb813" />
+              <Text style={styles.upgradeText}>Upgrade to Premium</Text>
+            </TouchableOpacity>
+          ) : null}
           <TouchableOpacity style={styles.faceHint} onPress={handleFaceSearch} disabled={faceSearching}>
             {faceSearching ? <ActivityIndicator size="small" color="#fdb813" /> : <FontAwesome name="camera" size={12} color="#fdb813" />}
             <Text style={styles.faceHintText}>Camera icon to search by face</Text>
@@ -361,14 +400,14 @@ export default function DiscoveryScreen() {
         />
       </View>
 
-      {mode === 'batch' && (
+      {mode === 'batch' && yearbookEnabled && (
         <TouchableOpacity style={styles.generateButton} onPress={handleOpenYearbook} disabled={openingYearbook}>
           {openingYearbook ? <ActivityIndicator color="#fdb813" size="small" /> : <FontAwesome name="book" size={14} color="#fdb813" />}
           <Text style={styles.generateText}>Open Yearbook - Batch {year || '2026'}</Text>
         </TouchableOpacity>
       )}
 
-      {!premium && (
+      {!premium && premiumEnabled && (
         <View style={styles.premiumBanner}>
           <View style={styles.lockIcon}>
             <FontAwesome name="lock" size={20} color="#fdb813" />
@@ -394,12 +433,13 @@ export default function DiscoveryScreen() {
     const name = studentName(item);
     const photo = studentPhoto(item);
     const matched = matchedIds.has(item?.id) || matchedIds.has(item?.user_id) || matchedIds.has(item?.student_id);
+    const score = matchedScores[String(item?.user_id || item?.student_id || item?.id)];
 
     return (
       <TouchableOpacity
         style={styles.card}
         activeOpacity={0.88}
-        onPress={() => router.push({ pathname: '/directory', params: { q: name } } as any)}
+        onPress={() => router.push({ pathname: '/student/[id]', params: studentRouteParams(item) } as any)}
       >
         <View style={styles.cardMedia}>
           {photo ? <Image source={photo} style={styles.cardImage} contentFit="cover" /> : <Text style={styles.initials}>{initials(name)}</Text>}
@@ -412,7 +452,7 @@ export default function DiscoveryScreen() {
           {matched && (
             <View style={styles.matchBadge}>
               <FontAwesome name="camera" size={9} color="#102044" />
-              <Text style={styles.matchBadgeText}>Match</Text>
+              <Text style={styles.matchBadgeText}>{score ? `${Math.round(score)}%` : 'Match'}</Text>
             </View>
           )}
         </View>

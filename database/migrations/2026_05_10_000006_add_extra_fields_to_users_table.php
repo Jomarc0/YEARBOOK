@@ -6,14 +6,27 @@ use Illuminate\Support\Facades\Schema;
 return new class extends Migration {
     public function up(): void {
         Schema::table('users', function (Blueprint $table) {
-            $table->string('fcm_token')->nullable()->after('bio');
-            $table->boolean('is_premium')->default(false)->after('fcm_token');
-            $table->boolean('email_verified')->default(false)->after('is_premium');
+            if (! Schema::hasColumn('users', 'fcm_token')) {
+                $table->string('fcm_token')->nullable()->after('bio');
+            }
+            if (! Schema::hasColumn('users', 'is_premium')) {
+                $table->boolean('is_premium')->default(false)->after('fcm_token');
+            }
+            if (! Schema::hasColumn('users', 'email_verified')) {
+                $table->boolean('email_verified')->default(false)->after('is_premium');
+            }
         });
     }
     public function down(): void {
         Schema::table('users', function (Blueprint $table) {
-            $table->dropColumn(['fcm_token', 'is_premium', 'email_verified']);
+            $columns = array_filter(
+                ['fcm_token', 'is_premium', 'email_verified'],
+                fn ($column) => Schema::hasColumn('users', $column)
+            );
+
+            if ($columns) {
+                $table->dropColumn($columns);
+            }
         });
     }
 };

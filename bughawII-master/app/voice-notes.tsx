@@ -5,7 +5,7 @@ import { Image } from 'expo-image';
 import { FontAwesome } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import { createAudioPlayer } from 'expo-audio';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { getErrorMessage, getVoiceNotesInbox, getVoiceNotesOutbox, imageUrl, unwrap } from '../lib/api';
 
 const TABS = [
@@ -38,7 +38,10 @@ function StatusBadge({ status }: { status?: string }) {
 
 export default function VoiceNotesScreen() {
   const router = useRouter();
-  const [tab, setTab] = useState('inbox');
+  const params = useLocalSearchParams();
+  const requestedTab = typeof params.tab === 'string' ? params.tab : '';
+  const requestedNoteId = typeof params.noteId === 'string' ? params.noteId : '';
+  const [tab, setTab] = useState(requestedTab === 'outbox' ? 'outbox' : 'inbox');
   const [notes, setNotes] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -65,6 +68,10 @@ export default function VoiceNotesScreen() {
   useEffect(() => {
     loadNotes();
   }, [loadNotes]);
+
+  useEffect(() => {
+    if (requestedTab === 'inbox' || requestedTab === 'outbox') setTab(requestedTab);
+  }, [requestedTab]);
 
   const togglePlay = (note: any) => {
     const url = audioUrl(note);
@@ -129,7 +136,7 @@ export default function VoiceNotesScreen() {
           const isPlaying = playing === item.id;
 
           return (
-            <View style={[styles.noteCard, item?.status === 'rejected' && styles.rejectedCard]}>
+            <View style={[styles.noteCard, item?.status === 'rejected' && styles.rejectedCard, requestedNoteId && String(item?.id) === requestedNoteId && styles.highlightCard]}>
               {photo ? <Image source={photo} style={styles.avatar} /> : (
                 <View style={styles.avatarFallback}>
                   <Text style={styles.avatarText}>{initials(personName(other))}</Text>
@@ -194,6 +201,7 @@ const styles = StyleSheet.create({
   ctaText: { color: 'rgba(255,255,255,0.62)', fontSize: 12, lineHeight: 17, marginTop: 4 },
   errorText: { marginHorizontal: 20, marginTop: 16, color: '#b91c1c', textAlign: 'center' },
   noteCard: { marginHorizontal: 20, marginTop: 14, backgroundColor: '#ffffff', borderRadius: 20, padding: 16, flexDirection: 'row', alignItems: 'center', gap: 13, borderWidth: 1, borderColor: '#edf2f7', shadowColor: '#0f172a', shadowOffset: { width: 0, height: 5 }, shadowOpacity: 0.05, shadowRadius: 14, elevation: 2 },
+  highlightCard: { borderColor: '#fdb813', borderWidth: 2 },
   rejectedCard: { opacity: 0.62 },
   avatar: { width: 46, height: 46, borderRadius: 23, backgroundColor: '#eef2ff' },
   avatarFallback: { width: 46, height: 46, borderRadius: 23, backgroundColor: '#1d2b4b', alignItems: 'center', justifyContent: 'center' },

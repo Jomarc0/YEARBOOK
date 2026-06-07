@@ -4,7 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
 import { FontAwesome } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
-import { getAnalyticsSummary, getErrorMessage, getMyStats, getTopViewed, getTrending, imageUrl, unwrap } from '../../lib/api';
+import { getAnalyticsSummary, getAppConfig, getErrorMessage, getMyStats, getTopViewed, getTrending, imageUrl, unwrap } from '../../lib/api';
 
 const TABS = [
   { id: 'trending', label: 'Trending', title: 'Trending this week', desc: 'Profiles with the most views in the last 7 days', icon: 'fire', color: '#fb923c' },
@@ -119,22 +119,27 @@ export default function AnalyticsScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
+  const [appConfig, setAppConfig] = useState<any>(null);
 
   const activeTab = useMemo(() => TABS.find((item) => item.id === tab) || TABS[0], [tab]);
   const activeList = tab === 'top-viewed' ? topViewed : trending;
+  const schoolName = appConfig?.school_name || 'National University Lipa';
+  const yearbookName = appConfig?.yearbook_name || 'Sinag-Bughaw Digital Yearbook';
 
   const loadAnalytics = useCallback(async () => {
     try {
       setError('');
       if (!refreshing) setLoading(true);
 
-      const [summaryResult, trendingResult, topViewedResult, statsResult] = await Promise.allSettled([
+      const [configResult, summaryResult, trendingResult, topViewedResult, statsResult] = await Promise.allSettled([
+        getAppConfig(),
         getAnalyticsSummary(),
         getTrending(),
         getTopViewed(10),
         getMyStats(),
       ]);
 
+      if (configResult.status === 'fulfilled') setAppConfig(objectFromPayload(configResult.value));
       if (summaryResult.status === 'fulfilled') setSummary(objectFromPayload(summaryResult.value));
       if (trendingResult.status === 'fulfilled') setTrending(listFromPayload(trendingResult.value));
       if (topViewedResult.status === 'fulfilled') setTopViewed(listFromPayload(topViewedResult.value));
@@ -160,13 +165,13 @@ export default function AnalyticsScreen() {
         <View style={styles.heroOrbOne} />
         <View style={styles.heroOrbTwo} />
         <View style={styles.breadcrumb}>
-          <Text style={styles.breadcrumbMuted}>SINAG-BUGHAW</Text>
+          <Text style={styles.breadcrumbMuted}>{yearbookName.replace(/\s*Digital Yearbook/i, '').toUpperCase()}</Text>
           <FontAwesome name="chevron-right" size={9} color="rgba(255,255,255,0.25)" />
           <Text style={styles.breadcrumbActive}>ANALYTICS</Text>
         </View>
 
         <View style={styles.badge}>
-          <Text style={styles.badgeText}>NATIONAL UNIVERSITY LIPA</Text>
+          <Text style={styles.badgeText}>{schoolName.toUpperCase()}</Text>
         </View>
 
         <Text style={styles.heroTitle}>

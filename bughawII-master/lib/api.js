@@ -314,6 +314,11 @@ export const getStudent = async (id) => {
   return response.data;
 };
 
+export const trackStudentView = async (id) => {
+  const response = await api.post(`/students/${id}/view`);
+  return response.data;
+};
+
 export const getStudentAchievements = async (id) => {
   const response = await api.get(`/students/${id}/achievements`);
   return response.data;
@@ -545,6 +550,13 @@ export const getAlumniYearbookEntry = async (id) => {
   return response.data;
 };
 
+export const getAlumniFromYearbookPage = async (batchId, pageIndex) => {
+  const response = await api.get("/alumni/from-yearbook-page", {
+    params: { batch_id: batchId, page_index: pageIndex },
+  });
+  return response.data;
+};
+
 export const getMessagesUnreadCount = async () => {
   const response = await api.get("/messages/unread-count");
   return response.data;
@@ -627,6 +639,11 @@ export const getDiscoverySchool = async (params = {}) => {
 
 export const getDiscoveryCrossProgram = async (params = {}) => {
   const response = await api.get("/discover/cross-program", { params });
+  return response.data;
+};
+
+export const getDiscoveryStudent = async (id) => {
+  const response = await api.get(`/discover/students/${id}`);
   return response.data;
 };
 

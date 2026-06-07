@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Alert, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
@@ -7,7 +7,7 @@ import * as WebBrowser from 'expo-web-browser';
 import { Stack, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { FontAwesome } from '@expo/vector-icons';
-import { acceptConsent, fetchCurrentUser, getErrorMessage, register, saveToken, sendOtp, STORAGE_BASE_URL, verifyOtp, verifyStudent } from '../lib/api';
+import { acceptConsent, fetchCurrentUser, getAppConfig, getErrorMessage, register, saveToken, sendOtp, STORAGE_BASE_URL, unwrap, verifyOtp, verifyStudent } from '../lib/api';
 
 const SCHOOLS = [
   { key: 'SACE', courses: ['Bachelor of Science in Architecture', 'Bachelor of Science in Civil Engineering', 'Bachelor of Science in Computer Science', 'Bachelor of Science in Information Technology', 'Bachelor of Multimedia Arts'] },
@@ -40,10 +40,27 @@ export default function Register() {
   const [otp, setOtp] = useState(emptyOtp.join(''));
   const [consentChecked, setConsentChecked] = useState(true);
   const [loading, setLoading] = useState(false);
+  const [appConfig, setAppConfig] = useState(null);
 
   const intent = verifyState === 'found' ? 'graduate' : 'browse';
+  const yearbookName = appConfig?.yearbook_name || 'Sinag-Bughaw Digital Yearbook';
+  const brandName = (yearbookName.replace(/\s*Digital Yearbook/i, '') || 'Sinag-Bughaw').toUpperCase();
 
   const batchPreview = useMemo(() => form.graduation_year ? `Batch ${form.graduation_year}` : 'Select batch', [form.graduation_year]);
+
+  useEffect(() => {
+    let active = true;
+
+    getAppConfig()
+      .then((response) => {
+        if (active) setAppConfig(unwrap(response));
+      })
+      .catch(() => {});
+
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const updateField = (field, value) => {
     setForm((current) => ({
@@ -205,7 +222,7 @@ export default function Register() {
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.flex}>
         <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
           <View style={styles.header}>
-            <Text style={styles.brandKicker}>SINAG-BUGHAW</Text>
+            <Text style={styles.brandKicker}>{brandName}</Text>
             <View style={styles.iconContainer}>
               <FontAwesome name={step === 'otp' ? 'envelope-open-o' : 'user-plus'} size={30} color="#1d2b4b" />
             </View>

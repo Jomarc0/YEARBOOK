@@ -11,10 +11,16 @@ return new class extends Migration
      */
     public function up(): void
     {
+        if (! Schema::hasTable('photos')) {
+            return;
+        }
+
         Schema::table('photos', function (Blueprint $table) {
-            $table->string('public_id')
-                  ->nullable()
-                  ->after('file_path');
+            if (! Schema::hasColumn('photos', 'public_id')) {
+                $table->string('public_id')
+                      ->nullable()
+                      ->after('file_path');
+            }
         });
     }
 
@@ -23,8 +29,14 @@ return new class extends Migration
      */
     public function down(): void
     {
+        if (! Schema::hasTable('photos')) {
+            return;
+        }
+
         Schema::table('photos', function (Blueprint $table) {
-            $table->dropColumn('public_id');
+            if (Schema::hasColumn('photos', 'public_id')) {
+                $table->dropColumn('public_id');
+            }
         });
     }
 };

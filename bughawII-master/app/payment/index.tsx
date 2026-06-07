@@ -3,11 +3,11 @@ import { ActivityIndicator, Alert, RefreshControl, ScrollView, StyleSheet, Text,
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { FontAwesome } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import * as Linking from 'expo-linking';
 import * as WebBrowser from 'expo-web-browser';
 import * as Haptics from 'expo-haptics';
-import { createPaymentIntent, getErrorMessage, getPaymentHistory, getSubscriptionStatus } from '../../lib/api';
+import { createPaymentIntent, getAppConfig, getErrorMessage, getPaymentHistory, getSubscriptionStatus, unwrap } from '../../lib/api';
 import { colors, shadows } from '../../components/webTheme';
 
 const PLANS: any = {
@@ -35,6 +35,7 @@ const PLANS: any = {
 
 export default function PaymentScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams<{ plan?: string }>();
   const [tierKey, setTierKey] = useState<'standard' | 'premium'>('standard');
   const [billing, setBilling] = useState<'monthly' | 'yearly'>('monthly');
   const [status, setStatus] = useState<any>(null);
@@ -43,9 +44,11 @@ export default function PaymentScreen() {
   const [paying, setPaying] = useState(false);
   const [error, setError] = useState('');
   const [history, setHistory] = useState<any[]>([]);
+  const [appConfig, setAppConfig] = useState<any>(null);
 
   const selectedTier = PLANS[tierKey];
   const selectedPlan = selectedTier[billing];
+  const subscriptionEnabled = appConfig?.features?.enable_premium_subscription !== false;
   const alreadyOnTier = tierKey === 'premium'
     ? status?.is_premium
     : Boolean(status?.is_standard && !status?.is_premium);
@@ -53,10 +56,12 @@ export default function PaymentScreen() {
   const loadStatus = useCallback(async () => {
     try {
       setError('');
-      const [statusPayload, historyPayload] = await Promise.all([
+      const [configPayload, statusPayload, historyPayload] = await Promise.all([
+        getAppConfig().catch(() => null),
         getSubscriptionStatus(),
         getPaymentHistory(),
       ]);
+      if (configPayload) setAppConfig(unwrap(configPayload));
       setStatus(statusPayload);
       setHistory(Array.isArray(historyPayload) ? historyPayload : historyPayload?.data || []);
       return statusPayload;
@@ -73,6 +78,16 @@ export default function PaymentScreen() {
     loadStatus();
   }, [loadStatus]);
 
+  useEffect(() => {
+    const plan = String(params.plan || '').toLowerCase();
+    if (!plan) return;
+
+    if (plan.includes('premium')) setTierKey('premium');
+    if (plan.includes('standard')) setTierKey('standard');
+    if (plan.includes('year')) setBilling('yearly');
+    if (plan.includes('month')) setBilling('monthly');
+  }, [params.plan]);
+
   const activeLabel = useMemo(() => {
     if (loading) return 'Checking access...';
     if (!status?.is_active) return 'Free access';
@@ -85,11 +100,16 @@ export default function PaymentScreen() {
   };
 
   const subscribe = async () => {
+    if (!subscriptionEnabled) {
+      Alert.alert('Subscriptions disabled', 'Premium subscriptions are currently disabled by platform settings.');
+      return;
+    }
+
     try {
       setPaying(true);
       setError('');
       const successUrl = Linking.createURL('/payment/success', { queryParams: { tier: tierKey } });
-      const cancelUrl = Linking.createURL('/payment/cancel');
+      const cancelUrl = Linking.createURL('/payment/cancel', { queryParams: { plan: selectedPlan.key } });
       const payload = await createPaymentIntent(selectedPlan.key, {
         success_url: successUrl,
         cancel_url: cancelUrl,
@@ -104,11 +124,11 @@ export default function PaymentScreen() {
       if (result.type === 'success' && result.url?.includes('/payment/success')) {
         router.push({ pathname: '/payment/success', params: { tier: nextStatus?.tier || tierKey } } as any);
       } else if (result.type === 'success' && result.url?.includes('/payment/cancel')) {
-        router.push('/payment/cancel' as any);
+        router.push({ pathname: '/payment/cancel', params: { plan: selectedPlan.key } } as any);
       } else if (nextStatus?.is_active) {
         router.push({ pathname: '/payment/success', params: { tier: nextStatus?.tier || tierKey } } as any);
       } else if (result.type === 'cancel') {
-        router.push('/payment/cancel' as any);
+        router.push({ pathname: '/payment/cancel', params: { plan: selectedPlan.key } } as any);
       } else {
         setError('Checkout was closed before the subscription was confirmed. Pull down to refresh after payment.');
       }
@@ -120,6 +140,27 @@ export default function PaymentScreen() {
       setPaying(false);
     }
   };
+
+  if (!subscriptionEnabled && !loading) {
+    return (
+      <SafeAreaView style={styles.container} edges={['left', 'right']}>
+        <StatusBar style="dark" />
+        <View style={styles.disabledWrap}>
+          <View style={styles.disabledIcon}>
+            <FontAwesome name="credit-card" size={24} color={colors.gold} />
+          </View>
+          <Text style={styles.disabledTitle}>Subscriptions Unavailable</Text>
+          <Text style={styles.disabledText}>
+            Premium and Standard subscriptions are currently disabled by platform settings.
+          </Text>
+          <TouchableOpacity style={styles.disabledButtonHome} onPress={() => router.replace('/(tabs)/home' as any)}>
+            <FontAwesome name="home" size={14} color={colors.navy} />
+            <Text style={styles.disabledButtonHomeText}>Go Home</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container} edges={['left', 'right']}>
@@ -149,6 +190,15 @@ export default function PaymentScreen() {
             </Text>
           </View>
         </View>
+
+        {params.plan ? (
+          <View style={styles.deepLinkPlanCard}>
+            <FontAwesome name="bell" size={13} color={colors.gold} />
+            <Text style={styles.deepLinkPlanText}>
+              Opened from notification. Showing {selectedTier.label} {billing} checkout.
+            </Text>
+          </View>
+        ) : null}
 
         <View style={styles.billingSwitch}>
           {(['monthly', 'yearly'] as const).map((item) => (
@@ -239,7 +289,7 @@ export default function PaymentScreen() {
           <Text style={styles.footerLabel}>{selectedTier.label}</Text>
           <Text style={styles.footerPrice}>{selectedPlan.price}/{selectedPlan.period}</Text>
         </View>
-        <TouchableOpacity style={[styles.payButton, alreadyOnTier && styles.disabledButton]} onPress={subscribe} disabled={paying || alreadyOnTier}>
+        <TouchableOpacity style={[styles.payButton, (alreadyOnTier || !subscriptionEnabled) && styles.disabledButton]} onPress={subscribe} disabled={paying || alreadyOnTier || !subscriptionEnabled}>
           {paying ? <ActivityIndicator color="#ffffff" /> : (
             <>
               <FontAwesome name={selectedTier.icon} size={13} color={colors.gold} />
@@ -263,6 +313,8 @@ const styles = StyleSheet.create({
   statusIcon: { width: 42, height: 42, borderRadius: 13, backgroundColor: colors.navy, alignItems: 'center', justifyContent: 'center' },
   statusTitle: { color: colors.navy, fontSize: 15, fontWeight: '900' },
   statusMeta: { color: colors.muted, fontSize: 12, lineHeight: 17, marginTop: 2 },
+  deepLinkPlanCard: { marginTop: 12, borderRadius: 14, borderWidth: 1, borderColor: 'rgba(253,184,19,0.42)', backgroundColor: '#fffdf5', padding: 12, flexDirection: 'row', alignItems: 'center', gap: 9 },
+  deepLinkPlanText: { flex: 1, color: colors.navy, fontSize: 12, fontWeight: '800', lineHeight: 18 },
   billingSwitch: { marginTop: 18, backgroundColor: '#e2e8f0', padding: 5, borderRadius: 16, flexDirection: 'row' },
   billingButton: { flex: 1, height: 40, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
   billingActive: { backgroundColor: '#ffffff', ...shadows.card },
@@ -299,4 +351,10 @@ const styles = StyleSheet.create({
   payButton: { minWidth: 142, height: 50, borderRadius: 15, backgroundColor: colors.navy, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 9 },
   disabledButton: { backgroundColor: '#94a3b8' },
   payButtonText: { color: '#ffffff', fontSize: 14, fontWeight: '900' },
+  disabledWrap: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 28 },
+  disabledIcon: { width: 68, height: 68, borderRadius: 22, backgroundColor: colors.navy, alignItems: 'center', justifyContent: 'center', marginBottom: 18 },
+  disabledTitle: { color: colors.navy, fontSize: 23, fontWeight: '900', textAlign: 'center' },
+  disabledText: { color: colors.muted, fontSize: 14, lineHeight: 21, textAlign: 'center', marginTop: 8, marginBottom: 20 },
+  disabledButtonHome: { minHeight: 46, borderRadius: 14, backgroundColor: colors.gold, paddingHorizontal: 18, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
+  disabledButtonHomeText: { color: colors.navy, fontSize: 13, fontWeight: '900' },
 });

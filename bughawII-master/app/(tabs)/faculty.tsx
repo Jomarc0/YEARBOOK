@@ -4,7 +4,7 @@ import { Image } from 'expo-image';
 import { StatusBar } from 'expo-status-bar';
 import { FontAwesome } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
-import { getErrorMessage, getFaculty, getFacultyMember, imageUrl, unwrap } from '../../lib/api';
+import { getAppConfig, getErrorMessage, getFaculty, getFacultyMember, imageUrl, unwrap } from '../../lib/api';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 const { height } = Dimensions.get('window');
@@ -23,8 +23,10 @@ export default function FacultyScreen() {
   const [error, setError] = useState('');
   const [selectedFaculty, setSelectedFaculty] = useState<any>(null);
   const [isModalVisible, setIsModalVisible] = useState(false);
+  const [appConfig, setAppConfig] = useState<any>(null);
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(height)).current;
+  const schoolName = appConfig?.school_name || 'National University Lipa';
 
   const loadFaculty = useCallback(async () => {
     try {
@@ -55,6 +57,20 @@ export default function FacultyScreen() {
     const timer = setTimeout(loadFaculty, 300);
     return () => clearTimeout(timer);
   }, [loadFaculty]);
+
+  useEffect(() => {
+    let active = true;
+
+    getAppConfig()
+      .then((payload) => {
+        if (active) setAppConfig(unwrap(payload));
+      })
+      .catch(() => {
+        if (active) setAppConfig(null);
+      });
+
+    return () => { active = false; };
+  }, []);
 
   const totalFaculty = useMemo(() => groups.reduce((total, group) => total + group.faculty.length, 0), [groups]);
   const filteredGroups = useMemo(() => (
@@ -224,7 +240,7 @@ export default function FacultyScreen() {
                 )}
                 <Text style={styles.userName}>{memberName(selectedFaculty)}</Text>
                 <Text style={styles.userDegree}>{memberRole(selectedFaculty)}</Text>
-                <Text style={styles.userYear}>{selectedFaculty?.department || 'National University Lipa'}</Text>
+                <Text style={styles.userYear}>{selectedFaculty?.department || schoolName}</Text>
               </View>
               <View style={styles.contentSection}>
                 <View style={styles.sectionHeader}>

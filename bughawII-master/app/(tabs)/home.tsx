@@ -9,6 +9,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
   fetchCurrentUser,
+  getAppConfig,
   getBatchmates,
   getCurrentUser,
   getErrorMessage,
@@ -217,6 +218,9 @@ export default function HomeScreen() {
   const [tagQuery, setTagQuery] = useState('');
   const [tagSaving, setTagSaving] = useState(false);
   const [tagError, setTagError] = useState('');
+  const [appConfig, setAppConfig] = useState<any>(null);
+  const postsEnabled = appConfig?.features?.allow_student_posts !== false;
+  const directoryEnabled = appConfig?.features?.enable_student_directory_search !== false;
 
   useFocusEffect(
     React.useCallback(() => {
@@ -225,8 +229,12 @@ export default function HomeScreen() {
         const storedUser = await getCurrentUser();
         if (active && storedUser) setCurrentUser(storedUser);
         try {
-          const freshUser = await fetchCurrentUser();
+          const [freshUser, configPayload] = await Promise.all([
+            fetchCurrentUser(),
+            getAppConfig().catch(() => null),
+          ]);
           if (active) setCurrentUser(freshUser);
+          if (active && configPayload) setAppConfig(unwrap(configPayload));
         } catch {}
       };
       loadUser();
@@ -235,6 +243,16 @@ export default function HomeScreen() {
   );
 
   const loadFeed = useCallback(async (nextPage = 1, append = false) => {
+    if (!postsEnabled) {
+      setPosts([]);
+      setPage(1);
+      setLastPage(1);
+      setLoading(false);
+      setRefreshing(false);
+      setLoadingMore(false);
+      return;
+    }
+
     try {
       setError('');
       if (!append && !refreshing) setLoading(true);
@@ -252,7 +270,7 @@ export default function HomeScreen() {
       setRefreshing(false);
       setLoadingMore(false);
     }
-  }, [filter, query, refreshing]);
+  }, [filter, postsEnabled, query, refreshing]);
 
   const loadSidebarData = useCallback(async () => {
     const [batchmatesResult, trendingResult] = await Promise.allSettled([
@@ -304,8 +322,11 @@ export default function HomeScreen() {
   };
 
   const openProfile = (user: any) => {
-    if (!user?.name) return;
-    router.push({ pathname: '/directory', params: { q: user.name } } as any);
+    if (user?.id) {
+      router.push({ pathname: '/student/[id]', params: { id: String(user.id) } } as any);
+      return;
+    }
+    if (user?.name) router.push({ pathname: '/directory', params: { q: user.name } } as any);
   };
 
   const openMessage = (user: any) => {
@@ -314,6 +335,7 @@ export default function HomeScreen() {
   };
 
   const openTagModal = (post: any) => {
+    if (!postsEnabled) return;
     setTagPost(post);
     setSelectedTagIds((post?.tagged_students || []).map((student: any) => Number(student.id)).filter(Boolean));
     setTagQuery('');
@@ -408,7 +430,7 @@ export default function HomeScreen() {
                       onPress={() => {
                         setShowSearch(false);
                         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                        router.push(item.type === 'Faculty' ? '/faculty' : { pathname: '/directory', params: { q: item.name } } as any);
+                        router.push(item.type === 'Faculty' ? '/faculty' : { pathname: '/student/[id]', params: { id: String(item.id) } } as any);
                       }}
                     >
                       <Avatar user={item} size={34} />
@@ -423,7 +445,7 @@ export default function HomeScreen() {
             </View>
 
             <View style={styles.filterRow}>
-              {FILTERS.map((item) => {
+              {postsEnabled ? FILTERS.map((item) => {
                 const active = filter === item.key;
                 return (
                   <TouchableOpacity
@@ -437,15 +459,24 @@ export default function HomeScreen() {
                     <Text style={[styles.filterText, active && styles.filterTextActive]}>{item.label}</Text>
                   </TouchableOpacity>
                 );
-              })}
+              }) : null}
             </View>
 
+            {!postsEnabled ? (
+              <View style={styles.featureNotice}>
+                <FontAwesome name="lock" size={14} color="#92590e" />
+                <Text style={styles.featureNoticeText}>Student posts are currently disabled by platform settings.</Text>
+              </View>
+            ) : null}
+
             <View style={styles.sideGrid}>
-              <TouchableOpacity style={styles.sideCard} onPress={() => router.push('/directory')}>
-                <Text style={styles.sideKicker}>Batchmates</Text>
-                <Text style={styles.sideValue}>{batchmates.length}</Text>
-                <Text style={styles.sideCopy}>People from your circle</Text>
-              </TouchableOpacity>
+              {directoryEnabled ? (
+                <TouchableOpacity style={styles.sideCard} onPress={() => router.push('/directory')}>
+                  <Text style={styles.sideKicker}>Batchmates</Text>
+                  <Text style={styles.sideValue}>{batchmates.length}</Text>
+                  <Text style={styles.sideCopy}>People from your circle</Text>
+                </TouchableOpacity>
+              ) : null}
               <TouchableOpacity style={styles.sideCardDark} onPress={() => router.push('/analytics')}>
                 <Text style={styles.sideKickerGold}>Trending</Text>
                 <Text style={styles.sideValueDark}>{trending.length}</Text>
@@ -524,9 +555,9 @@ export default function HomeScreen() {
         )}
         ListEmptyComponent={!loading ? (
           <View style={styles.emptyFeed}>
-            <FontAwesome name="photo" size={28} color="#cbd5e1" />
-            <Text style={styles.emptyTitle}>No posts here yet.</Text>
-            <Text style={styles.emptyText}>{filter === 'mine' ? 'Upload your first photo in Gallery.' : 'Check back later.'}</Text>
+            <FontAwesome name={postsEnabled ? 'photo' : 'lock'} size={28} color="#cbd5e1" />
+            <Text style={styles.emptyTitle}>{postsEnabled ? 'No posts here yet.' : 'Posts Disabled'}</Text>
+            <Text style={styles.emptyText}>{postsEnabled ? (filter === 'mine' ? 'Upload your first photo in Gallery.' : 'Check back later.') : 'The dashboard feed is currently disabled.'}</Text>
           </View>
         ) : null}
         ListFooterComponent={loadingMore ? <ActivityIndicator color="#1d2b4b" style={{ marginVertical: 18 }} /> : <View style={{ height: 110 }} />}
@@ -633,6 +664,8 @@ const styles = StyleSheet.create({
   filterButtonActive: { backgroundColor: '#1d2b4b', borderColor: '#1d2b4b' },
   filterText: { color: '#64748b', fontSize: 12, fontWeight: '800' },
   filterTextActive: { color: '#fdb813' },
+  featureNotice: { marginHorizontal: 18, marginBottom: 14, borderRadius: 14, backgroundColor: '#fffbeb', borderWidth: 1, borderColor: '#fde68a', paddingHorizontal: 13, paddingVertical: 11, flexDirection: 'row', alignItems: 'center', gap: 8 },
+  featureNoticeText: { color: '#92590e', fontSize: 12, fontWeight: '900', flex: 1 },
   sideGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, paddingHorizontal: 18, marginBottom: 14 },
   sideCard: { flexGrow: 1, flexBasis: '30%', backgroundColor: '#ffffff', borderRadius: 14, borderWidth: 1, borderColor: '#e2e8f0', padding: 14 },
   sideCardDark: { flexGrow: 1, flexBasis: '30%', backgroundColor: '#1d2b4b', borderRadius: 14, padding: 14 },
