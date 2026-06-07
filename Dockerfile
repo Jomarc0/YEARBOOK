@@ -37,7 +37,7 @@ RUN composer install \
 
 COPY . .
 
-RUN composer dump-autoload --optimize \
+RUN composer dump-autoload --optimize --no-scripts \
     && mkdir -p storage/framework/cache storage/framework/sessions storage/framework/views storage/logs bootstrap/cache \
     && chown -R www-data:www-data storage bootstrap/cache \
     && chmod -R ug+rw storage bootstrap/cache \
