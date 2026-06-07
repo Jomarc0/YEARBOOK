@@ -4,6 +4,8 @@ set -e
 mkdir -p storage/framework/cache storage/framework/sessions storage/framework/views storage/logs bootstrap/cache
 
 # Fix permissions
+touch storage/logs/laravel.log
+chown -R www-data:www-data storage bootstrap/cache
 chmod -R 777 storage bootstrap/cache
 
 cat > .env << EOF
@@ -15,6 +17,8 @@ APP_URL="${APP_URL}"
 FRONTEND_URL="${FRONTEND_URL}"
 CORS_ALLOWED_ORIGINS="${CORS_ALLOWED_ORIGINS}"
 SANCTUM_STATEFUL_DOMAINS="${SANCTUM_STATEFUL_DOMAINS}"
+LOG_CHANNEL="${LOG_CHANNEL:-stderr}"
+LOG_LEVEL="${LOG_LEVEL:-debug}"
 DB_CONNECTION="${DB_CONNECTION}"
 DB_HOST="${DB_HOST}"
 DB_PORT="${DB_PORT}"
@@ -22,7 +26,7 @@ DB_DATABASE="${DB_DATABASE}"
 DB_USERNAME="${DB_USERNAME}"
 DB_PASSWORD="${DB_PASSWORD}"
 DB_SSLMODE="${DB_SSLMODE}"
-SESSION_DRIVER="${SESSION_DRIVER}"
+SESSION_DRIVER="${SESSION_DRIVER:-cookie}"
 SESSION_LIFETIME="${SESSION_LIFETIME}"
 SESSION_SECURE_COOKIE="${SESSION_SECURE_COOKIE}"
 SESSION_SAME_SITE="${SESSION_SAME_SITE}"
