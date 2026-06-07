@@ -126,7 +126,12 @@ class MessageController extends Controller
                 $request->receiver_id,
                 $request->user()->name,
                 $request->body,
-                ['type' => 'chat', 'sender_id' => $request->user()->id],
+                [
+                    'type' => 'chat',
+                    'sender_id' => (string) $request->user()->id,
+                    'sender_name' => $request->user()->name,
+                    'sender_avatar' => $request->user()->profile_picture,
+                ],
                 'chat'
             );
         } catch (\Throwable $e) {

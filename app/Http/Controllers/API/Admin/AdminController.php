@@ -79,7 +79,7 @@ class AdminController extends Controller
             ->join('users', 'photos.user_id', '=', 'users.id')
             ->selectRaw("
                 photos.id,
-                SUBSTRING_INDEX(photos.file_path, '/', -1) AS filename,
+                photos.file_path,
                 CONCAT(users.first_name, ' ', users.last_name) AS uploader,
                 ? AS type,
                 photos.created_at
@@ -89,7 +89,7 @@ class AdminController extends Controller
             ->get()
             ->map(fn($u) => [
                 'id'       => $u->id,
-                'filename' => $u->filename,
+                'filename' => basename((string) $u->file_path),
                 'uploader' => $u->uploader,
                 'type'     => $u->type,
                 'time'     => Carbon::parse($u->created_at)->diffForHumans(),

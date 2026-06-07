@@ -1066,7 +1066,9 @@ function StudentsView({ batch, section, toast }) {
     try {
       await api.delete(`/admin/sections/${section.id}/students/${delTarget.id}`);
       toast("Student removed."); setDelTarget(null); load();
-    } catch { toast("Remove failed.", "error"); }
+    } catch (err) {
+      toast(err.response?.data?.message ?? "Remove failed.", "error");
+    }
     finally { setDelLoading(false); }
   };
 

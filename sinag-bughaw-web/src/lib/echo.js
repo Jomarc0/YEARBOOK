@@ -28,5 +28,18 @@ const echo = new Echo({
   },
 });
 
+export function refreshEchoAuthHeaders() {
+  const token = getToken();
+  const headers = {
+    Authorization: token ? `Bearer ${token}` : '',
+    Accept: 'application/json',
+  };
+
+  echo.options.auth.headers = headers;
+  if (echo.connector?.options?.auth) {
+    echo.connector.options.auth.headers = headers;
+  }
+}
+
 window.Echo = echo;
 export default echo;

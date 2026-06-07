@@ -80,8 +80,18 @@ export default function MessagesPage() {
 
   useEffect(() => {
     if (!recipientId) { setRecipient(null); return; }
-    studentsApi.show(recipientId).then(({ data }) => setRecipient(data)).catch(() => {});
-  }, [recipientId]);
+    const fromConversation = conversations
+      .map((conv) => (String(conv.sender_id) === String(user?.id) ? conv.receiver : conv.sender))
+      .find((person) => String(person?.id) === String(recipientId));
+
+    if (fromConversation) setRecipient(fromConversation);
+
+    studentsApi.show(recipientId)
+      .then(({ data }) => setRecipient(data.restricted ? (data.student ?? fromConversation ?? null) : data))
+      .catch(() => {
+        if (!fromConversation) setRecipient(null);
+      });
+  }, [recipientId, conversations, user?.id]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });

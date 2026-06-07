@@ -1,12 +1,34 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { faceApi } from '@/api/gallery.api';
+import { imageUrl } from '@/utils/imageUrl';
 
-function resolvePhotoUrl(path) {
-  if (!path) return null;
-  if (path.startsWith('http://') || path.startsWith('https://')) return path;
-  const root = import.meta.env.VITE_APP_URL || 'http://127.0.0.1:8000';
-  return `${root}/storage/${path}`;
+function resolvePhotoUrl(item) {
+  const photo = item?.photo ?? item ?? {};
+  return imageUrl(
+    photo.file_path ??
+    photo.photo_url ??
+    photo.image_url ??
+    photo.url ??
+    item?.file_path ??
+    item?.photo_url ??
+    item?.image_url ??
+    item?.url ??
+    item?.photo_path
+  );
+}
+
+function galleryLink(item) {
+  const photo = item?.photo ?? {};
+  const albumId = photo.album?.id ?? photo.album_id ?? item?.album?.id ?? item?.album_id;
+  const galleryId = photo.gallery_id ?? item?.gallery_id;
+  const ownerId = photo.user_id ?? item?.user_id;
+  const postId = item?.photo_id ?? photo.id;
+
+  if (albumId) return `/gallery/${albumId}`;
+  if (galleryId) return `/gallery/${galleryId}`;
+  if (ownerId && postId) return `/students/${ownerId}?post=${postId}`;
+  return '#';
 }
 
 export default function StudentPhotosSection({ userId, compact = false }) {
@@ -71,12 +93,11 @@ export default function StudentPhotosSection({ userId, compact = false }) {
       <>
         <div className="grid grid-cols-3 gap-2">
           {photos.slice(0, 6).map((item, index) => {
-            const photoUrl = resolvePhotoUrl(item.photo?.file_path);
+            const photoUrl = resolvePhotoUrl(item);
             const key      = item.id ?? `tagged-${item.photo_id ?? index}`;
-            const albumId  = item.photo?.album?.id ?? item.photo?.album_id;
 
             return (
-              <Link key={key} to={albumId ? `/gallery/${albumId}` : '#'} className="no-underline block">
+              <Link key={key} to={galleryLink(item)} className="no-underline block">
                 <div className="relative aspect-square rounded-xl overflow-hidden bg-[#1d2b4b]
                                 hover:scale-[1.03] hover:shadow-md transition-all duration-200">
                   {photoUrl ? (
@@ -140,12 +161,11 @@ export default function StudentPhotosSection({ userId, compact = false }) {
       {/* Grid */}
       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
         {photos.map((item, index) => {
-          const photoUrl = resolvePhotoUrl(item.photo?.file_path);
+          const photoUrl = resolvePhotoUrl(item);
           const key      = item.id ?? `tagged-full-${item.photo_id ?? index}`;
-          const albumId  = item.photo?.album?.id ?? item.photo?.album_id;
 
           return (
-            <Link key={key} to={albumId ? `/gallery/${albumId}` : '#'} className="no-underline block">
+            <Link key={key} to={galleryLink(item)} className="no-underline block">
               <div className="relative aspect-square rounded-2xl overflow-hidden bg-[#1d2b4b]
                               shadow-sm hover:scale-[1.03] hover:shadow-lg transition-all duration-300 group">
                 {photoUrl ? (

@@ -38,11 +38,13 @@ class AwsRekognitionFaceRecognition implements FaceRecognition
             return ['indexed' => false, 'reason' => 'Face recognition is not configured.'];
         }
 
-        if (blank($user->profile_picture)) {
+        $imageUrl = $this->faceIndexProfilePicture($user);
+
+        if (blank($imageUrl)) {
             return ['indexed' => false, 'reason' => 'No profile picture set.'];
         }
 
-        $bytes = $this->resolveImageBytes($user->profile_picture);
+        $bytes = $this->resolveImageBytes($imageUrl);
 
         if ($bytes === null || $bytes === '') {
             return ['indexed' => false, 'reason' => 'Could not read profile picture bytes.'];
@@ -257,7 +259,9 @@ class AwsRekognitionFaceRecognition implements FaceRecognition
                 $user            = $this->resolveUserFromExternalImageId($externalImageId);
 
                 return [
-                    'user_id'           => $user?->id,
+                    'user_id'           => $this->faceSubjectStudentRecordId($user),
+                    'student_record_id' => $this->faceSubjectStudentRecordId($user),
+                    'account_user_id'   => $this->faceSubjectAccountUserId($user),
                     'name'              => $this->faceSubjectName($user),
                     'student_id'        => $this->faceSubjectStudentNo($user),
                     'course'            => $this->faceSubjectCourse($user),
@@ -458,7 +462,9 @@ class AwsRekognitionFaceRecognition implements FaceRecognition
                 $user            = $this->resolveUserFromExternalImageId($externalImageId);
 
                 return [
-                    'user_id'           => $user?->id,
+                    'user_id'           => $this->faceSubjectStudentRecordId($user),
+                    'student_record_id' => $this->faceSubjectStudentRecordId($user),
+                    'account_user_id'   => $this->faceSubjectAccountUserId($user),
                     'name'              => $this->faceSubjectName($user) ?? 'Unknown student',
                     'student_id'        => $this->faceSubjectStudentNo($user),
                     'course'            => $this->faceSubjectCourse($user),
@@ -485,9 +491,42 @@ class AwsRekognitionFaceRecognition implements FaceRecognition
             return null;
         }
 
-        $id = (int) substr($externalImageId, strlen('student:'));
+        $ids = $this->parseStudentExternalImageId($externalImageId);
 
-        return Student::find($id) ?? User::find($id);
+        if ($ids['user_id']) {
+            $user = User::with('studentRecord')->find($ids['user_id']);
+            if ($user) return $user;
+        }
+
+        return Student::find($ids['student_id']) ?? User::with('studentRecord')->find($ids['student_id']);
+    }
+
+    private function parseStudentExternalImageId(string $externalImageId): array
+    {
+        preg_match('/^student:(\d+)(?::user:(\d+))?$/', $externalImageId, $matches);
+
+        return [
+            'student_id' => (int) ($matches[1] ?? 0),
+            'user_id'    => isset($matches[2]) ? (int) $matches[2] : null,
+        ];
+    }
+
+    private function faceSubjectStudentRecordId(User|Student|null $subject): ?int
+    {
+        if ($subject instanceof Student) {
+            return $subject->id;
+        }
+
+        return $subject?->student_record_id ?: $subject?->studentRecord?->id ?: $subject?->id;
+    }
+
+    private function faceSubjectAccountUserId(User|Student|null $subject): ?int
+    {
+        if ($subject instanceof User) {
+            return $subject->id;
+        }
+
+        return $subject?->userAccount?->id;
     }
 
     private function faceSubjectName(User|Student|null $subject): ?string
@@ -609,8 +648,21 @@ class AwsRekognitionFaceRecognition implements FaceRecognition
         }
     }
 
+    private function faceIndexProfilePicture(User $user): ?string
+    {
+        $user->loadMissing('studentRecord');
+
+        return $user->studentRecord?->photo
+            ?: $user->getRawOriginal('profile_picture')
+            ?: $user->profile_picture;
+    }
+
     private function externalImageId(User $user): string
     {
-        return 'student:' . $user->id;
+        $user->loadMissing('studentRecord');
+
+        $studentId = $user->student_record_id ?: $user->studentRecord?->id ?: $user->id;
+
+        return "student:{$studentId}:user:{$user->id}";
     }
 }

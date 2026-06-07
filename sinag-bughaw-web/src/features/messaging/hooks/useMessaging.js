@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import echo                              from '@/lib/echo';
+import echo, { refreshEchoAuthHeaders }  from '@/lib/echo';
 import { messagesApi, presenceApi }      from '@/api/messaging.api';
 import { useAuth }                       from '@/features/auth/hooks/useAuth';
 
@@ -121,6 +121,7 @@ export function useMessaging(recipientId = null) {
   useEffect(() => {
     if (!user?.id) return;
 
+    refreshEchoAuthHeaders();
     const channel = echo.private(`chat.${user.id}`);
 
     channel.listen('.message.sent', (payload) => {
@@ -159,6 +160,7 @@ export function useMessaging(recipientId = null) {
   useEffect(() => {
     if (!user?.id) return;
 
+    refreshEchoAuthHeaders();
     echo.join('online-users')
       .here((members) => {
         setOnlineUsers(new Set(members.map(m => m.id)));

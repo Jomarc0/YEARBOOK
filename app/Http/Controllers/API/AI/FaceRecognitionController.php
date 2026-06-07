@@ -30,7 +30,16 @@ class FaceRecognitionController extends Controller
         $this->ensureAdmin($request);
 
         try {
-            $students = User::whereNotNull('profile_picture')->get();
+            $students = User::with('studentRecord')
+                ->where(function ($query) {
+                    $query->whereNotNull('profile_picture')
+                        ->where('profile_picture', '!=', '');
+                })
+                ->orWhereHas('studentRecord', function ($query) {
+                    $query->whereNotNull('photo')
+                        ->where('photo', '!=', '');
+                })
+                ->get();
             $result   = $this->faceRecognition->syncStudents($students);
 
             AuditLog::record(
@@ -301,7 +310,7 @@ class FaceRecognitionController extends Controller
             // Only tags that have a valid photo_id (manual tags use this)
             ->whereNotNull('photo_id')
             ->with([
-                'photo:id,file_path,caption,album_id',
+                'photo:id,file_path,caption,album_id,user_id',
                 'photo.album:id,title,event_date',
             ])
             ->orderByDesc('created_at') // more reliable than similarity for mixed sources
@@ -317,6 +326,7 @@ class FaceRecognitionController extends Controller
                 'photo'      => $t->photo ? [
                     'file_path' => $t->photo->file_path,
                     'caption'   => $t->photo->caption,
+                    'user_id'   => $t->photo->user_id,
                     'album'     => $t->photo->album ? [
                         'id'         => $t->photo->album->id,
                         'title'      => $t->photo->album->title,

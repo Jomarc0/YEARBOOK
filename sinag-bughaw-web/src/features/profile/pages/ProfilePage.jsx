@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { useParams, Link, useNavigate } from 'react-router-dom';
+import { useParams, Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { studentsApi } from '@/api/student.api';
 import { profileApi } from '@/api/gallery.api';
 import { voiceNotesApi } from '@/api/messaging.api';
@@ -68,6 +68,7 @@ export default function ProfilePage() {
   const { user: authUser } = useAuth();
   const { isOn }           = useAppConfig();
   const navigate           = useNavigate();
+  const [searchParams] = useSearchParams();
   const postsEnabled       = isOn('allow_student_posts');
   const premiumBilling     = isOn('enable_premium_subscription');
 
@@ -94,6 +95,8 @@ export default function ProfilePage() {
 
   const fileRef = useRef();
   const isOwn   = authUser?.id === parseInt(id);
+  const postParam = searchParams.get('post');
+  const openedPostRef = useRef(null);
   const userTier   = getTier(authUser);
   const isPremium  = userTier === 'premium' || userTier === 'standard';
   const isFree     = isOwn && premiumBilling && !isPremium;
@@ -123,6 +126,20 @@ export default function ProfilePage() {
   useEffect(() => { if (activeTab === 'voicenotes')   loadVoiceNotes();   }, [activeTab, id]);
   useEffect(() => { if (activeTab === 'achievements') loadAchievements(); }, [activeTab, id]);
   useEffect(() => { if (activeTab === 'academic')     loadAcademic();     }, [activeTab, id]);
+
+  useEffect(() => {
+    if (postParam) setActiveTab('posts');
+  }, [postParam]);
+
+  useEffect(() => {
+    if (!postParam || postsLoading || !posts.length || openedPostRef.current === postParam) return;
+
+    const post = posts.find((p) => String(p.id) === String(postParam));
+    if (!post) return;
+
+    openedPostRef.current = postParam;
+    setLightbox({ post, idx: 0 });
+  }, [postParam, posts, postsLoading]);
 
   const loadPosts = () => {
     setPostsLoading(true);

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import api from '@/api/client';
+import { refreshEchoAuthHeaders } from '@/lib/echo';
 
 function initials(name = '') {
   return name.trim().split(/\s+/).map((w) => w[0]?.toUpperCase() || '').slice(0, 2).join('');
@@ -103,6 +104,7 @@ export default function MessageModal({ isOpen, onClose, student, authUser }) {
 
   useEffect(() => {
     if (!isOpen || !authUser?.id || !window.Echo) return;
+    refreshEchoAuthHeaders();
     const channel = window.Echo.private(`chat.${authUser.id}`)
       .listen('.message.sent', (payload) => {
         if (String(payload.sender_id) === String(student?.id)) {

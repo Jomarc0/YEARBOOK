@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import Navbar from '@/components/layout/Navbar';
 import Footer from '@/components/layout/Footer';
 import { studentsApi } from '@/api/student.api';
@@ -64,6 +64,7 @@ export default function StudentProfileView() {
   const { id }             = useParams();
   const { user: authUser } = useAuth();
   const navigate           = useNavigate();
+  const [searchParams]     = useSearchParams();
 
   const [student,          setStudent]          = useState(null);
   const [loading,          setLoading]          = useState(true);
@@ -79,6 +80,7 @@ export default function StudentProfileView() {
   const [toast,            setToast]            = useState(null);
   const [achievements,     setAchievements]     = useState([]);
   const [achieveLoading,   setAchieveLoading]   = useState(false);
+  const postParam = searchParams.get('post');
 
   const canViewFull = student?.is_subscribed_viewer ?? false;
 
@@ -97,7 +99,10 @@ export default function StudentProfileView() {
   // ── Fetch student + record view ────────────────────────────────────────────
   useEffect(() => {
     if (!id) return;
-    if (parseInt(id) === authUser?.id) { navigate('/profile', { replace: true }); return; }
+    if (parseInt(id) === authUser?.id) {
+      navigate(`/profile${postParam ? `?post=${encodeURIComponent(postParam)}` : ''}`, { replace: true });
+      return;
+    }
     setLoading(true);
     studentsApi.show(id)
       .then(({ data }) => {
@@ -116,11 +121,22 @@ export default function StudentProfileView() {
         setStudent(null);
       })
       .finally(() => setLoading(false));
-  }, [id, authUser]);
+  }, [id, authUser, navigate, postParam]);
 
   useEffect(() => {
     if (activeTab === 'posts' && student) loadPosts();
   }, [activeTab, id, student]);
+
+  useEffect(() => {
+    if (postParam) setActiveTab('posts');
+  }, [postParam]);
+
+  useEffect(() => {
+    if (!postParam || postsLoading || !posts.length) return;
+
+    const post = posts.find((p) => String(p.id) === String(postParam));
+    if (post) setLightbox(post);
+  }, [postParam, posts, postsLoading]);
 
   useEffect(() => {
     if (activeTab === 'achievements' && canViewFull && id) loadAchievements();

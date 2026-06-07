@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { notificationsApi } from '@/api/yearbook.api';
+import { imageUrl } from '@/utils/imageUrl';
 
 function timeAgo(dateStr) {
   const diff = Math.floor((Date.now() - new Date(dateStr)) / 1000);
@@ -16,12 +17,36 @@ function getInitials(name = '') {
 
 function typeStyle(type) {
   switch (type) {
-    case 'message': return { icon: 'fa-comment-dots', bubble: 'bg-indigo-50 text-[#3f51b5]' };
+    case 'message':
+    case 'chat':
+    case 'new_message':
+      return { icon: 'fa-comment-dots', bubble: 'bg-indigo-50 text-[#3f51b5]' };
     case 'like': return { icon: 'fa-heart', bubble: 'bg-red-50 text-red-500' };
-    case 'tag': return { icon: 'fa-tag', bubble: 'bg-emerald-50 text-emerald-500' };
+    case 'tag':
+    case 'photo_tagged':
+      return { icon: 'fa-tag', bubble: 'bg-emerald-50 text-emerald-500' };
     case 'announcement': return { icon: 'fa-bell', bubble: 'bg-amber-50 text-amber-600' };
     default: return { icon: 'fa-bell', bubble: 'bg-slate-100 text-slate-500' };
   }
+}
+
+function notificationTarget(notification) {
+  const data = notification.data ?? {};
+  const type = data.type ?? notification.type;
+  const actionUrl = data.action_url;
+
+  if (actionUrl) {
+    try {
+      const parsed = new URL(actionUrl, window.location.origin);
+      return `${parsed.pathname}${parsed.search}${parsed.hash}` || '/messages';
+    } catch {
+      return actionUrl;
+    }
+  }
+
+  if (type === 'photo_tagged' || type === 'tag') return '/profile';
+  const senderId = data.sender_id ?? notification.sender_id;
+  return senderId ? `/messages/${senderId}` : '/messages';
 }
 
 export default function NotificationBell() {
@@ -120,17 +145,24 @@ export default function NotificationBell() {
               </div>
             ) : (
               notifications.map((n) => {
-                const st = typeStyle(n.type ?? 'default');
+                const data = n.data ?? {};
+                const type = data.type ?? n.type ?? 'default';
+                const st = typeStyle(type);
                 const isUnread = !n.read_at;
-                const sender = n.data?.sender_name ?? n.sender_name ?? 'Someone';
-                const preview = n.data?.message ?? n.body ?? n.message ?? 'Sent you a message';
-                const senderId = n.data?.sender_id ?? n.sender_id;
-                const avatar = n.data?.sender_avatar ?? null;
+                const sender =
+                  data.sender_name ??
+                  data.tagger_name ??
+                  data.actor_name ??
+                  n.sender_name ??
+                  (type === 'announcement' ? 'Announcement' : 'Someone');
+                const preview = data.message ?? n.body ?? n.message ?? n.title ?? 'Sent you a notification';
+                const avatar = imageUrl(data.sender_avatar ?? data.tagger_avatar ?? null);
+                const target = notificationTarget(n);
 
                 return (
                   <Link
                     key={n.id}
-                    to={senderId ? `/messages/${senderId}` : '/messages'}
+                    to={target}
                     onClick={() => setOpen(false)}
                     className={`flex items-start gap-3 border-b border-slate-50 px-5 py-3.5 text-inherit no-underline transition hover:bg-slate-50 ${isUnread ? 'bg-[#fafbff]' : 'bg-white'}`}
                   >

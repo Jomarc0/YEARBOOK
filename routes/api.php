@@ -21,6 +21,7 @@ use App\Http\Controllers\API\Admin\FacultyAdminController;
 use App\Http\Controllers\API\Admin\TrashController;
 use App\Http\Controllers\API\Admin\SuperAdminController;
 use App\Http\Controllers\API\Admin\StudentController as AdminStudentController;
+use App\Http\Controllers\API\Admin\AnnouncementController as AdminAnnouncementController;
 use App\Http\Controllers\API\Analytics\AnalyticsController;
 use App\Http\Controllers\API\Auth\ConsentController;
 use App\Http\Controllers\API\Feed\FeedController;
@@ -299,9 +300,9 @@ Route::middleware(['auth:sanctum', 'throttle:120,1'])->group(function () {
     });
 
     // ── Announcements ─────────────────────────────────────────────────────────
-    Route::get('/announcements/recipients/count', [AnnouncementController::class, 'recipientCount']);
-    Route::post('/announcements', [AnnouncementController::class, 'store']);
-    Route::delete('/announcements/{announcement}', [AnnouncementController::class, 'destroy']);
+    Route::get('/announcements/recipients/count', [AdminAnnouncementController::class, 'recipientCount']);
+    Route::post('/announcements', [AdminAnnouncementController::class, 'store']);
+    Route::delete('/announcements/{announcement}', [AdminAnnouncementController::class, 'destroy']);
 
     // ── Analytics ─────────────────────────────────────────────────────────────
     Route::prefix('analytics')->group(function () {

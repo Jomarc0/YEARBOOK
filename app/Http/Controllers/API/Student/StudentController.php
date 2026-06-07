@@ -7,6 +7,7 @@ use App\Http\Controllers\Controller;
 use App\Jobs\AI\ProcessFaceIndexing;
 use App\Models\AuditLog;
 use App\Models\Photo;
+use App\Models\Student;
 use App\Models\TaggedPhoto;
 use App\Models\User;
 use App\Notifications\PhotoTaggedNotification;
@@ -93,9 +94,41 @@ class StudentController extends Controller
 
     public function show(Request $request, int $id): JsonResponse
     {
-        $student      = User::with(['section', 'studentRecord'])->findOrFail($id);
+        $student = User::with(['section', 'studentRecord'])->find($id);
+        if (! $student) {
+            $studentRecord = Student::with('userAccount')->find($id);
+            if (! $studentRecord) {
+                return response()->json([
+                    'message' => 'Student profile is unavailable.',
+                    'restricted' => true,
+                    'visibility' => 'unavailable',
+                    'student' => [
+                        'id' => $id,
+                        'name' => 'Unavailable Student',
+                        'profile_picture' => null,
+                    ],
+                ], 200);
+            }
+
+            $student = $studentRecord->userAccount;
+
+            if (! $student) {
+                return response()->json([
+                    'message' => 'This student has not registered a user account yet.',
+                    'restricted' => true,
+                    'visibility' => 'unregistered',
+                    'student' => [
+                        'id' => $studentRecord->id,
+                        'name' => trim(($studentRecord->first_name ?? '') . ' ' . ($studentRecord->last_name ?? '')),
+                        'profile_picture' => $studentRecord->photo,
+                        'course' => $studentRecord->course,
+                    ],
+                ], 200);
+            }
+        }
+
         $isSubscribed = $request->attributes->get('viewer_is_subscribed', false);
-        $isOwner      = $request->user()?->id === $id;
+        $isOwner      = $request->user()?->id === $student->id;
 
         if ($isOwner) {
             return response()->json(array_merge(
@@ -297,6 +330,10 @@ class StudentController extends Controller
 
         $studentIds = collect($request->student_ids)->unique()->values();
 
+        $alreadyTaggedIds = $photo->taggedStudents()
+            ->wherePivot('tagged_by', $authId)
+            ->pluck('users.id');
+
         // Sync via the BelongsToMany pivot (tagged_photos table).
         // syncWithoutDetaching preserves existing AI-tagged rows.
         $photo->taggedStudents()->syncWithoutDetaching(
@@ -308,20 +345,16 @@ class StudentController extends Controller
             ])->all()
         );
 
-        // Notify only students that weren't already tagged manually
-        $alreadyTaggedIds = $photo->taggedStudents()
-            ->wherePivot('tagged_by', $authId)
-            ->pluck('users.id');
-
         $newlyTagged = User::whereIn('id', $studentIds)
             ->whereNotIn('id', $alreadyTaggedIds)
             ->get();
 
-        $photoUrl = $photo->media->first()?->file_path ?? '';
+        $photoUrl = $photo->media->first()?->file_path ?? $photo->file_path ?? '';
 
         foreach ($newlyTagged as $tagged) {
             try {
-                PhotoTaggedNotification::dispatchFor($tagged, $request->user(), $photoUrl);
+                $actionUrl = rtrim(config('app.frontend_url'), '/') . '/students/' . $photo->user_id . '?post=' . $photo->id;
+                PhotoTaggedNotification::dispatchFor($tagged, $request->user(), $photoUrl, $actionUrl);
             } catch (\Throwable) {
                 // Never let a notification failure break the response
             }

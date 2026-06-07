@@ -5,9 +5,25 @@ import client from './client';
 export const DEPARTMENTS = ['SACE', 'SAHS', 'SABM', 'SHS'];
 
 export const DEPARTMENT_COURSES = {
-  SACE: ['BS Architecture', 'BS Civil Engineering', 'BS Computer Science', 'BS Information Technology'],
-  SAHS: ['BS Nursing', 'BS Medical Technology', 'BS Psychology'],
-  SABM: ['BS Accountancy', 'BSBA Financial Management', 'BSBA Marketing Management', 'BS Tourism Management'],
+  SACE: [
+    'Bachelor of Science in Architecture',
+    'Bachelor of Multimedia Arts',
+    'Bachelor of Science in Civil Engineering',
+    'Bachelor of Science in Computer Science',
+    'Bachelor of Science in Information Technology',
+  ],
+  SAHS: [
+    'Bachelor of Science in Nursing',
+    'Bachelor of Science in Medical Technology',
+    'Bachelor of Science in Psychology',
+  ],
+  SABM: [
+    'Bachelor of Science in Accountancy',
+    'Bachelor of Science in Business Administration - Financial Management',
+    'Bachelor of Science in Business Administration - Marketing Management',
+    'Bachelor of Science in Tourism Management',
+    'Master in Management',
+  ],
   SHS:  ['ABM', 'STEM', 'HUMSS'],
 };
 

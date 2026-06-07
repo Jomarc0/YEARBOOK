@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\API\Auth;
 
 use App\Http\Controllers\Controller;
+use App\Jobs\AI\ProcessFaceIndexing;
 use App\Jobs\Notification\SendOtpEmail;
 use App\Models\Batch;
 use App\Models\Consent;
@@ -84,6 +85,10 @@ class AuthController extends Controller
         ]);
 
         // ── Consent log ───────────────────────────────────────────────────
+        if ($studentRecord && filled($studentRecord->photo)) {
+            ProcessFaceIndexing::dispatch($user->fresh()->load('studentRecord'));
+        }
+
         Consent::create([
             'user_id'     => $user->id,
             'type'        => 'privacy_policy',
@@ -120,7 +125,10 @@ class AuthController extends Controller
             'password' => 'required',
         ]);
 
-        $key      = 'student_login:' . sha1(strtolower($request->email) . '|' . $request->ip());
+        $email = strtolower(trim((string) $request->input('email')));
+        $password = (string) $request->input('password');
+
+        $key      = 'student_login:' . sha1($email . '|' . $request->ip());
         $maxTries = (int) PlatformSettings::get('max_login_attempts');
 
         if (RateLimiter::tooManyAttempts($key, $maxTries)) {
@@ -132,9 +140,9 @@ class AuthController extends Controller
             ], 429);
         }
 
-        $user = User::where('email', $request->email)->first();
+        $user = User::whereRaw('LOWER(TRIM(email)) = ?', [$email])->first();
 
-        if (! $user || ! Hash::check($request->password, $user->password)) {
+        if (! $user || ! Hash::check($password, $user->getAuthPassword())) {
             RateLimiter::hit($key, 60 * (int) PlatformSettings::get('session_timeout_minutes'));
 
             throw ValidationException::withMessages([

@@ -20,7 +20,16 @@ Artisan::command('faces:sync-students', function (FaceRecognition $faceRecogniti
     }
 
     $summary = $faceRecognition->syncStudents(
-        User::query()->whereNotNull('profile_picture')->where('profile_picture', '!=', '')->get()
+        User::with('studentRecord')
+            ->where(function ($query) {
+                $query->whereNotNull('profile_picture')
+                    ->where('profile_picture', '!=', '');
+            })
+            ->orWhereHas('studentRecord', function ($query) {
+                $query->whereNotNull('photo')
+                    ->where('photo', '!=', '');
+            })
+            ->get()
     );
 
     $this->info('Indexed: ' . $summary['indexed']);

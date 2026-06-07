@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Http\Controllers\API\Yearbook;
+namespace App\Http\Controllers\API\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Jobs\Notification\SendAnnouncementEmail;
@@ -28,7 +28,6 @@ class AnnouncementController extends Controller
     public function recipientCount(): JsonResponse
     {
         $count = User::whereNotNull('email')
-            ->where('is_active', true)
             ->count();
 
         return response()->json(['count' => $count]);
@@ -60,7 +59,6 @@ class AnnouncementController extends Controller
         $sendPush  = $announcement->send_push;
 
         User::whereNotNull('email')
-            ->where('is_active', true)
             ->select('id', 'name', 'email', 'fcm_token')
             ->chunkById(100, function ($users) use ($announcement, $validated, $sendEmail, $sendPush) {
                 foreach ($users as $user) {
@@ -100,8 +98,6 @@ class AnnouncementController extends Controller
 
     public function destroy(Announcement $announcement): JsonResponse
     {
-        $this->authorize('delete', $announcement);
-
         $announcement->delete();
 
         return response()->json(['message' => 'Announcement deleted.']);

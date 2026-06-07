@@ -1,9 +1,14 @@
-const BASE = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000';
+const API_BASE = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000';
+const APP_BASE = import.meta.env.VITE_APP_URL || API_BASE.replace(/\/api\/?$/, '');
 
 export function imageUrl(path) {
   if (!path) return null;
   if (path.startsWith('http://') || path.startsWith('https://')) return path;
-  return `${BASE}/storage/${path}`;
+
+  const cleanPath = String(path).replace(/^\/+/, '');
+  if (cleanPath.startsWith('storage/')) return `${APP_BASE}/${cleanPath}`;
+
+  return `${APP_BASE}/storage/${cleanPath}`;
 }
 
 export function avatarUrl(name = '') {

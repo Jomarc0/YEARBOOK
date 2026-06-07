@@ -522,7 +522,7 @@ export default function BatchmatesPage() {
                   <div style={{ height: '220px', overflow: 'hidden', background: '#1d2b4b' }}>
                     {student.profile_picture ? (
                       <img
-                        src={`http://127.0.0.1:8000/storage/${student.profile_picture}`}
+                        src={imageUrl(student.profile_picture)}
                         alt={student.name}
                         className="w-full h-full object-cover transition-transform duration-700 hover:scale-105"
                         style={{ filter: 'brightness(0.9)' }}

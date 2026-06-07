@@ -4,9 +4,11 @@ namespace App\Http\Controllers\API\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Http\Controllers\Concerns\AuditsAdminActions;
+use App\Jobs\AI\ProcessFaceIndexing;
 use App\Models\AuditLog;
 use App\Models\Section;
 use App\Models\Student;
+use App\Models\User;
 use App\Services\Storage\CloudinaryService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -74,6 +76,9 @@ class StudentController extends Controller
             'batch_id'   => $section->batch_id,
         ]);
 
+        $this->autoLinkUser($student);
+        $this->refreshLinkedUser($student, $request->hasFile('photo'));
+
         $this->audit(
             AuditLog::ACTION_USER_CREATED,
             "Added student '{$student->first_name} {$student->last_name}' (No. {$student->student_no}) to section '{$section->name}'.",
@@ -90,6 +95,10 @@ class StudentController extends Controller
 
     public function update(Request $request, Section $section, Student $student): JsonResponse
     {
+        if ((int) $student->section_id !== (int) $section->id) {
+            return response()->json(['message' => 'Student does not belong to this section.'], 404);
+        }
+
         $validated = $request->validate($this->rules($student->id));
 
         if ($request->hasFile('photo')) {
@@ -109,11 +118,7 @@ class StudentController extends Controller
 
         $student->update($validated);
 
-        // If a registered user is linked, invalidate their cached profile
-        // so they see the updated yearbook data immediately.
-        if ($student->userAccount) {
-            cache()->forget('students.api.' . $student->userAccount->id . '.*');
-        }
+        $this->refreshLinkedUser($student, $request->hasFile('photo'));
 
         $this->audit(
             AuditLog::ACTION_USER_UPDATED,
@@ -131,12 +136,21 @@ class StudentController extends Controller
 
     public function destroy(Section $section, Student $student): JsonResponse
     {
+        if ((int) $student->section_id !== (int) $section->id) {
+            return response()->json(['message' => 'Student does not belong to this section.'], 404);
+        }
+
         $snapshot = "{$student->first_name} {$student->last_name} (No. {$student->student_no})";
 
         // If a user is linked, unlink them first so they become a browse account
         // rather than having a dangling FK.
         if ($student->userAccount) {
-            $student->userAccount->update(['student_record_id' => null]);
+            $student->userAccount->update([
+                'student_record_id' => null,
+                'section_id'        => null,
+                'batch_id'          => null,
+            ]);
+            cache()->forget('students.api.' . $student->userAccount->id . '.*');
         }
 
         $student->delete();
@@ -182,6 +196,7 @@ class StudentController extends Controller
             // If a user already registered with this student_no + name,
             // auto-link them to the newly imported record.
             $this->autoLinkUser($student);
+            $this->refreshLinkedUser($student, filled($student->photo));
 
             $imported++;
         }
@@ -208,7 +223,7 @@ class StudentController extends Controller
      */
     private function autoLinkUser(Student $student): void
     {
-        \App\Models\User::whereNull('student_record_id')
+        User::whereNull('student_record_id')
             ->whereRaw('LOWER(TRIM(first_name)) = ?', [strtolower(trim($student->first_name))])
             ->whereRaw('LOWER(TRIM(last_name)) = ?',  [strtolower(trim($student->last_name))])
             ->where(function ($q) use ($student) {
@@ -222,6 +237,25 @@ class StudentController extends Controller
                 'section_id'        => $student->section_id,
                 'batch_id'          => $student->batch_id,
             ]);
+    }
+
+    private function refreshLinkedUser(Student $student, bool $indexFace = false): void
+    {
+        $student->load('userAccount.studentRecord');
+
+        $user = $student->userAccount;
+        if (! $user) return;
+
+        $user->forceFill([
+            'section_id' => $student->section_id,
+            'batch_id'   => $student->batch_id,
+        ])->save();
+
+        cache()->forget('students.api.' . $user->id . '.*');
+
+        if ($indexFace && filled($student->photo)) {
+            ProcessFaceIndexing::dispatch($user->fresh()->load('studentRecord'));
+        }
     }
 
     private function rules(int $ignoreId = null): array
