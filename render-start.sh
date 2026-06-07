@@ -87,8 +87,8 @@ php artisan config:clear
 php artisan route:clear
 php artisan view:clear
 
-php artisan migrate --force 2>/dev/null || echo "Migration skipped"
-php artisan db:seed --class=SettingsSeeder --force 2>/dev/null || echo "Seeder skipped"
+php artisan migrate --force
+php artisan db:seed --class=SettingsSeeder --force
 
 php artisan config:cache
 php artisan route:cache
