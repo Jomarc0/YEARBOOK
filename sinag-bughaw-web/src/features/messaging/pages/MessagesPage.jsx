@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '@/features/auth/hooks/useAuth';
-import { studentsApi } from '@/api/student.api';
+import { messagesApi } from '@/api/messaging.api';
 import Navbar from '@/components/layout/Navbar';
 import { useMessaging } from '@/features/messaging/hooks/useMessaging';
 import { imageUrl } from '@/utils/imageUrl';
@@ -86,8 +86,8 @@ export default function MessagesPage() {
 
     if (fromConversation) setRecipient(fromConversation);
 
-    studentsApi.show(recipientId)
-      .then(({ data }) => setRecipient(data.restricted ? (data.student ?? fromConversation ?? null) : data))
+    messagesApi.participant(recipientId)
+      .then(({ data }) => setRecipient(data ?? fromConversation ?? null))
       .catch(() => {
         if (!fromConversation) setRecipient(null);
       });
@@ -112,7 +112,7 @@ export default function MessagesPage() {
 
   const filtered = conversations.filter((conv) => {
     if (!search.trim()) return true;
-    const other = conv.sender_id === user?.id ? conv.receiver : conv.sender;
+    const other = String(conv.sender_id) === String(user?.id) ? conv.receiver : conv.sender;
     return other?.name?.toLowerCase().includes(search.toLowerCase());
   });
 
@@ -153,7 +153,7 @@ export default function MessagesPage() {
             )}
 
             {filtered.map((conv) => {
-              const other = conv.sender_id === user?.id ? conv.receiver : conv.sender;
+              const other = String(conv.sender_id) === String(user?.id) ? conv.receiver : conv.sender;
               if (!other) return null;
               const active = String(recipientId) === String(other.id);
               const online = onlineUsers.has(other.id);

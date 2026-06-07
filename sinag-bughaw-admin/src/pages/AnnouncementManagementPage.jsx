@@ -76,7 +76,7 @@ function Toggle({ checked, onChange, label, icon }) {
   );
 }
 
-function AnnouncementRow({ ann, onDelete }) {
+function AnnouncementRow({ ann, onEdit, onDelete }) {
   const cfg = TYPE_CONFIG[ann.type] ?? TYPE_CONFIG.information;
   return (
     <div style={{
@@ -119,19 +119,34 @@ function AnnouncementRow({ ann, onDelete }) {
         </div>
       </div>
 
-      <button
-        onClick={() => onDelete(ann.id)}
-        style={{
-          background: 'transparent', border: 'none', cursor: 'pointer',
-          color: '#ef4444', padding: '4px 6px', borderRadius: '8px', fontSize: '13px',
-          flexShrink: 0, opacity: .7, transition: 'opacity .2s',
-        }}
-        onMouseEnter={e => e.currentTarget.style.opacity = 1}
-        onMouseLeave={e => e.currentTarget.style.opacity = .7}
-        title="Delete"
-      >
-        <i className="fas fa-trash" />
-      </button>
+      <div style={{ display: 'flex', gap: '4px', flexShrink: 0 }}>
+        <button
+          onClick={() => onEdit(ann)}
+          style={{
+            background: 'transparent', border: 'none', cursor: 'pointer',
+            color: '#3f51b5', padding: '4px 6px', borderRadius: '8px', fontSize: '13px',
+            opacity: .75, transition: 'opacity .2s',
+          }}
+          onMouseEnter={e => e.currentTarget.style.opacity = 1}
+          onMouseLeave={e => e.currentTarget.style.opacity = .75}
+          title="Edit"
+        >
+          <i className="fas fa-pen" />
+        </button>
+        <button
+          onClick={() => onDelete(ann.id)}
+          style={{
+            background: 'transparent', border: 'none', cursor: 'pointer',
+            color: '#ef4444', padding: '4px 6px', borderRadius: '8px', fontSize: '13px',
+            opacity: .7, transition: 'opacity .2s',
+          }}
+          onMouseEnter={e => e.currentTarget.style.opacity = 1}
+          onMouseLeave={e => e.currentTarget.style.opacity = .7}
+          title="Delete"
+        >
+          <i className="fas fa-trash" />
+        </button>
+      </div>
     </div>
   );
 }
@@ -162,6 +177,7 @@ export default function AnnouncementManagementPage({ showToast }) {
   const [filterType,     setFilterType]     = useState('all');
   const [searchQuery,    setSearchQuery]    = useState('');
   const [recipientCount, setRecipientCount] = useState(0);
+  const [editingId,      setEditingId]      = useState(null);
 
   // ── Fetch ──────────────────────────────────────────────────────────────────
 
@@ -209,7 +225,7 @@ export default function AnnouncementManagementPage({ showToast }) {
 
     setSubmitting(true);
     try {
-      await announcementsApi.create({
+      const payload = {
         title:        form.title.trim(),
         body:         form.body.trim(),
         type:         form.type,
@@ -217,15 +233,42 @@ export default function AnnouncementManagementPage({ showToast }) {
         send_email:   form.send_email,
         action_url:   form.action_url.trim()   || null,
         action_label: form.action_label.trim() || null,
-      });
-      showToast?.('Announcement published! Emails are being sent.', 'success');
+      };
+
+      if (editingId) {
+        await announcementsApi.update(editingId, payload);
+        showToast?.('Announcement updated.', 'success');
+      } else {
+        await announcementsApi.create(payload);
+        showToast?.('Announcement published! Emails are being sent.', 'success');
+      }
+
       setForm(EMPTY_FORM);
+      setEditingId(null);
       fetchAnnouncements();
     } catch (e) {
-      showToast?.(e?.response?.data?.message ?? 'Failed to publish announcement.', 'error');
+      showToast?.(e?.response?.data?.message ?? 'Failed to save announcement.', 'error');
     } finally {
       setSubmitting(false);
     }
+  };
+
+  const handleEdit = (ann) => {
+    setEditingId(ann.id);
+    setForm({
+      title:        ann.title ?? '',
+      body:         ann.body ?? '',
+      type:         ann.type ?? 'information',
+      send_email:   false,
+      send_push:    Boolean(ann.send_push),
+      action_url:   ann.action_url ?? '',
+      action_label: ann.action_label ?? '',
+    });
+  };
+
+  const cancelEdit = () => {
+    setEditingId(null);
+    setForm(EMPTY_FORM);
   };
 
   const handleDelete = async (id) => {
@@ -307,8 +350,21 @@ export default function AnnouncementManagementPage({ showToast }) {
               display: 'flex', alignItems: 'center', gap: '10px',
             }}>
               <i className="fas fa-pen-to-square" style={{ color: '#3f51b5' }} />
-              Compose Announcement
+              {editingId ? 'Edit Announcement' : 'Compose Announcement'}
             </h2>
+            {editingId && (
+              <button
+                type="button"
+                onClick={cancelEdit}
+                style={{
+                  marginTop: '-12px', marginBottom: '18px', border: 'none', background: '#f1f5f9',
+                  color: '#64748b', borderRadius: '10px', padding: '7px 12px', fontSize: '12px',
+                  fontWeight: 700, cursor: 'pointer',
+                }}
+              >
+                Cancel edit
+              </button>
+            )}
 
             {/* Title */}
             <div style={{ marginBottom: '16px' }}>
@@ -432,8 +488,8 @@ export default function AnnouncementManagementPage({ showToast }) {
                 </>
               ) : (
                 <>
-                  <i className="fas fa-paper-plane" />
-                  Publish &amp; Send Announcement
+                  <i className={`fas ${editingId ? 'fa-floppy-disk' : 'fa-paper-plane'}`} />
+                  {editingId ? 'Save Announcement' : 'Publish & Send Announcement'}
                 </>
               )}
             </button>
@@ -512,7 +568,7 @@ export default function AnnouncementManagementPage({ showToast }) {
               ) : (
                 filtered.map(ann => (
                   <div key={ann.id} className="ann-fade">
-                    <AnnouncementRow ann={ann} onDelete={handleDelete} />
+                    <AnnouncementRow ann={ann} onEdit={handleEdit} onDelete={handleDelete} />
                   </div>
                 ))
               )}

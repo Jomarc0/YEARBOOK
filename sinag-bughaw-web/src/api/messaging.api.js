@@ -3,6 +3,7 @@ import api from './client';
 export const messagesApi = {
   conversations: ()                     => api.get('/messages/conversations'),
   unreadCount:   ()                     => api.get('/messages/unread-count'),
+  participant:    (userId)              => api.get(`/messages/users/${userId}`),
   thread:        (userId)               => api.get(`/messages/${userId}`),
   send:          (receiverId, body)     => api.post('/messages', { receiver_id: receiverId, body }),
   markRead:      (id)                   => api.patch(`/messages/${id}/read`),

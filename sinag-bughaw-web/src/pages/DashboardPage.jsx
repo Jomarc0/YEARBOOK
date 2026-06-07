@@ -311,11 +311,13 @@ function TagModal({ photoId, existingTags = [], batchmates = [], onClose, onSave
 // ─────────────────────────────────────────────────────────────────────────────
 function PostCard({ post, currentUser, batchmates, onTagSaved }) {
   const [tagOpen, setTagOpen] = useState(false);
+  const posterName = post.user?.name || post.user_name || post.name || 'Student';
+  const posterCourse = post.user?.course || post.course || '';
 
   const avatar = storageUrl(post.user?.profile_picture)
-    || `https://ui-avatars.com/api/?name=${encodeURIComponent(post.user?.name ?? 'U')}&background=1d2b4b&color=fdb813&size=64`;
+    || `https://ui-avatars.com/api/?name=${encodeURIComponent(posterName)}&background=1d2b4b&color=fdb813&size=64`;
 
-  const isOwn = post.user_id === currentUser?.id;
+  const isOwn = String(post.user_id) === String(currentUser?.id);
 
   return (
     <>
@@ -325,21 +327,21 @@ function PostCard({ post, currentUser, batchmates, onTagSaved }) {
         <div className="flex items-center gap-3 px-4 py-3">
           <Link to={isOwn ? `/profile/${post.user_id}` : `/students/${post.user_id}`}
             className="flex-shrink-0 no-underline">
-            <img src={avatar} alt={post.user?.name}
+            <img src={avatar} alt={posterName}
               className="w-10 h-10 rounded-xl object-cover border border-slate-100"
-              onError={e => { e.currentTarget.src = `https://ui-avatars.com/api/?name=U&background=1d2b4b&color=fdb813`; }}
+              onError={e => { e.currentTarget.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(posterName)}&background=1d2b4b&color=fdb813`; }}
             />
           </Link>
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-1.5 flex-wrap">
               <Link to={isOwn ? `/profile/${post.user_id}` : `/students/${post.user_id}`}
                 className="text-[13px] font-bold text-[#1d2b4b] no-underline hover:text-[#3f51b5] truncate">
-                {post.user?.name}
+                {posterName}
               </Link>
               {isOwn && <span className="text-[10px] text-slate-400">(you)</span>}
             </div>
             <div className="flex items-center gap-2 mt-0.5">
-              <span className="text-[11px] text-slate-400">{post.user?.course}</span>
+              <span className="text-[11px] text-slate-400">{posterCourse}</span>
               <span className="text-slate-200">·</span>
               <VisPill visibility={post.visibility} />
             </div>
@@ -354,7 +356,7 @@ function PostCard({ post, currentUser, batchmates, onTagSaved }) {
         <div className="px-4 pt-3 pb-1">
           {post.caption && (
             <p className="text-[13px] text-slate-700 leading-relaxed mb-2">
-              <span className="font-semibold text-[#1d2b4b] mr-1">{post.user?.name}</span>
+              <span className="font-semibold text-[#1d2b4b] mr-1">{posterName}</span>
               {post.caption}
             </p>
           )}

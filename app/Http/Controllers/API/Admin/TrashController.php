@@ -5,6 +5,7 @@ namespace App\Http\Controllers\API\Admin;
 use App\Http\Controllers\Controller;
 use App\Http\Controllers\Concerns\AuditsAdminActions;
 use App\Models\Album;
+use App\Models\Announcement;
 use App\Models\AuditLog;
 use App\Models\Batch;
 use App\Models\Faculty;
@@ -128,6 +129,14 @@ class TrashController extends Controller
                 'title_col'    => 'first_name',
                 'subtitle_col' => 'email',
                 'cloudinary'   => fn ($m) => $m->profile_picture ?? null,
+            ],
+            'announcement' => [
+                'model'        => Announcement::class,
+                'label'        => 'Announcements',
+                'icon'         => 'announcement',
+                'title_col'    => 'title',
+                'subtitle_col' => 'type',
+                'cloudinary'   => null,
             ],
         ];
     }

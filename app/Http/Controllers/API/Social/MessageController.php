@@ -9,6 +9,7 @@ use App\Jobs\Notification\SendNewMessageEmail;
 use App\Jobs\SendPushNotification;
 use App\Models\Message;
 use App\Models\User;
+use App\Models\UserNotification;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -25,7 +26,12 @@ class MessageController extends Controller
         $conversations = Message::query()
             ->where('sender_id', $userId)
             ->orWhere('receiver_id', $userId)
-            ->with(['sender:id,name,profile_picture', 'receiver:id,name,profile_picture'])
+            ->with([
+                'sender:id,name,first_name,last_name,profile_picture,student_record_id',
+                'sender.studentRecord:id,course,photo',
+                'receiver:id,name,first_name,last_name,profile_picture,student_record_id',
+                'receiver.studentRecord:id,course,photo',
+            ])
             ->latest()
             ->get()
             ->filter(function ($message) use ($userId, &$seen) {
@@ -78,9 +84,23 @@ class MessageController extends Controller
 
     // ── Thread ────────────────────────────────────────────────────────────────
 
+    public function participant(Request $request, int $userId): JsonResponse
+    {
+        $user = $this->resolveParticipant($request, $userId);
+
+        return response()->json([
+            'id' => $user->id,
+            'name' => $this->displayName($user),
+            'profile_picture' => $user->profile_picture,
+            'course' => $user->course,
+        ]);
+    }
+
     public function thread(Request $request, int $userId): JsonResponse
     {
         $myId = $request->user()->id;
+        $participant = $this->resolveParticipant($request, $userId);
+        $userId = $participant->id;
 
         $messages = Message::thread($myId, $userId)
             ->with('sender:id,name,profile_picture')
@@ -122,15 +142,20 @@ class MessageController extends Controller
 
         // ── Push notification ─────────────────────────────────────────────────
         try {
+            $senderName = $this->displayName($request->user());
+
             SendPushNotification::dispatch(
                 $request->receiver_id,
-                $request->user()->name,
+                $senderName,
                 $request->body,
                 [
                     'type' => 'chat',
                     'sender_id' => (string) $request->user()->id,
-                    'sender_name' => $request->user()->name,
+                    'conversation_user_id' => (string) $request->user()->id,
+                    'message_id' => (string) $message->id,
+                    'sender_name' => $senderName,
                     'sender_avatar' => $request->user()->profile_picture,
+                    'action_url' => rtrim(config('app.frontend_url'), '/') . '/messages/' . $request->user()->id,
                 ],
                 'chat'
             );
@@ -145,7 +170,7 @@ class MessageController extends Controller
                 SendNewMessageEmail::dispatch(
                     email:          $receiver->email,
                     name:           $receiver->name ?? $receiver->email,
-                    senderName:     $request->user()->name,
+                    senderName:     $this->displayName($request->user()),
                     messagePreview: $request->body,
                 );
             }
@@ -153,7 +178,7 @@ class MessageController extends Controller
             Log::warning('Message email notification failed: ' . $e->getMessage());
         }
 
-        return response()->json($message->load('sender:id,name,profile_picture'), 201);
+        return response()->json($message->load('sender:id,name,first_name,last_name,profile_picture,student_record_id'), 201);
     }
 
     // ── Mark read ─────────────────────────────────────────────────────────────
@@ -183,7 +208,7 @@ class MessageController extends Controller
             broadcast(new UserTyping(
                 senderId:   $request->user()->id,
                 receiverId: $request->receiver_id,
-                senderName: $request->user()->name,
+                senderName: $this->displayName($request->user()),
                 isTyping:   $request->boolean('is_typing'),
             ))->toOthers();
         } catch (\Throwable $e) {
@@ -191,5 +216,52 @@ class MessageController extends Controller
         }
 
         return response()->json(['ok' => true]);
+    }
+
+    private function displayName(User $user): string
+    {
+        return trim((string) $user->name)
+            ?: trim(($user->first_name ?? '') . ' ' . ($user->last_name ?? ''))
+            ?: $user->email
+            ?: 'Someone';
+    }
+
+    private function resolveParticipant(Request $request, int $id): User
+    {
+        $user = User::with('studentRecord')->find($id);
+        if ($user) {
+            return $user;
+        }
+
+        $message = Message::where('id', $id)
+            ->where(function ($query) use ($request) {
+                $query->where('sender_id', $request->user()->id)
+                    ->orWhere('receiver_id', $request->user()->id);
+            })
+            ->first();
+
+        if (! $message) {
+            $notification = UserNotification::where('id', $id)
+                ->where('user_id', $request->user()->id)
+                ->firstOrFail();
+
+            $data = $notification->data ?? [];
+            $senderId = $data['conversation_user_id'] ?? $data['sender_id'] ?? null;
+
+            if ($senderId && User::whereKey($senderId)->exists()) {
+                return User::with('studentRecord')->findOrFail($senderId);
+            }
+
+            $message = Message::where('receiver_id', $request->user()->id)
+                ->where('body', $notification->body)
+                ->latest()
+                ->firstOrFail();
+        }
+
+        $participantId = $message->sender_id === $request->user()->id
+            ? $message->receiver_id
+            : $message->sender_id;
+
+        return User::with('studentRecord')->findOrFail($participantId);
     }
 }

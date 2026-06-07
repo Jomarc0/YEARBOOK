@@ -200,6 +200,7 @@ Route::middleware(['auth:sanctum', 'throttle:120,1'])->group(function () {
     Route::prefix('messages')->group(function () {
         Route::get('/conversations', [MessageController::class, 'conversations']);
         Route::get('/unread-count',  [MessageController::class, 'unreadCount']);
+        Route::get('/users/{userId}', [MessageController::class, 'participant']);
         Route::post('/typing',       [MessageController::class, 'typing']);
         Route::post('/',             [MessageController::class, 'send']);
         Route::get('/{userId}',      [MessageController::class, 'thread']);
@@ -302,6 +303,7 @@ Route::middleware(['auth:sanctum', 'throttle:120,1'])->group(function () {
     // ── Announcements ─────────────────────────────────────────────────────────
     Route::get('/announcements/recipients/count', [AdminAnnouncementController::class, 'recipientCount']);
     Route::post('/announcements', [AdminAnnouncementController::class, 'store']);
+    Route::put('/announcements/{announcement}', [AdminAnnouncementController::class, 'update']);
     Route::delete('/announcements/{announcement}', [AdminAnnouncementController::class, 'destroy']);
 
     // ── Analytics ─────────────────────────────────────────────────────────────

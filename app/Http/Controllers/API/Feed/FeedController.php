@@ -24,9 +24,9 @@ class FeedController extends Controller
 
         $query = Photo::query()
             ->with([
-                'user:id,name,profile_picture,batch_id,student_record_id',
+                'user:id,name,first_name,last_name,profile_picture,batch_id,student_record_id',
                 'user.studentRecord:id,course,photo',
-                'taggedStudents:id,name,student_record_id',
+                'taggedStudents:id,name,first_name,last_name,student_record_id',
                 'taggedStudents.studentRecord:id,course,photo',
                 'media',
             ])
@@ -130,7 +130,7 @@ class FeedController extends Controller
         $userData = $photo->user
             ? [
                 'id'              => $photo->user->id,
-                'name'            => $photo->user->name,
+                'name'            => $this->displayName($photo->user),
                 'course'          => $photo->user->course,
                 'profile_picture' => $photo->user->profile_picture,
                 // ⭐ Counts from withCount()
@@ -142,7 +142,7 @@ class FeedController extends Controller
         // ── Tagged students ─────────────────────────────────────────────
         $taggedStudents = $photo->taggedStudents->map(fn ($s) => [
             'id'              => $s->id,
-            'name'            => $s->name,
+            'name'            => $this->displayName($s),
             'course'          => $s->course,
             'profile_picture' => $s->profile_picture,
         ])->values()->toArray();
@@ -163,5 +163,12 @@ class FeedController extends Controller
 
             'tagged_students' => $taggedStudents,
         ];
+    }
+
+    private function displayName(User $user): string
+    {
+        return trim((string) $user->name)
+            ?: trim(($user->first_name ?? '') . ' ' . ($user->last_name ?? ''))
+            ?: 'Student';
     }
 }

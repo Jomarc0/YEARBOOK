@@ -105,7 +105,7 @@ class AuthController extends Controller
         $user->load('studentRecord', 'section');
 
         return response()->json([
-            'user'         => $user,
+            'user'         => $this->authUserPayload($user),
             'access_token' => $token,
             // Tell the frontend whether they were matched as a graduate
             'is_graduate'  => ! is_null($studentRecord),
@@ -261,6 +261,28 @@ class AuthController extends Controller
     private function normalizePersonName(string $name): string
     {
         return preg_replace('/[^a-z0-9]+/', '', strtolower($name)) ?: '';
+    }
+
+    private function authUserPayload(User $user): array
+    {
+        return [
+            'id'                 => $user->id,
+            'first_name'         => $user->first_name,
+            'last_name'          => $user->last_name,
+            'name'               => $user->name,
+            'email'              => $user->email,
+            'role'               => $user->role,
+            'student_record_id'  => $user->student_record_id,
+            'student_id'         => $user->student_id,
+            'course'             => $user->course,
+            'graduation_year'    => $user->graduation_year,
+            'batch'              => $user->batch,
+            'section_id'         => $user->section_id,
+            'batch_id'           => $user->batch_id,
+            'profile_picture'    => $user->profile_picture,
+            'email_verified'     => (bool) $user->email_verified,
+            'consent_accepted'   => (bool) $user->consent_accepted,
+        ];
     }
 
     public function sendOtp(Request $request)

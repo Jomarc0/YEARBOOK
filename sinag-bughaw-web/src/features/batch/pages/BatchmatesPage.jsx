@@ -30,11 +30,29 @@ function getInitials(name = '') {
   return name.trim().split(/\s+/).map(w => w[0]?.toUpperCase() || '').slice(0, 2).join('');
 }
 
+function faceUserId(match) {
+  const id = Number(match?.account_user_id ?? match?.user_id);
+  return Number.isFinite(id) && id > 0 ? id : null;
+}
+
+function studentUserId(student) {
+  const id = Number(student?.id ?? student?.user_id ?? student?.account_user_id);
+  return Number.isFinite(id) && id > 0 ? id : null;
+}
+
 function usableFaceMatches(matches = []) {
-  const validMatches = matches.filter(m =>
-    m?.user_id && (m.student_id || m.course || m.profile_picture)
+  const normalized = matches
+    .map(m => ({
+      ...m,
+      user_id: faceUserId(m),
+      student_record_id: m?.student_record_id ?? m?.student_id ?? null,
+    }))
+    .filter(m => m.user_id);
+
+  const validMatches = normalized.filter(m =>
+    m.name || m.student_id || m.course || m.profile_picture
   );
-  const source = validMatches.length ? validMatches : matches.filter(m => m?.user_id);
+  const source = validMatches.length ? validMatches : normalized;
   return Array.from(new Map(source.map(m => [m.user_id, m])).values());
 }
 
@@ -268,7 +286,7 @@ export default function BatchmatesPage() {
       s.name?.toLowerCase().includes(search.toLowerCase()) ||
       s.student_id?.includes(search);
 
-    if (matchedIds.size > 0) return matchedIds.has(s.id) && textMatch;
+    if (matchedIds.size > 0) return matchedIds.has(studentUserId(s)) && textMatch;
     return textMatch;
   });
 
@@ -492,8 +510,9 @@ export default function BatchmatesPage() {
           }}>
             {filtered.map((student, i) => {
               // FIX: highlight matched cards
-              const matchData  = faceMatches.find(m => m.user_id === student.id);
-              const isMatched  = matchedIds.has(student.id);
+              const userId = studentUserId(student);
+              const matchData  = faceMatches.find(m => m.user_id === userId);
+              const isMatched  = matchedIds.has(userId);
 
               return (
                 <Link

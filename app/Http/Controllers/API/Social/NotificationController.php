@@ -22,16 +22,22 @@ class NotificationController extends Controller
             ->latest()
             ->limit(20)
             ->get()
-            ->map(fn (UserNotification $notification) => [
-            'id' => 'custom:' . $notification->id,
-            'type' => $notification->type,
-            'title' => $notification->title,
-            'body' => $notification->body,
-            'data' => $notification->data,
-            'is_read' => $notification->is_read,
-            'read_at' => $notification->is_read ? $notification->updated_at?->toIso8601String() : null,
-            'created_at' => $notification->created_at?->toIso8601String(),
-        ]);
+            ->map(function (UserNotification $notification) {
+                $data = $notification->data ?? [];
+
+                return [
+                    'id' => 'custom:' . $notification->id,
+                    'type' => $notification->type,
+                    'title' => $notification->title,
+                    'body' => $notification->body,
+                    'data' => $data,
+                    'sender_name' => $data['sender_name'] ?? null,
+                    'sender_id' => $data['sender_id'] ?? null,
+                    'is_read' => $notification->is_read,
+                    'read_at' => $notification->is_read ? $notification->updated_at?->toIso8601String() : null,
+                    'created_at' => $notification->created_at?->toIso8601String(),
+                ];
+            });
 
         $database = DatabaseNotification::query()
             ->where('notifiable_type', get_class($request->user()))
@@ -48,6 +54,10 @@ class NotificationController extends Controller
                     'title' => $data['title'] ?? $data['message'] ?? 'Notification',
                     'body' => $data['body'] ?? $data['message'] ?? '',
                     'data' => $data,
+                    'sender_name' => $data['sender_name'] ?? null,
+                    'sender_id' => $data['sender_id'] ?? null,
+                    'receiver_id' => $data['receiver_id'] ?? null,
+                    'message_id' => $data['message_id'] ?? null,
                     'is_read' => filled($notification->read_at),
                     'read_at' => $notification->read_at?->toIso8601String(),
                     'created_at' => $notification->created_at?->toIso8601String(),

@@ -45,8 +45,22 @@ function notificationTarget(notification) {
   }
 
   if (type === 'photo_tagged' || type === 'tag') return '/profile';
-  const senderId = data.sender_id ?? notification.sender_id;
-  return senderId ? `/messages/${senderId}` : '/messages';
+  const messageUserId =
+    data.conversation_user_id ??
+    data.sender_id ??
+    notification.sender_id ??
+    data.receiver_id ??
+    notification.receiver_id ??
+    data.message_id ??
+    notification.message_id;
+  return messageUserId ? `/messages/${messageUserId}` : '/messages';
+}
+
+function messageSenderFromTitle(title) {
+  if (!title) return null;
+  const value = String(title).trim();
+  const match = value.match(/(?:new message from|message from|from)\s+(.+)$/i);
+  return (match?.[1] || value).trim() || null;
 }
 
 export default function NotificationBell() {
@@ -149,11 +163,15 @@ export default function NotificationBell() {
                 const type = data.type ?? n.type ?? 'default';
                 const st = typeStyle(type);
                 const isUnread = !n.read_at;
+                const titleSender = ['message', 'chat', 'new_message'].includes(type)
+                  ? messageSenderFromTitle(n.title)
+                  : null;
                 const sender =
                   data.sender_name ??
                   data.tagger_name ??
                   data.actor_name ??
                   n.sender_name ??
+                  titleSender ??
                   (type === 'announcement' ? 'Announcement' : 'Someone');
                 const preview = data.message ?? n.body ?? n.message ?? n.title ?? 'Sent you a notification';
                 const avatar = imageUrl(data.sender_avatar ?? data.tagger_avatar ?? null);

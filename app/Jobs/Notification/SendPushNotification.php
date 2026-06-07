@@ -3,14 +3,15 @@
 namespace App\Jobs;
 
 use App\Models\User;
-use App\Models\UserNotification;
 use App\Services\FirebaseService;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
+use Illuminate\Notifications\DatabaseNotification;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
 
 class SendPushNotification implements ShouldQueue
 {
@@ -31,12 +32,17 @@ class SendPushNotification implements ShouldQueue
         $user = User::find($this->userId);
         if (! $user) return;
 
-        UserNotification::create([
-            'user_id' => $this->userId,
-            'type'    => $this->type,
-            'title'   => $this->title,
-            'body'    => $this->body,
-            'data'    => $this->data,
+        DatabaseNotification::create([
+            'id' => (string) Str::uuid(),
+            'type' => $this->type,
+            'notifiable_type' => User::class,
+            'notifiable_id' => $this->userId,
+            'data' => array_merge($this->data, [
+                'type' => $this->type,
+                'title' => $this->title,
+                'body' => $this->body,
+            ]),
+            'read_at' => null,
         ]);
 
         if ($user->fcm_token) {

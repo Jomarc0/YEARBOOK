@@ -528,6 +528,7 @@ function StudentModal({ student, sectionId, onClose, onSaved, toast }) {
   });
   const [photoFile, setPhotoFile] = useState(null);
   const [photoPreview, setPhotoPreview] = useState(student?.photo_url ?? null);
+  const [removePhoto, setRemovePhoto] = useState(false);
   const [errors, setErrors] = useState({});
   const [saving, setSaving] = useState(false);
   const photoRef = useRef(null);
@@ -537,6 +538,7 @@ function StudentModal({ student, sectionId, onClose, onSaved, toast }) {
     const file = e.target.files[0];
     if (!file) return;
     setPhotoFile(file);
+    setRemovePhoto(false);
     setPhotoPreview(URL.createObjectURL(file));
   };
 
@@ -554,10 +556,11 @@ function StudentModal({ student, sectionId, onClose, onSaved, toast }) {
     if (Object.keys(e).length) { setErrors(e); return; }
     setSaving(true);
     try {
-      if (photoFile) {
+      if (photoFile || removePhoto) {
         const fd = new FormData();
         Object.entries(form).forEach(([k, v]) => { if (v !== "") fd.append(k, v); });
-        fd.append("photo", photoFile);
+        if (photoFile) fd.append("photo", photoFile);
+        if (removePhoto) fd.append("remove_photo", "1");
         isEdit
           ? await api.post(`/admin/sections/${sectionId}/students/${student.id}?_method=PUT`, fd, { headers: { "Content-Type": "multipart/form-data" } })
           : await api.post(`/admin/sections/${sectionId}/students/create`, fd, { headers: { "Content-Type": "multipart/form-data" } });
@@ -621,7 +624,7 @@ function StudentModal({ student, sectionId, onClose, onSaved, toast }) {
                   {photoPreview ? "Change Photo" : "Choose Photo"}
                 </Btn>
                 {photoPreview && (
-                  <button onClick={() => { setPhotoFile(null); setPhotoPreview(null); }}
+                  <button onClick={() => { setPhotoFile(null); setPhotoPreview(null); setRemovePhoto(isEdit); if (photoRef.current) photoRef.current.value = ""; }}
                     style={{ background: "none", border: "none", color: C.red, fontSize: "0.78rem", cursor: "pointer", fontWeight: 600 }}>
                     Remove
                   </button>

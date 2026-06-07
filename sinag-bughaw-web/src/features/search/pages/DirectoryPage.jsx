@@ -9,11 +9,29 @@ import { imageUrl, avatarUrl } from '@/utils/imageUrl';
 import { COURSE_FILTERS, getCourseShort } from '@/utils/courseShort';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
+const faceUserId = (match) => {
+  const id = Number(match?.account_user_id ?? match?.user_id);
+  return Number.isFinite(id) && id > 0 ? id : null;
+};
+
+const studentUserId = (student) => {
+  const id = Number(student?.id ?? student?.user_id ?? student?.account_user_id);
+  return Number.isFinite(id) && id > 0 ? id : null;
+};
+
 const usableFaceMatches = (matches = []) => {
-  const validMatches = matches.filter(m =>
-    m?.user_id && (m.student_id || m.course || m.profile_picture)
+  const normalized = matches
+    .map(m => ({
+      ...m,
+      user_id: faceUserId(m),
+      student_record_id: m?.student_record_id ?? m?.student_id ?? null,
+    }))
+    .filter(m => m.user_id);
+
+  const validMatches = normalized.filter(m =>
+    m.name || m.student_id || m.course || m.profile_picture
   );
-  const source = validMatches.length ? validMatches : matches.filter(m => m?.user_id);
+  const source = validMatches.length ? validMatches : normalized;
   return Array.from(new Map(source.map(m => [m.user_id, m])).values());
 };
 
@@ -415,8 +433,8 @@ export default function DirectoryPage() {
                   key={student.id}
                   student={student}
                   index={i}
-                  isMatched={matchedIds.has(student.id)}
-                  matchData={faceMatches.find(m => m.user_id === student.id)}
+                  isMatched={matchedIds.has(studentUserId(student))}
+                  matchData={faceMatches.find(m => m.user_id === studentUserId(student))}
                 />
               ))}
             </div>

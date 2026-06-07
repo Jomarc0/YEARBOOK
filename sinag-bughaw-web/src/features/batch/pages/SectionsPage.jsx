@@ -14,11 +14,24 @@ const TABS = [
 ];
 
 function usableFaceMatches(matches = []) {
-  const validMatches = matches.filter(m =>
-    m?.user_id && (m.student_id || m.course || m.profile_picture)
+  const normalized = matches
+    .map(m => ({
+      ...m,
+      user_id: studentUserId(m),
+      student_record_id: m?.student_record_id ?? m?.student_id ?? null,
+    }))
+    .filter(m => m.user_id);
+
+  const validMatches = normalized.filter(m =>
+    m.name || m.student_id || m.course || m.profile_picture
   );
-  const source = validMatches.length ? validMatches : matches.filter(m => m?.user_id);
+  const source = validMatches.length ? validMatches : normalized;
   return Array.from(new Map(source.map(m => [m.user_id, m])).values());
+}
+
+function studentUserId(student) {
+  const id = Number(student?.account_user_id ?? student?.user_id ?? student?.id);
+  return Number.isFinite(id) && id > 0 ? id : null;
 }
 
 // ── NEW: Generate Yearbook Button ─────────────────────────────────────────────
@@ -138,7 +151,7 @@ export default function SectionsPage() {
     let result = sections;
     if (courseFilter) result = result.filter(s => s.course === courseFilter);
     if (isFaceMode && matchedIds.size > 0)
-      result = result.filter(s => s.students?.some(st => matchedIds.has(st.id)));
+      result = result.filter(s => s.students?.some(st => matchedIds.has(studentUserId(st))));
     if (query.trim()) {
       const q = query.toLowerCase();
       result = result.filter(s =>
@@ -296,7 +309,7 @@ export default function SectionsPage() {
               gap:                 '24px',
             }}>
               {filteredSections.map(sec => {
-                const hasFaceMatch = isFaceMode && sec.students?.some(st => matchedIds.has(st.id));
+                const hasFaceMatch = isFaceMode && sec.students?.some(st => matchedIds.has(studentUserId(st)));
                 return (
                   <Link key={sec.id} to={`/sections/${sec.id}`}
                     className="no-underline block bg-white transition-all"
@@ -366,7 +379,7 @@ export default function SectionsPage() {
                               className="rounded-full"
                               style={{
                                 width: '30px', height: '30px', objectFit: 'cover', marginLeft: '-8px',
-                                border: matchedIds.has(s.id) ? '2px solid #fdb813' : '2px solid white',
+                                border: matchedIds.has(studentUserId(s)) ? '2px solid #fdb813' : '2px solid white',
                               }} />
                           ))}
                           {sec.students_count > 4 && (

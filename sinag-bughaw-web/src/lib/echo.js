@@ -3,6 +3,11 @@ import Pusher from 'pusher-js';
 
 window.Pusher = Pusher;
 
+const apiRoot = (import.meta.env.VITE_APP_URL
+  ?? import.meta.env.VITE_API_URL?.replace(/\/api\/?$/, '')
+  ?? 'http://127.0.0.1:8000'
+).replace(/\/+$/, '');
+
 function getToken() {
   // ← Use whichever key YOUR app stores the token under
   return (
@@ -19,7 +24,7 @@ const echo = new Echo({
   key:               import.meta.env.VITE_PUSHER_APP_KEY,
   cluster:           import.meta.env.VITE_PUSHER_APP_CLUSTER,
   forceTLS:          true,
-  authEndpoint:      `${import.meta.env.VITE_APP_URL ?? 'http://127.0.0.1:8000'}/broadcasting/auth`,
+  authEndpoint:      `${apiRoot}/broadcasting/auth`,
   auth: {
     headers: {
       Authorization: `Bearer ${getToken()}`,

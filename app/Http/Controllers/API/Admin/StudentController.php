@@ -13,6 +13,7 @@ use App\Services\Storage\CloudinaryService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Log;
 
 class StudentController extends Controller
 {
@@ -101,9 +102,34 @@ class StudentController extends Controller
 
         $validated = $request->validate($this->rules($student->id));
 
+        if ($request->boolean('remove_photo')) {
+            if ($student->photo_public_id) {
+                try {
+                    $this->cloudinary->deletePhoto($student->photo_public_id);
+                } catch (\Throwable $e) {
+                    Log::warning('Admin student photo cleanup failed; continuing removal.', [
+                        'student_id' => $student->id,
+                        'public_id'  => $student->photo_public_id,
+                        'error'      => $e->getMessage(),
+                    ]);
+                }
+            }
+
+            $validated['photo'] = null;
+            $validated['photo_public_id'] = null;
+        }
+
         if ($request->hasFile('photo')) {
             if ($student->photo_public_id) {
-                $this->cloudinary->deletePhoto($student->photo_public_id);
+                try {
+                    $this->cloudinary->deletePhoto($student->photo_public_id);
+                } catch (\Throwable $e) {
+                    Log::warning('Admin student photo cleanup failed; continuing update.', [
+                        'student_id' => $student->id,
+                        'public_id'  => $student->photo_public_id,
+                        'error'      => $e->getMessage(),
+                    ]);
+                }
             }
 
             $result = $this->cloudinary->uploadPhoto(
@@ -267,6 +293,7 @@ class StudentController extends Controller
             'student_no'            => 'required|string|max:50|unique:students,student_no' . ($ignoreId ? ",{$ignoreId}" : ''),
             'email'                 => 'nullable|email|max:255',
             'photo'                 => 'nullable|image|mimes:jpeg,png,jpg,webp|max:5120',
+            'remove_photo'          => 'nullable|boolean',
             'birthday'              => 'nullable|date',
             'hometown'              => 'nullable|string|max:255',
             'nickname'              => 'nullable|string|max:255',

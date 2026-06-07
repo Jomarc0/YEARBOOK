@@ -80,7 +80,20 @@ class FaceRecognitionController extends Controller
             $rekognitionResult = $this->faceRecognition->searchIndexedFaces($file, 30, $threshold);
 
             $rawMatches   = collect($rekognitionResult['matches'] ?? []);
-            $matches      = $rawMatches->filter(fn ($m) => filled($m['user_id']))->values()->all();
+            $matches      = $rawMatches
+                ->filter(fn ($m) => filled($m['account_user_id'] ?? $m['user_id'] ?? null))
+                ->map(function (array $match) {
+                    $studentRecordId = $match['student_record_id'] ?? $match['user_id'] ?? null;
+                    $accountUserId   = $match['account_user_id'] ?? $match['user_id'] ?? null;
+
+                    return array_merge($match, [
+                        'user_id' => $accountUserId ? (int) $accountUserId : null,
+                        'student_record_id' => $studentRecordId ? (int) $studentRecordId : null,
+                    ]);
+                })
+                ->filter(fn ($m) => filled($m['user_id']))
+                ->values()
+                ->all();
             $studentIds   = [];
             $photoIds     = [];
             $galleryMediaIds = [];

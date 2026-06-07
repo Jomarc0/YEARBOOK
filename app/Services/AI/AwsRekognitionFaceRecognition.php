@@ -50,6 +50,9 @@ class AwsRekognitionFaceRecognition implements FaceRecognition
             return ['indexed' => false, 'reason' => 'Could not read profile picture bytes.'];
         }
 
+        $this->ensureCollectionExists();
+        $deletedFaces = $this->deleteExistingStudentFaces($user);
+
         $result = $this->client()->indexFaces([
             'CollectionId'        => $this->collectionId(),
             'ExternalImageId'     => $this->externalImageId($user),
@@ -64,6 +67,7 @@ class AwsRekognitionFaceRecognition implements FaceRecognition
             'face_records'      => count($result['FaceRecords'] ?? []),
             'unindexed_faces'   => count($result['UnindexedFaces'] ?? []),
             'external_image_id' => $this->externalImageId($user),
+            'deleted_faces'      => $deletedFaces,
         ];
     }
 
@@ -646,6 +650,74 @@ class AwsRekognitionFaceRecognition implements FaceRecognition
                 throw $e;
             }
         }
+    }
+
+    private function deleteExistingStudentFaces(User $user): int
+    {
+        $user->loadMissing('studentRecord');
+
+        $studentIds = collect([
+            $user->student_record_id,
+            $user->studentRecord?->id,
+            $user->id,
+        ])
+            ->filter()
+            ->map(fn ($id) => (int) $id)
+            ->unique()
+            ->values()
+            ->all();
+
+        $faceIds = [];
+        $nextToken = null;
+
+        try {
+            do {
+                $params = [
+                    'CollectionId' => $this->collectionId(),
+                    'MaxResults'   => 1000,
+                ];
+
+                if ($nextToken) {
+                    $params['NextToken'] = $nextToken;
+                }
+
+                $result = $this->client()->listFaces($params);
+
+                foreach ($result['Faces'] ?? [] as $face) {
+                    $externalImageId = (string) ($face['ExternalImageId'] ?? '');
+
+                    if (! str_starts_with($externalImageId, 'student:')) {
+                        continue;
+                    }
+
+                    $ids = $this->parseStudentExternalImageId($externalImageId);
+                    $sameUser = $ids['user_id'] && (int) $ids['user_id'] === (int) $user->id;
+                    $sameStudent = in_array((int) $ids['student_id'], $studentIds, true);
+
+                    if (($sameUser || $sameStudent) && filled($face['FaceId'] ?? null)) {
+                        $faceIds[] = $face['FaceId'];
+                    }
+                }
+
+                $nextToken = $result['NextToken'] ?? null;
+            } while ($nextToken);
+
+            foreach (array_chunk(array_unique($faceIds), 100) as $chunk) {
+                $this->client()->deleteFaces([
+                    'CollectionId' => $this->collectionId(),
+                    'FaceIds'      => $chunk,
+                ]);
+            }
+        } catch (AwsException $e) {
+            Log::warning('[Rekognition] Could not delete old student faces before re-indexing.', [
+                'user_id' => $user->id,
+                'error'   => $e->getMessage(),
+            ]);
+
+            return 0;
+        }
+
+        return count(array_unique($faceIds));
     }
 
     private function faceIndexProfilePicture(User $user): ?string

@@ -38,11 +38,29 @@ function studentPhoto(s) {
   return s.profile_picture ?? s.photo_url ?? s.photo ?? null;
 }
 
+function faceUserId(match) {
+  const id = Number(match?.account_user_id ?? match?.user_id);
+  return Number.isFinite(id) && id > 0 ? id : null;
+}
+
+function studentUserId(student) {
+  const id = Number(student?.id ?? student?.user_id ?? student?.account_user_id);
+  return Number.isFinite(id) && id > 0 ? id : null;
+}
+
 function usableFaceMatches(matches = []) {
-  const validMatches = matches.filter(m =>
-    m?.user_id && (m.student_id || m.course || m.profile_picture)
+  const normalized = matches
+    .map(m => ({
+      ...m,
+      user_id: faceUserId(m),
+      student_record_id: m?.student_record_id ?? m?.student_id ?? null,
+    }))
+    .filter(m => m.user_id);
+
+  const validMatches = normalized.filter(m =>
+    m.name || m.student_id || m.course || m.profile_picture
   );
-  const source = validMatches.length ? validMatches : matches.filter(m => m?.user_id);
+  const source = validMatches.length ? validMatches : normalized;
   return Array.from(new Map(source.map(m => [m.user_id, m])).values());
 }
 
@@ -162,7 +180,10 @@ function FaceResultBanner({ matches, onClear }) {
         </div>
         <span className="text-[0.8rem] font-bold text-amber-700">
           <i className="fas fa-brain mr-1 text-amber-400" />
+          {matches.length} total face match{matches.length > 1 ? 'es' : ''} found
+          {/*
           {matches.length} face match{matches.length > 1 ? 'es' : ''} — showing matched students only
+          */}
         </span>
       </div>
       <button
@@ -298,14 +319,15 @@ function StudentGrid({
   return (
     <div className="grid gap-5" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(185px, 1fr))' }}>
       {students.map((s, i) => {
-        const matchData = faceMatches.find(m => m.user_id === s.id);
+        const userId = studentUserId(s);
+        const matchData = faceMatches.find(m => m.user_id === userId);
         return (
           <StudentCard
             key={s.id}
             student={s}
             isPremium={isPremium}
             index={i}
-            isMatched={matchedIds.has(s.id)}
+            isMatched={matchedIds.has(userId)}
             matchSimilarity={matchData?.similarity ?? null}
           />
         );
@@ -382,11 +404,11 @@ function SearchInput({ value, onChange, placeholder, hasMatch, children }) {
 
 function ResultCount({ matchedSize, displayedLength, total, hasQuery, resultsLength, isPremium, suffix = '' }) {
   if (matchedSize > 0) {
+    const label = suffix || 'student';
     return (
       <p className="text-sm font-semibold mb-4 text-slate-500">
         <i className="fas fa-brain mr-1 text-amber-400" />
-        {displayedLength} face match{displayedLength !== 1 ? 'es' : ''}
-        {suffix}
+        {displayedLength} {label}{displayedLength !== 1 ? 's' : ''} shown from {matchedSize} face match{matchedSize !== 1 ? 'es' : ''}
       </p>
     );
   }
@@ -436,7 +458,7 @@ function BatchView({ isPremium, userYear, userCourse }) {
     clearFace();
   };
 
-  const displayed  = matchedIds.size > 0 ? results.filter(s => matchedIds.has(s.id)) : results;
+  const displayed  = matchedIds.size > 0 ? results.filter(s => matchedIds.has(studentUserId(s))) : results;
   const activeYear = filters.year ?? userYear ?? null;
   const activeCourse = filters.course ?? userCourse ?? null;
 
@@ -506,7 +528,7 @@ function SectionView({ isPremium }) {
       .finally(() => setLoading(false));
   }, []);
 
-  const displayed = matchedIds.size > 0 ? results.filter(s => matchedIds.has(s.id)) : results;
+  const displayed = matchedIds.size > 0 ? results.filter(s => matchedIds.has(studentUserId(s))) : results;
 
   return (
     <div>
@@ -592,7 +614,7 @@ function SchoolView({ isPremium }) {
   };
 
   const loadPage  = (page) => load({ ...filters, page });
-  const displayed = matchedIds.size > 0 ? students.filter(s => matchedIds.has(s.id)) : students;
+  const displayed = matchedIds.size > 0 ? students.filter(s => matchedIds.has(studentUserId(s))) : students;
 
   return (
     <div>
@@ -710,7 +732,7 @@ function CrossProgramView({ isPremium }) {
   const loadMore  = () => { const n = page + 1; setPage(n); load({ ...filters, page: n }, true); };
   const setFilter = (key, val) => { clearFace(); setFilters(f => ({ ...f, [key]: val || undefined })); };
 
-  const displayed = matchedIds.size > 0 ? results.filter(s => matchedIds.has(s.id)) : results;
+  const displayed = matchedIds.size > 0 ? results.filter(s => matchedIds.has(studentUserId(s))) : results;
   const grouped   = displayed.reduce((acc, s) => {
     const key = s.course ?? 'Unknown';
     if (!acc[key]) acc[key] = [];
@@ -802,14 +824,15 @@ function CrossProgramView({ isPremium }) {
               {/* Student grid for this course */}
               <div className="grid gap-[18px]" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(185px, 1fr))' }}>
                 {courseStudents.map((s, i) => {
-                  const matchData = faceMatches.find(m => m.user_id === s.id);
+                  const userId = studentUserId(s);
+                  const matchData = faceMatches.find(m => m.user_id === userId);
                   return (
                     <StudentCard
                       key={s.id}
                       student={s}
                       isPremium={isPremium}
                       index={i}
-                      isMatched={matchedIds.has(s.id)}
+                      isMatched={matchedIds.has(userId)}
                       matchSimilarity={matchData?.similarity ?? null}
                     />
                   );
