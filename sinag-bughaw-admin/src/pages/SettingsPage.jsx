@@ -459,25 +459,25 @@ export default function SettingsPage() {
           )}
         </SectionCard>
 
-        {/* Graduation */}
-        <SectionCard title="Graduation">
+        {/* Yearbook Generation */}
+        <SectionCard title="Yearbook Generation">
           {loading ? (
             <Sk h={14} />
           ) : (
             <>
-              <SettingRow label="Academic Year" description="Current academic year label (e.g. 2025-2026).">
+              <SettingRow label="Academic Year" description="Shown on generated yearbook pages and PDF exports.">
                 <input value={settings.academic_year ?? ""} onChange={(e) => set("academic_year", e.target.value)} style={inputStyle} />
               </SettingRow>
-              <SettingRow label="Graduation Batch" description="Batch name or year used for archive and yearbook scope.">
+              <SettingRow label="Graduation Batch" description="Used by Archive Batch to choose which batch will become alumni.">
                 <input value={settings.graduation_batch ?? ""} onChange={(e) => set("graduation_batch", e.target.value)} style={inputStyle} />
               </SettingRow>
-              <SettingRow label="Graduation Date" description="Ceremony date (YYYY-MM-DD).">
+              <SettingRow label="Graduation Date" description="Shown in the generated yearbook and PDF export.">
                 <input type="date" value={settings.graduation_date ?? ""} onChange={(e) => set("graduation_date", e.target.value)} style={{ ...inputStyle, width: 180 }} />
               </SettingRow>
-              <SettingRow label="Graduation Theme" description="Visual theme name for the yearbook edition.">
+              <SettingRow label="Graduation Theme" description="Theme label used by the yearbook preview and PDF export.">
                 <input value={settings.graduation_theme ?? ""} onChange={(e) => set("graduation_theme", e.target.value)} style={inputStyle} />
               </SettingRow>
-              <SettingRow label="Publish Yearbook" description="Make the yearbook publicly available to students." last>
+              <SettingRow label="Publish Yearbook" description="Allows students to open and download the published yearbook." last>
                 <Toggle value={bool("publish_yearbook")} onChange={() => toggleSetting("publish_yearbook")} label="Publish yearbook" />
               </SettingRow>
               <SaveBtn keys={["academic_year", "graduation_batch", "graduation_date", "graduation_theme", "publish_yearbook"]} />

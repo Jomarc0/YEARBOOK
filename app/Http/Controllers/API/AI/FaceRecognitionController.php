@@ -323,8 +323,11 @@ class FaceRecognitionController extends Controller
             // Only tags that have a valid photo_id (manual tags use this)
             ->whereNotNull('photo_id')
             ->with([
-                'photo:id,file_path,caption,album_id,user_id',
+                'photo:id,file_path,caption,album_id,user_id,created_at,ai_metadata',
                 'photo.album:id,title,event_date',
+                'photo.media:id,photo_id,file_path,public_id,resource_type,sort_order',
+                'photo.user:id,name,profile_picture,student_record_id',
+                'photo.taggedStudents:id,name,profile_picture,student_record_id',
             ])
             ->orderByDesc('created_at') // more reliable than similarity for mixed sources
             ->paginate(24);
@@ -337,9 +340,28 @@ class FaceRecognitionController extends Controller
                 'confidence' => $t->confidence,
                 'source'     => $t->source,
                 'photo'      => $t->photo ? [
+                    'id'        => $t->photo->id,
                     'file_path' => $t->photo->file_path,
                     'caption'   => $t->photo->caption,
                     'user_id'   => $t->photo->user_id,
+                    'created_at' => $t->photo->created_at,
+                    'ai_metadata' => $t->photo->ai_metadata,
+                    'media'     => $t->photo->media->map(fn ($m) => [
+                        'file_path'     => $m->file_path,
+                        'public_id'     => $m->public_id,
+                        'resource_type' => $m->resource_type,
+                        'sort_order'    => $m->sort_order,
+                    ])->values(),
+                    'user'      => $t->photo->user ? [
+                        'id'              => $t->photo->user->id,
+                        'name'            => $t->photo->user->name,
+                        'profile_picture' => $t->photo->user->profile_picture,
+                    ] : null,
+                    'tagged_students' => $t->photo->taggedStudents->map(fn ($u) => [
+                        'id'              => $u->id,
+                        'name'            => $u->name,
+                        'profile_picture' => $u->profile_picture,
+                    ])->values(),
                     'album'     => $t->photo->album ? [
                         'id'         => $t->photo->album->id,
                         'title'      => $t->photo->album->title,

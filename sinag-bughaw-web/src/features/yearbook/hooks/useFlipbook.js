@@ -4,6 +4,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import apiClient from '../../../api/client';
+import { downloadYearbookPdf } from '../../../api/yearbook.api';
 
 /**
  * Fetches structured yearbook data (school info, faculty, sections/students)
@@ -30,14 +31,16 @@ export function useFlipbook(batchId) {
         }
     }, [batchId]);
 
-    useEffect(() => { fetch(); }, [fetch]);
+    useEffect(() => {
+        queueMicrotask(() => fetch());
+    }, [fetch]);
 
     return { data, loading, error, refetch: fetch };
 }
 
 /**
  * Triggers a PDF download for the given batch.
- * Reuses the existing axios client so auth headers are included.
+ * Uses the tokenized PDF route so the browser can download without CORS-heavy blob XHR.
  *
  * @param {number|string} batchId
  * @param {string}        batchYear  — used for filename
@@ -50,30 +53,10 @@ export function useYearbookPdfDownload() {
         setDownloading(true);
         setProgress(10);
         try {
-            const response = await apiClient.get(
-                `/yearbook/export/pdf/${batchId}`,
-                {
-                    responseType: 'blob',
-                    onDownloadProgress: (e) => {
-                        if (e.total) {
-                            setProgress(Math.round((e.loaded / e.total) * 90) + 10);
-                        }
-                    },
-                }
-            );
-
-            // Build a temporary anchor to trigger browser download
-            const url      = URL.createObjectURL(new Blob([response.data], { type: 'application/pdf' }));
-            const anchor   = document.createElement('a');
-            anchor.href    = url;
-            anchor.download = `yearbook-${batchYear || batchId}.pdf`;
-            document.body.appendChild(anchor);
-            anchor.click();
-            document.body.removeChild(anchor);
-            URL.revokeObjectURL(url);
+            await downloadYearbookPdf(batchId, {}, `yearbook-${batchYear || batchId}.pdf`);
             setProgress(100);
-        } catch {
-            throw new Error('PDF generation failed. Please try again.');
+        } catch (error) {
+            throw new Error(error?.message || 'PDF generation failed. Please try again.', { cause: error });
         } finally {
             setTimeout(() => { setDownloading(false); setProgress(0); }, 1200);
         }

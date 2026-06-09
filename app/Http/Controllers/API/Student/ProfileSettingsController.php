@@ -7,11 +7,27 @@ use App\Models\AlumniActivity;
 use App\Models\AuditLog;
 use App\Models\ProfileView;
 use App\Models\User;
+use App\Models\UserNotification;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 class ProfileSettingsController extends Controller
 {
+    private function notifyProfileUpdate(User $user, string $body): void
+    {
+        UserNotification::create([
+            'user_id' => $user->id,
+            'type' => 'profile_update',
+            'title' => 'Profile updated',
+            'body' => $body,
+            'data' => [
+                'type' => 'profile_update',
+                'sender_name' => 'Sinag-Bughaw',
+                'action_url' => '/profile',
+            ],
+        ]);
+    }
+
     // ── Update visibility ─────────────────────────────────────────────────────
     public function updateVisibility(Request $request): JsonResponse
     {
@@ -19,7 +35,9 @@ class ProfileSettingsController extends Controller
             'visibility' => 'required|in:public,private,batchmates',
         ]);
 
-        $request->user()->update(['profile_visibility' => $request->visibility]);
+        $user = $request->user();
+        $user->update(['profile_visibility' => $request->visibility]);
+        $this->notifyProfileUpdate($user, 'Your profile visibility was updated successfully.');
 
         return response()->json(['message' => 'Visibility updated.']);
     }
@@ -36,6 +54,8 @@ class ProfileSettingsController extends Controller
         } else {
             $user->update(['motto' => $request->motto]);
         }
+
+        $this->notifyProfileUpdate($user, 'Your motto was updated successfully.');
 
         return response()->json(['message' => 'Motto updated.']);
     }
@@ -77,6 +97,7 @@ class ProfileSettingsController extends Controller
         }
 
         AuditLog::record($request, 'API Update Academic', 'Updated academic info for ' . $request->user()->email);
+        $this->notifyProfileUpdate($user, 'Your academic info was updated successfully.');
 
         return response()->json([
             'success' => true,
@@ -132,6 +153,7 @@ class ProfileSettingsController extends Controller
         }
 
         AuditLog::record($request, 'API Update Achievements', 'Updated achievements for ' . $user->email);
+        $this->notifyProfileUpdate($user, 'Your achievements were updated successfully.');
 
         return response()->json(['success' => true, 'message' => 'Achievements updated.']);
     }

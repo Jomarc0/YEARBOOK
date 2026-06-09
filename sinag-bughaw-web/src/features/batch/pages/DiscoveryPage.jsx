@@ -91,7 +91,7 @@ async function findYearbookBatchId(year, course = null) {
   return (exactCourse ?? sameYear[0])?.id ?? null;
 }
 
-function GenerateYearbookButton({ batchId, course, label }) {
+function GenerateYearbookButton({ batchId, department, course, label }) {
   const navigate = useNavigate();
   const [opening, setOpening] = useState(false);
   if (!batchId) return null;
@@ -100,9 +100,15 @@ function GenerateYearbookButton({ batchId, course, label }) {
     setOpening(true);
     try {
       const resolvedBatchId = await findYearbookBatchId(batchId, course);
-      navigate(resolvedBatchId ? `/yearbook/${resolvedBatchId}/view` : `/yearbook?year=${batchId}`);
+      const params = new URLSearchParams();
+      if (department) params.set('department', department);
+      if (course) params.set('course', course);
+      navigate(resolvedBatchId ? `/yearbook/${resolvedBatchId}/view${params.toString() ? `?${params.toString()}` : ''}` : `/yearbook?year=${batchId}`);
     } catch {
-      navigate(`/yearbook?year=${batchId}`);
+      const params = new URLSearchParams({ year: String(batchId) });
+      if (department) params.set('department', department);
+      if (course) params.set('course', course);
+      navigate(`/yearbook?${params.toString()}`);
     } finally {
       setOpening(false);
     }
@@ -179,7 +185,7 @@ function FaceResultBanner({ matches, onClear }) {
           ))}
         </div>
         <span className="text-[0.8rem] font-bold text-amber-700">
-          <i className="fas fa-brain mr-1 text-amber-400" />
+          <i className="fas fa-camera mr-1 text-amber-400" />
           {matches.length} total face match{matches.length > 1 ? 'es' : ''} found
           {/*
           {matches.length} face match{matches.length > 1 ? 'es' : ''} — showing matched students only
@@ -264,7 +270,7 @@ function StudentCard({ student, isPremium, index = 0, isMatched = false, matchSi
 
           {isMatched && (
             <div className="absolute top-2 left-2 flex items-center gap-1 text-[10px] font-black px-2 py-1 rounded-lg bg-amber-400 text-[#1d2b4b]">
-              <i className="fas fa-brain" />
+              <i className="fas fa-camera" />
               {matchSimilarity != null ? `${matchSimilarity.toFixed(0)}%` : 'Match'}
             </div>
           )}
@@ -404,13 +410,7 @@ function SearchInput({ value, onChange, placeholder, hasMatch, children }) {
 
 function ResultCount({ matchedSize, displayedLength, total, hasQuery, resultsLength, isPremium, suffix = '' }) {
   if (matchedSize > 0) {
-    const label = suffix || 'student';
-    return (
-      <p className="text-sm font-semibold mb-4 text-slate-500">
-        <i className="fas fa-brain mr-1 text-amber-400" />
-        {displayedLength} {label}{displayedLength !== 1 ? 's' : ''} shown from {matchedSize} face match{matchedSize !== 1 ? 'es' : ''}
-      </p>
-    );
+    return null;
   }
   if (hasQuery) {
     return (
@@ -478,13 +478,13 @@ function BatchView({ isPremium, userYear, userCourse }) {
         <div className="ml-auto">
           <GenerateYearbookButton
             batchId={activeYear}
+            department={filters.department}
             course={activeCourse}
             label={activeYear ? `Generate Yearbook · Batch ${activeYear}` : undefined}
           />
         </div>
       </div>
 
-      <FaceResultBanner matches={faceMatches} onClear={clearFace} />
       {!isPremium && <UpgradeBanner />}
 
       <ResultCount
@@ -549,7 +549,6 @@ function SectionView({ isPremium }) {
         </SearchInput>
       </div>
 
-      <FaceResultBanner matches={faceMatches} onClear={clearFace} />
       {!isPremium && <UpgradeBanner />}
 
       <ResultCount
@@ -631,15 +630,11 @@ function SchoolView({ isPremium }) {
         <FiltersPanel filters={filters} onChange={setFilter} />
       </div>
 
-      <FaceResultBanner matches={faceMatches} onClear={clearFace} />
       {!isPremium && <UpgradeBanner />}
 
       {pagination && (
         <p className="text-sm font-semibold mb-4 text-slate-500">
-          {matchedIds.size > 0
-            ? <><i className="fas fa-brain mr-1 text-amber-400" />{displayed.length} face match{displayed.length !== 1 ? 'es' : ''} on this page</>
-            : <>{pagination.total?.toLocaleString()} student{pagination.total !== 1 ? 's' : ''} in the school</>
-          }
+          {pagination.total?.toLocaleString()} student{pagination.total !== 1 ? 's' : ''} in the school
           {!isPremium && <span className="text-slate-400"> · Public profiles only</span>}
         </p>
       )}
@@ -706,6 +701,7 @@ function CrossProgramView({ isPremium }) {
   const [filters,     setFilters]     = useState({});
   const [hasMore,     setHasMore]     = useState(false);
   const [page,        setPage]        = useState(1);
+  const [error,       setError]       = useState(null);
 
   const { query, setQuery, results, hasQuery } = useFuseSearch(allStudents, CROSS_PROGRAM_FUSE_KEYS);
   const { faceSearching, faceMatches, matchedIds, handleFaceFile, clearFace } = useFaceSearch();
@@ -718,6 +714,14 @@ function CrossProgramView({ isPremium }) {
       setAllStudents(prev => append ? [...prev, ...newStudents] : newStudents);
       setStats(data.stats ?? null);
       setHasMore((data.data?.current_page ?? 1) < (data.data?.last_page ?? 1));
+      setError(null);
+    } catch (err) {
+      setError(err?.response?.data?.message ?? 'Failed to load cross-program students.');
+      if (!append) {
+        setAllStudents([]);
+        setStats(null);
+      }
+      setHasMore(false);
     } finally {
       setLoading(false);
     }
@@ -781,7 +785,6 @@ function CrossProgramView({ isPremium }) {
         <FiltersPanel filters={filters} onChange={setFilter} />
       </div>
 
-      <FaceResultBanner matches={faceMatches} onClear={clearFace} />
       {!isPremium && <UpgradeBanner />}
 
       {/* Content */}
@@ -792,11 +795,11 @@ function CrossProgramView({ isPremium }) {
         </div>
       ) : Object.keys(grouped).length === 0 ? (
         <div className="text-center py-24 bg-white rounded-3xl shadow-[0_4px_20px_rgba(0,0,0,0.03)]">
-          <i className="fas fa-shuffle text-6xl mb-5 block opacity-10 text-[#1d2b4b]" />
-          <h3 className="font-extrabold text-xl mb-2 text-[#1d2b4b]">No Results</h3>
+          <i className={`fas ${error ? 'fa-triangle-exclamation text-red-400 opacity-70' : 'fa-shuffle text-[#1d2b4b] opacity-10'} text-6xl mb-5 block`} />
+          <h3 className="font-extrabold text-xl mb-2 text-[#1d2b4b]">{error ? 'Could Not Load Students' : 'No Results'}</h3>
           <p className="text-sm text-slate-400">
-            {matchedIds.size > 0
-              ? 'No face matches in other programs.'
+            {error
+              ? error
               : hasQuery
                 ? 'No fuzzy matches found.'
                 : 'No students from other programs found.'}
@@ -903,9 +906,6 @@ export default function DiscoveryPage() {
               <i className="fas fa-lock" /> Upgrade to Premium
             </Link>
           )}
-          <span className="inline-flex items-center gap-2 font-bold text-xs px-4 py-2 rounded-full bg-white/10 border border-white/15 text-white/60">
-            <i className="fas fa-camera text-amber-400" /> Camera icon to search by face
-          </span>
         </div>
       </header>
 

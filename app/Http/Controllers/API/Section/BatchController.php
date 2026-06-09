@@ -55,10 +55,13 @@ class BatchController extends Controller
     public function batchmates(Request $request): JsonResponse
     {
         $viewer  = $request->user();
+        $course  = $this->cleanFilter($request->query('course'));
+        $department = $this->cleanFilter($request->query('department'));
         $results = $this->batchService->getBatchmates(
             $viewer,
-            $request->query('course'),
-            $request->query('year') ? (int) $request->query('year') : null
+            $course,
+            $request->query('year') ? (int) $request->query('year') : null,
+            $department
         );
 
         return response()->json([
@@ -67,10 +70,24 @@ class BatchController extends Controller
             'is_premium' => $viewer->is_premium,
             'view_mode'  => 'batch',
             'filter'     => [
-                'course' => $request->query('course') ?? $viewer->course,
-                'year'   => $request->query('year')   ?? $viewer->graduation_year,
+                'course'     => $course ?? ($request->query('year') || $department ? null : ($viewer->studentRecord?->course ?? $viewer->course)),
+                'department' => $department,
+                'year'       => $request->query('year')   ?? $viewer->graduation_year,
             ],
         ]);
+    }
+
+    private function cleanFilter(?string $value): ?string
+    {
+        if ($value === null) {
+            return null;
+        }
+
+        $value = trim($value);
+
+        return $value === '' || strtolower($value) === 'null' || strtolower($value) === 'undefined'
+            ? null
+            : $value;
     }
 
     // ── GET /api/discover/sectionmates ─────────────────────────────────────

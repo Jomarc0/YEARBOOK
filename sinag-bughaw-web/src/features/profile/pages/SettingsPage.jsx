@@ -79,6 +79,7 @@ export default function SettingsPage() {
   const [toast, setToast] = useState(null);
   const showToast = (msg, type = 'success') => {
     setToast({ msg, type });
+    if (type === 'success') window.dispatchEvent(new Event('notifications:refresh'));
     setTimeout(() => setToast(null), 3000);
   };
 
@@ -118,7 +119,7 @@ export default function SettingsPage() {
     setVisibilitySaving(true);
     try {
       await profileSettingsApi.updateVisibility(visibility);
-      showToast('Visibility saved!');
+      showToast('Your profile visibility was updated successfully.');
     } catch {
       showToast('Failed to save visibility.', 'error');
     } finally {
@@ -130,7 +131,7 @@ export default function SettingsPage() {
     setMottoSaving(true);
     try {
       await profileSettingsApi.updateMotto(motto);
-      showToast('Motto saved!');
+      showToast('Your motto was updated successfully.');
     } catch {
       showToast('Failed to save motto.', 'error');
     } finally {
@@ -154,7 +155,7 @@ export default function SettingsPage() {
     setLoading(true); setPwErrors({});
     try {
       await studentsApi.updatePassword(pwForm);
-      showToast('Password changed successfully!');
+      showToast('Your password was updated successfully.');
       setPwForm({ current_password: '', password: '', password_confirmation: '' });
     } catch (err) {
       const apiErrors = err.response?.data?.errors || {};
@@ -176,7 +177,7 @@ export default function SettingsPage() {
           batch:           updated.batch           ?? '',
         });
       }
-      showToast('Academic info updated!');
+      showToast('Your academic info was updated successfully.');
     } catch {
       showToast('Failed to update academic info.', 'error');
     } finally { setAcademicSaving(false); }
@@ -203,7 +204,7 @@ export default function SettingsPage() {
         type:     JSON.stringify({ icon, color }),
       }));
       await studentsApi.updateAchievements(payload);
-      showToast('Achievements updated!');
+      showToast('Your achievements were updated successfully.');
       setShowIconPicker(null);
 
       // Reload achievements from DB so local ids are replaced with real DB ids

@@ -1,16 +1,18 @@
 export const colors = {
-  navy: '#1d2b4b',
+  navy: '#1A2547',
   indigo: '#3f51b5',
-  gold: '#fdb813',
-  bg: '#f4f7fe',
-  card: '#ffffff',
-  text: '#1d2b4b',
-  muted: '#64748b',
-  border: '#e2e8f0',
+  gold: '#F5A623',
+  bg: '#F0F2F8',
+  card: '#FFFFFF',
+  text: '#1A2547',
+  muted: '#6B7280',
+  placeholder: '#9CA3AF',
+  border: '#E5E7EB',
   softIndigo: '#eef2ff',
   softGold: '#fff8e1',
-  danger: '#dc2626',
-  success: '#16a34a',
+  statIconBg: '#E8ECF4',
+  danger: '#EF4444',
+  success: '#22C55E',
 };
 
 export const shadows = {
@@ -31,7 +33,17 @@ export const shadows = {
 };
 
 export const radii = {
-  card: 18,
-  panel: 22,
-  control: 14,
+  card: 12,
+  panel: 16,
+  control: 12,
+  chip: 20,
+};
+
+export const layout = {
+  buttonHeight: 52,
+  fieldHeight: 56,
+  chipHeight: 32,
+  bottomTabHeight: 64,
+  topBarHeight: 56,
+  minTouch: 48,
 };

@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';          // ← added useNavigate
-import { useSection } from '@/features/batch/hooks/useBatch';
-import { batchApi, COURSES } from '@/api/batch.api';
+import { batchApi } from '@/api/batch.api';
 import { faceApi } from '@/api/gallery.api';
 import FaceSearchButton from '@/components/ui/FaceSearchButton';
 import Navbar from '@/components/layout/Navbar';
@@ -9,7 +8,6 @@ import Footer from '@/components/layout/Footer';
 import { storageUrl } from '@/api/client';
 
 const TABS = [
-  { key: 'sections', label: 'Sections', icon: 'fa-layer-group' },
   { key: 'batches',  label: 'Batches',  icon: 'fa-graduation-cap' },
 ];
 
@@ -34,6 +32,43 @@ function studentUserId(student) {
   return Number.isFinite(id) && id > 0 ? id : null;
 }
 
+function studentName(student) {
+  return student?.name || `${student?.first_name ?? ''} ${student?.last_name ?? ''}`.trim();
+}
+
+function allBatchStudents(batches) {
+  return Object.values(batches ?? {})
+    .flat()
+    .flatMap(batch => (batch.sections ?? []).flatMap(section =>
+      (section.students ?? []).map(student => ({
+        ...student,
+        name: studentName(student),
+        section_name: student.section_name ?? section.name,
+        section_id: student.section_id ?? section.id,
+        batch_id: batch.id,
+        batch_name: batch.name,
+        batch_year: batch.graduation_year,
+        department: batch.department,
+        course: student.course ?? section.course ?? batch.course,
+      }))
+    ));
+}
+
+function looseCourseMatches(value, filter) {
+  if (!filter) return true;
+  const a = String(value ?? '').toLowerCase();
+  const b = String(filter ?? '').toLowerCase();
+  if (!a) return false;
+  if (a === b || a.includes(b) || b.includes(a)) return true;
+
+  const meaningfulWords = b
+    .replace(/bachelor|science|administration|in|of|and|-/g, ' ')
+    .split(/\s+/)
+    .filter(word => word.length > 2);
+
+  return meaningfulWords.length > 0 && meaningfulWords.every(word => a.includes(word));
+}
+
 // ── NEW: Generate Yearbook Button ─────────────────────────────────────────────
 /**
  * Standalone button used inside every batch card.
@@ -41,20 +76,24 @@ function studentUserId(student) {
  * batchId  — the DB primary key of the Batch record
  * batchYear — shown in the label so users know exactly which yearbook opens
  */
-function GenerateYearbookButton({ batchId, batchYear }) {
+function GenerateYearbookButton({ batchId, batchYear, department, course }) {
   const navigate = useNavigate();
   const [hovered, setHovered] = useState(false);
+  const scopeLabel = course || department || batchYear;
 
   return (
     <button
       onClick={(e) => {
         e.preventDefault();          // stop Link parent from firing
         e.stopPropagation();
-        navigate(`/yearbook/${batchId}/view`);
+        const params = new URLSearchParams();
+        if (department) params.set('department', department);
+        if (course) params.set('course', course);
+        navigate(`/yearbook/${batchId}/view${params.toString() ? `?${params.toString()}` : ''}`);
       }}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
-      title={`Generate ${batchYear} Yearbook`}
+      title={`Generate ${scopeLabel} Yearbook`}
       style={{
         display:        'inline-flex',
         alignItems:     'center',
@@ -84,16 +123,15 @@ function GenerateYearbookButton({ batchId, batchYear }) {
         <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>
         <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
       </svg>
-      Generate Yearbook · {batchYear}
+      Generate Yearbook - {scopeLabel}
     </button>
   );
 }
 
 export default function SectionsPage() {
-  const { sections, loading, error } = useSection();
-
-  const [activeTab,    setActiveTab]    = useState('sections');
+  const [activeTab,    setActiveTab]    = useState('batches');
   const [courseFilter, setCourseFilter] = useState(null);
+  const [departmentFilter, setDepartmentFilter] = useState(null);
   const [batches,      setBatches]      = useState({});
   const [departments,  setDepartments]  = useState([]);
   const [batchLoading, setBatchLoading] = useState(false);
@@ -104,7 +142,7 @@ export default function SectionsPage() {
   const [isFaceMode,    setIsFaceMode]    = useState(false);
 
   useEffect(() => {
-    if (activeTab !== 'batches' || departments.length > 0) return;
+    if (departments.length > 0) return;
     setBatchLoading(true);
     batchApi.all()
       .then(({ data }) => {
@@ -112,7 +150,7 @@ export default function SectionsPage() {
         setDepartments(data.departments ?? []);
       })
       .finally(() => setBatchLoading(false));
-  }, [activeTab]);
+  }, [departments.length]);
 
   const onSearch = (val) => {
     setQuery(val);
@@ -147,22 +185,62 @@ export default function SectionsPage() {
     setQuery('');
   };
 
-  const filteredSections = (() => {
-    let result = sections;
-    if (courseFilter) result = result.filter(s => s.course === courseFilter);
-    if (isFaceMode && matchedIds.size > 0)
-      result = result.filter(s => s.students?.some(st => matchedIds.has(studentUserId(st))));
+  const departmentOptions = departments.length ? departments : Object.keys(batches ?? {});
+  const coursesForDepartment = (department) => Array.from(new Set(
+    (batches[department] ?? [])
+      .flatMap(batch => (batch.sections ?? []).map(section => section.course ?? batch.course))
+      .filter(Boolean)
+  )).sort((a, b) => a.localeCompare(b));
+  const activeDepartments = departmentFilter ? [departmentFilter] : departmentOptions;
+
+  const studentResults = (() => {
+    const students = allBatchStudents(batches);
+    let result = students;
+    if (courseFilter) result = result.filter(s => looseCourseMatches(s.course, courseFilter));
+    if (isFaceMode && matchedIds.size > 0) {
+      result = result.filter(s => matchedIds.has(studentUserId(s)));
+    }
     if (query.trim()) {
       const q = query.toLowerCase();
       result = result.filter(s =>
         s.name?.toLowerCase().includes(q) ||
+        s.student_no?.toLowerCase().includes(q) ||
         s.course?.toLowerCase().includes(q) ||
-        s.batch?.name?.toLowerCase().includes(q) ||
-        s.students?.some(st => st.name?.toLowerCase().includes(q))
+        s.section_name?.toLowerCase().includes(q) ||
+        String(s.batch_year ?? '').includes(q) ||
+        s.department?.toLowerCase().includes(q)
       );
     }
     return result;
   })();
+
+  const batchMatchesSearch = (batch) => {
+    if (courseFilter
+      && !looseCourseMatches(batch.course, courseFilter)
+      && !looseCourseMatches(batch.course_code, courseFilter)
+      && !(batch.sections ?? []).some(s => looseCourseMatches(s.course, courseFilter))) {
+      return false;
+    }
+    if (isFaceMode && matchedIds.size > 0) {
+      return (batch.sections ?? []).some(section =>
+        (section.students ?? []).some(student => matchedIds.has(studentUserId(student)))
+      );
+    }
+    if (!query.trim()) return true;
+    const q = query.toLowerCase();
+    return [
+      batch.name,
+      batch.course,
+      batch.course_code,
+      batch.department,
+      batch.graduation_year,
+      ...(batch.sections ?? []).flatMap(section => [
+        section.name,
+        section.course,
+        ...(section.students ?? []).map(student => studentName(student)),
+      ]),
+    ].some(value => String(value ?? '').toLowerCase().includes(q));
+  };
 
   return (
     <div className="min-h-screen flex flex-col"
@@ -177,10 +255,10 @@ export default function SectionsPage() {
           borderRadius: '0 0 28px 28px',
         }}>
         <h1 className="font-extrabold mb-2 text-3xl sm:text-4xl">
-          Sections & <span style={{ color: '#fdb813' }}>Batches</span>
+          Academic <span style={{ color: '#fdb813' }}>Batches</span>
         </h1>
         <p className="font-light opacity-80" style={{ fontSize: '1rem' }}>
-          Browse academic sections and graduation batches.
+          Browse batches by department, course, section, and students.
         </p>
 
         <div style={{ maxWidth: 560, margin: '18px auto 0', position: 'relative' }}>
@@ -211,7 +289,7 @@ export default function SectionsPage() {
                 type="text"
                 value={query}
                 onChange={e => onSearch(e.target.value)}
-                placeholder={isFaceMode ? 'Showing face match results…' : 'Search sections, courses, students…'}
+                placeholder="Search students, sections, courses, departments..."
                 style={{
                   width: '100%', height: 46, boxSizing: 'border-box',
                   padding: '0 52px 0 42px',
@@ -228,59 +306,140 @@ export default function SectionsPage() {
             </div>
           </div>
 
-          {isFaceMode && matchedIds.size > 0 && (
-            <div style={{
-              marginTop: 10, padding: '9px 16px', borderRadius: 10,
-              background: '#ecfdf5', border: '1px solid #bbf7d0',
-              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-            }}>
-              <span style={{ fontSize: '0.8rem', fontWeight: 600, color: '#15803d' }}>
-                <i className="fas fa-circle-check mr-2" />
-                Showing sections with {matchedIds.size} face-matched student{matchedIds.size > 1 ? 's' : ''}
-              </span>
-              <button onClick={clearFaceSearch}
-                style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#15803d', fontSize: '0.78rem', fontWeight: 600 }}>
-                <i className="fas fa-times mr-1" /> Clear
-              </button>
-            </div>
-          )}
         </div>
 
-        <div className="inline-flex gap-1 mt-6 p-1 rounded-2xl"
-          style={{ background: 'rgba(255,255,255,0.1)' }}>
-          {TABS.map(t => (
-            <button key={t.key} onClick={() => setActiveTab(t.key)}
-              className="font-bold text-sm px-6 py-3 rounded-xl transition-all"
-              style={{
-                background: activeTab === t.key ? 'white' : 'transparent',
-                color:      activeTab === t.key ? '#1d2b4b' : 'rgba(255,255,255,0.7)',
-                border:     'none', cursor: 'pointer',
-              }}>
-              <i className={`fas ${t.icon} mr-2`} />{t.label}
-            </button>
-          ))}
-        </div>
       </header>
 
       {/* ── Course Filter Pills ───────────────────────────────────────────── */}
-      <div className="flex items-center flex-wrap gap-2 px-[8%] pt-8 pb-2">
-        {COURSES.map(f => (
-          <button key={String(f.value)} onClick={() => setCourseFilter(f.value)}
+      <div className="px-[8%] pt-8 pb-2">
+        <div className="mb-3 flex items-center gap-2">
+          <div className="w-9 h-9 rounded-xl flex items-center justify-center"
+            style={{ background: '#1d2b4b', color: '#fdb813' }}>
+            <i className="fas fa-building-columns text-sm" />
+          </div>
+          <span className="text-xs font-extrabold uppercase tracking-wide" style={{ color: '#64748b' }}>
+            Filter by department
+          </span>
+        </div>
+        <div className="flex items-center flex-wrap gap-2">
+          <button onClick={() => { setDepartmentFilter(null); setCourseFilter(null); }}
             className="font-bold text-xs px-4 py-2 rounded-xl transition-all"
             style={{
-              background:  courseFilter === f.value ? '#1d2b4b' : 'white',
-              color:       courseFilter === f.value ? 'white'   : '#64748b',
+              background:  departmentFilter === null ? '#1d2b4b' : 'white',
+              color:       departmentFilter === null ? 'white'   : '#64748b',
               border:      '1.5px solid',
-              borderColor: courseFilter === f.value ? '#1d2b4b' : '#e2e8f0',
+              borderColor: departmentFilter === null ? '#1d2b4b' : '#e2e8f0',
               cursor:      'pointer',
             }}>
-            {f.label}
+            All Departments
           </button>
-        ))}
+          {departmentOptions.map(dept => (
+            <button key={dept} onClick={() => { setDepartmentFilter(dept); setCourseFilter(null); }}
+              className="font-bold text-xs px-4 py-2 rounded-xl transition-all"
+              style={{
+                background:  departmentFilter === dept ? '#1d2b4b' : 'white',
+                color:       departmentFilter === dept ? 'white'   : '#64748b',
+                border:      '1.5px solid',
+                borderColor: departmentFilter === dept ? '#1d2b4b' : '#e2e8f0',
+                cursor:      'pointer',
+              }}>
+              {dept}
+            </button>
+          ))}
+        </div>
+
+        {departmentFilter && (
+          <div className="mt-5">
+            <div className="mb-3 flex items-center gap-2">
+              <div className="w-9 h-9 rounded-xl flex items-center justify-center"
+                style={{ background: '#eef2ff', color: '#3f51b5' }}>
+                <i className="fas fa-graduation-cap text-sm" />
+              </div>
+              <span className="text-xs font-extrabold uppercase tracking-wide" style={{ color: '#64748b' }}>
+                Courses in {departmentFilter}
+              </span>
+            </div>
+            <div className="flex items-center flex-wrap gap-2">
+              <button onClick={() => setCourseFilter(null)}
+                className="font-bold text-xs px-4 py-2 rounded-xl transition-all"
+                style={{
+                  background:  courseFilter === null ? '#3f51b5' : 'white',
+                  color:       courseFilter === null ? 'white'   : '#64748b',
+                  border:      '1.5px solid',
+                  borderColor: courseFilter === null ? '#3f51b5' : '#e2e8f0',
+                  cursor:      'pointer',
+                }}>
+                All Courses
+              </button>
+              {coursesForDepartment(departmentFilter).map(course => (
+                <button key={course} onClick={() => setCourseFilter(course)}
+                  className="font-bold text-xs px-4 py-2 rounded-xl transition-all"
+                  style={{
+                    background:  courseFilter === course ? '#3f51b5' : 'white',
+                    color:       courseFilter === course ? 'white'   : '#64748b',
+                    border:      '1.5px solid',
+                    borderColor: courseFilter === course ? '#3f51b5' : '#e2e8f0',
+                    cursor:      'pointer',
+                  }}>
+                  {course}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* ── Main Content ─────────────────────────────────────────────────── */}
       <main style={{ padding: '20px 8% 80px' }}>
+        {(query.trim() || isFaceMode) && (
+          <section className="mb-8">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="m-0 text-xl font-extrabold" style={{ color: '#1d2b4b' }}>
+                Student Matches
+              </h2>
+              <span className="text-xs font-bold px-3 py-1 rounded-lg" style={{ background: '#eef2ff', color: '#3f51b5' }}>
+                {studentResults.length} result{studentResults.length !== 1 ? 's' : ''}
+              </span>
+            </div>
+
+            {studentResults.length === 0 ? (
+              <div className="rounded-2xl bg-white border border-slate-200 p-8 text-center text-slate-400">
+                <i className="fas fa-user-slash text-4xl mb-3 block text-slate-200" />
+                No students matched this search.
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                {studentResults.slice(0, 18).map(student => {
+                  const avatar = storageUrl(student.profile_picture ?? student.photo ?? student.photo_url)
+                    || `https://ui-avatars.com/api/?name=${encodeURIComponent(student.name || 'Student')}&background=1d2b4b&color=fdb813&bold=true`;
+                  const profileId = student.account_user_id ?? student.user_id ?? student.id;
+
+                  return (
+                    <Link key={`${student.batch_id}-${student.section_id}-${student.id}`} to={`/profile/${profileId}`}
+                      className="no-underline rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-lg">
+                      <div className="flex items-center gap-4">
+                        <img src={avatar} alt={student.name}
+                          className="h-16 w-16 rounded-2xl object-cover"
+                          onError={e => { e.currentTarget.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(student.name || 'Student')}&background=1d2b4b&color=fdb813&bold=true`; }} />
+                        <div className="min-w-0 flex-1">
+                          <h3 className="m-0 truncate text-base font-extrabold" style={{ color: '#1d2b4b' }}>
+                            {student.name}
+                          </h3>
+                          <p className="m-0 mt-1 text-xs font-bold" style={{ color: '#3f51b5' }}>
+                            Batch {student.batch_year} - Section {student.section_name}
+                          </p>
+                          <p className="m-0 mt-1 truncate text-xs text-slate-500">
+                            {student.department} - {student.course}
+                          </p>
+                        </div>
+                      </div>
+                    </Link>
+                  );
+                })}
+              </div>
+            )}
+          </section>
+        )}
 
         {/* SECTIONS TAB — unchanged */}
         {activeTab === 'sections' && (
@@ -293,7 +452,7 @@ export default function SectionsPage() {
           ) : filteredSections.length === 0 ? (
             <div className="text-center py-20 text-slate-400">
               <i className="fas fa-folder-open text-5xl mb-4 block opacity-20" />
-              <p>No sections found{isFaceMode ? ' for this face match' : ' for this filter'}.</p>
+              <p>No sections found for this filter.</p>
               {isFaceMode && (
                 <button onClick={clearFaceSearch}
                   className="mt-3 text-xs font-bold px-4 py-2 rounded-xl"
@@ -414,7 +573,7 @@ export default function SectionsPage() {
             </div>
           ) : (
             <div className="space-y-12 pt-4">
-              {departments.map(dept => (
+              {activeDepartments.map(dept => (
                 <div key={dept}>
                   <div className="flex items-center gap-3 mb-5">
                     <div className="w-10 h-10 rounded-xl flex items-center justify-center"
@@ -431,7 +590,10 @@ export default function SectionsPage() {
                   </div>
 
                   <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-3">
-                    {(batches[dept] ?? []).map(batch => (
+                    {(batches[dept] ?? [])
+                      .filter(batch => !courseFilter || (batch.sections ?? []).some(section => looseCourseMatches(section.course, courseFilter)))
+                      .filter(batchMatchesSearch)
+                      .map(batch => (
                       <div key={batch.id} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-lg hover:shadow-[#1d2b4b]/10">
 
                         {/* Batch header */}
@@ -481,7 +643,7 @@ export default function SectionsPage() {
                         >
                           {/* Existing: View Batchmates */}
                           <Link
-                            to={`/batchmates?course=${encodeURIComponent(batch.course)}&year=${batch.graduation_year}`}
+                            to={`/batchmates?year=${batch.graduation_year}&department=${encodeURIComponent(dept)}${courseFilter ? `&course=${encodeURIComponent(courseFilter)}` : ''}`}
                             className="inline-block text-xs font-bold no-underline px-4 py-2 rounded-lg transition-all"
                             style={{ background: '#eef2ff', color: '#3f51b5' }}>
                             View Batchmates →
@@ -491,6 +653,8 @@ export default function SectionsPage() {
                           <GenerateYearbookButton
                             batchId={batch.id}
                             batchYear={batch.graduation_year}
+                            department={departmentFilter ? dept : null}
+                            course={courseFilter}
                           />
                         </div>
                       </div>

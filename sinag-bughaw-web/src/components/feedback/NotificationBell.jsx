@@ -26,25 +26,28 @@ function typeStyle(type) {
     case 'photo_tagged':
       return { icon: 'fa-tag', bubble: 'bg-emerald-50 text-emerald-500' };
     case 'announcement': return { icon: 'fa-bell', bubble: 'bg-amber-50 text-amber-600' };
+    case 'profile_update': return { icon: 'fa-user-check', bubble: 'bg-emerald-50 text-emerald-500' };
     default: return { icon: 'fa-bell', bubble: 'bg-slate-100 text-slate-500' };
   }
 }
 
 function notificationTarget(notification) {
   const data = notification.data ?? {};
-  const type = data.type ?? notification.type;
-  const actionUrl = data.action_url;
+  const type = String(data.type ?? notification.type ?? '').toLowerCase();
+  const actionUrl = data.action_url ?? data.url ?? notification.action_url ?? notification.url;
 
   if (actionUrl) {
     try {
       const parsed = new URL(actionUrl, window.location.origin);
-      return `${parsed.pathname}${parsed.search}${parsed.hash}` || '/messages';
+      return `${parsed.pathname}${parsed.search}${parsed.hash}`;
     } catch {
       return actionUrl;
     }
   }
 
+  if (type.includes('announcement')) return null;
   if (type === 'photo_tagged' || type === 'tag') return '/profile';
+  if (type === 'profile_update') return '/profile';
   const messageUserId =
     data.conversation_user_id ??
     data.sender_id ??
@@ -96,6 +99,12 @@ export default function NotificationBell() {
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
   }, []);
+
+  useEffect(() => {
+    const handler = () => fetchNotifications(true);
+    window.addEventListener('notifications:refresh', handler);
+    return () => window.removeEventListener('notifications:refresh', handler);
+  }, [fetchNotifications]);
 
   const handleOpen = async () => {
     setOpen((value) => !value);
@@ -176,14 +185,9 @@ export default function NotificationBell() {
                 const preview = data.message ?? n.body ?? n.message ?? n.title ?? 'Sent you a notification';
                 const avatar = imageUrl(data.sender_avatar ?? data.tagger_avatar ?? null);
                 const target = notificationTarget(n);
-
-                return (
-                  <Link
-                    key={n.id}
-                    to={target}
-                    onClick={() => setOpen(false)}
-                    className={`flex items-start gap-3 border-b border-slate-50 px-5 py-3.5 text-inherit no-underline transition hover:bg-slate-50 ${isUnread ? 'bg-[#fafbff]' : 'bg-white'}`}
-                  >
+                const itemClasses = `flex items-start gap-3 border-b border-slate-50 px-5 py-3.5 text-inherit no-underline transition hover:bg-slate-50 ${isUnread ? 'bg-[#fafbff]' : 'bg-white'}`;
+                const content = (
+                  <>
                     <div className="relative shrink-0">
                       {avatar ? (
                         <img src={avatar} alt={sender} className="h-10 w-10 rounded-xl object-cover" />
@@ -207,6 +211,30 @@ export default function NotificationBell() {
                     </div>
 
                     {isUnread && <div className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-[#3f51b5]" />}
+                  </>
+                );
+
+                if (!target) {
+                  return (
+                    <button
+                      key={n.id}
+                      type="button"
+                      onClick={() => setOpen(false)}
+                      className={`${itemClasses} w-full border-x-0 border-t-0 text-left`}
+                    >
+                      {content}
+                    </button>
+                  );
+                }
+
+                return (
+                  <Link
+                    key={n.id}
+                    to={target}
+                    onClick={() => setOpen(false)}
+                    className={itemClasses}
+                  >
+                    {content}
                   </Link>
                 );
               })

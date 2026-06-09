@@ -143,6 +143,67 @@ class PaymentController extends Controller
         return response()->json(['received' => true]);
     }
 
+    public function confirm(Request $request)
+    {
+        $validated = $request->validate([
+            'session_id' => 'required|string|max:255',
+        ]);
+
+        $result = app(PayMongoService::class)
+            ->retrieveCheckoutSession($validated['session_id']);
+
+        if (data_get($result, 'errors')) {
+            Log::warning('PayMongo confirm failed', [
+                'session_id' => $validated['session_id'],
+                'errors'     => data_get($result, 'errors'),
+            ]);
+
+            return response()->json([
+                'message' => data_get($result, 'errors.0.detail', 'Could not verify payment.'),
+            ], 422);
+        }
+
+        $attributes = data_get($result, 'data.attributes', []);
+        $metadata   = $attributes['metadata'] ?? [];
+        $userId     = (int) ($metadata['user_id'] ?? 0);
+        $planKey    = $metadata['plan'] ?? 'standard_monthly';
+
+        if ($userId !== (int) $request->user()->id) {
+            return response()->json([
+                'message' => 'This payment session does not belong to the logged-in user.',
+            ], 403);
+        }
+
+        $plan       = $this->plans[$planKey] ?? $this->plans['standard_monthly'];
+        $expiresAt  = $plan['duration'] === 'year' ? now()->addYear() : now()->addMonth();
+        $intentId   = $attributes['payment_intent_id']
+            ?? data_get($attributes, 'payment_intent.id')
+            ?? data_get($attributes, 'payments.0.id')
+            ?? $validated['session_id'];
+        $amountPaid = $attributes['amount_paid']
+            ?? $attributes['amount_due']
+            ?? $attributes['amount_total']
+            ?? data_get($attributes, 'payments.0.attributes.amount')
+            ?? $plan['amount'];
+
+        $subscription = Subscription::updateOrCreate(
+            ['user_id' => $userId],
+            [
+                'plan'                       => $planKey,
+                'tier'                       => $plan['tier'],
+                'status'                     => 'active',
+                'paymongo_payment_intent_id' => $intentId,
+                'amount_paid'                => $amountPaid,
+                'expires_at'                 => $expiresAt,
+            ]
+        );
+
+        return response()->json([
+            'message'      => 'Subscription confirmed.',
+            'subscription' => $subscription,
+        ]);
+    }
+
     public function history(Request $request)
     {
         return response()->json(

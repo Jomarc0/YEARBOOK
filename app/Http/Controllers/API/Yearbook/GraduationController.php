@@ -20,10 +20,13 @@ class GraduationController extends Controller
     public function index(Request $request): JsonResponse
     {
         try {
-            $category = $request->query('category', 'photos');
+            $category = $this->normalizeCategory((string) $request->query('category', 'photos'));
+            $categories = $category === 'videos'
+                ? ['videos', 'speeches']
+                : [$category];
 
             $albums = GraduationAlbum::published()
-                ->ofCategory($category)
+                ->whereIn('category', $categories)
                 ->with([
                     // Cover thumbnails for photo tabs
                     'photos' => fn ($q) => $q->images()->orderBy('sort_order')->limit(4),
@@ -118,5 +121,15 @@ class GraduationController extends Controller
 
             return response()->json(['message' => 'Failed to delete graduation album.'], 500);
         }
+    }
+
+    private function normalizeCategory(string $category): string
+    {
+        return match ($category) {
+            'invitation' => 'invitations',
+            'song'       => 'songs',
+            'speech'     => 'speeches',
+            default      => $category,
+        };
     }
 }

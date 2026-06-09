@@ -21,13 +21,13 @@ class AnalyticsController extends Controller
     public function topViewed(Request $request): JsonResponse
     {
         $limit = max(1, min((int) $request->query('limit', 10), 50));
-        return response()->json(['data' => $this->analytics->topViewed($limit)]);
+        return response()->json(['data' => $this->analytics->mixedTopViewed($limit)]);
     }
 
     public function trending(Request $request): JsonResponse
     {
         $limit = max(1, min((int) $request->query('limit', 10), 50));
-        return response()->json(['data' => $this->analytics->trending($limit)]);
+        return response()->json(['data' => $this->analytics->mixedTrending($limit)]);
     }
 
     public function myStats(Request $request): JsonResponse
@@ -58,6 +58,29 @@ class AnalyticsController extends Controller
             viewedUserId: $userId,
             viewerUserId: $request->user()?->id, // null for guests
             ipAddress:    $request->ip()
+        );
+
+        return response()->json(['recorded' => true]);
+    }
+
+    public function recordContentView(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'content_type' => 'required|string|max:40',
+            'content_id'   => 'required|integer|min:1',
+            'title'        => 'nullable|string|max:255',
+            'category'     => 'nullable|string|max:60',
+            'url'          => 'nullable|string|max:255',
+        ]);
+
+        $this->analytics->recordContentView(
+            contentType:  $data['content_type'],
+            contentId:    (int) $data['content_id'],
+            viewerUserId: $request->user()?->id,
+            ipAddress:    $request->ip(),
+            title:        $data['title'] ?? null,
+            category:     $data['category'] ?? null,
+            url:          $data['url'] ?? null,
         );
 
         return response()->json(['recorded' => true]);

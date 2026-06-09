@@ -11,6 +11,7 @@ use App\Exceptions\StorageUploadException;
 use App\Http\Controllers\API\Concerns\AutoTranscribesVideo;
 use App\Http\Controllers\Controller;
 use App\Jobs\AI\AnalyzePhotoFaces;
+use App\Models\Admin;
 use App\Models\GraduationAlbum;
 use App\Models\GraduationPhoto;
 use App\Models\Transcript;
@@ -685,13 +686,15 @@ class GraduationContentController extends Controller
                 'published_at'     => $a->published_at
                     ? Carbon::parse($a->published_at)->format('Y-m-d') : null,
                 'created_at_human' => Carbon::parse($a->created_at)->diffForHumans(),
-                'has_transcript'   => Transcript::where('album_id', $a->id)->exists(),
+                'has_transcript'   => Transcript::whereIn('graduation_photo_id', $a->photos->pluck('id'))->exists(),
             ];
 
             if (! $studentView) {
-                $item['uploaded_by'] = $a->user
-                    ? "{$a->user->first_name} {$a->user->last_name}"
-                    : 'Unknown';
+                $admin = Admin::find($a->user_id);
+
+                $item['uploaded_by'] = $admin?->name
+                    ?? ($a->user ? trim("{$a->user->first_name} {$a->user->last_name}") : null)
+                    ?? 'Unknown';
             }
 
             return $item;

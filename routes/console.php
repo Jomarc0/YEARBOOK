@@ -1,7 +1,10 @@
 <?php
 
 use App\Contracts\FaceRecognition;
+use App\Jobs\AI\GenerateTranscript;
+use App\Models\GraduationPhoto;
 use App\Models\Photo;
+use App\Models\Transcript;
 use App\Models\User;
 use Cloudinary\Api\Upload\UploadApi;
 use Cloudinary\Configuration\Configuration;
@@ -41,6 +44,72 @@ Artisan::command('faces:sync-students', function (FaceRecognition $faceRecogniti
 })->purpose('Index student profile photos into the Rekognition collection.');
 
 // ── Re-upload authenticated Cloudinary photos as public ────────────────────
+Artisan::command('transcripts:backfill-graduation {--dry-run}', function () {
+    $transcriptCategories = ['videos', 'songs', 'mass', 'speeches'];
+    $created = 0;
+    $queued = 0;
+    $skipped = 0;
+
+    $media = GraduationPhoto::query()
+        ->with('album')
+        ->whereHas('album', fn ($query) => $query->whereIn('category', $transcriptCategories))
+        ->where(function ($query) {
+            $query->where('resource_type', 'video')
+                ->orWhere('mime_type', 'like', 'video/%')
+                ->orWhere('mime_type', 'like', 'audio/%')
+                ->orWhere('file_path', 'regexp', '\\.(mp4|mov|webm|avi|mkv|mp3|wav|m4a|ogg|flac)(\\?.*)?$');
+        })
+        ->orderBy('id')
+        ->get();
+
+    $this->info("Found {$media->count()} graduation media file(s) eligible for transcripts.");
+
+    foreach ($media as $item) {
+        $album = $item->album;
+
+        if (! $album || blank($item->file_path)) {
+            $skipped++;
+            continue;
+        }
+
+        $exists = Transcript::query()
+            ->where('graduation_photo_id', $item->id)
+            ->when($item->cloudinary_public_id, fn ($query) => $query->orWhere('public_id', $item->cloudinary_public_id))
+            ->exists();
+
+        if ($exists) {
+            $skipped++;
+            continue;
+        }
+
+        $this->line("Creating transcript for {$album->category} media #{$item->id}: {$album->title}");
+
+        if ($this->option('dry-run')) {
+            $created++;
+            continue;
+        }
+
+        $transcript = Transcript::create([
+            'title'               => $album->title,
+            'audio_path'          => $item->file_path,
+            'public_id'           => $item->cloudinary_public_id,
+            'status'              => 'pending',
+            'source'              => 'auto',
+            'album_id'            => null,
+            'graduation_photo_id' => $item->id,
+            'uploaded_by'         => $album->user_id,
+        ]);
+
+        GenerateTranscript::dispatch($transcript);
+        $created++;
+        $queued++;
+    }
+
+    $this->info("Created: {$created}");
+    $this->info("Queued: {$queued}");
+    $this->info("Skipped: {$skipped}");
+})->purpose('Create and queue missing transcripts for graduation video/audio uploads.');
+
 Artisan::command('cloudinary:reupload-as-public', function () {
     Configuration::instance([
         'cloud' => [

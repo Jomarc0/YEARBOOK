@@ -10,6 +10,7 @@ import ShareModal from '@/features/profile/components/ShareModal';
 import PremiumBadge from '@/features/subscription/components/PremiumBadge';
 import SubscriptionGate from '@/features/subscription/components/SubscriptionGate';
 import StudentPhotosSection from '../components/StudentPhotosSection';
+import PostLightbox from '../components/PostLightbox';
 import PostContextMenu from '../components/PostContextMenu';
 import VoiceNotesSection from '@/features/messaging/components/VoiceNotesSection';
 import { imageUrl, avatarUrl as makeAvatar } from '@/utils/imageUrl';
@@ -252,24 +253,7 @@ export default function StudentProfileView() {
           onClose={() => setContextMenu(null)} onDelete={handlePostDeleted} onUpdated={handlePostUpdated} />
       )}
 
-      {/* Lightbox */}
-      {lightbox && (
-        <div className="fixed inset-0 z-[9999] bg-black/95 flex items-center justify-center" onClick={() => setLightbox(null)}>
-          <button onClick={() => setLightbox(null)}
-            className="absolute top-5 right-6 bg-transparent border-none text-white text-2xl cursor-pointer opacity-75 hover:opacity-100 transition">
-            <i className="fas fa-times" />
-          </button>
-          {lightbox.file_path?.match(/\.(mp4|mov|webm)(\?|$)/i)
-            ? <video src={lightbox.file_path} controls autoPlay className="max-w-[88vw] max-h-[88vh] rounded-lg" onClick={e => e.stopPropagation()} />
-            : <img   src={lightbox.file_path} alt={lightbox.caption ?? ''} className="max-w-[88vw] max-h-[88vh] object-contain rounded-lg" onClick={e => e.stopPropagation()} />
-          }
-          {lightbox.caption && (
-            <div className="absolute bottom-7 left-1/2 -translate-x-1/2 text-white text-sm font-medium bg-black/55 px-5 py-2 rounded-full whitespace-nowrap">
-              {lightbox.caption}
-            </div>
-          )}
-        </div>
-      )}
+      {lightbox && <PostLightbox post={lightbox} onClose={() => setLightbox(null)} />}
 
       {/* Toast */}
       {toast && (
@@ -484,7 +468,7 @@ export default function StudentProfileView() {
             preview={<div className="bg-white rounded-2xl p-6 space-y-3"><SkeletonBlock /><SkeletonBlock w="40%" /><SkeletonBlock w="70%" /></div>}
           >
             <ViewCard icon="fas fa-tag" label="Tagged Photos">
-              <StudentPhotosSection userId={parseInt(id)} compact />
+              <StudentPhotosSection userId={parseInt(id)} compact openInModal />
             </ViewCard>
           </SubscriptionGate>
         )}

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { faceApi } from '@/api/gallery.api';
 import { imageUrl } from '@/utils/imageUrl';
+import PostLightbox from './PostLightbox';
 
 function resolvePhotoUrl(item) {
   const photo = item?.photo ?? item ?? {};
@@ -18,6 +19,31 @@ function resolvePhotoUrl(item) {
   );
 }
 
+function postFromTaggedItem(item) {
+  const photo = item?.photo ?? {};
+  const media = Array.isArray(photo.media) && photo.media.length
+    ? photo.media
+    : [{
+        file_path: photo.file_path ?? item?.file_path,
+        public_id: photo.public_id ?? null,
+        resource_type: photo.ai_metadata?.resource_type ?? 'image',
+        sort_order: 0,
+      }];
+
+  return {
+    id: item?.photo_id ?? photo.id ?? item?.id,
+    caption: photo.caption ?? item?.caption ?? '',
+    file_path: photo.file_path ?? media[0]?.file_path,
+    ai_metadata: photo.ai_metadata ?? {},
+    created_at: photo.created_at ?? item?.created_at,
+    media,
+    media_count: media.length,
+    user_id: photo.user_id ?? item?.user_id,
+    user: photo.user ?? item?.uploaded_by ?? null,
+    tagged_students: photo.tagged_students ?? [],
+  };
+}
+
 function galleryLink(item) {
   const photo = item?.photo ?? {};
   const albumId = photo.album?.id ?? photo.album_id ?? item?.album?.id ?? item?.album_id;
@@ -31,11 +57,12 @@ function galleryLink(item) {
   return '#';
 }
 
-export default function StudentPhotosSection({ userId, compact = false }) {
+export default function StudentPhotosSection({ userId, compact = false, openInModal = false }) {
   const [photos,  setPhotos]  = useState([]);
   const [loading, setLoading] = useState(true);
   const [page,    setPage]    = useState(1);
   const [meta,    setMeta]    = useState(null);
+  const [viewer,  setViewer]  = useState(null);
 
   const load = async (p = 1) => {
     setLoading(true);
@@ -91,13 +118,22 @@ export default function StudentPhotosSection({ userId, compact = false }) {
   if (compact) {
     return (
       <>
+        {openInModal && viewer && (
+          <PostLightbox
+            post={viewer.post}
+            initialIdx={viewer.idx}
+            onClose={() => setViewer(null)}
+          />
+        )}
         <div className="grid grid-cols-3 gap-2">
-          {photos.slice(0, 6).map((item, index) => {
+          {(openInModal ? photos : photos.slice(0, 6)).map((item, index) => {
             const photoUrl = resolvePhotoUrl(item);
             const key      = item.id ?? `tagged-${item.photo_id ?? index}`;
 
             return (
-              <Link key={key} to={galleryLink(item)} className="no-underline block">
+              openInModal ? (
+              <button key={key} type="button" onClick={() => setViewer({ post: postFromTaggedItem(item), idx: 0 })}
+                className="block w-full border-none bg-transparent p-0 text-left cursor-pointer">
                 <div className="relative aspect-square rounded-xl overflow-hidden bg-[#1d2b4b]
                                 hover:scale-[1.03] hover:shadow-md transition-all duration-200">
                   {photoUrl ? (
@@ -128,12 +164,44 @@ export default function StudentPhotosSection({ userId, compact = false }) {
                     </div>
                   )}
                 </div>
+              </button>
+              ) : (
+              <Link key={key} to={galleryLink(item)} className="no-underline block">
+                <div className="relative aspect-square rounded-xl overflow-hidden bg-[#1d2b4b]
+                                hover:scale-[1.03] hover:shadow-md transition-all duration-200">
+                  {photoUrl ? (
+                    <img
+                      src={photoUrl}
+                      alt={item.photo?.caption || 'Tagged photo'}
+                      className="w-full h-full object-cover block"
+                      loading="lazy"
+                      onError={e => { e.currentTarget.style.display = 'none'; }}
+                    />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center text-[#fdb813] text-2xl">
+                      <i className="fas fa-image" />
+                    </div>
+                  )}
+
+                  {item.similarity != null && parseFloat(item.similarity) > 0 && (
+                    <div className="absolute bottom-1.5 right-1.5 bg-[#1d2b4b]/85 text-[#fdb813] text-[9px] font-black px-1.5 py-0.5 rounded-md">
+                      {parseFloat(item.similarity).toFixed(0)}%
+                    </div>
+                  )}
+
+                  {item.source === 'rekognition' && (
+                    <div className="absolute top-1.5 left-1.5 bg-indigo-600/85 text-white text-[8px] font-black px-1.5 py-0.5 rounded-md flex items-center gap-1">
+                      <i className="fas fa-wand-magic-sparkles text-[7px]" /> AI
+                    </div>
+                  )}
+                </div>
               </Link>
+              )
             );
           })}
         </div>
 
-        {meta && meta.total > 6 && (
+        {!openInModal && meta && meta.total > 6 && (
           <p className="text-center text-xs text-[#3f51b5] font-bold mt-3 m-0">
             +{meta.total - 6} more tagged photos
           </p>
@@ -145,6 +213,13 @@ export default function StudentPhotosSection({ userId, compact = false }) {
   // ── Full paginated mode ────────────────────────────────────────────────────
   return (
     <section>
+      {openInModal && viewer && (
+        <PostLightbox
+          post={viewer.post}
+          initialIdx={viewer.idx}
+          onClose={() => setViewer(null)}
+        />
+      )}
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <h3 className="flex items-center gap-2.5 font-black text-xl text-[#1d2b4b] m-0">
@@ -165,7 +240,9 @@ export default function StudentPhotosSection({ userId, compact = false }) {
           const key      = item.id ?? `tagged-full-${item.photo_id ?? index}`;
 
           return (
-            <Link key={key} to={galleryLink(item)} className="no-underline block">
+            openInModal ? (
+            <button key={key} type="button" onClick={() => setViewer({ post: postFromTaggedItem(item), idx: 0 })}
+              className="block w-full border-none bg-transparent p-0 text-left cursor-pointer">
               <div className="relative aspect-square rounded-2xl overflow-hidden bg-[#1d2b4b]
                               shadow-sm hover:scale-[1.03] hover:shadow-lg transition-all duration-300 group">
                 {photoUrl ? (
@@ -214,7 +291,56 @@ export default function StudentPhotosSection({ userId, compact = false }) {
                   )}
                 </div>
               </div>
+            </button>
+            ) : (
+            <Link key={key} to={galleryLink(item)} className="no-underline block">
+              <div className="relative aspect-square rounded-2xl overflow-hidden bg-[#1d2b4b]
+                              shadow-sm hover:scale-[1.03] hover:shadow-lg transition-all duration-300 group">
+                {photoUrl ? (
+                  <img
+                    src={photoUrl}
+                    alt={item.photo?.caption || 'Gallery photo'}
+                    className="w-full h-full object-cover block"
+                    loading="lazy"
+                    onError={e => { e.currentTarget.style.display = 'none'; }}
+                  />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center text-[#fdb813] text-3xl">
+                    <i className="fas fa-image" />
+                  </div>
+                )}
+
+                {item.similarity != null && parseFloat(item.similarity) > 0 && (
+                  <div className="absolute top-2 right-2 bg-[#1d2b4b]/82 backdrop-blur-sm text-[#fdb813] text-[10px] font-black px-2 py-1 rounded-lg">
+                    {parseFloat(item.similarity).toFixed(1)}%
+                  </div>
+                )}
+
+                {item.source === 'rekognition' && (
+                  <div className="absolute top-2 left-2 bg-indigo-600/85 backdrop-blur-sm text-white text-[9px] font-black px-2 py-1 rounded-lg flex items-center gap-1">
+                    <i className="fas fa-wand-magic-sparkles text-[8px]" /> AI
+                  </div>
+                )}
+
+                <div className="absolute inset-0 bg-gradient-to-t from-[#1d2b4b]/85 to-transparent
+                                opacity-0 group-hover:opacity-100 transition-opacity duration-300
+                                flex flex-col justify-end p-3">
+                  {item.photo?.album && (
+                    <>
+                      <p className="text-white text-xs font-bold truncate m-0">{item.photo.album.title}</p>
+                      {item.photo.album.event_date && (
+                        <p className="text-white/55 text-[10px] m-0 mt-0.5">
+                          {new Date(item.photo.album.event_date).toLocaleDateString('en-PH', {
+                            month: 'short', day: 'numeric', year: 'numeric',
+                          })}
+                        </p>
+                      )}
+                    </>
+                  )}
+                </div>
+              </div>
             </Link>
+            )
           );
         })}
       </div>

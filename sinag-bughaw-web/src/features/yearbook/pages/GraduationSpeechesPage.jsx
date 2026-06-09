@@ -4,6 +4,7 @@ import Navbar from '@/components/layout/Navbar';
 import Footer from '@/components/layout/Footer';
 import { transcriptApi } from '@/api/yearbook.api';
 import { galleryApi } from '@/api/gallery.api';
+import { recordContentView } from '@/api/analytics.api';
 import FaceSearchButton from '@/components/ui/FaceSearchButton';
 import { imageUrl, avatarUrl } from '@/utils/imageUrl';
 
@@ -213,6 +214,18 @@ export default function GraduationSpeechesPage() {
 
   useEffect(() => { fetchTranscripts(search, page); }, [page]); // eslint-disable-line
 
+  useEffect(() => {
+    if (!selected?.id) return;
+
+    recordContentView({
+      content_type: 'graduation_speech',
+      content_id: selected.id,
+      title: selected.title,
+      category: selected.status ?? 'speech',
+      url: '/graduation/speeches',
+    }).catch(() => {});
+  }, [selected]);
+
   const handleSearch = (val) => {
     setSearch(val);
     clearTimeout(debounceRef.current);
@@ -312,31 +325,6 @@ export default function GraduationSpeechesPage() {
           </div>
         </div>
 
-        {/* Face match results */}
-        {faceMatches.length > 0 && (
-          <div className="mt-3 grid grid-cols-[repeat(auto-fill,minmax(200px,1fr))] gap-2.5">
-            {faceMatches.map(m => (
-              <Link
-                key={m.user_id}
-                to={`/profile/${m.user_id}`}
-                className="flex items-center gap-3 bg-white border border-slate-100 rounded-[14px] p-3
-                           no-underline hover:border-[#fdb813] hover:shadow-md transition-all shadow-sm"
-              >
-                <img
-                  src={imageUrl(m.profile_picture) || avatarUrl(m.name)}
-                  alt={m.name}
-                  className="w-11 h-11 rounded-xl object-cover border-2 border-[#fdb813] flex-shrink-0"
-                />
-                <div className="min-w-0">
-                  <p className="m-0 font-bold text-[13px] text-[#1d2b4b] truncate">{m.name}</p>
-                  <p className="m-0 text-[11px] text-slate-400">
-                    <i className="fas fa-brain mr-1 text-[#fdb813]" />{m.similarity}% match
-                  </p>
-                </div>
-              </Link>
-            ))}
-          </div>
-        )}
       </div>
 
       {/* ── Main layout ── */}

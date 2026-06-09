@@ -1,5 +1,31 @@
 import api from './client';
 
+const getAuthToken = () =>
+  localStorage.getItem('auth_token') ||
+  localStorage.getItem('sb_token') ||
+  localStorage.getItem('token');
+
+export const buildYearbookPdfDownloadUrl = (batchId, params = {}) => {
+  const token = getAuthToken();
+  if (!token) {
+    throw new Error('Please sign in again before downloading the yearbook.');
+  }
+
+  const query = new URLSearchParams({ token, _ts: String(Date.now()) });
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && String(value).trim() !== '') {
+      query.set(key, value);
+    }
+  });
+
+  return `${api.defaults.baseURL}/yearbook/export/mobile-pdf/${batchId}?${query.toString()}`;
+};
+
+export const downloadYearbookPdf = async (batchId, params = {}) => {
+  const url = buildYearbookPdfDownloadUrl(batchId, params);
+  window.location.assign(url);
+};
+
 export const getYearbookBatches = () =>
   api.get('/batches').then((res) => {
     const raw = res.data?.data ?? res.data ?? [];
@@ -29,8 +55,8 @@ export const yearbookApi = {
     api.get('/yearbook/certificate', { responseType: 'blob' }),
 
   /** GET /api/yearbook/search?batchId=&q= → [{ pageIndex, label, excerpt }] */
-  search: (batchId, q) =>
-    api.get('/yearbook/search', { params: { batchId, q } }),
+  search: (batchId, q, params = {}) =>
+    api.get('/yearbook/search', { params: { batchId, q, ...params } }),
 
   /** GET /api/yearbook/bookmarks/:batchId → user's bookmarked pages */
   getBookmarks: (batchId) =>
@@ -66,8 +92,8 @@ export const yearbookApi = {
    *   sectionPages    → /yearbook/sections/:batchId
    *   facultyPage     → /yearbook/faculty/:batchId
    */
-  pages: (batchId) =>
-    api.get(`/yearbooks/${batchId}/pages`),
+  pages: (batchId, params = {}) =>
+    api.get(`/yearbooks/${batchId}/pages`, { params }),
 
   /**
    * GET /api/yearbooks/:batchId/download → watermarked PDF blob (premium)
@@ -76,8 +102,8 @@ export const yearbookApi = {
   download: (batchId) =>
     api.get(`/yearbooks/${batchId}/download`, { responseType: 'blob' }),
 
-  exportBatchPdf: (batchId) =>
-    api.get(`/yearbook/export/pdf/${batchId}`, { responseType: 'blob' }),
+  exportBatchPdf: (batchId, params = {}) =>
+    api.get(`/yearbook/export/pdf/${batchId}`, { params, responseType: 'blob' }),
 
   /**
    * POST /api/yearbooks/:batchId/generate → queue PDF generation (admin)

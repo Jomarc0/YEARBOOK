@@ -29,9 +29,9 @@ const SCHOOL_MAP = {
     color: C.blue, bg: C.blueBg,
     courses: [
       "BS Architecture",
-      "BS Civil Engineering",
       "BS Computer Science",
       "BS Information Technology",
+      "BS Civil Engineering",
       "Bachelor of Multimedia Arts (BMMA)",
     ],
   },
@@ -65,6 +65,64 @@ const SCHOOL_KEYS   = Object.keys(SCHOOL_MAP);
 const schoolOf      = (dept) => SCHOOL_MAP[dept] ?? { label: dept, color: C.blue, bg: C.blueBg, courses: [] };
 const colorOf       = (dept) => schoolOf(dept).color;
 const bgOf          = (dept) => schoolOf(dept).bg;
+const naturalSort   = new Intl.Collator(undefined, { numeric: true, sensitivity: "base" });
+
+const normalizeSortText = (value = "") =>
+  String(value).toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+
+const courseAliases = {
+  "bachelor of multimedia arts": "bachelor of multimedia arts bmma",
+  "bachelor of multimedia arts bmma": "bachelor of multimedia arts bmma",
+};
+
+function courseRank(dept, course) {
+  const courses = schoolOf(dept).courses;
+  const normalizedCourse = courseAliases[normalizeSortText(course)] ?? normalizeSortText(course);
+  const exactIndex = courses.findIndex(c => normalizeSortText(c) === normalizedCourse);
+  if (exactIndex >= 0) return exactIndex;
+
+  const looseIndex = courses.findIndex(c => {
+    const mapped = courseAliases[normalizeSortText(c)] ?? normalizeSortText(c);
+    return mapped.includes(normalizedCourse) || normalizedCourse.includes(mapped);
+  });
+  return looseIndex >= 0 ? looseIndex : courses.length + 1;
+}
+
+function compareSections(a, b) {
+  const deptA = a.department ?? "";
+  const deptB = b.department ?? "";
+  const deptIndexA = SCHOOL_KEYS.indexOf(deptA);
+  const deptIndexB = SCHOOL_KEYS.indexOf(deptB);
+  const deptOrder = (deptIndexA >= 0 ? deptIndexA : SCHOOL_KEYS.length)
+    - (deptIndexB >= 0 ? deptIndexB : SCHOOL_KEYS.length);
+  if (deptOrder) return deptOrder;
+
+  const rankOrder = courseRank(deptA, a.course) - courseRank(deptB, b.course);
+  if (rankOrder) return rankOrder;
+
+  const courseOrder = naturalSort.compare(a.course ?? "", b.course ?? "");
+  if (courseOrder) return courseOrder;
+
+  return naturalSort.compare(a.name ?? "", b.name ?? "");
+}
+
+function courseLabelFor(dept, course) {
+  const normalizedCourse = courseAliases[normalizeSortText(course)] ?? normalizeSortText(course);
+  const mappedCourse = schoolOf(dept).courses.find(c => {
+    const mapped = courseAliases[normalizeSortText(c)] ?? normalizeSortText(c);
+    return mapped === normalizedCourse || mapped.includes(normalizedCourse) || normalizedCourse.includes(mapped);
+  });
+  return mappedCourse ?? course ?? "Unassigned Course";
+}
+
+function groupSectionsByCourse(dept, sections) {
+  return sections.reduce((groups, section) => {
+    const label = courseLabelFor(dept, section.course);
+    if (!groups[label]) groups[label] = [];
+    groups[label].push(section);
+    return groups;
+  }, {});
+}
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 const Skeleton = ({ w = "100%", h = 14, radius = 6, style = {} }) => (
@@ -888,7 +946,7 @@ function SectionsView({ batch, toast, onSelect }) {
     const matchDept   = !filterDept || s.department === filterDept;
     const matchSearch = !search || s.name.toLowerCase().includes(search.toLowerCase()) || s.course?.toLowerCase().includes(search.toLowerCase());
     return matchDept && matchSearch;
-  });
+  }).sort(compareSections);
 
   // Group by department
   const grouped = {};
@@ -898,10 +956,23 @@ function SectionsView({ batch, toast, onSelect }) {
     grouped[dept].push(s);
   });
 
-  const deptKeys = Object.keys(grouped);
+  const deptKeys = Object.keys(grouped).sort((a, b) => {
+    const indexA = SCHOOL_KEYS.indexOf(a);
+    const indexB = SCHOOL_KEYS.indexOf(b);
+    return (indexA >= 0 ? indexA : SCHOOL_KEYS.length)
+      - (indexB >= 0 ? indexB : SCHOOL_KEYS.length)
+      || naturalSort.compare(a, b);
+  });
 
   // Unique departments present in this batch
-  const presentDepts = [...new Set(sections.map(s => s.department).filter(Boolean))];
+  const presentDepts = [...new Set(sections.map(s => s.department).filter(Boolean))]
+    .sort((a, b) => {
+      const indexA = SCHOOL_KEYS.indexOf(a);
+      const indexB = SCHOOL_KEYS.indexOf(b);
+      return (indexA >= 0 ? indexA : SCHOOL_KEYS.length)
+        - (indexB >= 0 ? indexB : SCHOOL_KEYS.length)
+        || naturalSort.compare(a, b);
+    });
 
   return (
     <>
@@ -967,6 +1038,11 @@ function SectionsView({ batch, toast, onSelect }) {
           const color = colorOf(dept);
           const bg    = bgOf(dept);
           const school = SCHOOL_MAP[dept];
+          const courseGroups = groupSectionsByCourse(dept, grouped[dept]);
+          const courseKeys = Object.keys(courseGroups).sort((a, b) => {
+            const rankOrder = courseRank(dept, a) - courseRank(dept, b);
+            return rankOrder || naturalSort.compare(a, b);
+          });
           return (
             <div key={dept} className="mb-8">
               {/* School group header */}
@@ -985,8 +1061,18 @@ function SectionsView({ batch, toast, onSelect }) {
                 </div>
               </div>
 
-              <CardGrid>
-                {grouped[dept].map(s => (
+              <div className="space-y-5">
+                {courseKeys.map(course => (
+                  <div key={`${dept}-${course}`}>
+                    <div className="mb-2.5 flex flex-wrap items-center gap-2">
+                      <div style={{ color }} className="text-sm font-extrabold">
+                        {course}
+                      </div>
+                      <div className="h-px min-w-[80px] flex-1 bg-slate-200" />
+                      {pill(`${courseGroups[course].length} sections`, color, bg)}
+                    </div>
+                    <CardGrid>
+                {courseGroups[course].map(s => (
                   <Card key={s.id} accent={color} onClick={() => onSelect(s)}
                     actions={<>
                       <SmallBtn onClick={e => { e.stopPropagation(); setModal(s); }}>
@@ -1008,7 +1094,10 @@ function SectionsView({ batch, toast, onSelect }) {
                     </div>
                   </Card>
                 ))}
-              </CardGrid>
+                    </CardGrid>
+                  </div>
+                ))}
+              </div>
             </div>
           );
         })

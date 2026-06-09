@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, FlatList, Modal, RefreshControl, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, FlatList, KeyboardAvoidingView, Modal, Platform, RefreshControl, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
 import { FontAwesome } from '@expo/vector-icons';
@@ -19,6 +19,16 @@ const personName = (item: any, currentUserId?: any) => otherUser(item, currentUs
 const personPhoto = (item: any, currentUserId?: any) => imageUrl(otherUser(item, currentUserId)?.profile_picture || item?.profile_picture);
 const personCourse = (item: any, currentUserId?: any) => otherUser(item, currentUserId)?.course || item?.course || 'Yearbook profile';
 const initials = (name = '') => name.trim().split(/\s+/).slice(0, 2).map((part) => part[0]?.toUpperCase()).join('') || '?';
+const conversationList = (payload: any) => {
+  const data = unwrap(payload);
+  if (Array.isArray(data)) return data;
+  if (Array.isArray(data?.conversations)) return data.conversations;
+  if (Array.isArray(data?.data)) return data.data;
+  if (Array.isArray(payload?.conversations)) return payload.conversations;
+  if (Array.isArray(payload?.data?.conversations)) return payload.data.conversations;
+  if (Array.isArray(payload?.data?.data)) return payload.data.data;
+  return [];
+};
 const formatTime = (value?: string) => {
   if (!value) return '';
   const date = new Date(value);
@@ -64,11 +74,10 @@ export default function MessagesScreen() {
       const user = await fetchCurrentUser().catch(() => null);
       if (user) setCurrentUser(user);
       const payload = await getConversations();
-      const data = unwrap(payload);
-      const nextConversations = Array.isArray(data) ? data : [];
+      const nextConversations = conversationList(payload);
       setConversations(nextConversations);
 
-      const ids = Array.from(new Set(nextConversations.map((item) => personId(item, user?.id)).filter(Boolean)));
+      const ids = Array.from(new Set(nextConversations.map((item: any) => personId(item, user?.id)).filter(Boolean)));
       if (ids.length) {
         const presencePayload = await getPresenceBulk(ids).catch(() => ({}));
         setPresence(presencePayload || {});
@@ -84,12 +93,11 @@ export default function MessagesScreen() {
   const refreshConversationsQuietly = useCallback(async () => {
     try {
       const payload = await getConversations();
-      const data = unwrap(payload);
-      const nextConversations = Array.isArray(data) ? data : [];
+      const nextConversations = conversationList(payload);
       setConversations(nextConversations);
 
       const ids = Array.from(new Set([
-        ...nextConversations.map((item) => personId(item, currentUser?.id)),
+        ...nextConversations.map((item: any) => personId(item, currentUser?.id)),
         selectedRef.current ? personId(selectedRef.current, currentUser?.id) : null,
       ].filter(Boolean)));
       if (ids.length) {
@@ -254,9 +262,9 @@ export default function MessagesScreen() {
                 <Text style={styles.name}>{personName(item, currentUser?.id)}</Text>
                 {!!item?.unread_count && <View style={styles.unreadBadge}><Text style={styles.unreadText}>{item.unread_count}</Text></View>}
               </View>
-              <Text style={styles.preview} numberOfLines={1}>{item?.last_message?.body || item?.body || 'Open conversation'}</Text>
+              <Text style={styles.preview} numberOfLines={1}>{item?.last_message?.body || item?.latest_message?.body || item?.body || item?.message || 'Open conversation'}</Text>
             </View>
-            <Text style={styles.timeText}>{formatTime(item?.created_at)}</Text>
+            <Text style={styles.timeText}>{formatTime(item?.last_message?.created_at || item?.latest_message?.created_at || item?.created_at)}</Text>
           </TouchableOpacity>
         )}
         ListEmptyComponent={loading ? <ActivityIndicator color="#1d2b4b" style={{ marginTop: 26 }} /> : (
@@ -275,6 +283,7 @@ export default function MessagesScreen() {
 
       <Modal visible={!!selected} animationType="slide" onRequestClose={() => setSelected(null)}>
         <SafeAreaView style={styles.container}>
+          <KeyboardAvoidingView style={styles.keyboardWrap} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
           <View style={styles.threadHeader}>
             <TouchableOpacity onPress={() => setSelected(null)}>
               <FontAwesome name="chevron-left" size={20} color="#1d2b4b" />
@@ -310,6 +319,7 @@ export default function MessagesScreen() {
               <FontAwesome name="send" size={16} color="#FFFFFF" />
             </TouchableOpacity>
           </View>
+          </KeyboardAvoidingView>
         </SafeAreaView>
       </Modal>
     </SafeAreaView>
@@ -318,45 +328,46 @@ export default function MessagesScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f4f7fe' },
-  header: { backgroundColor: '#1d2b4b', paddingHorizontal: 24, paddingTop: 26, paddingBottom: 30, borderBottomLeftRadius: 28, borderBottomRightRadius: 28 },
-  kicker: { color: '#fdb813', fontSize: 11, fontWeight: '900', letterSpacing: 1.4, marginBottom: 8 },
-  headerTitle: { color: '#ffffff', fontSize: 28, fontWeight: '900' },
-  headerText: { color: '#cbd5e1', fontSize: 13, lineHeight: 20, marginTop: 6 },
-  content: { padding: 20, paddingBottom: 40 },
+  header: { backgroundColor: '#1d2b4b', paddingHorizontal: 18, paddingTop: 14, paddingBottom: 16 },
+  kicker: { color: '#fdb813', fontSize: 10, fontWeight: '900', letterSpacing: 1.2, marginBottom: 4 },
+  headerTitle: { color: '#ffffff', fontSize: 24, fontWeight: '900' },
+  headerText: { color: '#cbd5e1', fontSize: 12, lineHeight: 18, marginTop: 4 },
+  content: { padding: 16, paddingBottom: 40 },
   searchContainer: { height: 50, borderRadius: 15, backgroundColor: '#ffffff', borderWidth: 1, borderColor: '#e2e8f0', flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 14, marginBottom: 14 },
   searchInput: { flex: 1, color: '#1d2b4b', fontSize: 14 },
-  card: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFFFFF', borderRadius: 18, padding: 16, marginBottom: 12, elevation: 2 },
+  card: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFFFFF', borderRadius: 16, padding: 12, marginBottom: 10, borderWidth: 1, borderColor: '#e2e8f0' },
   avatarWrap: { position: 'relative', marginRight: 14 },
-  avatar: { width: 52, height: 52, borderRadius: 26 },
-  avatarFallback: { width: 52, height: 52, borderRadius: 26, backgroundColor: '#1d2b4b', justifyContent: 'center', alignItems: 'center' },
+  avatar: { width: 48, height: 48, borderRadius: 16 },
+  avatarFallback: { width: 48, height: 48, borderRadius: 16, backgroundColor: '#1d2b4b', justifyContent: 'center', alignItems: 'center' },
   onlineDot: { position: 'absolute', right: 1, bottom: 1, width: 13, height: 13, borderRadius: 7, borderWidth: 2, borderColor: '#ffffff', backgroundColor: '#cbd5e1' },
   onlineDotActive: { backgroundColor: '#10b981' },
   avatarText: { color: '#fdb813', fontWeight: '900', fontSize: 16 },
   info: { flex: 1 },
   nameRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  name: { fontSize: 16, fontWeight: 'bold', color: '#1C1C1E' },
+  name: { fontSize: 14, fontWeight: '900', color: '#1d2b4b', flexShrink: 1 },
   preview: { color: '#8E8E93', fontSize: 13, marginTop: 3 },
   unreadBadge: { minWidth: 20, height: 20, borderRadius: 10, backgroundColor: '#fdb813', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 6 },
   unreadText: { color: '#1d2b4b', fontSize: 10, fontWeight: '900' },
   timeText: { color: '#94a3b8', fontSize: 11, marginLeft: 8 },
   emptyText: { color: '#8E8E93', textAlign: 'center', padding: 24 },
-  emptyPanel: { backgroundColor: '#ffffff', borderRadius: 22, alignItems: 'center', paddingVertical: 48, paddingHorizontal: 24, borderWidth: 1, borderColor: '#e2e8f0' },
+  emptyPanel: { minHeight: 520, backgroundColor: '#ffffff', borderRadius: 18, alignItems: 'center', justifyContent: 'center', paddingVertical: 34, paddingHorizontal: 20, borderWidth: 1, borderColor: '#e2e8f0' },
   emptyTitle: { color: '#1d2b4b', fontSize: 16, fontWeight: '900', marginTop: 14, textAlign: 'center' },
-  findButton: { height: 44, borderRadius: 13, backgroundColor: '#1d2b4b', flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 18, marginTop: 18 },
+  findButton: { minHeight: 44, borderRadius: 13, backgroundColor: '#1d2b4b', flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 18, marginTop: 18 },
   findButtonText: { color: '#ffffff', fontSize: 13, fontWeight: '900' },
-  threadHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 20, borderBottomWidth: 1, borderBottomColor: '#E5E7EB' },
+  keyboardWrap: { flex: 1 },
+  threadHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 14, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#E5E7EB', backgroundColor: '#ffffff' },
   threadTitleWrap: { flex: 1, alignItems: 'center', paddingHorizontal: 12 },
   threadTitle: { color: '#1C1C1E', fontWeight: 'bold', fontSize: 18 },
   threadMeta: { color: '#94a3b8', fontSize: 11, fontWeight: '800', marginTop: 2 },
   refreshThreadButton: { width: 36, height: 36, borderRadius: 12, backgroundColor: '#f4f7fe', alignItems: 'center', justifyContent: 'center' },
-  threadContent: { padding: 20 },
+  threadContent: { padding: 16, paddingBottom: 24 },
   bubble: { alignSelf: 'flex-start', backgroundColor: '#FFFFFF', padding: 12, borderRadius: 16, marginBottom: 10, maxWidth: '82%' },
   mineBubble: { alignSelf: 'flex-end', backgroundColor: '#1d2b4b' },
   bubbleText: { color: '#1C1C1E', fontSize: 14 },
   mineText: { color: '#FFFFFF' },
   bubbleTime: { color: '#94a3b8', fontSize: 10, marginTop: 5 },
   mineTime: { color: 'rgba(255,255,255,0.55)' },
-  composer: { flexDirection: 'row', padding: 14, borderTopWidth: 1, borderTopColor: '#E5E7EB', backgroundColor: '#FFFFFF' },
-  composerInput: { flex: 1, maxHeight: 110, backgroundColor: '#f4f7fe', borderRadius: 16, paddingHorizontal: 14, paddingVertical: 12, marginRight: 10, color: '#1d2b4b' },
+  composer: { flexDirection: 'row', padding: 12, borderTopWidth: 1, borderTopColor: '#E5E7EB', backgroundColor: '#FFFFFF', alignItems: 'flex-end' },
+  composerInput: { flex: 1, minHeight: 46, maxHeight: 110, backgroundColor: '#f4f7fe', borderRadius: 16, paddingHorizontal: 14, paddingVertical: 12, marginRight: 10, color: '#1d2b4b' },
   sendButton: { width: 48, height: 48, borderRadius: 24, backgroundColor: '#1d2b4b', justifyContent: 'center', alignItems: 'center' },
 });

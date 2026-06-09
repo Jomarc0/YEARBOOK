@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\API\Feed;
 
 use App\Http\Controllers\Controller;
+use App\Models\ContentView;
 use App\Models\Photo;
 use App\Models\User;
 use Illuminate\Http\Request;
@@ -107,6 +108,34 @@ class FeedController extends Controller
         ]);
     }
 
+    public function recordView(Request $request, Photo $photo): JsonResponse
+    {
+        $user = $request->user();
+
+        if ($photo->user_id !== $user->id) {
+            ContentView::firstOrCreate(
+                [
+                    'content_type'   => 'post',
+                    'content_id'     => $photo->id,
+                    'viewer_user_id' => $user->id,
+                ],
+                [
+                    'viewer_ip' => $request->ip(),
+                    'title'     => $photo->caption ?: 'Feed post',
+                    'category'  => $photo->visibility,
+                    'url'       => "/students/{$photo->user_id}?post={$photo->id}",
+                ]
+            );
+        }
+
+        return response()->json([
+            'recorded'    => true,
+            'views_count' => ContentView::where('content_type', 'post')
+                ->where('content_id', $photo->id)
+                ->count(),
+        ]);
+    }
+
     private function formatPost(Photo $photo, User $authUser): array
     {
         // ── Media handling ──────────────────────────────────────────────
@@ -152,7 +181,9 @@ class FeedController extends Controller
             'caption'         => $photo->caption,
             'visibility'      => $photo->visibility === 'friends' ? 'batchmates' : $photo->visibility,
             'is_profile_post' => $photo->is_profile_post,
-            'views_count'     => $photo->views_count ?? 0,
+            'views_count'     => ContentView::where('content_type', 'post')
+                ->where('content_id', $photo->id)
+                ->count(),
             'time_ago'        => $photo->created_at?->diffForHumans() ?? '',
             'created_at'      => $photo->created_at?->toIso8601String(),
 

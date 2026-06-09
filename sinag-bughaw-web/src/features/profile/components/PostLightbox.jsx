@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { recordContentView } from '@/api/analytics.api';
 
 export default function PostLightbox({ post, initialIdx = 0, onClose }) {
   const [idx,    setIdx]    = useState(initialIdx);
@@ -20,6 +21,16 @@ export default function PostLightbox({ post, initialIdx = 0, onClose }) {
 
   useEffect(() => { setLoaded(false); }, [idx]);
   useEffect(() => { requestAnimationFrame(() => setAnimIn(true)); }, []);
+  useEffect(() => {
+    if (!post?.id) return;
+    recordContentView({
+      content_type: 'post',
+      content_id: post.id,
+      title: post.caption || 'Profile post',
+      category: current.resource_type || 'post',
+      url: `/profile/${post.user_id ?? post.user?.id ?? ''}`,
+    }).catch(() => {});
+  }, [post?.id]);
 
   const handleClose = useCallback(() => {
     setAnimIn(false);

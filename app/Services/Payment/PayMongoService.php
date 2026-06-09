@@ -57,6 +57,14 @@ class PayMongoService
         return $response->json();
     }
 
+    public function retrieveCheckoutSession(string $sessionId): array
+    {
+        $response = Http::withBasicAuth($this->secretKey, '')
+            ->get("{$this->baseUrl}/checkout_sessions/{$sessionId}");
+
+        return $response->json();
+    }
+
     public function verifyWebhookSignature(?string $signatureHeader, string $rawBody): bool
     {
         if (! $signatureHeader || ! $this->webhookSecret) {

@@ -7,10 +7,10 @@
  * page manifest server-side via YearbookController@pages), then layers
  * in bookmarks. No client-side page building needed.
  */
-import { useState, useEffect, useCallback, useRef } from 'react';
-import { yearbookApi } from '../../../api/yearbook.api';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { downloadYearbookPdf, yearbookApi } from '../../../api/yearbook.api';
 
-export function useYearbook(batchId) {
+export function useYearbook(batchId, scope = {}) {
   const [state, setState] = useState({
     loading:       true,
     error:         null,
@@ -22,6 +22,10 @@ export function useYearbook(batchId) {
   });
 
   const abortRef = useRef(null);
+  const cleanScope = useMemo(() => ({
+    department: scope.department || undefined,
+    course: scope.course || undefined,
+  }), [scope.department, scope.course]);
 
   const load = useCallback(async () => {
     if (!batchId) return;
@@ -37,7 +41,7 @@ export function useYearbook(batchId) {
       // yearbookApi.meta()  returns cover meta separately (pdfReady, theme, etc.)
       const [metaRes, pagesRes, bookmarksRes] = await Promise.all([
         yearbookApi.meta(batchId),
-        yearbookApi.pages(batchId),
+        yearbookApi.pages(batchId, cleanScope),
         yearbookApi.getBookmarks(batchId),
       ]);
 
@@ -78,7 +82,7 @@ export function useYearbook(batchId) {
         error:   err?.response?.data?.message ?? 'Failed to load yearbook.',
       }));
     }
-  }, [batchId]);
+  }, [batchId, cleanScope]);
 
   useEffect(() => {
     load();
@@ -93,12 +97,12 @@ export function useYearbook(batchId) {
       return;
     }
     try {
-      const { data } = await yearbookApi.search(batchId, q.trim());
+      const { data } = await yearbookApi.search(batchId, q.trim(), cleanScope);
       setState((s) => ({ ...s, searchResults: data }));
     } catch {
       setState((s) => ({ ...s, searchResults: [] }));
     }
-  }, [batchId]);
+  }, [batchId, cleanScope]);
 
   const addBookmark = useCallback(async (pageIndex, label) => {
     try {
@@ -135,21 +139,12 @@ export function useYearbook(batchId) {
    */
   const downloadPdf = useCallback(async () => {
     try {
-      const { data } = await yearbookApi.exportBatchPdf(batchId);
-
-      const blob   = new Blob([data], { type: 'application/pdf' });
-      const url    = URL.createObjectURL(blob);
-      const anchor = document.createElement('a');
-      anchor.href     = url;
-      anchor.download = `yearbook-${batchId}.pdf`;
-      document.body.appendChild(anchor);
-      anchor.click();
-      anchor.remove();
-      URL.revokeObjectURL(url);
+      const suffix = cleanScope.course || cleanScope.department || batchId;
+      await downloadYearbookPdf(batchId, cleanScope, `yearbook-${suffix}.pdf`);
     } catch (err) {
       console.error('PDF download failed:', err);
     }
-  }, [batchId]);
+  }, [batchId, cleanScope]);
 
   return {
     ...state,
@@ -187,7 +182,7 @@ function tocEntry(page, idx) {
     'cover':          { label: 'Cover',                          icon: 'book'      },
     'dedication':     null,
     'toc':            { label: 'Contents',                       icon: 'list'      },
-    'section-header': { label: page.section?.name ?? 'Section',  icon: 'users'     },
+    'section-header': { label: sectionLabel(page.section),       icon: 'users'     },
     'student-grid':   null,
     'student-profile': null,
     'gallery':        { label: page.gallery?.name ?? 'Gallery',  icon: 'photo'     },
@@ -201,4 +196,11 @@ function tocEntry(page, idx) {
   if (!entry) return null;
 
   return { pageIndex: idx, ...entry };
+}
+
+function sectionLabel(section = {}) {
+  const name = section?.name || 'Section';
+  const course = section?.strand || section?.course;
+
+  return course && course !== name ? `${course} - ${name}` : name;
 }

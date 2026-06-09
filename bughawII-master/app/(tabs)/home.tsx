@@ -1,4 +1,4 @@
-import { ActivityIndicator, FlatList, Modal, RefreshControl, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, AppState, FlatList, Modal, RefreshControl, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { Image } from 'expo-image';
 import { FontAwesome } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
@@ -14,6 +14,8 @@ import {
   getCurrentUser,
   getErrorMessage,
   getFeed,
+  getMessagesUnreadCount,
+  getNotifications,
   getTrending,
   imageUrl,
   paginationMeta,
@@ -27,6 +29,13 @@ const FILTERS = [
   { key: 'public', label: 'Public' },
   { key: 'batchmates', label: 'Batchmates' },
   { key: 'mine', label: 'My posts' },
+];
+
+const QUICK_ACTIONS = [
+  { label: 'Directory', icon: 'users', route: '/directory' },
+  { label: 'Faculty', icon: 'briefcase', route: '/faculty' },
+  { label: 'Gallery', icon: 'image', route: '/gallery' },
+  { label: 'Yearbook', icon: 'book', route: '/yearbook' },
 ];
 
 const visibilityMap: Record<string, { label: string; icon: any; color: string; bg: string }> = {
@@ -219,6 +228,8 @@ export default function HomeScreen() {
   const [tagSaving, setTagSaving] = useState(false);
   const [tagError, setTagError] = useState('');
   const [appConfig, setAppConfig] = useState<any>(null);
+  const [unreadMessages, setUnreadMessages] = useState(0);
+  const [unreadNotifications, setUnreadNotifications] = useState(0);
   const postsEnabled = appConfig?.features?.allow_student_posts !== false;
   const directoryEnabled = appConfig?.features?.enable_student_directory_search !== false;
 
@@ -241,6 +252,42 @@ export default function HomeScreen() {
       return () => { active = false; };
     }, [])
   );
+
+  const loadBadges = useCallback(async () => {
+    try {
+      const [messagePayload, notificationPayload] = await Promise.allSettled([
+        getMessagesUnreadCount(),
+        getNotifications(),
+      ]);
+
+      if (messagePayload.status === 'fulfilled') {
+        const data = unwrap(messagePayload.value);
+        setUnreadMessages(Number(data?.count ?? data?.unread_count ?? data ?? 0) || 0);
+      }
+
+      if (notificationPayload.status === 'fulfilled') {
+        const data = unwrap(notificationPayload.value);
+        const list = Array.isArray(data) ? data : data?.data || [];
+        setUnreadNotifications(list.filter((item: any) => !item?.read_at && item?.read !== true && item?.is_read !== true).length);
+      }
+    } catch {
+      setUnreadMessages(0);
+      setUnreadNotifications(0);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadBadges();
+    const timer = setInterval(loadBadges, 45000);
+    const subscription = AppState.addEventListener('change', (status) => {
+      if (status === 'active') loadBadges();
+    });
+
+    return () => {
+      clearInterval(timer);
+      subscription.remove();
+    };
+  }, [loadBadges]);
 
   const loadFeed = useCallback(async (nextPage = 1, append = false) => {
     if (!postsEnabled) {
@@ -386,6 +433,15 @@ export default function HomeScreen() {
     ...(searchResults?.students || []).map((item: any) => ({ ...item, type: 'Student' })),
   ].slice(0, 6);
 
+  const renderBadge = (count: number) => {
+    if (!count) return null;
+    return (
+      <View style={styles.badge}>
+        <Text style={styles.badgeText}>{count > 9 ? '9+' : count}</Text>
+      </View>
+    );
+  };
+
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar style="dark" />
@@ -397,16 +453,27 @@ export default function HomeScreen() {
         onEndReachedThreshold={0.35}
         ListHeaderComponent={(
           <>
+            <View style={styles.appHeader}>
+              <View style={styles.headerSpacer} />
+              <View style={styles.headerActions}>
+                <TouchableOpacity style={styles.headerIconButton} onPress={() => router.push('/notifications')}>
+                  <FontAwesome name="bell" size={16} color="#1d2b4b" />
+                  {renderBadge(unreadNotifications)}
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.headerIconButton} onPress={() => router.push('/messages')}>
+                  <FontAwesome name="commenting" size={16} color="#1d2b4b" />
+                  {renderBadge(unreadMessages)}
+                </TouchableOpacity>
+              </View>
+            </View>
+
             <View style={styles.topArea}>
-              <Text style={styles.kicker}>Mabuhay, Pioneer!</Text>
               <View style={styles.greetingRow}>
                 <View>
+                  <Text style={styles.kicker}>Mabuhay, Pioneer!</Text>
                   <Text style={styles.title}>Welcome back,</Text>
                   <Text style={styles.name}>{firstName}</Text>
                 </View>
-                <TouchableOpacity onPress={() => router.push('/profile')}>
-                  <Avatar user={currentUser} size={48} />
-                </TouchableOpacity>
               </View>
 
               <View style={styles.searchBox}>
@@ -444,22 +511,15 @@ export default function HomeScreen() {
               ) : null}
             </View>
 
-            <View style={styles.filterRow}>
-              {postsEnabled ? FILTERS.map((item) => {
-                const active = filter === item.key;
-                return (
-                  <TouchableOpacity
-                    key={item.key}
-                    style={[styles.filterButton, active && styles.filterButtonActive]}
-                    onPress={() => {
-                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                      setFilter(item.key);
-                    }}
-                  >
-                    <Text style={[styles.filterText, active && styles.filterTextActive]}>{item.label}</Text>
-                  </TouchableOpacity>
-                );
-              }) : null}
+            <View style={styles.quickActions}>
+              {QUICK_ACTIONS.map((item) => (
+                <TouchableOpacity key={item.label} style={styles.quickAction} onPress={() => router.push(item.route as any)}>
+                  <View style={styles.quickIcon}>
+                    <FontAwesome name={item.icon as any} size={16} color="#fdb813" />
+                  </View>
+                  <Text style={styles.quickText} numberOfLines={1}>{item.label}</Text>
+                </TouchableOpacity>
+              ))}
             </View>
 
             {!postsEnabled ? (
@@ -469,75 +529,96 @@ export default function HomeScreen() {
               </View>
             ) : null}
 
-            <View style={styles.sideGrid}>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.statsRow}>
               {directoryEnabled ? (
-                <TouchableOpacity style={styles.sideCard} onPress={() => router.push('/directory')}>
+                <TouchableOpacity style={styles.statCard} onPress={() => router.push('/directory')}>
                   <Text style={styles.sideKicker}>Batchmates</Text>
                   <Text style={styles.sideValue}>{batchmates.length}</Text>
-                  <Text style={styles.sideCopy}>People from your circle</Text>
+                  <Text style={styles.sideCopy}>Your circle</Text>
                 </TouchableOpacity>
               ) : null}
-              <TouchableOpacity style={styles.sideCardDark} onPress={() => router.push('/analytics')}>
+              <TouchableOpacity style={styles.statCard} onPress={() => router.push('/analytics')}>
                 <Text style={styles.sideKickerGold}>Trending</Text>
-                <Text style={styles.sideValueDark}>{trending.length}</Text>
-                <Text style={styles.sideCopyDark}>Top viewed this week</Text>
+                <Text style={styles.sideValue}>{trending.length}</Text>
+                <Text style={styles.sideCopy}>This week</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={styles.sideCardGold} onPress={() => router.push('/analytics')}>
-                <Text style={styles.sideKickerNavy}>Analytics</Text>
-                <Text style={styles.sideValueGold}>View</Text>
-                <Text style={styles.sideCopyNavy}>Engagement stats</Text>
+              <TouchableOpacity style={styles.statCard} onPress={() => router.push('/gallery')}>
+                <Text style={styles.sideKicker}>Memories</Text>
+                <Text style={styles.sideValue}>{posts.length}</Text>
+                <Text style={styles.sideCopy}>Recent posts</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={styles.sideCard} onPress={() => router.push('/alumni' as any)}>
-                <Text style={styles.sideKicker}>Alumni</Text>
-                <Text style={styles.sideValue}>Track</Text>
-                <Text style={styles.sideCopy}>Careers & yearbook links</Text>
-              </TouchableOpacity>
-            </View>
+            </ScrollView>
+
+            <TouchableOpacity style={styles.alumniTrackCard} onPress={() => router.push('/alumni' as any)}>
+              <View style={styles.alumniIcon}>
+                <FontAwesome name="briefcase" size={16} color="#fdb813" />
+              </View>
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <Text style={styles.alumniTitle}>Alumni Track</Text>
+                <Text style={styles.alumniText}>Careers, links, and yearbook connections</Text>
+              </View>
+              <FontAwesome name="chevron-right" size={13} color="#94a3b8" />
+            </TouchableOpacity>
 
             {batchmates.length ? (
-              <View style={styles.horizontalPanel}>
+              <View style={styles.sectionBlock}>
                 <Text style={styles.panelTitle}>Suggested Batchmates</Text>
-                <View style={styles.miniList}>
-                  {batchmates.slice(0, 3).map((student: any) => (
-                    <TouchableOpacity key={student.id} style={styles.miniItem} onPress={() => openProfile(student)}>
-                      <Avatar user={student} size={34} />
-                      <View style={styles.miniInfo}>
-                        <Text style={styles.miniName} numberOfLines={1}>{student.name}</Text>
-                        <Text style={styles.miniMeta} numberOfLines={1}>{student.course || 'Student'}</Text>
-                      </View>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.horizontalList}>
+                  {batchmates.slice(0, 8).map((student: any) => (
+                    <TouchableOpacity key={student.id} style={styles.batchmateCard} onPress={() => openProfile(student)}>
+                      <Avatar user={student} size={48} />
+                      <Text style={styles.miniName} numberOfLines={1}>{student.name}</Text>
+                      <Text style={styles.miniMeta} numberOfLines={1}>{student.course || 'Student'}</Text>
                       <TouchableOpacity style={styles.miniMessageButton} onPress={() => openMessage(student)}>
                         <FontAwesome name="comment" size={11} color="#3f51b5" />
                       </TouchableOpacity>
                     </TouchableOpacity>
                   ))}
-                </View>
+                </ScrollView>
               </View>
             ) : null}
 
             {trending.length ? (
-              <View style={styles.horizontalPanel}>
+              <View style={styles.sectionBlock}>
                 <View style={styles.panelTitleRow}>
                   <Text style={styles.panelTitle}>Trending This Week</Text>
                   <TouchableOpacity onPress={() => router.push('/analytics')}>
                     <Text style={styles.panelLink}>See all</Text>
                   </TouchableOpacity>
                 </View>
-                <View style={styles.miniList}>
-                  {trending.slice(0, 3).map((student: any, index: number) => (
-                    <TouchableOpacity key={student.id || `${student.name}-${index}`} style={styles.trendingRow} onPress={() => openProfile(student)}>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.horizontalList}>
+                  {trending.slice(0, 8).map((student: any, index: number) => (
+                    <TouchableOpacity key={student.id || `${student.name}-${index}`} style={styles.trendingCard} onPress={() => openProfile(student)}>
                       <Text style={styles.trendingRank}>#{index + 1}</Text>
                       <Avatar user={student} size={34} />
-                      <View style={styles.miniInfo}>
-                        <Text style={styles.miniName} numberOfLines={1}>{student.name || 'Student'}</Text>
-                        <Text style={styles.miniMeta} numberOfLines={1}>
-                          {Number(student.views_this_week || student.views || student.total_views || 0).toLocaleString()} views
-                        </Text>
-                      </View>
-                      <FontAwesome name="chevron-right" size={11} color="#cbd5e1" />
+                      <Text style={styles.miniName} numberOfLines={1}>{student.name || 'Student'}</Text>
+                      <Text style={styles.miniMeta} numberOfLines={1}>
+                        {Number(student.views_this_week || student.views || student.total_views || 0).toLocaleString()} views
+                      </Text>
                     </TouchableOpacity>
                   ))}
-                </View>
+                </ScrollView>
               </View>
+            ) : null}
+
+            {postsEnabled ? (
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRow}>
+                {FILTERS.map((item) => {
+                  const active = filter === item.key;
+                  return (
+                    <TouchableOpacity
+                      key={item.key}
+                      style={[styles.filterButton, active && styles.filterButtonActive]}
+                      onPress={() => {
+                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                        setFilter(item.key);
+                      }}
+                    >
+                      <Text style={[styles.filterText, active && styles.filterTextActive]}>{item.label}</Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
             ) : null}
 
             {loading ? <ActivityIndicator color="#1d2b4b" style={{ marginVertical: 24 }} /> : null}
@@ -641,14 +722,24 @@ export default function HomeScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f4f7fe' },
+  container: { flex: 1, backgroundColor: '#F0F2F8' },
   content: { paddingBottom: 0 },
-  topArea: { paddingHorizontal: 18, paddingTop: 18, paddingBottom: 10 },
+  appHeader: { height: 56, backgroundColor: '#F0F2F8', paddingHorizontal: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  headerSpacer: { flex: 1 },
+  brandRow: { flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: 10 },
+  brandCopy: { flex: 1, minWidth: 0 },
+  brandTitle: { color: '#ffffff', fontSize: 13, fontWeight: '900', letterSpacing: 0.8 },
+  brandSub: { color: '#fdb813', fontSize: 9, fontWeight: '900', letterSpacing: 1.1, marginTop: 1 },
+  headerActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  headerIconButton: { width: 48, height: 48, borderRadius: 24, backgroundColor: '#ffffff', alignItems: 'center', justifyContent: 'center' },
+  badge: { position: 'absolute', right: 4, top: 3, minWidth: 16, height: 16, borderRadius: 8, paddingHorizontal: 4, backgroundColor: '#fdb813', borderWidth: 2, borderColor: '#ffffff', alignItems: 'center', justifyContent: 'center' },
+  badgeText: { color: '#1d2b4b', fontSize: 8, fontWeight: '900' },
+  topArea: { paddingHorizontal: 18, paddingTop: 16, paddingBottom: 10 },
   kicker: { color: '#94a3b8', fontSize: 11, fontWeight: '900', letterSpacing: 1, textTransform: 'uppercase' },
-  greetingRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 6, marginBottom: 18 },
-  title: { color: '#1d2b4b', fontSize: 21, fontWeight: '800' },
-  name: { color: '#3f51b5', fontSize: 24, fontWeight: '900', marginTop: -2 },
-  searchBox: { minHeight: 50, backgroundColor: '#ffffff', borderRadius: 12, borderWidth: 1, borderColor: '#e2e8f0', flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14 },
+  greetingRow: { marginBottom: 16 },
+  title: { color: '#1A2547', fontSize: 21, fontWeight: '800' },
+  name: { color: '#F5A623', fontSize: 24, fontWeight: '900', marginTop: -2 },
+  searchBox: { minHeight: 56, backgroundColor: '#F3F4F6', borderRadius: 12, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14 },
   searchInput: { flex: 1, color: '#1d2b4b', fontSize: 14, marginLeft: 10 },
   searchDrop: { backgroundColor: '#ffffff', borderRadius: 14, borderWidth: 1, borderColor: '#e2e8f0', marginTop: 8, overflow: 'hidden' },
   resultRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#f1f5f9' },
@@ -659,13 +750,23 @@ const styles = StyleSheet.create({
   avatar: { backgroundColor: '#eef2ff' },
   avatarFallback: { backgroundColor: '#1d2b4b', justifyContent: 'center', alignItems: 'center' },
   avatarText: { color: '#fdb813', fontWeight: '900' },
-  filterRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingHorizontal: 18, paddingTop: 6, paddingBottom: 16 },
+  quickActions: { flexDirection: 'row', paddingHorizontal: 18, gap: 10, marginBottom: 14 },
+  quickAction: { flex: 1, minWidth: 0, alignItems: 'center', gap: 7 },
+  quickIcon: { width: 48, height: 48, borderRadius: 16, backgroundColor: '#1A2547', alignItems: 'center', justifyContent: 'center' },
+  quickText: { color: '#1d2b4b', fontSize: 10, fontWeight: '900' },
+  filterRow: { gap: 8, paddingHorizontal: 18, paddingTop: 2, paddingBottom: 16 },
   filterButton: { paddingHorizontal: 14, paddingVertical: 9, borderRadius: 999, borderWidth: 1, borderColor: '#e2e8f0', backgroundColor: '#ffffff' },
   filterButtonActive: { backgroundColor: '#1d2b4b', borderColor: '#1d2b4b' },
   filterText: { color: '#64748b', fontSize: 12, fontWeight: '800' },
   filterTextActive: { color: '#fdb813' },
   featureNotice: { marginHorizontal: 18, marginBottom: 14, borderRadius: 14, backgroundColor: '#fffbeb', borderWidth: 1, borderColor: '#fde68a', paddingHorizontal: 13, paddingVertical: 11, flexDirection: 'row', alignItems: 'center', gap: 8 },
   featureNoticeText: { color: '#92590e', fontSize: 12, fontWeight: '900', flex: 1 },
+  statsRow: { gap: 10, paddingHorizontal: 18, paddingBottom: 14 },
+  statCard: { width: 112, backgroundColor: '#ffffff', borderRadius: 14, borderWidth: 1, borderColor: '#e2e8f0', padding: 13 },
+  alumniTrackCard: { marginHorizontal: 18, marginBottom: 14, minHeight: 72, borderRadius: 12, backgroundColor: '#ffffff', borderWidth: 1, borderColor: '#e2e8f0', flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14 },
+  alumniIcon: { width: 44, height: 44, borderRadius: 12, backgroundColor: '#1A2547', alignItems: 'center', justifyContent: 'center' },
+  alumniTitle: { color: '#1A2547', fontSize: 15, fontWeight: '900' },
+  alumniText: { color: '#6B7280', fontSize: 12, marginTop: 2 },
   sideGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, paddingHorizontal: 18, marginBottom: 14 },
   sideCard: { flexGrow: 1, flexBasis: '30%', backgroundColor: '#ffffff', borderRadius: 14, borderWidth: 1, borderColor: '#e2e8f0', padding: 14 },
   sideCardDark: { flexGrow: 1, flexBasis: '30%', backgroundColor: '#1d2b4b', borderRadius: 14, padding: 14 },
@@ -680,8 +781,10 @@ const styles = StyleSheet.create({
   sideCopyDark: { color: 'rgba(255, 255, 255, 0.55)', fontSize: 11, marginTop: 2 },
   sideCopyNavy: { color: 'rgba(29, 43, 75, 0.70)', fontSize: 11, marginTop: 2 },
   horizontalPanel: { backgroundColor: '#ffffff', borderRadius: 14, borderWidth: 1, borderColor: '#e2e8f0', marginHorizontal: 18, padding: 14, marginBottom: 14 },
+  sectionBlock: { marginBottom: 14 },
+  horizontalList: { gap: 10, paddingHorizontal: 18 },
   panelTitleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 },
-  panelTitle: { color: '#1d2b4b', fontSize: 13, fontWeight: '900', marginBottom: 8 },
+  panelTitle: { color: '#1d2b4b', fontSize: 15, fontWeight: '900', marginHorizontal: 18, marginBottom: 9 },
   panelLink: { color: '#3f51b5', fontSize: 11, fontWeight: '900' },
   miniList: { gap: 8 },
   miniItem: { flexDirection: 'row', alignItems: 'center' },
@@ -689,6 +792,8 @@ const styles = StyleSheet.create({
   miniName: { color: '#1d2b4b', fontSize: 12, fontWeight: '800' },
   miniMeta: { color: '#94a3b8', fontSize: 10, marginTop: 1 },
   miniMessageButton: { width: 34, height: 34, borderRadius: 12, backgroundColor: '#eef2ff', alignItems: 'center', justifyContent: 'center' },
+  batchmateCard: { width: 92, minHeight: 126, backgroundColor: 'transparent', alignItems: 'center', paddingVertical: 6, gap: 6 },
+  trendingCard: { width: 118, minHeight: 124, backgroundColor: '#ffffff', borderRadius: 16, borderWidth: 1, borderColor: '#e2e8f0', alignItems: 'center', padding: 12, gap: 6 },
   trendingRow: { flexDirection: 'row', alignItems: 'center', minHeight: 42 },
   trendingRank: { width: 28, color: '#cbd5e1', fontSize: 11, fontWeight: '900' },
   postCard: { backgroundColor: '#ffffff', borderRadius: 14, borderWidth: 1, borderColor: '#e2e8f0', marginHorizontal: 18, marginBottom: 14, overflow: 'hidden' },

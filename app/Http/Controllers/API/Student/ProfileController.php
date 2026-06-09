@@ -8,6 +8,7 @@ use App\Contracts\StorageServiceInterface;
 use App\Exceptions\StorageLimitExceededException;
 use App\Http\Controllers\Controller;
 use App\Models\Album;
+use App\Models\GalleryMedia;
 use App\Models\Photo;
 use App\Models\PostMedia;
 use App\Models\TaggedPhoto;
@@ -322,7 +323,7 @@ class ProfileController extends Controller
             ->where(fn ($q) => $q->whereNull('expires_at')->orWhere('expires_at', '>', now()))
             ->latest()->first();
 
-        $tierKey    = $subscription?->tier ?? 'free';
+        $tierKey    = $subscription?->storage_tier_key ?? 'free';
         $tierConfig = config("cloudinary.tiers.{$tierKey}");
 
         if (! is_array($tierConfig)) $tierConfig = config('cloudinary.tiers.free');
@@ -331,16 +332,26 @@ class ProfileController extends Controller
             'hd_enabled'          => false,
         ];
 
-        $usedBytes = $this->storage->getUserStorageUsed($user->id);
+        $postBytes = (int) PostMedia::whereHas(
+            'photo',
+            fn ($q) => $q->where('user_id', $user->id)
+        )->sum('bytes');
+
+        $galleryBytes = (int) GalleryMedia::whereHas(
+            'gallery',
+            fn ($q) => $q->where('user_id', $user->id)
+        )->sum('bytes');
+
+        $usedBytes = $postBytes + $galleryBytes;
 
         return response()->json([
             'success' => true,
             'data'    => [
                 'used_bytes'  => $usedBytes,
-                'limit_bytes' => $tierConfig['storage_limit_bytes'],
+                'limit_bytes' => $subscription?->storage_limit_bytes ?? $tierConfig['storage_limit_bytes'],
                 'tier'        => $tierKey,
-                'tier_label'  => ucfirst($tierKey),
-                'hd_enabled'  => $tierConfig['hd_enabled'],
+                'tier_label'  => $subscription?->storage_tier_label ?? ucfirst($tierKey),
+                'hd_enabled'  => $subscription?->hd_enabled ?? $tierConfig['hd_enabled'],
             ],
         ]);
     }

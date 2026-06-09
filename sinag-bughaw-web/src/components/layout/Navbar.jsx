@@ -80,7 +80,7 @@ const NAV_LINKS = [
   { to: '/directory', label: 'Directory' },
   { to: '/faculty',   label: 'Faculty'   },
   { to: '/gallery',   label: 'Gallery'   },
-  { to: '/sections',  label: 'Sections'  },
+  { to: '/sections',  label: 'Batch'     },
   { to: '/discover',  label: 'Discovery' },
   { to: '/analytics', label: 'Analytics' },
 ];

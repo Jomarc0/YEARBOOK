@@ -12,7 +12,6 @@ import { getAppConfig, getDiscoveryStudent, getErrorMessage, getStudent, getStud
 const TABS = [
   { key: 'posts', label: 'Posts', icon: 'th-large' },
   { key: 'tagged', label: 'Tagged', icon: 'tag' },
-  { key: 'yearbook', label: 'Yearbook', icon: 'book' },
   { key: 'academic', label: 'Academic', icon: 'graduation-cap' },
   { key: 'achievements', label: 'Awards', icon: 'trophy' },
   { key: 'voice', label: 'Voice', icon: 'microphone' },
@@ -292,7 +291,6 @@ export default function StudentProfileScreen() {
       </View>
       <View style={styles.tabs}>
         {TABS.map((item) => {
-          if (item.key === 'yearbook' && !canShowYearbook) return null;
           const active = tab === item.key;
           return (
             <TouchableOpacity key={item.key} style={[styles.tab, active && styles.tabActive]} onPress={() => setTab(item.key)}>
@@ -344,18 +342,6 @@ export default function StudentProfileScreen() {
           })}
         </View>
       ) : <Empty icon="tags" title="No Tagged Photos" text="Tagged memories will appear here." />;
-    }
-
-    if (tab === 'yearbook') {
-      return (
-        <View style={styles.card}>
-          <InfoRow icon="graduation-cap" label="Class Of" value={year(student) || 'Not set'} />
-          <InfoRow icon="id-card" label="Student No." value={studentNo(student) || 'Not set'} />
-          <InfoRow icon="quote-left" label="Motto" value={safeStudent(student)?.motto || student?.motto || 'No motto yet.'} />
-          <InfoRow icon="heart" label="Fondest Memory" value={safeStudent(student)?.fondest_memory || student?.fondest_memory || 'No memory added yet.'} />
-          <InfoRow icon="rocket" label="Future Plans" value={safeStudent(student)?.future_plans || student?.future_plans || 'No future plans added yet.'} />
-        </View>
-      );
     }
 
     if (tab === 'academic') {
@@ -469,7 +455,6 @@ export default function StudentProfileScreen() {
 function InfoRow({ icon, label, value }: { icon: any; label: string; value: any }) {
   return (
     <View style={styles.infoRow}>
-      <View style={styles.infoIcon}><FontAwesome name={icon} size={13} color="#fdb813" /></View>
       <View style={{ flex: 1 }}>
         <Text style={styles.infoLabel}>{label}</Text>
         <Text style={styles.infoValue}>{String(value || 'Not set')}</Text>
@@ -538,10 +523,10 @@ const styles = StyleSheet.create({
   recordButtonText: { color: '#ffffff', fontSize: 12, fontWeight: '900' },
   sendVoiceButton: { width: 92, minHeight: 44, borderRadius: 12, backgroundColor: '#fdb813', alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 7 },
   sendVoiceText: { color: '#1d2b4b', fontSize: 12, fontWeight: '900' },
-  infoRow: { flexDirection: 'row', gap: 12, paddingVertical: 13, borderBottomWidth: 1, borderBottomColor: '#f1f5f9' },
+  infoRow: { paddingVertical: 13, borderBottomWidth: 1, borderBottomColor: '#f1f5f9' },
   infoIcon: { width: 34, height: 34, borderRadius: 10, backgroundColor: '#1d2b4b', alignItems: 'center', justifyContent: 'center' },
-  infoLabel: { color: '#94a3b8', fontSize: 10, fontWeight: '900', letterSpacing: 0.8 },
-  infoValue: { color: '#1d2b4b', fontSize: 14, fontWeight: '700', marginTop: 3 },
+  infoLabel: { color: '#6B7280', fontSize: 12, fontWeight: '900', letterSpacing: 0.8, textTransform: 'uppercase' },
+  infoValue: { color: '#1A2547', fontSize: 16, fontWeight: '900', marginTop: 3 },
   row: { flexDirection: 'row', alignItems: 'center', gap: 13, paddingVertical: 13 },
   rowBorder: { borderBottomWidth: 1, borderBottomColor: '#f1f5f9' },
   rowIcon: { width: 42, height: 42, borderRadius: 12, backgroundColor: '#f8fafc', alignItems: 'center', justifyContent: 'center' },

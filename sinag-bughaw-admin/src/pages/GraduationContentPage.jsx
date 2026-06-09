@@ -82,7 +82,7 @@ const Skeleton = ({ w = "100%", h = 14, radius = 6, style = {} }) => (
 
 function detectFileType(photo) {
   const meta = photo?.ai_metadata ?? {};
-  const mime = meta.mime_type ?? "";
+  const mime = photo?.mime_type ?? meta.mime_type ?? "";
   const url  = photo?.file_path ?? "";
   if (mime.startsWith("video/") || /\.(mp4|mov|webm|avi|mkv)(\?|$)/i.test(url)) return "video";
   if (mime.startsWith("audio/") || /\.(mp3|wav|m4a|ogg|flac)(\?|$)/i.test(url)) return "audio";
@@ -278,10 +278,10 @@ function FileThumb({ photo, idx, onLightbox }) {
   );
 
   if (type === "pdf") return (
-    <a href={url} target="_blank" rel="noreferrer" style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "20px 12px", background: T.bg, borderRadius: 10, border: `1px solid ${T.border}`, textDecoration: "none", gap: 8, minHeight: 100 }}>
-      <div style={{ fontSize: "2rem" }}>📄</div>
-      <div style={{ fontSize: "0.75rem", fontWeight: 700, color: T.primary }}>Open PDF</div>
-    </a>
+    <button type="button" onClick={() => onLightbox({ url, type: "pdf" })} style={{ width: "100%", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "20px 12px", background: T.bg, borderRadius: 10, border: `1px solid ${T.border}`, textDecoration: "none", gap: 8, minHeight: 100, cursor: "pointer", fontFamily: "inherit" }}>
+      <div style={{ fontSize: "2rem" }}>PDF</div>
+      <div style={{ fontSize: "0.75rem", fontWeight: 700, color: T.primary }}>View PDF</div>
+    </button>
   );
 
   return (
@@ -484,12 +484,20 @@ function AlbumDetailModal({ open, albumId, album: albumProp, contentType, isAdmi
           style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.92)", zIndex: 2000, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}
           onClick={() => setLightbox(null)}
         >
-          <button onClick={() => setLightbox(null)} style={{ position: "absolute", top: 20, right: 24, background: "none", border: "none", color: "#fff", fontSize: "2rem", cursor: "pointer", lineHeight: 1 }}>×</button>
+          <button onClick={() => setLightbox(null)} style={{ position: "absolute", top: 20, right: 24, background: "none", border: "none", color: "#fff", fontSize: "2rem", cursor: "pointer", lineHeight: 1 }}>x</button>
           {lightbox.type === "image" && (
-            <img src={lightbox.url} alt="Preview" style={{ maxWidth: "90vw", maxHeight: "88vh", borderRadius: 12, objectFit: "contain" }} onClick={e => e.stopPropagation()} />
+            <>
+              <a href={lightbox.url} download target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} style={{ position: "absolute", top: 22, right: 72, border: "1px solid rgba(255,255,255,.25)", borderRadius: 10, background: "rgba(255,255,255,.12)", color: "#fff", padding: "8px 12px", textDecoration: "none", fontSize: "0.82rem", fontWeight: 700 }}>
+                Download Image
+              </a>
+              <img src={lightbox.url} alt="Preview" style={{ maxWidth: "90vw", maxHeight: "88vh", borderRadius: 12, objectFit: "contain" }} onClick={e => e.stopPropagation()} />
+            </>
           )}
           {lightbox.type === "video" && (
             <video src={lightbox.url} controls autoPlay style={{ maxWidth: "90vw", maxHeight: "88vh", borderRadius: 12 }} onClick={e => e.stopPropagation()} />
+          )}
+          {lightbox.type === "pdf" && (
+            <iframe src={lightbox.url} title="PDF preview" style={{ width: "90vw", height: "88vh", border: "none", borderRadius: 12, background: "#fff" }} onClick={e => e.stopPropagation()} />
           )}
         </div>
       )}
@@ -1381,3 +1389,5 @@ export default function GraduationContentPage({ isAdmin = false }) {
     </>
   );
 }
+
+

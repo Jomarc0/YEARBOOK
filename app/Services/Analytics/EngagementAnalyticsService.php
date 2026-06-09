@@ -3,6 +3,7 @@
 namespace App\Services\Analytics;
 
 use App\Models\User;
+use App\Models\ContentView;
 use App\Models\ProfileView;
 use Illuminate\Support\Facades\DB;
 
@@ -174,5 +175,167 @@ class EngagementAnalyticsService
                                         ->distinct('viewer_user_id')
                                         ->count('viewer_user_id'),
         ];
+    }
+
+    public function mixedTopViewed(int $limit = 10): array
+    {
+        $profiles = collect($this->topViewed($limit))
+            ->map(fn ($item) => [
+                ...$item,
+                'type' => 'profile',
+                'url'  => "/profile/{$item['id']}",
+            ]);
+
+        $content = DB::table('content_views')
+            ->select(
+                'content_type',
+                'content_id',
+                DB::raw('MAX(title) as title'),
+                DB::raw('MAX(category) as category'),
+                DB::raw('MAX(url) as url'),
+                DB::raw('COUNT(*) as views')
+            )
+            ->groupBy('content_type', 'content_id')
+            ->orderByDesc('views')
+            ->limit($limit)
+            ->get()
+            ->map(fn ($row) => $this->formatContentViewRow($row, 'views'));
+
+        return $profiles
+            ->merge($content)
+            ->sortByDesc(fn ($item) => $item['views'] ?? 0)
+            ->take($limit)
+            ->values()
+            ->toArray();
+    }
+
+    public function mixedTrending(int $limit = 10): array
+    {
+        $profiles = collect($this->trending($limit))
+            ->map(function ($item) {
+                $row = (array) $item;
+                $row['type'] = 'profile';
+                $row['url'] = "/profile/{$row['id']}";
+                return $row;
+            });
+
+        $content = DB::table('content_views')
+            ->select(
+                'content_type',
+                'content_id',
+                DB::raw('MAX(title) as title'),
+                DB::raw('MAX(category) as category'),
+                DB::raw('MAX(url) as url'),
+                DB::raw('COUNT(*) as views_this_week')
+            )
+            ->where('created_at', '>=', now()->subDays(7))
+            ->groupBy('content_type', 'content_id')
+            ->orderByDesc('views_this_week')
+            ->limit($limit)
+            ->get()
+            ->map(fn ($row) => $this->formatContentViewRow($row, 'views_this_week'));
+
+        return $profiles
+            ->merge($content)
+            ->sortByDesc(fn ($item) => $item['views_this_week'] ?? 0)
+            ->take($limit)
+            ->values()
+            ->toArray();
+    }
+
+    public function recordContentView(
+        string $contentType,
+        int $contentId,
+        ?int $viewerUserId,
+        string $ipAddress,
+        ?string $title = null,
+        ?string $category = null,
+        ?string $url = null
+    ): void {
+        $allowed = [
+            'batch',
+            'post',
+            'gallery_album',
+            'gallery_photo',
+            'graduation_album',
+            'graduation_photo',
+            'graduation_video',
+            'graduation_program',
+            'graduation_invitation',
+            'graduation_song',
+            'graduation_speech',
+            'baccalaureate_mass',
+            'yearbook',
+        ];
+
+        if (! in_array($contentType, $allowed, true)) {
+            return;
+        }
+
+        $alreadyViewed = ContentView::where('content_type', $contentType)
+            ->where('content_id', $contentId)
+            ->where(function ($q) use ($viewerUserId, $ipAddress) {
+                if ($viewerUserId) {
+                    $q->where('viewer_user_id', $viewerUserId);
+                } else {
+                    $q->whereNull('viewer_user_id')->where('viewer_ip', $ipAddress);
+                }
+            })
+            ->where('created_at', '>=', now()->subHour())
+            ->exists();
+
+        if ($alreadyViewed) {
+            return;
+        }
+
+        ContentView::create([
+            'content_type'   => $contentType,
+            'content_id'     => $contentId,
+            'viewer_user_id' => $viewerUserId,
+            'viewer_ip'      => $ipAddress,
+            'title'          => $title,
+            'category'       => $category,
+            'url'            => $url,
+        ]);
+    }
+
+    private function formatContentViewRow(object $row, string $viewsKey): array
+    {
+        $views = (int) ($row->{$viewsKey} ?? 0);
+
+        return [
+            'id'              => "{$row->content_type}:{$row->content_id}",
+            'content_id'      => (int) $row->content_id,
+            'type'            => $row->content_type,
+            'name'            => $row->title ?: $this->labelForContentType($row->content_type),
+            'profile_picture' => null,
+            'course'          => $this->labelForContentType($row->content_type),
+            'batch'           => $row->category,
+            'graduation_year' => null,
+            'views'           => $views,
+            'views_this_week' => $views,
+            'total_views'     => $views,
+            'url'             => $row->url ?: '#',
+        ];
+    }
+
+    private function labelForContentType(string $type): string
+    {
+        return match ($type) {
+            'batch'                 => 'Batch',
+            'post'                  => 'Post',
+            'gallery_album'         => 'Gallery Album',
+            'gallery_photo'         => 'Gallery Photo',
+            'graduation_album'      => 'Graduation Album',
+            'graduation_photo'      => 'Graduation Photo',
+            'graduation_video'      => 'Graduation Video',
+            'graduation_program'    => 'Program',
+            'graduation_invitation' => 'Invitation',
+            'graduation_song'       => 'Grad Song',
+            'graduation_speech'     => 'Speech',
+            'baccalaureate_mass'    => 'Baccalaureate Mass',
+            'yearbook'              => 'Yearbook',
+            default                 => ucwords(str_replace('_', ' ', $type)),
+        };
     }
 }

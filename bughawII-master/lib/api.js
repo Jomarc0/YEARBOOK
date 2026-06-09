@@ -1,6 +1,7 @@
 import axios from "axios";
 import Constants from "expo-constants";
 import * as SecureStore from "expo-secure-store";
+import { Platform } from "react-native";
 
 const configuredApiUrl = Constants.expoConfig?.extra?.apiUrl || process.env.EXPO_PUBLIC_API_URL;
 
@@ -11,6 +12,10 @@ const inferApiUrlFromExpoHost = () => {
     Constants.manifest?.debuggerHost;
 
   const host = typeof hostUri === "string" ? hostUri.split(":")[0] : "";
+  if (Platform.OS === "web" && (!host || host === "localhost")) {
+    return "http://127.0.0.1:8000/api";
+  }
+
   return host ? `http://${host}:8000/api` : "http://127.0.0.1:8000/api";
 };
 
@@ -24,6 +29,26 @@ export const STORAGE_BASE_URL = API_BASE_URL.replace(/\/api\/?$/, "");
 const TOKEN_KEY = "nu_lipa_yearbook_token";
 const USER_KEY = "nu_lipa_yearbook_user";
 
+const webStorage = {
+  getItemAsync: async (key) => {
+    if (typeof window === "undefined" || !window.localStorage) return null;
+    return window.localStorage.getItem(key);
+  },
+  setItemAsync: async (key, value) => {
+    if (typeof window === "undefined" || !window.localStorage) return;
+    window.localStorage.setItem(key, value);
+  },
+  deleteItemAsync: async (key) => {
+    if (typeof window === "undefined" || !window.localStorage) return;
+    window.localStorage.removeItem(key);
+  },
+};
+
+const sessionStore =
+  Platform.OS === "web" || typeof SecureStore.getItemAsync !== "function"
+    ? webStorage
+    : SecureStore;
+
 const api = axios.create({
   baseURL: API_BASE_URL,
   headers: {
@@ -33,7 +58,7 @@ const api = axios.create({
 });
 
 api.interceptors.request.use(async (config) => {
-  const token = await SecureStore.getItemAsync(TOKEN_KEY);
+  const token = await sessionStore.getItemAsync(TOKEN_KEY);
 
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
@@ -54,17 +79,17 @@ api.interceptors.response.use(
 );
 
 export const saveToken = async (token) => {
-  await SecureStore.setItemAsync(TOKEN_KEY, token);
+  await sessionStore.setItemAsync(TOKEN_KEY, token);
 };
 
-export const getToken = async () => SecureStore.getItemAsync(TOKEN_KEY);
+export const getToken = async () => sessionStore.getItemAsync(TOKEN_KEY);
 
 export const saveCurrentUser = async (user) => {
-  await SecureStore.setItemAsync(USER_KEY, JSON.stringify(user));
+  await sessionStore.setItemAsync(USER_KEY, JSON.stringify(user));
 };
 
 export const getCurrentUser = async () => {
-  const rawUser = await SecureStore.getItemAsync(USER_KEY);
+  const rawUser = await sessionStore.getItemAsync(USER_KEY);
 
   if (!rawUser) {
     return null;
@@ -73,19 +98,19 @@ export const getCurrentUser = async () => {
   try {
     return JSON.parse(rawUser);
   } catch (_error) {
-    await SecureStore.deleteItemAsync(USER_KEY);
+    await sessionStore.deleteItemAsync(USER_KEY);
     return null;
   }
 };
 
 export const clearToken = async () => {
-  await SecureStore.deleteItemAsync(TOKEN_KEY);
+  await sessionStore.deleteItemAsync(TOKEN_KEY);
 };
 
 export const clearSession = async () => {
   await Promise.all([
-    SecureStore.deleteItemAsync(TOKEN_KEY),
-    SecureStore.deleteItemAsync(USER_KEY),
+    sessionStore.deleteItemAsync(TOKEN_KEY),
+    sessionStore.deleteItemAsync(USER_KEY),
   ]);
 };
 

@@ -11,8 +11,8 @@
  * ─────────────────────────────────────────────────────────────────────────────
  */
 
-import { useEffect, useRef, useState, useCallback } from 'react';
-import { Link, useNavigate }                         from 'react-router-dom';
+import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
+import { Link }                                      from 'react-router-dom';
 import { useAuth }                                   from '@/features/auth/hooks/useAuth';
 import { useAppConfig }                              from '@/features/platform/AppConfigProvider';
 import { searchApi }                                 from '@/api/search.api';
@@ -28,6 +28,43 @@ const getTier = (user) => {
   if (user.tier === 'standard') return 'standard';
   return 'free';
 };
+
+const firstValue = (source, keys = []) => {
+  for (const key of keys) {
+    const value = key.split('.').reduce((current, part) => current?.[part], source);
+    if (value !== undefined && value !== null && String(value).trim() !== '') return value;
+  }
+  return null;
+};
+
+const batchValues = (person) => [
+  'batch_id',
+  'batch.id',
+  'student.batch_id',
+  'profile.batch_id',
+  'graduation_year',
+  'batch_year',
+  'year',
+  'batch.year',
+  'student.graduation_year',
+].map((key) => firstValue(person, [key]))
+  .filter((value) => value !== null)
+  .map((value) => String(value).trim().toLowerCase());
+
+const sameBatchOnly = (people = [], user) => {
+  const userBatches = new Set(batchValues(user));
+  if (!userBatches.size) return [];
+
+  return people.filter((person) => (
+    person?.id !== user?.id && batchValues(person).some((value) => userBatches.has(value))
+  ));
+};
+
+const batchLabel = (user) =>
+  firstValue(user, ['graduation_year', 'batch_year', 'year', 'batch.year']) || 'your batch';
+
+const batchRequestValue = (user) =>
+  firstValue(user, ['graduation_year', 'batch_year', 'year', 'batch.year', 'batch_id', 'batch.id']);
 
 // ─── Visibility pill ─────────────────────────────────────────────────────────
 function VisPill({ visibility }) {
@@ -58,11 +95,11 @@ function PostMediaGrid({ media }) {
   if (media.length === 1) {
     const m = media[0];
     return (
-      <div className="w-full max-h-[480px] bg-black">
+      <div className="w-full h-[320px] bg-[#0f172a]">
         {isVideo(m.file_path)
-          ? <video src={getUrl(m.file_path)} controls className="w-full max-h-[480px] object-contain mx-auto block" />
+          ? <video src={getUrl(m.file_path)} controls className="w-full h-full object-contain mx-auto block" />
           : <img   src={getUrl(m.file_path)} alt={m.caption ?? 'post'}
-              className="w-full max-h-[480px] object-cover block"
+              className="w-full h-full object-contain block"
               loading="lazy"
               onError={e => { e.currentTarget.src = 'https://via.placeholder.com/800x480?text=Photo'; }}
             />
@@ -78,15 +115,15 @@ function PostMediaGrid({ media }) {
   const m = media[current];
 
   return (
-    <div className="relative w-full max-h-[480px] bg-black select-none">
+    <div className="relative w-full h-[320px] bg-[#0f172a] select-none">
 
       {/* Current slide */}
-      <div className="w-full max-h-[480px] overflow-hidden">
+      <div className="w-full h-full overflow-hidden">
         {isVideo(m.file_path)
           ? <video src={getUrl(m.file_path)} controls
-              className="w-full max-h-[480px] object-contain mx-auto block" />
+              className="w-full h-full object-contain mx-auto block" />
           : <img src={getUrl(m.file_path)} alt={`slide ${current + 1}`}
-              className="w-full max-h-[480px] object-cover block"
+              className="w-full h-full object-contain block"
               loading="lazy"
               onError={e => { e.currentTarget.src = 'https://via.placeholder.com/800x480?text=Photo'; }}
             />
@@ -309,8 +346,10 @@ function TagModal({ photoId, existingTags = [], batchmates = [], onClose, onSave
 // FIX: onTagSaved now receives the full tagged_students array from the server,
 // not a list of IDs. Passed straight through to TagModal's onSaved prop.
 // ─────────────────────────────────────────────────────────────────────────────
-function PostCard({ post, currentUser, batchmates, onTagSaved }) {
+function PostCard({ post, currentUser, batchmates, onTagSaved, onViewed }) {
   const [tagOpen, setTagOpen] = useState(false);
+  const cardRef = useRef(null);
+  const viewedRef = useRef(false);
   const posterName = post.user?.name || post.user_name || post.name || 'Student';
   const posterCourse = post.user?.course || post.course || '';
 
@@ -319,16 +358,37 @@ function PostCard({ post, currentUser, batchmates, onTagSaved }) {
 
   const isOwn = String(post.user_id) === String(currentUser?.id);
 
+  useEffect(() => {
+    if (!post?.id || isOwn || viewedRef.current || !cardRef.current) return;
+
+    const observer = new IntersectionObserver(([entry]) => {
+      if (!entry.isIntersecting || entry.intersectionRatio < 0.55 || viewedRef.current) return;
+
+      viewedRef.current = true;
+      axios.post(`/feed/${post.id}/view`)
+        .then(({ data }) => {
+          if (Number.isFinite(Number(data.views_count))) {
+            onViewed?.(post.id, Number(data.views_count));
+          }
+        })
+        .catch(() => {});
+      observer.disconnect();
+    }, { threshold: [0.55] });
+
+    observer.observe(cardRef.current);
+    return () => observer.disconnect();
+  }, [post?.id, isOwn, onViewed]);
+
   return (
     <>
-      <article className="bg-white rounded-2xl border border-slate-100 overflow-hidden
+      <article ref={cardRef} className="bg-white rounded-2xl border border-slate-100 overflow-hidden
                            transition-shadow duration-200 hover:shadow-md hover:shadow-slate-200/60">
         {/* Post header */}
-        <div className="flex items-center gap-3 px-4 py-3">
+        <div className="flex items-center gap-3 px-4 py-2.5">
           <Link to={isOwn ? `/profile/${post.user_id}` : `/students/${post.user_id}`}
             className="flex-shrink-0 no-underline">
             <img src={avatar} alt={posterName}
-              className="w-10 h-10 rounded-xl object-cover border border-slate-100"
+              className="w-9 h-9 rounded-xl object-cover border border-slate-100"
               onError={e => { e.currentTarget.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(posterName)}&background=1d2b4b&color=fdb813`; }}
             />
           </Link>
@@ -353,7 +413,7 @@ function PostCard({ post, currentUser, batchmates, onTagSaved }) {
         <PostMediaGrid media={post.media ?? []} />
 
         {/* Caption + tags */}
-        <div className="px-4 pt-3 pb-1">
+        <div className="px-4 pt-2.5 pb-1">
           {post.caption && (
             <p className="text-[13px] text-slate-700 leading-relaxed mb-2">
               <span className="font-semibold text-[#1d2b4b] mr-1">{posterName}</span>
@@ -378,7 +438,7 @@ function PostCard({ post, currentUser, batchmates, onTagSaved }) {
         </div>
 
         {/* Action bar */}
-        <div className="flex items-center gap-2 px-4 pb-3 pt-1 border-t border-slate-50 mt-1">
+        <div className="flex items-center gap-2 px-4 pb-2.5 pt-1 border-t border-slate-50 mt-1">
           <button
             onClick={() => setTagOpen(true)}
             className="inline-flex items-center gap-1.5 text-[12px] font-medium text-slate-500
@@ -523,31 +583,53 @@ function LeftSidebar({ user, isOn }) {
 }
 
 // ─── Right sidebar ────────────────────────────────────────────────────────────
-function RightSidebar({ batchmates, batchStats, topViewed }) {
+function RightSidebar({ batchmates, batchStats, topViewed, currentUser }) {
+  const sameBatchmates = useMemo(() => sameBatchOnly(batchmates, currentUser), [batchmates, currentUser]);
+  const visibleBatchmates = sameBatchmates.slice(0, 5);
+  const userBatchLabel = batchLabel(currentUser);
+
   return (
     <aside className="flex flex-col gap-4 sticky top-[88px]">
 
       {/* Batchmates */}
-      <div className="bg-white rounded-2xl border border-slate-100 p-4">
-        <p className="text-[11px] font-bold tracking-widest uppercase text-slate-400 mb-3">Batchmates</p>
-        {batchmates.slice(0, 5).map(s => {
+      <div className="bg-white rounded-[24px] border border-slate-100 p-4 shadow-[0_18px_45px_rgba(29,43,75,0.07)]">
+        <div className="flex items-start justify-between gap-3 mb-3">
+          <div>
+            <p className="text-[10px] font-black tracking-[0.18em] uppercase text-[#fdb813] m-0">Your Batch</p>
+            <p className="text-[18px] leading-6 font-black text-[#1d2b4b] m-0">Batchmates</p>
+            <p className="text-[11px] text-slate-400 m-0">Only students from {userBatchLabel}</p>
+          </div>
+          <span className="min-w-9 h-9 px-2 rounded-2xl bg-[#1d2b4b] text-[#fdb813] flex items-center justify-center text-[13px] font-black">
+            {sameBatchmates.length}
+          </span>
+        </div>
+        {visibleBatchmates.map(s => {
           const avatar = storageUrl(s.profile_picture)
             || `https://ui-avatars.com/api/?name=${encodeURIComponent(s.name)}&background=3f51b5&color=fff&size=64`;
           return (
             <Link key={s.id} to={`/students/${s.id}`}
-              className="flex items-center gap-2.5 py-2 no-underline group">
+              className="flex items-center gap-3 p-2 rounded-2xl no-underline group hover:bg-[#f4f7fe] transition-colors">
               <img src={avatar} alt={s.name}
-                className="w-8 h-8 rounded-lg object-cover flex-shrink-0"
+                className="w-10 h-10 rounded-2xl object-cover flex-shrink-0 ring-1 ring-slate-100"
                 onError={e => { e.currentTarget.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(s.name)}&background=1d2b4b&color=fff`; }}
               />
               <div className="flex-1 min-w-0">
-                <p className="text-[12px] font-semibold text-[#1d2b4b] truncate m-0 group-hover:text-[#3f51b5] transition-colors">{s.name}</p>
-                <p className="text-[10px] text-slate-400 m-0 truncate">{s.course ?? 'Student'}</p>
+                <p className="text-[13px] font-extrabold text-[#1d2b4b] truncate m-0 group-hover:text-[#3f51b5] transition-colors">{s.name}</p>
+                <p className="text-[10px] text-slate-400 m-0 truncate">{s.course ?? s.program ?? 'Pioneer Student'}</p>
               </div>
-              <i className="fas fa-chevron-right text-[10px] text-slate-300 group-hover:text-[#3f51b5] transition-colors" aria-hidden="true" />
+              <i className="fas fa-arrow-right text-[10px] text-slate-300 group-hover:text-[#fdb813] transition-colors" aria-hidden="true" />
             </Link>
           );
         })}
+        {!visibleBatchmates.length && (
+          <div className="px-3 py-5 text-center">
+            <div className="w-12 h-12 rounded-2xl bg-[#f4f7fe] text-[#3f51b5] flex items-center justify-center mx-auto mb-3">
+              <i className="fas fa-users" aria-hidden="true" />
+            </div>
+            <p className="text-[13px] font-extrabold text-[#1d2b4b] m-0">No same-batch matches</p>
+            <p className="text-[11px] text-slate-400 m-0 mt-1">Update your batch year if this looks wrong.</p>
+          </div>
+        )}
         <Link to="/batchmates"
           className="block text-center text-[11px] font-semibold text-[#3f51b5] mt-2 pt-3
                      border-t border-slate-100 no-underline hover:text-[#1d2b4b] transition-colors">
@@ -624,7 +706,7 @@ function FeedSkeleton() {
               <div className="h-2.5 bg-slate-100 rounded w-24" />
             </div>
           </div>
-          <div className="h-56 bg-slate-100" />
+          <div className="h-[320px] bg-slate-100" />
           <div className="px-4 py-3">
             <div className="h-3 bg-slate-100 rounded w-3/4 mb-2" />
             <div className="h-3 bg-slate-100 rounded w-1/2" />
@@ -639,7 +721,6 @@ function FeedSkeleton() {
 export default function DashboardPage() {
   const { user }    = useAuth();
   const { isOn }    = useAppConfig();
-  const navigate    = useNavigate();
 
   const [filter,      setFilter]      = useState('all');
   const [posts,       setPosts]       = useState([]);
@@ -650,7 +731,7 @@ export default function DashboardPage() {
 
   const [batchmates,  setBatchmates]  = useState([]);
   const [topViewed,   setTopViewed]   = useState([]);
-  const [batchStats,  setBatchStats]  = useState(null);
+  const [batchStats]  = useState(null);
 
   // ── Search state ────────────────────────────────────────────────────────────
   const [query,      setQuery]      = useState('');
@@ -672,17 +753,19 @@ export default function DashboardPage() {
       }
       const meta = data.meta ?? data;
       setHasMore(meta.current_page < meta.last_page || newPosts.length === 10);
-    } catch (_) {
+    } catch {
       // silently degrade
     }
   }, [query]);
 
   // initial load + filter change
   useEffect(() => {
-    setLoading(true);
-    setPage(1);
-    setHasMore(true);
-    fetchFeed(filter, 1, query).finally(() => setLoading(false));
+    queueMicrotask(() => {
+      setLoading(true);
+      setPage(1);
+      setHasMore(true);
+      fetchFeed(filter, 1, query).finally(() => setLoading(false));
+    });
   }, [filter, query, fetchFeed]);
 
   // ── Sidebar data ─────────────────────────────────────────────────────────────
@@ -690,14 +773,16 @@ export default function DashboardPage() {
     (async () => {
       try {
         const [bm, tv] = await Promise.allSettled([
-          axios.get('/batchmates', { params: { per_page: 10 } }),
+          axios.get('/batchmates', { params: { per_page: 10, year: batchRequestValue(user) || undefined } }),
           axios.get('/analytics/trending'),
         ]);
         if (bm.status === 'fulfilled') setBatchmates(bm.value.data.data ?? bm.value.data ?? []);
         if (tv.status === 'fulfilled') setTopViewed(tv.value.data.data ?? tv.value.data ?? []);
-      } catch (_) {}
+      } catch {
+        // Sidebar data is optional.
+      }
     })();
-  }, []);
+  }, [user]);
 
   // ── Load more ─────────────────────────────────────────────────────────────
   const loadMore = async () => {
@@ -717,7 +802,9 @@ export default function DashboardPage() {
       const { data } = await searchApi.search(val);
       setResults(data.results);
       setShowDrop(true);
-    } catch (_) {}
+    } catch {
+      // Search suggestions can fail without blocking the feed.
+    }
   };
 
   useEffect(() => {
@@ -740,6 +827,12 @@ export default function DashboardPage() {
       p.id !== postId ? p : { ...p, tagged_students: taggedStudents }
     ));
   };
+
+  const handlePostViewed = useCallback((postId, viewsCount) => {
+    setPosts(prev => prev.map(p =>
+      p.id !== postId ? p : { ...p, views_count: viewsCount }
+    ));
+  }, []);
 
   const FILTERS = [
     { key: 'all',        label: 'All posts'       },
@@ -833,7 +926,7 @@ export default function DashboardPage() {
         </div>
 
         {/* ── 3-column layout ── */}
-        <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_260px] gap-6 items-start">
+        <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,640px)_260px] xl:grid-cols-[minmax(0,680px)_280px] gap-6 items-start justify-center">
 
           {/* Left sidebar */}
           <div className="hidden">
@@ -841,7 +934,7 @@ export default function DashboardPage() {
           </div>
 
           {/* Feed column */}
-          <div className="min-w-0">
+          <div className="min-w-0 w-full max-w-[680px]">
             {/* Filter tabs */}
             <div className="flex items-center gap-2 mb-5 flex-wrap">
               {FILTERS.map(({ key, label }) => (
@@ -879,6 +972,7 @@ export default function DashboardPage() {
                     currentUser={user}
                     batchmates={batchmates}
                     onTagSaved={handleTagSaved}
+                    onViewed={handlePostViewed}
                   />
                 ))}
 
@@ -908,6 +1002,7 @@ export default function DashboardPage() {
               batchmates={batchmates}
               topViewed={topViewed}
               batchStats={batchStats}
+              currentUser={user}
             />
           </div>
         </div>

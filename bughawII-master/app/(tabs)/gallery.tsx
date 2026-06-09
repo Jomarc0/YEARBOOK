@@ -1,13 +1,12 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Alert, FlatList, Linking, Modal, RefreshControl, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, FlatList, Linking, Modal, RefreshControl, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { Image } from 'expo-image';
 import { StatusBar } from 'expo-status-bar';
 import { FontAwesome } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import * as ImagePicker from 'expo-image-picker';
-import { faceSearch, getAppConfig, getErrorMessage, getGallery, getGalleryAlbum, getGraduationAlbum, getGraduationGallery, getProfileStorageUsage, imageUrl, paginationMeta, unwrap } from '../../lib/api';
+import { faceSearch, getAppConfig, getErrorMessage, getGallery, getGalleryAlbum, getGraduationAlbum, getGraduationGallery, imageUrl, paginationMeta, unwrap } from '../../lib/api';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import FilterDropdown from '../../components/FilterDropdown';
 
 const TABS = [
   { key: 'general', label: 'All Photos', icon: 'image', type: 'general', category: null },
@@ -65,20 +64,17 @@ const mediaCountLabel = (category?: string | null) => {
   if (category === 'videos' || category === 'mass') return 'videos';
   return 'photos';
 };
+const friendlyGalleryError = (error: any) => (
+  error?.message === 'Network Error'
+    ? 'Unable to connect to the gallery. Pull down to retry.'
+    : getErrorMessage(error, 'Unable to load gallery albums.')
+);
 const normalizeFaceScore = (value: any) => {
   const score = Number(value || 0);
   if (!Number.isFinite(score) || score <= 0) return 0;
   return score <= 1 ? score * 100 : score;
 };
 const faceScore = (item: any) => normalizeFaceScore(item?.similarity ?? item?.confidence ?? item?.score ?? item?.Similarity);
-const formatBytes = (bytes?: number) => {
-  const value = Number(bytes || 0);
-  if (value >= 1024 * 1024 * 1024) return `${(value / 1024 / 1024 / 1024).toFixed(1)} GB`;
-  if (value >= 1024 * 1024) return `${(value / 1024 / 1024).toFixed(1)} MB`;
-  if (value >= 1024) return `${(value / 1024).toFixed(1)} KB`;
-  return `${value} B`;
-};
-
 export default function GalleryScreen() {
   const [activeTab, setActiveTab] = useState('general');
   const [albums, setAlbums] = useState<any[]>([]);
@@ -96,7 +92,6 @@ export default function GalleryScreen() {
   const [faceResults, setFaceResults] = useState<any[]>([]);
   const [isFaceVisible, setIsFaceVisible] = useState(false);
   const [faceLoading, setFaceLoading] = useState(false);
-  const [storageUsage, setStorageUsage] = useState<any>(null);
   const [appConfig, setAppConfig] = useState<any>(null);
 
   const tab = useMemo(() => TABS.find((item) => item.key === activeTab) || TABS[0], [activeTab]);
@@ -125,7 +120,7 @@ export default function GalleryScreen() {
       setLastPage(meta.lastPage);
     } catch (requestError: any) {
       setAlbums([]);
-      setError(getErrorMessage(requestError, 'Unable to load gallery albums.'));
+      setError(friendlyGalleryError(requestError));
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -140,12 +135,8 @@ export default function GalleryScreen() {
   useEffect(() => {
     let active = true;
 
-    Promise.all([
-      getProfileStorageUsage().catch(() => null),
-      getAppConfig().catch(() => null),
-    ]).then(([storagePayload, configPayload]) => {
+    getAppConfig().catch(() => null).then((configPayload) => {
       if (!active) return;
-      setStorageUsage(storagePayload ? unwrap(storagePayload) : null);
       setAppConfig(configPayload ? unwrap(configPayload) : null);
     });
 
@@ -226,11 +217,6 @@ export default function GalleryScreen() {
     }
   };
 
-  const heroSubtitle = isGraduation
-    ? 'Photos, videos, programs, ceremonies, and memories all in one place.'
-    : 'Relive the milestones and pioneer memories through our AI-powered digital gallery.';
-  const heroLabel = isGraduation ? 'CLASS MILESTONES' : schoolName.toUpperCase();
-
   const renderAlbum = ({ item }: { item: any }) => {
     const media = isGraduation ? graduationMedia(item, tab.category) : albumPhotos(item);
     const cover = imageUrl(item?.cover_photo_url || item?.cover_url || item?.cover_photo || item?.cover || item?.thumbnail || item?.media_url || media[0]?.url || media[0]?.path || media[0]?.file_path);
@@ -270,7 +256,7 @@ export default function GalleryScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={['left', 'right']}>
-      <StatusBar style="light" />
+      <StatusBar style="dark" />
       <FlatList
         data={albums}
         keyExtractor={(item, index) => String(albumId(item) || index)}
@@ -279,97 +265,52 @@ export default function GalleryScreen() {
         columnWrapperStyle={styles.columnWrapper}
         ListHeaderComponent={(
           <>
-            <View style={styles.hero}>
-              <Text style={styles.heroLabel}>{heroLabel}</Text>
-              <Text style={styles.heroTitle}>
-                {isGraduation ? <><Text style={styles.heroGold}>Graduation</Text> Hub</> : <>The <Text style={styles.heroGold}>Visual Archive</Text></>}
-              </Text>
-              <Text style={styles.heroSubtitle}>{heroSubtitle}</Text>
+            <View style={styles.compactHeader}>
+              <View>
+                <Text style={styles.heroLabel}>Gallery</Text>
+                <Text style={styles.compactTitle}>{isGraduation ? 'Graduation' : 'Albums'}</Text>
+              </View>
+              <TouchableOpacity style={styles.infoButton} onPress={() => Alert.alert('Content ownership', `All media in this gallery is protected content from ${schoolName}.`)}>
+                <FontAwesome name="info" size={15} color="#F5A623" />
+              </TouchableOpacity>
+            </View>
 
-              {!isGraduation ? (
-                <View style={styles.ownershipCard}>
-                  <View style={styles.shieldCircle}>
-                    <FontAwesome name="shield" size={15} color="#fdb813" />
-                  </View>
-                  <View style={styles.ownershipTextWrap}>
-                    <Text style={styles.ownershipKicker}>CONTENT OWNERSHIP</Text>
-                    <Text style={styles.ownershipText}>
-                      All media in this gallery is the exclusive property of <Text style={styles.ownershipGold}>{schoolName}</Text>
-                    </Text>
-                  </View>
-                  <View style={styles.protectedPill}>
-                    <Text style={styles.protectedText}>PROTECTED</Text>
-                  </View>
-                </View>
-              ) : null}
-
-              <View style={styles.searchShell}>
-                <View style={styles.searchContainer}>
-                  <FontAwesome name="search" size={16} color="#fdb813" style={styles.searchIcon} />
+            <View style={styles.searchShell}>
+              <View style={styles.searchContainer}>
+                  <FontAwesome name="search" size={16} color="#9CA3AF" style={styles.searchIcon} />
                   <TextInput
                     editable={false}
                     style={styles.searchInput}
-                    placeholder={faceLoading ? 'Searching...' : 'Click the camera icon to search by face...'}
-                    placeholderTextColor="rgba(255,255,255,0.55)"
+                    placeholder={faceLoading ? 'Searching...' : 'Search gallery by face...'}
+                    placeholderTextColor="#9CA3AF"
                   />
                   <TouchableOpacity style={styles.cameraButton} onPress={handleFaceSearch} disabled={faceLoading}>
-                    {faceLoading ? <ActivityIndicator color="#fdb813" size="small" /> : <FontAwesome name="camera" size={15} color="#fdb813" />}
+                    {faceLoading ? <ActivityIndicator color="#F5A623" size="small" /> : <FontAwesome name="camera" size={15} color="#F5A623" />}
                   </TouchableOpacity>
-                </View>
               </View>
             </View>
 
-            <View style={styles.galleryFilterWrap}>
-              <FilterDropdown
-                label="Gallery Section"
-                icon={tab.icon as any}
-                options={TABS.map((item) => ({
-                  label: item.label,
-                  value: item.key,
-                  icon: item.icon,
-                  meta: item.type === 'graduation' ? 'Graduation content' : 'General archive',
-                }))}
-                value={activeTab}
-                onChange={switchTab}
-              />
-            </View>
-
-            {storageUsage ? (
-              <View style={styles.accessCard}>
-                <View style={styles.accessTop}>
-                  <View style={styles.accessBadge}>
-                    <FontAwesome name={storageUsage.tier === 'premium' ? 'star' : storageUsage.tier === 'standard' ? 'bolt' : 'user'} size={12} color="#1d2b4b" />
-                    <Text style={styles.accessBadgeText}>{storageUsage.tier_label || storageUsage.tier || 'Free'}</Text>
-                  </View>
-                  <Text style={styles.accessPercent}>
-                    {Math.min(100, Math.round((Number(storageUsage.used_bytes || 0) / Math.max(Number(storageUsage.limit_bytes || 1), 1)) * 100))}% used
-                  </Text>
-                </View>
-                <View style={styles.accessTrack}>
-                  <View
-                    style={[
-                      styles.accessFill,
-                      { width: `${Math.min(100, Math.round((Number(storageUsage.used_bytes || 0) / Math.max(Number(storageUsage.limit_bytes || 1), 1)) * 100))}%` },
-                    ]}
-                  />
-                </View>
-                <Text style={styles.accessText}>
-                  Gallery storage: {formatBytes(storageUsage.used_bytes)} of {formatBytes(storageUsage.limit_bytes)}
-                </Text>
-              </View>
-            ) : null}
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.galleryChipRow}>
+              {TABS.map((item) => {
+                const active = activeTab === item.key;
+                return (
+                  <TouchableOpacity key={item.key} style={[styles.galleryChip, active && styles.galleryChipActive]} onPress={() => switchTab(item.key)}>
+                    <Text style={[styles.galleryChipText, active && styles.galleryChipTextActive]}>{item.label}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
 
             <View style={styles.sectionHeader}>
               <Text style={styles.sectionTitle}>{tab.label}</Text>
             </View>
-            {error ? <Text style={styles.errorText}>{error}</Text> : null}
           </>
         )}
         ListEmptyComponent={loading ? <ActivityIndicator color="#1d2b4b" style={{ marginTop: 32 }} /> : (
           <View style={styles.emptyPanel}>
             <FontAwesome name="image" size={38} color="#cbd5e1" />
             <Text style={styles.emptyTitle}>Nothing Here Yet</Text>
-            <Text style={styles.emptyText}>No content in this section yet.</Text>
+            <Text style={styles.emptyText}>{error || 'No content in this section yet.'}</Text>
           </View>
         )}
         ListFooterComponent={loadingMore ? <ActivityIndicator color="#1d2b4b" style={{ marginVertical: 20 }} /> : <View style={{ height: 110 }} />}
@@ -488,10 +429,13 @@ export default function GalleryScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f4f7fe' },
+  container: { flex: 1, backgroundColor: '#F0F2F8' },
   scrollContent: { paddingBottom: 0 },
+  compactHeader: { height: 56, paddingHorizontal: 18, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  compactTitle: { color: '#1A2547', fontSize: 24, fontWeight: '900' },
+  infoButton: { width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center', backgroundColor: '#ffffff' },
   hero: { backgroundColor: '#24365f', paddingTop: 54, paddingHorizontal: 20, paddingBottom: 38, borderBottomLeftRadius: 28, borderBottomRightRadius: 28, alignItems: 'center' },
-  heroLabel: { color: 'rgba(255,255,255,0.54)', fontSize: 11, fontWeight: '900', letterSpacing: 2, textAlign: 'center', marginBottom: 12 },
+  heroLabel: { color: '#F5A623', fontSize: 12, fontWeight: '900', letterSpacing: 1.2, textTransform: 'uppercase' },
   heroTitle: { color: '#ffffff', fontSize: 34, lineHeight: 40, fontWeight: '900', textAlign: 'center' },
   heroGold: { color: '#fdb813' },
   heroSubtitle: { color: 'rgba(255,255,255,0.72)', fontSize: 13, lineHeight: 20, textAlign: 'center', maxWidth: 340, marginTop: 8, marginBottom: 18 },
@@ -503,11 +447,16 @@ const styles = StyleSheet.create({
   ownershipGold: { color: '#fdb813' },
   protectedPill: { borderWidth: 1, borderColor: 'rgba(253,184,19,0.5)', borderRadius: 9, paddingHorizontal: 8, paddingVertical: 5, marginLeft: 8 },
   protectedText: { color: '#fdb813', fontSize: 9, fontWeight: '900', letterSpacing: 0.8 },
-  searchShell: { width: '100%', maxWidth: 560 },
-  searchContainer: { minHeight: 50, borderRadius: 12, borderWidth: 1, borderColor: 'rgba(255,255,255,0.18)', backgroundColor: 'rgba(255,255,255,0.1)', flexDirection: 'row', alignItems: 'center', paddingLeft: 16 },
+  searchShell: { marginHorizontal: 18, marginBottom: 12 },
+  searchContainer: { minHeight: 56, borderRadius: 12, backgroundColor: '#F3F4F6', flexDirection: 'row', alignItems: 'center', paddingLeft: 16 },
   searchIcon: { marginRight: 12 },
-  searchInput: { flex: 1, color: '#ffffff', fontSize: 13, fontWeight: '700' },
-  cameraButton: { width: 38, height: 34, borderRadius: 10, borderWidth: 1, borderColor: '#fdb813', alignItems: 'center', justifyContent: 'center', marginRight: 7 },
+  searchInput: { flex: 1, color: '#1A2547', fontSize: 15 },
+  cameraButton: { width: 48, height: 48, borderRadius: 12, alignItems: 'center', justifyContent: 'center', marginRight: 4 },
+  galleryChipRow: { gap: 8, paddingHorizontal: 18, paddingBottom: 8 },
+  galleryChip: { height: 32, borderRadius: 12, borderWidth: 1, borderColor: '#1A2547', paddingHorizontal: 13, alignItems: 'center', justifyContent: 'center' },
+  galleryChipActive: { backgroundColor: '#F5A623', borderColor: '#F5A623' },
+  galleryChipText: { color: '#1A2547', fontSize: 12, fontWeight: '900' },
+  galleryChipTextActive: { color: '#ffffff' },
   galleryFilterWrap: { marginHorizontal: 18, marginTop: -18, marginBottom: 8 },
   accessCard: { marginHorizontal: 18, marginTop: 10, borderRadius: 16, backgroundColor: '#ffffff', borderWidth: 1, borderColor: '#e2e8f0', padding: 14, shadowColor: '#1d2b4b', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.07, shadowRadius: 14, elevation: 3 },
   accessTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 },
@@ -528,7 +477,6 @@ const styles = StyleSheet.create({
   activeTabText: { color: '#ffffff' },
   sectionHeader: { paddingHorizontal: 22, marginTop: 34, marginBottom: 18 },
   sectionTitle: { color: '#1d2b4b', fontSize: 21, fontWeight: '900' },
-  errorText: { color: '#dc2626', marginHorizontal: 22, marginBottom: 14 },
   columnWrapper: { paddingHorizontal: 18, gap: 14 },
   albumCard: { flex: 1, backgroundColor: '#ffffff', borderRadius: 20, overflow: 'hidden', marginBottom: 18, borderWidth: 1, borderColor: '#e2e8f0', shadowColor: '#0f172a', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.05, shadowRadius: 12, elevation: 2 },
   imageContainer: { position: 'relative', height: 190, backgroundColor: '#dfe6f1' },

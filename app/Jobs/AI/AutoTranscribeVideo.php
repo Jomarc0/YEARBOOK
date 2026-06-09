@@ -48,13 +48,13 @@ class AutoTranscribeVideo implements ShouldQueue
             'public_id'           => $this->publicId,
             'status'              => 'pending',
             'source'              => 'auto',
-            'album_id'            => $this->albumId,
+            'album_id'            => $this->graduationPhotoId ? null : $this->albumId,
             'graduation_photo_id' => $this->graduationPhotoId,  
             'uploaded_by'         => $this->uploadedBy,
         ]);
 
         Log::info("AutoTranscribeVideo: created Transcript #{$transcript->id} for [{$this->publicId}].", [
-            'album_id'            => $this->albumId,
+            'album_id'            => $this->graduationPhotoId ? null : $this->albumId,
             'graduation_photo_id' => $this->graduationPhotoId,
         ]);
 

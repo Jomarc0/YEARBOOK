@@ -2,7 +2,6 @@
  * ControlBar.jsx
  * src/features/yearbook/components/controls/ControlBar.jsx
  */
-import React from 'react';
 import DownloadYearbookButton from './DownloadYearbookButton';
 
 const GOLD = '#c9a84c';
@@ -21,14 +20,15 @@ export default function ControlBar({
   batchId,
   pdfReady,
   isPremium,
+  yearbookScope,
 }) {
   const atStart = currentPage === 0;
   const atEnd   = currentPage >= totalPages - 1;
 
   return (
     <div
-      className="flex flex-wrap items-center justify-center gap-2 px-4 py-3 mt-2"
-      style={{ maxWidth: 780 }}
+      className="flex flex-wrap items-center justify-center gap-2 px-3 py-0"
+      style={{ maxWidth: 860 }}
       role="toolbar"
       aria-label="Yearbook controls"
     >
@@ -131,6 +131,7 @@ export default function ControlBar({
         batchId={batchId}
         pdfReady={pdfReady}
         isPremium={isPremium}
+        scope={yearbookScope}
       />
     </div>
   );

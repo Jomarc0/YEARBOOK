@@ -63,6 +63,148 @@ function InfoTile({ icon, label, value }) {
 }
 
 // ── Main component ────────────────────────────────────────────────────────────
+const loadImage = (src) => new Promise((resolve, reject) => {
+  const img = new Image();
+  img.crossOrigin = 'anonymous';
+  img.onload = () => resolve(img);
+  img.onerror = reject;
+  img.src = src;
+});
+
+async function makeAvatarFile({ file, previewUrl, zoom, x, y }) {
+  const size = 512;
+  const image = await loadImage(previewUrl);
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+
+  const ctx = canvas.getContext('2d');
+  const baseScale = Math.max(size / image.naturalWidth, size / image.naturalHeight);
+  const scale = baseScale * zoom;
+  const drawWidth = image.naturalWidth * scale;
+  const drawHeight = image.naturalHeight * scale;
+  const drawX = (size / 2) + ((x / 100) * size) - (drawWidth / 2);
+  const drawY = (size / 2) + ((y / 100) * size) - (drawHeight / 2);
+
+  ctx.drawImage(image, drawX, drawY, drawWidth, drawHeight);
+
+  const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.92));
+  if (!blob) throw new Error('Could not prepare profile photo.');
+
+  const name = file?.name?.replace(/\.[^.]+$/, '') || 'profile-photo';
+  return new File([blob], `${name}-profile.jpg`, { type: 'image/jpeg' });
+}
+
+function ProfilePhotoEditor({ draft, saving, fileRef, setDraft, onCancel, onSave }) {
+  const dragRef = useRef({ active: false, startX: 0, startY: 0, originX: 0, originY: 0 });
+  const clampPosition = (value) => Math.max(-45, Math.min(45, Math.round(value)));
+
+  if (!draft) return null;
+
+  const previewStyle = {
+    left: `${50 + draft.x}%`,
+    top: `${50 + draft.y}%`,
+    transform: `translate(-50%, -50%) scale(${draft.zoom})`,
+    width: draft.aspect >= 1 ? 'auto' : '100%',
+    height: draft.aspect >= 1 ? '100%' : 'auto',
+  };
+  const startDrag = (e) => {
+    e.preventDefault();
+    e.currentTarget.setPointerCapture(e.pointerId);
+    dragRef.current = {
+      active: true,
+      startX: e.clientX,
+      startY: e.clientY,
+      originX: draft.x,
+      originY: draft.y,
+    };
+  };
+  const moveDrag = (e) => {
+    if (!dragRef.current.active) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const nextX = dragRef.current.originX + ((e.clientX - dragRef.current.startX) / rect.width) * 100;
+    const nextY = dragRef.current.originY + ((e.clientY - dragRef.current.startY) / rect.height) * 100;
+    setDraft(current => ({ ...current, x: clampPosition(nextX), y: clampPosition(nextY) }));
+  };
+  const stopDrag = (e) => {
+    dragRef.current.active = false;
+    if (e.currentTarget.hasPointerCapture(e.pointerId)) {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-[9500] bg-[#0f172a]/55 backdrop-blur-sm flex items-center justify-center px-4">
+      <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl border border-slate-100 overflow-hidden">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+          <div>
+            <h3 className="m-0 text-base font-black text-[#1d2b4b]">Profile Photo</h3>
+            <p className="m-0 mt-0.5 text-xs text-slate-400">Position your photo before saving.</p>
+          </div>
+          <button type="button" onClick={onCancel}
+            className="w-9 h-9 rounded-xl border border-slate-200 bg-white text-slate-400 hover:text-[#1d2b4b] cursor-pointer">
+            <i className="fas fa-times" />
+          </button>
+        </div>
+
+        <div className="px-5 py-5">
+          <div
+            className="mx-auto w-56 h-56 rounded-full overflow-hidden bg-slate-100 border-[5px] border-[#fdb813] relative shadow-inner cursor-grab active:cursor-grabbing touch-none"
+            onPointerDown={startDrag}
+            onPointerMove={moveDrag}
+            onPointerUp={stopDrag}
+            onPointerCancel={stopDrag}
+          >
+            <img src={draft.previewUrl} alt="Profile preview"
+              crossOrigin="anonymous"
+              className="absolute max-w-none select-none pointer-events-none"
+              style={previewStyle}
+              onLoad={(e) => {
+                const image = e.currentTarget;
+                const aspect = image.naturalWidth / image.naturalHeight;
+                setDraft(current => current ? { ...current, aspect } : current);
+              }}
+              draggable="false"
+            />
+          </div>
+          <p className="m-0 mt-3 text-center text-xs font-semibold text-slate-400">Drag the photo to reposition it.</p>
+
+          <div className="mt-5">
+            <label className="block">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-[11px] font-black uppercase tracking-wider text-slate-400">Zoom</span>
+                <span className="text-[11px] font-bold text-[#1d2b4b]">{Math.round(draft.zoom * 100)}%</span>
+              </div>
+              <input type="range" min="1" max="2.4" step="0.01" value={draft.zoom}
+                onChange={(e) => setDraft(current => ({ ...current, zoom: Number(e.target.value) }))}
+                className="w-full accent-[#fdb813]"
+              />
+            </label>
+          </div>
+        </div>
+
+        <div className="px-5 py-4 bg-slate-50 border-t border-slate-100 flex items-center justify-between gap-3">
+          <button type="button" onClick={() => fileRef.current?.click()}
+            className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-xs font-black text-[#1d2b4b] cursor-pointer hover:bg-slate-100">
+            <i className="fas fa-image text-[#fdb813]" /> Choose Another
+          </button>
+          <div className="flex items-center gap-2">
+            <button type="button" onClick={onCancel}
+              className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-xs font-bold text-slate-500 cursor-pointer hover:bg-slate-100">
+              Cancel
+            </button>
+            <button type="button" onClick={onSave} disabled={saving}
+              className="inline-flex items-center gap-2 rounded-xl border-none bg-[#1d2b4b] px-4 py-2.5 text-xs font-black text-white cursor-pointer disabled:opacity-60">
+              <i className={`fas ${saving ? 'fa-spinner animate-spin' : 'fa-check'} text-[#fdb813]`} />
+              {saving ? 'Saving...' : 'Save Photo'}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function ProfilePage() {
   const { id }             = useParams();
   const { user: authUser } = useAuth();
@@ -87,6 +229,8 @@ export default function ProfilePage() {
   const [lightbox,          setLightbox]          = useState(null);
   const [voiceNotes,        setVoiceNotes]        = useState([]);
   const [voiceNotesLoading, setVoiceNotesLoading] = useState(false);
+  const [photoDraft,        setPhotoDraft]        = useState(null);
+  const [photoSaving,       setPhotoSaving]       = useState(false);
 
   const [academicData,    setAcademicData]    = useState(null);
   const [academicLoading, setAcademicLoading] = useState(false);
@@ -140,6 +284,10 @@ export default function ProfilePage() {
     openedPostRef.current = postParam;
     setLightbox({ post, idx: 0 });
   }, [postParam, posts, postsLoading]);
+
+  useEffect(() => () => {
+    if (photoDraft?.isObjectUrl && photoDraft?.previewUrl) URL.revokeObjectURL(photoDraft.previewUrl);
+  }, [photoDraft?.isObjectUrl, photoDraft?.previewUrl]);
 
   const loadPosts = () => {
     setPostsLoading(true);
@@ -204,24 +352,59 @@ export default function ProfilePage() {
 
   const showToast = (msg, type = 'success') => {
     setToast({ msg, type });
+    if (type === 'success') window.dispatchEvent(new Event('notifications:refresh'));
     setTimeout(() => setToast(null), 3000);
   };
 
   const saveBio = async () => {
-    await studentsApi.updateBio(bio);
-    setStudent(prev => ({ ...prev, bio }));
-    setEditing(false);
-    showToast('Bio updated!');
+    try {
+      await studentsApi.updateBio(bio);
+      setStudent(prev => ({ ...prev, bio }));
+      setEditing(false);
+      showToast('Your profile bio was updated successfully.');
+    } catch {
+      showToast('Failed to update your profile bio.', 'error');
+    }
   };
 
   const handlePhotoUpload = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
-    const fd = new FormData();
-    fd.append('photo', file);
-    const { data } = await studentsApi.updatePhoto(fd);
-    setStudent(prev => ({ ...prev, profile_picture: data.profile_picture }));
-    showToast('Profile photo updated!');
+    if (!file.type.startsWith('image/')) {
+      showToast('Please choose an image file.', 'error');
+      e.target.value = '';
+      return;
+    }
+    setPhotoDraft(current => {
+      if (current?.isObjectUrl && current?.previewUrl) URL.revokeObjectURL(current.previewUrl);
+      return { file, previewUrl: URL.createObjectURL(file), isObjectUrl: true, zoom: 1, x: 0, y: 0, aspect: 1 };
+    });
+    e.target.value = '';
+  };
+
+  const closePhotoEditor = () => {
+    setPhotoDraft(current => {
+      if (current?.isObjectUrl && current?.previewUrl) URL.revokeObjectURL(current.previewUrl);
+      return null;
+    });
+    setPhotoSaving(false);
+  };
+
+  const saveProfilePhoto = async () => {
+    if (!photoDraft || photoSaving) return;
+    setPhotoSaving(true);
+    try {
+      const croppedFile = await makeAvatarFile(photoDraft);
+      const fd = new FormData();
+      fd.append('photo', croppedFile);
+      const { data } = await studentsApi.updatePhoto(fd);
+      setStudent(prev => ({ ...prev, profile_picture: data.profile_picture }));
+      showToast('Your profile picture was updated successfully.');
+      closePhotoEditor();
+    } catch {
+      showToast('Failed to update your profile picture.', 'error');
+      setPhotoSaving(false);
+    }
   };
 
   const handlePostDeleted = (pid) => {
@@ -232,7 +415,7 @@ export default function ProfilePage() {
 
   const handlePostUpdated = (updated) => {
     setPosts(prev => prev.map(p => p.id === updated.id ? { ...p, ...updated } : p));
-    showToast('Post updated!');
+    showToast('Your post was updated successfully.');
     setContextMenu(null);
   };
 
@@ -260,6 +443,18 @@ export default function ProfilePage() {
     || `https://ui-avatars.com/api/?name=${encodeURIComponent(student.name)}&background=1d2b4b&color=fdb813&bold=true&size=400`;
 
   const courseShort = student.course_short || getCourseShort(student.course);
+  const openProfilePhotoEditor = () => {
+    if (!isOwn) return;
+    if (!student.profile_picture) {
+      fileRef.current?.click();
+      return;
+    }
+
+    setPhotoDraft(current => {
+      if (current?.isObjectUrl && current?.previewUrl) URL.revokeObjectURL(current.previewUrl);
+      return { file: null, previewUrl: avatar, isObjectUrl: false, zoom: 1, x: 0, y: 0, aspect: 1 };
+    });
+  };
 
   return (
     <div className="min-h-screen bg-[#f4f7fe] flex flex-col font-sans">
@@ -275,6 +470,14 @@ export default function ProfilePage() {
       <Navbar />
 
       {showUpload  && <ProfileUploadModal onClose={() => setShowUpload(false)} onSuccess={() => { setShowUpload(false); loadPosts(); }} />}
+      <ProfilePhotoEditor
+        draft={photoDraft}
+        saving={photoSaving}
+        fileRef={fileRef}
+        setDraft={setPhotoDraft}
+        onCancel={closePhotoEditor}
+        onSave={saveProfilePhoto}
+      />
       <ShareModal   isOpen={showShare} onClose={() => setShowShare(false)} student={student} />
       <MessageModal isOpen={showMsg}   onClose={() => setShowMsg(false)}   student={student} authUser={authUser} />
       {contextMenu && (
@@ -321,7 +524,7 @@ export default function ProfilePage() {
                   <div className="p-[3px] rounded-full bg-white inline-block">
                     <div
                       className={`w-20 h-20 sm:w-24 sm:h-24 rounded-full overflow-hidden bg-[#1d2b4b] ${isOwn ? 'cursor-pointer' : ''}`}
-                      onClick={() => isOwn && fileRef.current.click()}
+                      onClick={openProfilePhotoEditor}
                     >
                       <img src={avatar} alt={student.name}
                         className="w-full h-full object-cover block"
@@ -334,7 +537,7 @@ export default function ProfilePage() {
                 {isOwn && (
                   <>
                     <input ref={fileRef} type="file" accept="image/*" hidden onChange={handlePhotoUpload} />
-                    <button onClick={() => fileRef.current.click()}
+                    <button onClick={openProfilePhotoEditor}
                       className="absolute -bottom-0 left-1/2 -translate-x-1/2 bg-[#1d2b4b]/80 backdrop-blur-sm text-white text-[9px] font-black px-2 py-0.5 rounded-full border-none cursor-pointer whitespace-nowrap tracking-wide">
                       EDIT
                     </button>

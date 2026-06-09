@@ -23,6 +23,8 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class YearbookController extends Controller
 {
+    private const TOC_ENTRIES_PER_PAGE = 8;
+
     public function __construct(
         private WatermarkService    $watermark,
         private PageResolverService $pageResolver,
@@ -107,9 +109,13 @@ class YearbookController extends Controller
      * GET /api/yearbooks/{batch}/pages
      * Returns the ordered page manifest consumed by FlipbookViewer.
      */
-    public function pages(Batch $batch): JsonResponse
+    public function pages(Request $request, Batch $batch): JsonResponse
     {
+        $scope = $this->yearbookScope($request);
+
         $sections = $batch->sections()
+            ->when($scope['department'] !== '', fn ($query) => $query->where('department', $scope['department']))
+            ->when($scope['course'] !== '', fn ($query) => $query->where('course', $scope['course']))
             ->with(['students' => function ($q) {
                 $q->select(
                     'id',
@@ -144,6 +150,9 @@ class YearbookController extends Controller
                 ->orderBy('last_name')
                 ->orderBy('first_name');
             }, 'adviser:id,name'])
+            ->orderBy('department')
+            ->orderBy('course')
+            ->orderBy('name')
             ->get();
 
         $albums = Album::where('batch_id', $batch->id)
@@ -165,6 +174,11 @@ class YearbookController extends Controller
             'theme'  => PlatformSettings::get('graduation_theme') ?: 'Legacy in Motion',
             'academic_year' => PlatformSettings::get('academic_year'),
             'graduation_date' => PlatformSettings::get('graduation_date'),
+            'scope' => [
+                'department' => $scope['department'] ?: null,
+                'course' => $scope['course'] ?: null,
+                'label' => $this->yearbookScopeLabel($scope),
+            ],
         ];
 
         $pages = [];
@@ -265,8 +279,30 @@ class YearbookController extends Controller
         }
 
         $toc = $this->buildTableOfContents($pages);
+        $tocPageCount = max(2, (int) ceil(count($toc) / self::TOC_ENTRIES_PER_PAGE));
+        if ($tocPageCount % 2 !== 0) {
+            $tocPageCount++;
+        }
+
+        if ($tocPageCount > count($tocIndexes)) {
+            $extraTocPages = [];
+            for ($i = count($tocIndexes); $i < $tocPageCount; $i++) {
+                $extraTocPages[] = [
+                    'type' => 'toc',
+                    'side' => $i % 2 === 0 ? 'left' : 'right',
+                    'toc' => [],
+                    'tocStart' => $i * self::TOC_ENTRIES_PER_PAGE,
+                ];
+            }
+
+            array_splice($pages, $tocIndexes[0] + count($tocIndexes), 0, $extraTocPages);
+            $tocIndexes = range($tocIndexes[0], $tocIndexes[0] + $tocPageCount - 1);
+            $toc = $this->buildTableOfContents($pages);
+        }
+
         foreach ($tocIndexes as $index) {
             $pages[$index]['toc'] = $toc;
+            $pages[$index]['tocStart'] = ($index - $tocIndexes[0]) * self::TOC_ENTRIES_PER_PAGE;
         }
 
         return response()->json([
@@ -390,12 +426,19 @@ class YearbookController extends Controller
     {
         $q       = trim($request->query('q', ''));
         $batchId = $request->query('batchId');
+        $scope = $this->yearbookScope($request);
 
         if (!$q) return response()->json([]);
 
         $students = Student::with('section')
             ->when($batchId, fn ($query) =>
                 $query->whereHas('section.batch', fn ($q2) => $q2->where('id', $batchId))
+            )
+            ->when($scope['department'] !== '', fn ($query) =>
+                $query->whereHas('section', fn ($q2) => $q2->where('department', $scope['department']))
+            )
+            ->when($scope['course'] !== '', fn ($query) =>
+                $query->whereHas('section', fn ($q2) => $q2->where('course', $scope['course']))
             )
             ->where(fn ($query) =>
                 $query->where('first_name', 'LIKE', "%{$q}%")
@@ -425,13 +468,39 @@ class YearbookController extends Controller
                 : null,
             'type'      => 'student',
             'pageIndex' => $batchId
-                ? $this->pageResolver->getPageIndex($s->id, (int) $batchId)
+                ? $this->pageResolver->getPageIndex(
+                    $s->id,
+                    (int) $batchId,
+                    $scope['department'] ?: null,
+                    $scope['course'] ?: null
+                )
                 : 0,
             'studentId' => $s->id,
         ]));
     }
 
     // ── Private helpers ───────────────────────────────────────────────────────
+
+    private function yearbookScope(Request $request): array
+    {
+        return [
+            'department' => trim((string) $request->query('department', '')),
+            'course' => trim((string) $request->query('course', '')),
+        ];
+    }
+
+    private function yearbookScopeLabel(array $scope): ?string
+    {
+        if ($scope['course'] !== '') {
+            return $scope['course'];
+        }
+
+        if ($scope['department'] !== '') {
+            return $scope['department'];
+        }
+
+        return null;
+    }
 
     private function mapSection($section): array
     {
@@ -596,7 +665,7 @@ class YearbookController extends Controller
             }
 
             $label = $type === 'section-header'
-                ? ($page['section']['name'] ?? $labels[$type])
+                ? $this->sectionTocLabel($page['section'] ?? [])
                 : $labels[$type];
 
             if (collect($toc)->contains('label', $label)) {
@@ -607,5 +676,13 @@ class YearbookController extends Controller
         }
 
         return $toc;
+    }
+
+    private function sectionTocLabel(array $section): string
+    {
+        $name = $section['name'] ?? 'Section';
+        $course = $section['strand'] ?? $section['course'] ?? null;
+
+        return $course && $course !== $name ? "{$course} - {$name}" : $name;
     }
 }

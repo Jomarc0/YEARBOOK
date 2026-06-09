@@ -102,6 +102,7 @@ Route::middleware(['auth:sanctum', 'throttle:120,1'])->group(function () {
 
     // ── Feed ──────────────────────────────────────────────────────────────────
     Route::get('/feed', [FeedController::class, 'index']);
+    Route::post('/feed/{photo}/view', [FeedController::class, 'recordView']);
 
     // ── Profile ───────────────────────────────────────────────────────────────
     Route::prefix('profile')->group(function () {
@@ -288,6 +289,8 @@ Route::middleware(['auth:sanctum', 'throttle:120,1'])->group(function () {
     Route::prefix('payments')->group(function () {
         Route::post('/create-intent', [PaymentController::class, 'createIntent'])
             ->middleware('feature:enable_premium_subscription');
+        Route::post('/confirm',       [PaymentController::class, 'confirm'])
+            ->middleware('feature:enable_premium_subscription');
         Route::get('/history',        [PaymentController::class, 'history']);
         Route::get('/status',         [PaymentController::class, 'subscriptionStatus']);
     });
@@ -314,6 +317,7 @@ Route::middleware(['auth:sanctum', 'throttle:120,1'])->group(function () {
         Route::get('/my-stats/trend', [AnalyticsController::class, 'myStatsTrend']);
         Route::get('/batchmates',     [AnalyticsController::class, 'batchmates']);
         Route::post('/record-view/{userId}', [AnalyticsController::class, 'recordView']);
+        Route::post('/record-content-view', [AnalyticsController::class, 'recordContentView']);
     });
 
     // ── Memory Digest ─────────────────────────────────────────────────────────

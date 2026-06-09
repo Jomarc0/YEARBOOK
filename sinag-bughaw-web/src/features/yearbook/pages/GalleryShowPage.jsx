@@ -21,6 +21,7 @@ import { ContentOwnershipBanner } from '@/components/ui/CopyrightLabel';
 import { useContentProtection } from '@/utils/contentProtection';
 import FaceSearchButton from '@/components/ui/FaceSearchButton';
 import { imageUrl, avatarUrl } from '@/utils/imageUrl';
+import { recordContentView } from '@/api/analytics.api';
 
 // ─── Sub-components (unchanged) ───────────────────────────────────────────────
 
@@ -79,6 +80,12 @@ function GridTagChips({ tags }) {
   );
 }
 
+function isVideoItem(item = {}) {
+  const type = String(item.resource_type ?? item.file_type ?? item.ai_metadata?.resource_type ?? '').toLowerCase();
+  const path = String(item.file_path ?? item.url ?? '');
+  return type.includes('video') || /\.(mp4|mov|m4v|webm)(\?|$)/i.test(path);
+}
+
 function StatusPill({ status, faceCount }) {
   const cfg = {
     analyzed: { cls: 'bg-emerald-50 text-emerald-700',  icon: 'fa-circle-check',         text: `${faceCount} face${faceCount !== 1 ? 's' : ''}` },
@@ -102,6 +109,8 @@ function LightboxModal({ photo, photos, tagCache, onClose, onNavigate }) {
   const next = photos[idx + 1] ?? null;
   const tags = tagCache[photo.id]?.tags ?? [];
   const td   = tagCache[photo.id];
+  const isVideo = isVideoItem(photo);
+  const isPending = photo.status && photo.status !== 'approved';
 
   useEffect(() => {
     const handle = (e) => {
@@ -116,18 +125,18 @@ function LightboxModal({ photo, photos, tagCache, onClose, onNavigate }) {
   return (
     <div
       onClick={onClose}
-      className="fixed inset-0 z-[9999] bg-[#060a14]/[0.97] flex items-center justify-center cursor-zoom-out"
+      className="fixed inset-0 z-[9999] bg-[#060a14]/90 backdrop-blur-sm flex items-center justify-center overflow-y-auto p-4 sm:p-6 cursor-zoom-out"
     >
       <button
         onClick={onClose}
-        className="absolute top-5 right-5 bg-white/10 hover:bg-white/[0.22] border-none text-white
+        className="fixed top-5 right-5 bg-white/10 hover:bg-white/[0.22] border-none text-white
                    w-11 h-11 rounded-full cursor-pointer flex items-center justify-center text-base
-                   transition-colors z-10"
+                   transition-colors z-[10001]"
       >
         <i className="fas fa-times" />
       </button>
 
-      <div className="absolute top-[22px] left-1/2 -translate-x-1/2 bg-white/[0.08] text-white/55
+      <div className="fixed top-[22px] left-1/2 -translate-x-1/2 bg-white/[0.08] text-white/70
                       text-[11px] font-bold px-3.5 py-1.5 rounded-full">
         {idx + 1} / {photos.length}
       </div>
@@ -135,9 +144,9 @@ function LightboxModal({ photo, photos, tagCache, onClose, onNavigate }) {
       {prev && (
         <button
           onClick={e => { e.stopPropagation(); onNavigate(prev); }}
-          className="absolute left-4 top-1/2 -translate-y-1/2 bg-white/10 hover:bg-white/[0.22] border-none
+          className="fixed left-4 top-1/2 -translate-y-1/2 bg-white/10 hover:bg-white/[0.22] border-none
                      text-white w-12 h-12 rounded-full cursor-pointer flex items-center justify-center
-                     text-base transition-colors z-10"
+                     text-base transition-colors z-[10001]"
         >
           <i className="fas fa-chevron-left" />
         </button>
@@ -146,9 +155,9 @@ function LightboxModal({ photo, photos, tagCache, onClose, onNavigate }) {
       {next && (
         <button
           onClick={e => { e.stopPropagation(); onNavigate(next); }}
-          className="absolute right-4 top-1/2 -translate-y-1/2 bg-white/10 hover:bg-white/[0.22] border-none
+          className="fixed right-4 top-1/2 -translate-y-1/2 bg-white/10 hover:bg-white/[0.22] border-none
                      text-white w-12 h-12 rounded-full cursor-pointer flex items-center justify-center
-                     text-base transition-colors z-10"
+                     text-base transition-colors z-[10001]"
         >
           <i className="fas fa-chevron-right" />
         </button>
@@ -156,35 +165,82 @@ function LightboxModal({ photo, photos, tagCache, onClose, onNavigate }) {
 
       <div
         onClick={e => e.stopPropagation()}
-        className="flex flex-col items-center max-w-[88vw] max-h-[90vh]"
+        className="grid w-[min(1120px,94vw)] max-h-[92vh] grid-cols-1 overflow-hidden rounded-2xl bg-white shadow-[0_40px_120px_rgba(0,0,0,0.65)] cursor-default lg:max-h-[88vh] lg:grid-cols-[minmax(0,1fr)_340px]"
       >
+        <div className="relative flex h-[min(58vh,620px)] min-h-[320px] items-center justify-center bg-black lg:h-[min(88vh,760px)]">
+        {isVideoItem(photo) ? (
+          <video
+            src={storageUrl(photo.file_path)}
+            controls
+            className="h-full max-h-[88vh] w-full object-contain"
+          />
+        ) : (
         <ProtectedImage
           src={storageUrl(photo.file_path)}
           alt={photo.caption || 'Photo'}
           variant="lightbox"
           watermarkText="© NU Lipa — All Rights Reserved"
-          style={{ borderRadius: 16, overflow: 'hidden', boxShadow: '0 32px 80px rgba(0,0,0,0.6)' }}
-          imgStyle={{ maxHeight: '72vh', maxWidth: '88vw', objectFit: 'contain', display: 'block' }}
+          style={{ width: '100%', height: '100%', borderRadius: 0, overflow: 'hidden' }}
+          imgStyle={{ width: '100%', height: '100%', maxHeight: '88vh', objectFit: 'contain', display: 'block' }}
         />
-
-        {photo.caption && (
-          <p className="text-white/65 text-[13px] font-semibold mt-3.5 text-center">{photo.caption}</p>
         )}
+        </div>
 
-        {tags.length > 0 && (
-          <div className="flex flex-wrap gap-2 justify-center mt-3">
-            <span className="text-white/35 text-[10px] font-bold uppercase tracking-widest self-center">
-              <i className="fas fa-user-tag mr-1" />Tagged:
-            </span>
-            {tags.map(tag => <FaceTagBadge key={tag.user_id ?? tag.student?.id} tag={tag} />)}
+        <aside className="flex max-h-[30vh] flex-col bg-white lg:max-h-[88vh]">
+          <div className="border-b border-slate-100 px-5 py-4">
+            <p className="m-0 text-[11px] font-black uppercase tracking-[0.2em] text-[#fdb813]">
+              {isVideoItem(photo) ? 'Gallery Video' : 'Gallery Photo'}
+            </p>
+            <h3 className="m-0 mt-1 text-lg font-black text-[#1d2b4b]">
+              {photo.caption || (isVideoItem(photo) ? 'Untitled video' : 'Untitled photo')}
+            </h3>
           </div>
-        )}
 
-        {td && (
-          <div className="mt-2.5">
-            <StatusPill status={td.status} faceCount={td.face_count} />
+          <div className="flex-1 overflow-y-auto px-5 py-4">
+            {photo.caption ? (
+              <p className="m-0 mb-4 text-sm font-medium leading-relaxed text-slate-600">
+                {photo.caption}
+              </p>
+            ) : (
+              <p className="m-0 mb-4 text-sm italic text-slate-400">
+                No caption added.
+              </p>
+            )}
+
+            {td && !isVideo && !isPending && (
+              <div className="mb-4">
+                <StatusPill status={td.status} faceCount={td.face_count} />
+              </div>
+            )}
+
+            {isVideo ? (
+              <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 px-4 py-5 text-center">
+                <i className="fas fa-film mb-2 block text-xl text-slate-300" />
+                <p className="m-0 text-xs font-bold text-slate-400">Video uploads do not use face tags.</p>
+              </div>
+            ) : isPending ? (
+              <div className="rounded-xl border border-dashed border-amber-200 bg-amber-50 px-4 py-5 text-center">
+                <i className="fas fa-clock mb-2 block text-xl text-amber-400" />
+                <p className="m-0 text-xs font-bold text-amber-700">Waiting for admin approval.</p>
+              </div>
+            ) : tags.length > 0 ? (
+              <div>
+                <p className="m-0 mb-2 text-[11px] font-black uppercase tracking-widest text-slate-400">
+                  <i className="fas fa-user-tag mr-1.5 text-[#fdb813]" />
+                  Tagged Students
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {tags.map(tag => <FaceTagBadge key={tag.user_id ?? tag.student?.id} tag={tag} />)}
+                </div>
+              </div>
+            ) : (
+              <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 px-4 py-5 text-center">
+                <i className="fas fa-user-tag mb-2 block text-xl text-slate-300" />
+                <p className="m-0 text-xs font-bold text-slate-400">No tagged students yet.</p>
+              </div>
+            )}
           </div>
-        )}
+        </aside>
       </div>
     </div>
   );
@@ -227,6 +283,17 @@ export default function GalleryShowPage() {
 
   useEffect(() => { loadAlbum(); }, [loadAlbum]);
 
+  useEffect(() => {
+    if (!album?.id) return;
+    recordContentView({
+      content_type: 'gallery_album',
+      content_id: album.id,
+      title: album.title,
+      category: 'gallery',
+      url: `/gallery/${album.id}`,
+    }).catch(() => {});
+  }, [album?.id]);
+
   const uploadHook = useMediaUpload(id ? parseInt(id) : null, tier, () => {
     setShowUpload(false);
     loadAlbum();
@@ -249,7 +316,9 @@ export default function GalleryShowPage() {
     finally { fetchingRef.current.delete(photoId); }
   }, []);
 
-  const albumPhotoIds = album?.photos?.map(photo => photo.id) ?? [];
+  const albumPhotoIds = album?.photos
+    ?.filter((photo) => photo.status === 'approved' && !isVideoItem(photo))
+    .map(photo => photo.id) ?? [];
 
   usePhotoFacesBroadcast(
     (event) => {
@@ -269,14 +338,16 @@ export default function GalleryShowPage() {
 
   useEffect(() => {
     if (!album?.photos) return;
-    album.photos.forEach((photo, i) => {
+    album.photos
+      .filter((photo) => photo.status === 'approved' && !isVideoItem(photo))
+      .forEach((photo, i) => {
       setTimeout(() => loadTags(photo.id), i * 80);
     });
   }, [album, loadTags]);
 
   const handleDelete = async (photoId, e) => {
     e.stopPropagation();
-    if (!window.confirm('Delete this photo permanently?')) return;
+    if (!window.confirm('Delete this media permanently?')) return;
     setDeleting(photoId);
     setDeleteErr('');
     try {
@@ -340,17 +411,17 @@ export default function GalleryShowPage() {
     <div className="min-h-screen flex flex-col bg-[#f4f7fe]">
       <Navbar />
 
-      <header className="bg-gradient-to-br from-[#1d2b4b] to-[#2a3d66] px-[8%] pt-[72px] pb-16 text-white rounded-b-[56px]">
+      <header className="bg-gradient-to-br from-[#1d2b4b] to-[#2a3d66] px-[8%] pt-8 pb-8 text-white rounded-b-[36px]">
         <Link
           to="/gallery"
-          className="inline-flex items-center gap-2 text-white/55 hover:text-white text-[13px] no-underline mb-5 transition-colors"
+          className="inline-flex items-center gap-2 text-white/55 hover:text-white text-[13px] no-underline mb-3 transition-colors"
         >
           <i className="fas fa-arrow-left" /> Back to Gallery
         </Link>
 
         <div className="flex items-start justify-between flex-wrap gap-4">
           <div>
-            <h1 className="text-[2.2rem] font-black tracking-tight mb-3.5">{album.title}</h1>
+            <h1 className="text-[2rem] font-black tracking-tight mb-2.5">{album.title}</h1>
             <div className="flex flex-wrap items-center gap-5 text-white/65 text-[13px]">
               {album.event_date && (
                 <span className="flex items-center gap-1.5">
@@ -360,7 +431,7 @@ export default function GalleryShowPage() {
               )}
               <span className="flex items-center gap-1.5">
                 <i className="fas fa-images text-[#fdb813]" />
-                {photos.length} photo{photos.length !== 1 ? 's' : ''}
+                {photos.length} item{photos.length !== 1 ? 's' : ''}
               </span>
               {totalTags > 0 && (
                 <span className="flex items-center gap-1.5">
@@ -386,7 +457,7 @@ export default function GalleryShowPage() {
                             : 'bg-[#fdb813] text-[#1d2b4b] hover:bg-[#f5b200]'}`}
             >
               <i className={`fas ${showUpload ? 'fa-times' : 'fa-cloud-arrow-up'}`} />
-              {showUpload ? 'Cancel Upload' : 'Upload Photos'}
+              {showUpload ? 'Cancel Upload' : 'Upload Media'}
             </button>
           ) : (
             <Link to="/premium"
@@ -397,14 +468,14 @@ export default function GalleryShowPage() {
         </div>
 
         {/* Face search bar */}
-        <div className="mt-6 max-w-[600px]">
+        <div className="mt-5 max-w-[600px]">
           <div className="relative">
             <i className="fas fa-search absolute left-[18px] top-1/2 -translate-y-1/2 text-[#fdb813] text-[15px] z-[1] pointer-events-none" />
             <input
               type="text"
               readOnly
               placeholder={searching ? 'Searching…' : 'Click the camera icon to search by face…'}
-              className="w-full h-[52px] pl-[50px] pr-14 border border-white/15 rounded-[14px] outline-none
+              className="w-full h-12 pl-[50px] pr-14 border border-white/15 rounded-[14px] outline-none
                          bg-white/10 backdrop-blur-xl text-white text-sm font-medium cursor-pointer
                          focus:bg-white/[0.18] focus:border-[#fdb813]/60 transition-all placeholder-white/50
                          box-border"
@@ -412,33 +483,9 @@ export default function GalleryShowPage() {
             <FaceSearchButton onFile={handleFaceFile} loading={searching} />
           </div>
 
-          {matches.length > 0 && (
-            <div className="mt-3 grid grid-cols-[repeat(auto-fill,minmax(200px,1fr))] gap-2.5">
-              {matches.map(m => (
-                <Link
-                  key={m.user_id}
-                  to={`/profile/${m.user_id}`}
-                  className="flex items-center gap-3 bg-white/[0.12] backdrop-blur-md border border-white/20
-                             rounded-[14px] p-3 no-underline hover:border-[#fdb813] transition-colors"
-                >
-                  <img
-                    src={imageUrl(m.profile_picture) || avatarUrl(m.name)}
-                    alt={m.name}
-                    className="w-11 h-11 rounded-xl object-cover border-2 border-[#fdb813] flex-shrink-0"
-                  />
-                  <div className="min-w-0">
-                    <p className="m-0 font-bold text-[13px] text-white truncate">{m.name}</p>
-                    <p className="m-0 text-[11px] text-white/60">
-                      <i className="fas fa-brain text-[#fdb813] mr-1" />{m.similarity}% match
-                    </p>
-                  </div>
-                </Link>
-              ))}
-            </div>
-          )}
         </div>
 
-        <div className="mt-5">
+        <div className="mt-4">
           <ContentOwnershipBanner />
         </div>
       </header>
@@ -458,7 +505,7 @@ export default function GalleryShowPage() {
         </div>
       )}
 
-      <main ref={masonryRef} className="px-[8%] pt-9 pb-20 flex-1">
+      <main ref={masonryRef} className="px-[8%] pt-7 pb-20 flex-1">
         {photos.length > 0 ? (
           <div className="grid grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-4">
             {photos.map(photo => {
@@ -479,6 +526,15 @@ export default function GalleryShowPage() {
                   <div className="relative w-full pt-[75%] bg-slate-100 overflow-hidden">
                     {src && (
                       <div className="absolute inset-0">
+                        {isVideoItem(photo) ? (
+                          <video
+                            src={src}
+                            muted
+                            playsInline
+                            preload="metadata"
+                            className="h-full w-full object-cover"
+                          />
+                        ) : (
                         <ProtectedImage
                           src={src}
                           alt={photo.caption || 'Photo'}
@@ -487,6 +543,7 @@ export default function GalleryShowPage() {
                           style={{ width: '100%', height: '100%', borderRadius: 0 }}
                           imgStyle={{ width: '100%', height: '100%', objectFit: 'cover' }}
                         />
+                        )}
                       </div>
                     )}
 
@@ -507,7 +564,7 @@ export default function GalleryShowPage() {
                                    ${isDeleting ? 'cursor-not-allowed bg-red-500/80 text-white opacity-100' : ''}`}
                       onClick={e => handleDelete(photo.id, e)}
                       disabled={isDeleting}
-                      title="Delete photo"
+                      title="Delete media"
                     >
                       <i className={`fas ${isDeleting ? 'fa-spinner fa-spin' : 'fa-trash-can'}`} />
                     </button>
@@ -533,8 +590,8 @@ export default function GalleryShowPage() {
         ) : (
           <div className="text-center py-20 px-5 bg-white rounded-3xl shadow-[0_2px_16px_rgba(29,43,75,0.06)]">
             <i className="fas fa-images text-5xl text-slate-200 block mb-4" />
-            <h3 className="text-xl font-extrabold text-[#1d2b4b] mb-2">No Photos Yet</h3>
-            <p className="text-[13px] text-slate-400 mb-5">This album has no photos.</p>
+            <h3 className="text-xl font-extrabold text-[#1d2b4b] mb-2">No Media Yet</h3>
+            <p className="text-[13px] text-slate-400 mb-5">This album has no media yet.</p>
             <button
               onClick={() => setShowUpload(true)}
               className="inline-flex items-center gap-2 bg-[#1d2b4b] hover:bg-[#3f51b5] text-white
@@ -542,7 +599,7 @@ export default function GalleryShowPage() {
                          transition-colors"
             >
               <i className="fas fa-cloud-arrow-up text-[#fdb813]" />
-              Upload First Photos
+              Upload First Media
             </button>
           </div>
         )}

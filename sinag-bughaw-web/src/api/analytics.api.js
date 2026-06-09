@@ -65,6 +65,9 @@ export const getPlatformEngagement = () =>
 export const recordProfileView = (userId) =>
   client.post(`${BASE}/record-view/${userId}`).then((r) => r.data);
 
+export const recordContentView = (payload) =>
+  client.post(`${BASE}/record-content-view`, payload).then((r) => r.data);
+
 // ─── JSDoc type stubs ─────────────────────────────────────────────────────────
 
 /**

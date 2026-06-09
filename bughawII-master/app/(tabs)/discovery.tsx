@@ -43,10 +43,10 @@ const COURSE_FILTERS = [
 ];
 
 const MODE_CONFIG = [
-  { key: 'batch', label: 'My Batch', hint: 'Same course & year', icon: 'graduation-cap' },
-  { key: 'section', label: 'My Section', hint: 'My classmates', icon: 'stack-overflow' },
-  { key: 'school', label: 'Whole School', hint: 'All students', icon: 'institution' },
-  { key: 'cross', label: 'Cross-Program', hint: 'Other programs', icon: 'random' },
+  { key: 'batch', label: 'Batch', hint: 'Same course & year', icon: 'graduation-cap' },
+  { key: 'section', label: 'Section', hint: 'My classmates', icon: 'stack-overflow' },
+  { key: 'school', label: 'School', hint: 'All students', icon: 'institution' },
+  { key: 'cross', label: 'Cross', hint: 'Other programs', icon: 'compass' },
 ];
 
 const years = Array.from({ length: 7 }, (_, index) => String(2026 - index));
@@ -129,7 +129,6 @@ export default function DiscoveryScreen() {
   const premium = hasPremium(user);
   const premiumEnabled = appConfig?.features?.enable_premium_subscription !== false;
   const yearbookEnabled = appConfig?.features?.enable_flipbook_viewer !== false && appConfig?.features?.publish_yearbook !== false;
-  const schoolName = appConfig?.school_name || 'National University Lipa';
 
   const visibleStudents = useMemo(() => {
     if (!matchedIds.size) return students;
@@ -310,25 +309,9 @@ export default function DiscoveryScreen() {
 
   const renderHeader = () => (
     <>
-      <View style={styles.hero}>
-        <View style={styles.heroOrb} />
-        <Text style={styles.eyebrow}>{schoolName.toUpperCase()}</Text>
-        <Text style={styles.heroTitle}>
-          Student <Text style={styles.gold}>Discovery</Text>
-        </Text>
-        <Text style={styles.heroCopy}>Find classmates, explore other programs, and connect with the {schoolName} community.</Text>
-        <View style={styles.heroActions}>
-          {premiumEnabled && !premium ? (
-            <TouchableOpacity style={styles.upgradePill} onPress={() => router.push('/payment' as any)}>
-              <FontAwesome name="lock" size={12} color="#fdb813" />
-              <Text style={styles.upgradeText}>Upgrade to Premium</Text>
-            </TouchableOpacity>
-          ) : null}
-          <TouchableOpacity style={styles.faceHint} onPress={handleFaceSearch} disabled={faceSearching}>
-            {faceSearching ? <ActivityIndicator size="small" color="#fdb813" /> : <FontAwesome name="camera" size={12} color="#fdb813" />}
-            <Text style={styles.faceHintText}>Camera icon to search by face</Text>
-          </TouchableOpacity>
-        </View>
+      <View style={styles.compactHeader}>
+        <Text style={styles.eyebrow}>Discover</Text>
+        <Text style={styles.headerTitle}>Connections</Text>
       </View>
 
       <View style={styles.modePanel}>
@@ -338,7 +321,6 @@ export default function DiscoveryScreen() {
             <TouchableOpacity key={item.key} style={[styles.modeButton, active && styles.modeButtonActive]} onPress={() => { setMode(item.key); setMatchedIds(new Set()); }}>
               <FontAwesome name={item.icon as any} size={16} color={active ? '#fdb813' : '#71809c'} />
               <Text style={[styles.modeLabel, active && styles.modeLabelActive]}>{item.label}</Text>
-              <Text style={[styles.modeHint, active && styles.modeHintActive]}>{item.hint}</Text>
             </TouchableOpacity>
           );
         })}
@@ -495,11 +477,13 @@ export default function DiscoveryScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f4f7fb' },
+  container: { flex: 1, backgroundColor: '#F0F2F8' },
   content: { paddingBottom: 36 },
+  compactHeader: { height: 56, paddingHorizontal: 18, justifyContent: 'center' },
   hero: { minHeight: 265, backgroundColor: '#31408f', paddingHorizontal: 22, paddingTop: 58, paddingBottom: 70, alignItems: 'center', overflow: 'hidden', borderBottomLeftRadius: 26, borderBottomRightRadius: 26 },
   heroOrb: { position: 'absolute', right: -36, top: -42, width: 150, height: 150, borderRadius: 75, backgroundColor: 'rgba(255,255,255,0.04)' },
-  eyebrow: { color: '#b9c4e0', fontSize: 11, letterSpacing: 1.5, fontWeight: '900', marginBottom: 10 },
+  eyebrow: { color: '#F5A623', fontSize: 12, letterSpacing: 1.2, fontWeight: '900', textTransform: 'uppercase' },
+  headerTitle: { color: '#1A2547', fontSize: 24, fontWeight: '900', marginTop: 1 },
   heroTitle: { color: '#ffffff', fontSize: 33, fontWeight: '900', textAlign: 'center' },
   gold: { color: '#fdb813' },
   heroCopy: { color: '#d8dff4', fontSize: 14, textAlign: 'center', lineHeight: 21, maxWidth: 340, marginTop: 8 },
@@ -508,10 +492,10 @@ const styles = StyleSheet.create({
   upgradeText: { color: '#fdb813', fontWeight: '900', fontSize: 12 },
   faceHint: { flexDirection: 'row', gap: 8, alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.12)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.16)', paddingHorizontal: 15, paddingVertical: 10, borderRadius: 999 },
   faceHintText: { color: '#d8dff4', fontWeight: '800', fontSize: 12 },
-  modePanel: { marginHorizontal: 18, marginTop: -38, backgroundColor: '#ffffff', borderRadius: 16, padding: 8, flexDirection: 'row', elevation: 8, shadowColor: '#102044', shadowOpacity: 0.12, shadowRadius: 18, shadowOffset: { width: 0, height: 8 } },
-  modeButton: { flex: 1, minHeight: 78, alignItems: 'center', justifyContent: 'center', borderRadius: 12, paddingHorizontal: 4 },
-  modeButtonActive: { backgroundColor: '#1d2b4b' },
-  modeLabel: { color: '#4f6081', fontSize: 11, fontWeight: '900', marginTop: 6, textAlign: 'center' },
+  modePanel: { marginHorizontal: 18, backgroundColor: '#ffffff', borderRadius: 12, padding: 5, flexDirection: 'row', borderWidth: 1, borderColor: '#E5E7EB' },
+  modeButton: { flex: 1, minHeight: 64, alignItems: 'center', justifyContent: 'center', borderRadius: 10, paddingHorizontal: 2 },
+  modeButtonActive: { backgroundColor: '#1A2547' },
+  modeLabel: { color: '#6B7280', fontSize: 11, fontWeight: '900', marginTop: 5, textAlign: 'center' },
   modeLabelActive: { color: '#ffffff' },
   modeHint: { color: '#9aa8c0', fontSize: 9, fontWeight: '700', marginTop: 4, textAlign: 'center' },
   modeHintActive: { color: '#cbd5ec' },
@@ -519,10 +503,10 @@ const styles = StyleSheet.create({
   sectionIcon: { width: 42, height: 42, borderRadius: 12, backgroundColor: '#1d2b4b', alignItems: 'center', justifyContent: 'center' },
   sectionTitle: { color: '#071b3d', fontSize: 22, fontWeight: '900' },
   sectionSubtitle: { color: '#8fa0bf', fontSize: 13, marginTop: 2 },
-  toolbar: { paddingHorizontal: 22, marginBottom: 12 },
-  searchContainer: { height: 50, borderRadius: 12, borderWidth: 1, borderColor: '#d7dfef', backgroundColor: '#ffffff', flexDirection: 'row', alignItems: 'center', paddingLeft: 14, paddingRight: 7 },
-  searchInput: { flex: 1, color: '#102044', fontSize: 14, paddingHorizontal: 10 },
-  cameraButton: { width: 36, height: 36, borderRadius: 10, borderWidth: 1, borderColor: '#fdb813', alignItems: 'center', justifyContent: 'center', backgroundColor: '#fff8e6' },
+  toolbar: { paddingHorizontal: 18, marginBottom: 12 },
+  searchContainer: { height: 56, borderRadius: 12, backgroundColor: '#F3F4F6', flexDirection: 'row', alignItems: 'center', paddingLeft: 14, paddingRight: 4 },
+  searchInput: { flex: 1, color: '#1A2547', fontSize: 15, paddingHorizontal: 10 },
+  cameraButton: { width: 48, height: 48, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
   discoveryFilters: { paddingHorizontal: 22, gap: 10, paddingBottom: 16 },
   filterRow: { paddingHorizontal: 22, gap: 8, paddingBottom: 8 },
   yearRow: { paddingHorizontal: 22, gap: 8, paddingBottom: 16 },

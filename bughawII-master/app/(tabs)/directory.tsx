@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, Animated, Dimensions, FlatList, ImageBackground, Modal, RefreshControl, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, Animated, Dimensions, FlatList, Modal, RefreshControl, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { Image } from 'expo-image';
 import { FontAwesome } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
@@ -9,7 +9,6 @@ import * as ImagePicker from 'expo-image-picker';
 import { createAudioPlayer, RecordingPresets, requestRecordingPermissionsAsync, setAudioModeAsync, useAudioRecorder, useAudioRecorderState } from 'expo-audio';
 import { getAppConfig, getErrorMessage, getSearchFilters, getStudent, getStudentAchievements, getStudentSuggestions, getStudents, getVoiceNotesForProfile, imageUrl, paginationMeta, searchFace, sendVoiceNote, unwrap } from '../../lib/api';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import FilterDropdown from '../../components/FilterDropdown';
 
 const { height } = Dimensions.get('window');
 
@@ -35,6 +34,10 @@ const COURSE_SHORT: Record<string, string> = {
 const COURSE_FILTERS = [
   { label: 'All Programs', value: 'All Programs' },
   ...Object.entries(COURSE_SHORT).map(([value, label]) => ({ label, value })),
+];
+const DEFAULT_BATCH_FILTERS = [
+  { label: 'All Years', value: 'All Years' },
+  ...Array.from({ length: 8 }, (_, index) => String(new Date().getFullYear() - index)).map((year) => ({ label: year, value: year })),
 ];
 
 const getCourseShort = (course: string, fallback = 'Student') => COURSE_SHORT[course] || course || fallback;
@@ -68,7 +71,7 @@ export default function DirectoryScreen() {
   const { filter, q } = useLocalSearchParams();
   const [students, setStudents] = useState<any[]>([]);
   const [courseFilters, setCourseFilters] = useState(COURSE_FILTERS);
-  const [batchFilters, setBatchFilters] = useState([{ label: 'All Years', value: 'All Years' }]);
+  const [batchFilters, setBatchFilters] = useState(DEFAULT_BATCH_FILTERS);
   const [activeFilter, setActiveFilter] = useState('All Programs');
   const [activeBatchYear, setActiveBatchYear] = useState('All Years');
   const [query, setQuery] = useState(typeof q === 'string' ? q : '');
@@ -103,8 +106,6 @@ export default function DirectoryScreen() {
   const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
   const recorderState = useAudioRecorderState(recorder, 300);
   const directoryEnabled = appConfig?.features?.enable_student_directory_search !== false;
-  const schoolName = appConfig?.school_name || 'National University Lipa';
-  const yearbookName = appConfig?.yearbook_name || 'Sinag-Bughaw Digital Yearbook';
 
   useEffect(() => {
     let mounted = true;
@@ -143,25 +144,33 @@ export default function DirectoryScreen() {
         const batchYears = Array.isArray(payload?.batch_years) ? payload.batch_years : payload?.data?.batch_years || [];
 
         if (courses.length) {
+          const apiCourses = courses.map((item: any) => ({
+            label: item?.label || getCourseShort(item?.value || item, 'Program'),
+            value: item?.value || item,
+          }));
+          const mergedCourses = [...COURSE_FILTERS, ...apiCourses].filter((item, index, list) => (
+            list.findIndex((candidate) => candidate.value === item.value) === index
+          ));
           setCourseFilters([
             { label: 'All Programs', value: 'All Programs' },
-            ...courses.map((item: any) => ({
-              label: item?.label || getCourseShort(item?.value || item, 'Program'),
-              value: item?.value || item,
-            })),
+            ...mergedCourses.filter((item) => item.value !== 'All Programs'),
           ]);
         }
 
         if (batchYears.length) {
+          const apiYears = batchYears.map((year: any) => ({ label: String(year), value: String(year) }));
+          const mergedYears = [...DEFAULT_BATCH_FILTERS, ...apiYears].filter((item, index, list) => (
+            list.findIndex((candidate) => candidate.value === item.value) === index
+          ));
           setBatchFilters([
             { label: 'All Years', value: 'All Years' },
-            ...batchYears.map((year: any) => ({ label: String(year), value: String(year) })),
+            ...mergedYears.filter((item) => item.value !== 'All Years').sort((a, b) => Number(b.value) - Number(a.value)),
           ]);
         }
       })
       .catch(() => {
         setCourseFilters(COURSE_FILTERS);
-        setBatchFilters([{ label: 'All Years', value: 'All Years' }]);
+        setBatchFilters(DEFAULT_BATCH_FILTERS);
       });
 
     return () => {
@@ -418,13 +427,15 @@ export default function DirectoryScreen() {
 
   const renderStudent = ({ item, index }: { item: any; index: number }) => {
     const name = getStudentName(item);
+    const program = getStudentCourse(item);
+    const hasProgram = program && program !== 'No program listed';
     const photo = getStudentPhoto(item);
     const matched = matchedIds.has(getStudentId(item)) || matchedIds.has(item?.user_id);
     const score = matchedScores[String(getRecipientId(item))] || matchedScores[String(getStudentId(item))];
 
     return (
       <TouchableOpacity
-        style={[styles.studentCard, matched && styles.studentCardMatched, index % 2 === 0 ? styles.leftCard : styles.rightCard]}
+        style={[styles.studentCard, matched && styles.studentCardMatched]}
         activeOpacity={0.88}
         onPress={() => {
           Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -442,10 +453,6 @@ export default function DirectoryScreen() {
               <Text style={styles.initialsText}>{getInitials(name)}</Text>
             </View>
           )}
-          <View style={styles.batchBadge}>
-            <FontAwesome name="graduation-cap" size={9} color="#fdb813" />
-            <Text style={styles.batchText}>{getStudentYear(item)}</Text>
-          </View>
           {matched ? (
             <View style={styles.matchBadge}>
               <FontAwesome name="camera" size={9} color="#1d2b4b" />
@@ -455,9 +462,23 @@ export default function DirectoryScreen() {
         </View>
         <View style={styles.cardInfo}>
           <Text style={styles.name} numberOfLines={1}>{name}</Text>
-          <View style={styles.courseBadge}>
-            <Text style={styles.courseBadgeText}>{getCourseShort(getStudentCourse(item)).toUpperCase()}</Text>
+          <Text style={styles.studentMeta} numberOfLines={1}>{program}</Text>
+          <View style={styles.studentMetaRow}>
+            {hasProgram ? (
+              <View style={styles.courseBadge}>
+                <Text style={styles.courseBadgeText}>{getCourseShort(program).toUpperCase()}</Text>
+              </View>
+            ) : (
+              <Text style={styles.missingProgramText}>NO PROGRAM LISTED</Text>
+            )}
+            <View style={styles.yearBadge}>
+              <FontAwesome name="graduation-cap" size={9} color="#fdb813" />
+              <Text style={styles.batchText}>{getStudentYear(item)}</Text>
+            </View>
           </View>
+        </View>
+        <View style={styles.profileButton}>
+          <FontAwesome name="chevron-right" size={12} color="#94a3b8" />
         </View>
       </TouchableOpacity>
     );
@@ -486,32 +507,27 @@ export default function DirectoryScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={['left', 'right']}>
-      <StatusBar style="light" />
+      <StatusBar style="dark" />
       <FlatList
         data={students}
         keyExtractor={(item, index) => String(getStudentId(item) || index)}
         renderItem={renderStudent}
-        numColumns={2}
-        columnWrapperStyle={styles.columnWrapper}
         ListHeaderComponent={(
           <>
-            <ImageBackground source={require('../../assets/images/NU-building.jpg')} style={styles.hero} resizeMode="cover">
-              <View style={styles.heroOverlay} />
-              <View style={styles.dotPattern} />
-              <View style={styles.heroContent}>
-                <View style={styles.heroBadge}>
-                  <FontAwesome name="users" size={10} color="#fdb813" />
-                  <Text style={styles.heroBadgeText}>STUDENT DIRECTORY</Text>
-                </View>
-                <Text style={styles.heroTitle}>{yearbookName.replace(/\s*Digital Yearbook/i, '')} <Text style={styles.heroTitleGold}>Pioneers</Text></Text>
-                <Text style={styles.heroSubtitle}>Connecting the innovators of {schoolName}. Built by Pioneers, for Pioneers.</Text>
-                <View style={styles.searchShell}>
-                  <View style={styles.searchContainer}>
-                    <FontAwesome name="search" size={16} color="#fdb813" style={styles.searchIcon} />
+            <View style={styles.directoryHeader}>
+              <View>
+                <Text style={styles.headerKicker}>Directory</Text>
+                <Text style={styles.headerTitle}>Students</Text>
+              </View>
+            </View>
+
+            <View style={styles.searchArea}>
+              <View style={styles.searchContainer}>
+                    <FontAwesome name="search" size={16} color="#94a3b8" style={styles.searchIcon} />
                     <TextInput
                       style={styles.searchInput}
                       placeholder={isFaceMode ? 'Showing face match results...' : 'Search names, student IDs, or programs...'}
-                      placeholderTextColor="rgba(255,255,255,0.48)"
+                      placeholderTextColor="#94a3b8"
                       value={query}
                       onChangeText={(value) => {
                         setQuery(value);
@@ -522,11 +538,10 @@ export default function DirectoryScreen() {
                       }}
                       onFocus={() => setShowSuggestions(true)}
                     />
-                    <TouchableOpacity style={styles.cameraButton} onPress={handleFaceSearch} disabled={faceSearching}>
-                      {faceSearching ? <ActivityIndicator color="#fdb813" size="small" /> : <FontAwesome name="camera" size={15} color="#fdb813" />}
+                    <TouchableOpacity style={styles.searchCameraButton} onPress={handleFaceSearch} disabled={faceSearching}>
+                      {faceSearching ? <ActivityIndicator color="#F5A623" size="small" /> : <FontAwesome name="camera" size={15} color="#F5A623" />}
                     </TouchableOpacity>
-                  </View>
-                </View>
+              </View>
                 {showSuggestions && suggestions.length ? (
                   <View style={styles.suggestionBox}>
                     {suggestions.map((item) => (
@@ -569,37 +584,28 @@ export default function DirectoryScreen() {
                     </TouchableOpacity>
                   </View>
                 ) : null}
-              </View>
-            </ImageBackground>
-
-            <View style={styles.filtersWrap}>
-              <FilterDropdown
-                label="Program"
-                icon="graduation-cap"
-                options={courseFilters.map((item) => ({
-                  ...item,
-                  icon: item.value === 'All Programs' ? 'users' : 'graduation-cap',
-                }))}
-                value={activeFilter}
-                onChange={(value) => {
-                  clearFaceResults();
-                  setActiveFilter(value);
-                }}
-              />
-              <FilterDropdown
-                label="Batch Year"
-                icon="calendar"
-                options={batchFilters.map((item) => ({
-                  ...item,
-                  icon: item.value === 'All Years' ? 'calendar' : 'graduation-cap',
-                }))}
-                value={activeBatchYear}
-                onChange={(value) => {
-                  clearFaceResults();
-                  setActiveBatchYear(value);
-                }}
-              />
             </View>
+
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
+              {courseFilters.map((item) => {
+                const active = activeFilter === item.value;
+                return (
+                  <TouchableOpacity key={`course-${item.value}`} style={[styles.filterChip, active && styles.filterChipActive]} onPress={() => { clearFaceResults(); setActiveFilter(item.value); }}>
+                    <Text style={[styles.filterChipText, active && styles.filterChipTextActive]}>{item.label}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRowSecondary}>
+              {batchFilters.map((item) => {
+                const active = activeBatchYear === item.value;
+                return (
+                  <TouchableOpacity key={`batch-${item.value}`} style={[styles.filterChip, active && styles.filterChipActive]} onPress={() => { clearFaceResults(); setActiveBatchYear(item.value); }}>
+                    <Text style={[styles.filterChipText, active && styles.filterChipTextActive]}>{item.label}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
 
             {!loading ? (
               <Text style={styles.resultCount}>
@@ -768,8 +774,13 @@ export default function DirectoryScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f4f7fe' },
-  scrollContent: { paddingBottom: 0 },
+  container: { flex: 1, backgroundColor: '#F0F2F8' },
+  scrollContent: { paddingBottom: 0, paddingTop: 0 },
+  directoryHeader: { height: 56, paddingHorizontal: 18, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  headerKicker: { color: '#F5A623', fontSize: 12, fontWeight: '900', letterSpacing: 1.2, textTransform: 'uppercase' },
+  headerTitle: { color: '#1A2547', fontSize: 24, fontWeight: '900', marginTop: 0 },
+  headerCameraButton: { width: 42, height: 42, borderRadius: 16, backgroundColor: 'rgba(255,255,255,0.12)', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: 'rgba(253,184,19,0.28)' },
+  searchArea: { paddingHorizontal: 18, paddingTop: 14 },
   hero: { minHeight: 360, borderBottomLeftRadius: 28, borderBottomRightRadius: 28, overflow: 'hidden' },
   heroOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(29,43,75,0.9)' },
   dotPattern: { ...StyleSheet.absoluteFillObject, opacity: 0.05, backgroundColor: 'transparent' },
@@ -780,9 +791,10 @@ const styles = StyleSheet.create({
   heroTitleGold: { color: '#fdb813' },
   heroSubtitle: { color: 'rgba(255,255,255,0.74)', fontSize: 14, lineHeight: 21, textAlign: 'center', marginTop: 8, marginBottom: 24, maxWidth: 340 },
   searchShell: { width: '100%', borderRadius: 17, padding: 8, backgroundColor: 'rgba(255,255,255,0.1)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.2)' },
-  searchContainer: { flexDirection: 'row', alignItems: 'center', minHeight: 52, borderRadius: 13, backgroundColor: 'rgba(255,255,255,0.08)', paddingLeft: 14 },
+  searchContainer: { flexDirection: 'row', alignItems: 'center', minHeight: 56, borderRadius: 12, backgroundColor: '#F3F4F6', paddingHorizontal: 14 },
   searchIcon: { marginRight: 10 },
-  searchInput: { flex: 1, color: '#ffffff', fontSize: 14 },
+  searchInput: { flex: 1, color: '#1A2547', fontSize: 15 },
+  searchCameraButton: { width: 48, height: 48, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
   cameraButton: { width: 40, height: 40, borderRadius: 11, borderWidth: 1, borderColor: '#fdb813', alignItems: 'center', justifyContent: 'center', marginRight: 6 },
   faceBanner: { marginTop: 10, paddingHorizontal: 12, paddingVertical: 9, borderRadius: 12, borderWidth: 1, borderColor: 'rgba(253,184,19,0.4)', backgroundColor: 'rgba(253,184,19,0.12)', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', width: '100%' },
   faceBannerText: { color: '#fdb813', fontSize: 12, fontWeight: '800' },
@@ -794,34 +806,45 @@ const styles = StyleSheet.create({
   suggestionInitialsText: { color: '#fdb813', fontSize: 12, fontWeight: '900' },
   suggestionName: { color: '#1d2b4b', fontSize: 13, fontWeight: '900' },
   suggestionMeta: { color: '#8fa0bf', fontSize: 11, marginTop: 2 },
-  suggestionLoading: { marginTop: 10, alignSelf: 'stretch', borderRadius: 14, backgroundColor: 'rgba(255,255,255,0.1)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.18)', paddingVertical: 10, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 8 },
-  suggestionLoadingText: { color: 'rgba(255,255,255,0.76)', fontSize: 12, fontWeight: '800' },
-  filtersWrap: { paddingTop: 22, paddingHorizontal: 18, paddingBottom: 4, gap: 10 },
+  suggestionLoading: { marginTop: 10, alignSelf: 'stretch', borderRadius: 14, backgroundColor: '#ffffff', borderWidth: 1, borderColor: '#e2e8f0', paddingVertical: 10, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 8 },
+  suggestionLoadingText: { color: '#64748b', fontSize: 12, fontWeight: '800' },
+  filtersWrap: { paddingTop: 12, paddingHorizontal: 18, paddingBottom: 4, gap: 10 },
+  chipRow: { gap: 8, paddingHorizontal: 18, paddingTop: 12, paddingBottom: 8 },
+  chipRowSecondary: { gap: 8, paddingHorizontal: 18, paddingBottom: 8 },
+  filterChip: { height: 32, borderRadius: 12, borderWidth: 1, borderColor: '#1A2547', paddingHorizontal: 13, alignItems: 'center', justifyContent: 'center', backgroundColor: 'transparent' },
+  filterChipActive: { backgroundColor: '#F5A623', borderColor: '#F5A623' },
+  filterChipText: { color: '#1A2547', fontSize: 12, fontWeight: '900' },
+  filterChipTextActive: { color: '#ffffff' },
   filterContent: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 8 },
   filterPill: { paddingHorizontal: 16, paddingVertical: 10, borderRadius: 16, backgroundColor: '#ffffff', borderWidth: 1, borderColor: '#e2e8f0', shadowColor: '#0f172a', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 6, elevation: 1 },
   activeFilterPill: { backgroundColor: '#3f51b5', borderColor: '#3f51b5' },
   filterText: { color: '#1d2b4b', fontSize: 12, fontWeight: '900' },
   activeFilterText: { color: '#ffffff' },
-  resultCount: { color: '#94a3b8', textAlign: 'center', fontSize: 12, marginTop: 20, marginBottom: 24 },
+  resultCount: { color: '#94a3b8', fontSize: 12, marginHorizontal: 18, marginTop: 12, marginBottom: 12 },
   resultStrong: { color: '#1d2b4b', fontWeight: '900' },
   errorText: { color: '#dc2626', textAlign: 'center', marginHorizontal: 20, marginBottom: 16 },
   columnWrapper: { paddingHorizontal: 14, gap: 12 },
-  studentCard: { flex: 1, backgroundColor: '#ffffff', borderRadius: 18, overflow: 'hidden', marginBottom: 16, borderWidth: 1, borderColor: '#dbe3ef', shadowColor: '#0f172a', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.06, shadowRadius: 10, elevation: 2 },
+  studentCard: { backgroundColor: '#ffffff', borderRadius: 16, marginHorizontal: 18, marginBottom: 10, borderWidth: 1, borderColor: '#dbe3ef', shadowColor: '#0f172a', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.05, shadowRadius: 8, elevation: 2, flexDirection: 'row', alignItems: 'center', padding: 10 },
   leftCard: { marginRight: 0 },
   rightCard: { marginLeft: 0 },
   studentCardMatched: { borderColor: '#fdb813', borderWidth: 2 },
-  photoArea: { height: 178, backgroundColor: '#1d2b4b', position: 'relative' },
+  photoArea: { width: 58, height: 58, borderRadius: 16, backgroundColor: '#1d2b4b', position: 'relative', overflow: 'hidden' },
   cardPhoto: { width: '100%', height: '100%' },
   initialsArea: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#1d2b4b' },
-  initialsText: { color: '#fdb813', fontSize: 48, fontWeight: '900', letterSpacing: -1 },
+  initialsText: { color: '#fdb813', fontSize: 18, fontWeight: '900' },
   batchBadge: { position: 'absolute', top: 10, right: 10, flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: 'rgba(29,43,75,0.86)', borderRadius: 999, paddingHorizontal: 8, paddingVertical: 5 },
   batchText: { color: '#ffffff', fontSize: 10, fontWeight: '900' },
   matchBadge: { position: 'absolute', top: 10, left: 10, flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#fdb813', borderRadius: 999, paddingHorizontal: 8, paddingVertical: 5 },
   matchText: { color: '#1d2b4b', fontSize: 10, fontWeight: '900' },
-  cardInfo: { minHeight: 84, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 10, paddingVertical: 14 },
-  name: { color: '#1d2b4b', fontSize: 13, fontWeight: '900', textAlign: 'center', marginBottom: 10, textTransform: 'capitalize' },
+  cardInfo: { flex: 1, minWidth: 0, justifyContent: 'center', paddingHorizontal: 12 },
+  name: { color: '#1d2b4b', fontSize: 14, fontWeight: '900', marginBottom: 3, textTransform: 'capitalize' },
+  studentMeta: { color: '#64748b', fontSize: 11, marginBottom: 7 },
+  studentMetaRow: { flexDirection: 'row', alignItems: 'center', gap: 7 },
   courseBadge: { backgroundColor: '#eef2ff', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 999 },
   courseBadgeText: { color: '#3f51b5', fontSize: 10, fontWeight: '900', letterSpacing: 0.7 },
+  missingProgramText: { color: '#6B7280', fontSize: 10, fontWeight: '900' },
+  yearBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#fff8e1', borderRadius: 999, paddingHorizontal: 8, paddingVertical: 5 },
+  profileButton: { width: 30, height: 30, borderRadius: 10, backgroundColor: '#f8fafc', alignItems: 'center', justifyContent: 'center' },
   emptyContainer: { marginHorizontal: 18, backgroundColor: '#ffffff', borderRadius: 18, borderWidth: 1, borderColor: '#e2e8f0', paddingVertical: 54, alignItems: 'center' },
   emptyTitle: { color: '#1d2b4b', fontSize: 18, fontWeight: '900', marginTop: 16 },
   emptyText: { color: '#8E8E93', fontSize: 14, textAlign: 'center', marginTop: 6 },

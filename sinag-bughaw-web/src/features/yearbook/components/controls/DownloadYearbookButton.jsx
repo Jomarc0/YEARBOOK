@@ -1,10 +1,10 @@
-import React, { useState, useCallback } from 'react';
-import { yearbookApi } from '../../../../api/yearbook.api';
+import { useState, useCallback } from 'react';
+import { downloadYearbookPdf } from '../../../../api/yearbook.api';
 
 const GOLD = '#c9a84c';
 const DARK = '#1a1a2e';
 
-export default function DownloadYearbookButton({ batchId, pdfReady: initialPdfReady, isPremium }) {
+export default function DownloadYearbookButton({ batchId, pdfReady: initialPdfReady, scope = {} }) {
   const [phase, setPhase] = useState('idle');
   const [errorMsg, setErrorMsg] = useState(null);
 
@@ -15,16 +15,8 @@ export default function DownloadYearbookButton({ batchId, pdfReady: initialPdfRe
     setErrorMsg(null);
 
     try {
-      const { data } = await yearbookApi.exportBatchPdf(batchId);
-      const blob = new Blob([data], { type: 'application/pdf' });
-      const url = URL.createObjectURL(blob);
-      const anchor = document.createElement('a');
-      anchor.href = url;
-      anchor.download = `yearbook-${batchId}.pdf`;
-      document.body.appendChild(anchor);
-      anchor.click();
-      anchor.remove();
-      URL.revokeObjectURL(url);
+      const suffix = scope.course || scope.department || batchId;
+      await downloadYearbookPdf(batchId, scope, `yearbook-${suffix}.pdf`);
 
       setPhase('done');
       setTimeout(() => setPhase('idle'), 3000);
@@ -36,10 +28,10 @@ export default function DownloadYearbookButton({ batchId, pdfReady: initialPdfRe
       } else if (status === 404) {
         setErrorMsg('Yearbook PDF endpoint was not found.');
       } else {
-        setErrorMsg(err?.response?.data?.message ?? 'Download failed. Please try again.');
+        setErrorMsg(err?.response?.data?.message ?? err?.message ?? 'Download failed. Please try again.');
       }
     }
-  }, [phase, batchId]);
+  }, [phase, batchId, scope]);
 
   const { label, icon, disabled, variant } = phaseConfig(phase, initialPdfReady);
 
@@ -133,16 +125,6 @@ function DownloadIcon() {
       strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
       <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
       <polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
-    </svg>
-  );
-}
-
-function LockIcon() {
-  return (
-    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-      strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
-      <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
     </svg>
   );
 }

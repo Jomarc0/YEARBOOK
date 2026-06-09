@@ -89,6 +89,47 @@ function Badge({ label, color, bg }) {
   );
 }
 
+function mediaKind(item = {}) {
+  const type = String(item.resource_type ?? item.file_type ?? item.type ?? "").toLowerCase();
+  const url = String(item.url ?? item.file_path ?? item.video_url ?? "");
+
+  if (type.includes("video") || /\.(mp4|mov|webm|m4v)(\?|$)/i.test(url)) return "video";
+  return "image";
+}
+
+function MediaPreview({ item, src, alt = "", fit = "cover" }) {
+  const kind = mediaKind(item);
+
+  if (!src) {
+    return (
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100%", color: "#ffffff55", fontSize: "2rem" }}>
+        {kind === "video" ? "🎬" : "🖼"}
+      </div>
+    );
+  }
+
+  if (kind === "video") {
+    return (
+      <video
+        src={src}
+        muted
+        playsInline
+        preload="metadata"
+        style={{ width: "100%", height: "100%", objectFit: fit, display: "block", background: "#000" }}
+      />
+    );
+  }
+
+  return (
+    <img
+      src={src}
+      alt={alt}
+      style={{ width: "100%", height: "100%", objectFit: fit, display: "block" }}
+      onError={e => { e.currentTarget.style.display = "none"; }}
+    />
+  );
+}
+
 function statusBadge(status) {
   const map = {
     pending:  { label: "Pending",  color: T.warning, bg: T.warningBg },
@@ -633,7 +674,7 @@ function AlbumDrillPanel({ album, onClose, onApproveAlbum, onRejectAlbum, onAppr
 
                     <div style={{ height: 150, background: "#0d1528", position: "relative", cursor: "pointer", overflow: "hidden" }} onClick={() => openLightbox(photo, idx)}>
                       {photo.url
-                        ? <img src={photo.url} alt={photo.caption} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                        ? <MediaPreview item={photo} src={photo.url} alt={photo.caption} />
                         : <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100%", color: "#ffffff44", fontSize: "2rem" }}>🖼</div>
                       }
                       {photo.ai_metadata && (
@@ -676,7 +717,11 @@ function AlbumDrillPanel({ album, onClose, onApproveAlbum, onRejectAlbum, onAppr
                 <button onClick={goNext} style={{ position: "absolute", right: -52, top: "50%", transform: "translateY(-50%)", background: "rgba(255,255,255,.12)", border: "none", color: "#fff", fontSize: "1.6rem", width: 40, height: 40, borderRadius: "50%", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>›</button>
               </>
             )}
-            <img src={lightbox.url} alt={lightbox.caption} style={{ maxWidth: "90vw", maxHeight: "72vh", borderRadius: 14, objectFit: "contain", boxShadow: "0 8px 60px rgba(0,0,0,.6)" }} />
+            {mediaKind(lightbox) === "video" ? (
+              <video src={lightbox.url} controls style={{ maxWidth: "90vw", maxHeight: "72vh", borderRadius: 14, objectFit: "contain", boxShadow: "0 8px 60px rgba(0,0,0,.6)", background: "#000" }} />
+            ) : (
+              <img src={lightbox.url} alt={lightbox.caption} style={{ maxWidth: "90vw", maxHeight: "72vh", borderRadius: 14, objectFit: "contain", boxShadow: "0 8px 60px rgba(0,0,0,.6)" }} />
+            )}
             <div style={{ marginTop: 14, background: "rgba(255,255,255,.08)", backdropFilter: "blur(8px)", borderRadius: 12, padding: "10px 18px", display: "flex", alignItems: "center", gap: 14, minWidth: 300, maxWidth: 560, justifyContent: "space-between" }}>
               <div>
                 <div style={{ color: "#fff", fontWeight: 700, fontSize: "0.86rem" }}>{lightbox.caption || "No caption"}</div>
@@ -732,12 +777,12 @@ function ModerationAlbumCard({ album, selected, onSelect, onOpen, onApprove, onR
 
       <div style={{ height: 170, background: "#0d1528", position: "relative", overflow: "hidden" }}>
         {album.cover_url ? (
-          <img src={album.cover_url} alt={album.title} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+          <MediaPreview item={{ resource_type: album.cover_resource_type ?? "image" }} src={album.cover_url} alt={album.title} />
         ) : thumbs.length > 1 ? (
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gridTemplateRows: "1fr 1fr", height: "100%", gap: 2 }}>
             {thumbs.map((p, i) => (
               <div key={p.id} style={{ position: "relative", overflow: "hidden" }}>
-                {p.url ? <img src={p.url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : <div style={{ background: "#1a2540", width: "100%", height: "100%" }} />}
+                {p.url ? <MediaPreview item={p} src={p.url} alt="" /> : <div style={{ background: "#1a2540", width: "100%", height: "100%" }} />}
                 {i === 3 && extra > 0 && (
                   <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,.55)", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: 800, fontSize: "1.1rem" }}>+{extra}</div>
                 )}
@@ -745,7 +790,7 @@ function ModerationAlbumCard({ album, selected, onSelect, onOpen, onApprove, onR
             ))}
           </div>
         ) : thumbs.length === 1 ? (
-          <img src={thumbs[0].url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+          <MediaPreview item={thumbs[0]} src={thumbs[0].url} alt="" />
         ) : (
           <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100%", color: "#ffffff33", fontSize: "2.5rem" }}>📂</div>
         )}
@@ -779,6 +824,7 @@ function ModerationAlbumCard({ album, selected, onSelect, onOpen, onApprove, onR
 function ModerationContentCard({ item, type, selected, onSelect, onPreview, onApprove, onReject, onRevert, onHistory }) {
   const isAudio   = type === "voice";
   const isPending = !item.status || item.status === "pending";
+  const mediaSrc  = item.url ?? item.file_path ?? item.video_url ?? null;
 
   return (
     <div style={{ background: T.surface, border: `2px solid ${selected ? T.primary : T.border}`, borderRadius: 16, overflow: "hidden", boxShadow: T.shadow, transition: "all .15s", position: "relative", transform: selected ? "scale(1.01)" : "scale(1)" }}>
@@ -789,10 +835,11 @@ function ModerationContentCard({ item, type, selected, onSelect, onPreview, onAp
       )}
 
       <div onClick={() => onPreview(item)} style={{ height: 160, background: "#0f1729", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", position: "relative", overflow: "hidden" }}>
-        {isAudio
+        {!isAudio && mediaSrc && <MediaPreview item={item} src={mediaSrc} />}
+        {(isAudio || !mediaSrc) && (isAudio
           ? <div style={{ textAlign: "center", color: "#ffffff99" }}><div style={{ fontSize: "2.5rem" }}>🎙</div><div style={{ fontSize: "0.78rem", marginTop: 6 }}>Tap to listen</div></div>
           : <div style={{ textAlign: "center", color: "#ffffff99" }}><div style={{ fontSize: "2.5rem" }}>🎬</div><div style={{ fontSize: "0.78rem", marginTop: 6 }}>Tap to preview</div></div>
-        }
+        )}
         {item.ai_flags && (
           <div style={{ position: "absolute", top: 8, right: 8, background: T.warning, color: "#fff", fontSize: "0.7rem", fontWeight: 700, padding: "2px 7px", borderRadius: 6 }}>AI FLAG</div>
         )}
@@ -1006,7 +1053,7 @@ function ModerationMode({ toast }) {
   const doApproveItem = async item => {
     setActLoading(true);
     try {
-      await api.post(`/admin/moderation/${activeTab}/${item.id}/approve`);
+      await api.post(`/admin/moderation/${activeTab}/${item.id}/approve`, { source: item.source });
       toast("✓ Approved."); setPreview(null); refresh();
     } catch { toast("Approve failed.", "error"); }
     finally { setActLoading(false); }
@@ -1016,7 +1063,7 @@ function ModerationMode({ toast }) {
     const item = rejectTarget?.payload;
     setActLoading(true);
     try {
-      await api.post(`/admin/moderation/${activeTab}/${item.id}/reject`, { reason });
+      await api.post(`/admin/moderation/${activeTab}/${item.id}/reject`, { reason, source: item.source });
       toast("✕ Rejected."); setPreview(null); setRejectTarget(null); refresh();
     } catch { toast("Reject failed.", "error"); }
     finally { setActLoading(false); }
@@ -1032,7 +1079,7 @@ function ModerationMode({ toast }) {
       else if (type === "photo") endpoint = `/admin/moderation/photo/${item.id}/revert`;
       else endpoint = `/admin/moderation/${activeTab}/${item.id}/revert`;
 
-      await api.post(endpoint, { status: targetStatus, note });
+      await api.post(endpoint, { status: targetStatus, note, source: item.source });
       toast(`↩ Status changed to "${targetStatus}".`, "info");
       setRevertTarget(null);
 
@@ -1383,7 +1430,7 @@ function LibraryAlbumDrillPanel({ album, onClose, toast }) {
                         onClick={() => openLightbox(photo, idx)}
                       >
                         {imgSrc
-                          ? <img src={imgSrc} alt={photo.caption} style={{ width: "100%", height: "100%", objectFit: "cover" }} onError={e => { e.target.style.display = "none"; }} />
+                          ? <MediaPreview item={photo} src={imgSrc} alt={photo.caption} />
                           : <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100%", color: "#ffffff33", fontSize: "2rem" }}>🖼</div>
                         }
                         {/* Visibility badge */}
@@ -1459,11 +1506,19 @@ function LibraryAlbumDrillPanel({ album, onClose, toast }) {
                 <button onClick={goNext} style={{ position: "absolute", right: -56, top: "50%", transform: "translateY(-50%)", background: "rgba(255,255,255,.12)", border: "none", color: "#fff", fontSize: "1.6rem", width: 44, height: 44, borderRadius: "50%", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>›</button>
               </>
             )}
-            <img
-              src={lightbox.url ?? lightbox.file_path}
-              alt={lightbox.caption}
-              style={{ maxWidth: "88vw", maxHeight: "74vh", borderRadius: 16, objectFit: "contain", boxShadow: "0 8px 60px rgba(0,0,0,.7)" }}
-            />
+            {mediaKind(lightbox) === "video" ? (
+              <video
+                src={lightbox.url ?? lightbox.file_path}
+                controls
+                style={{ maxWidth: "88vw", maxHeight: "74vh", borderRadius: 16, objectFit: "contain", boxShadow: "0 8px 60px rgba(0,0,0,.7)", background: "#000" }}
+              />
+            ) : (
+              <img
+                src={lightbox.url ?? lightbox.file_path}
+                alt={lightbox.caption}
+                style={{ maxWidth: "88vw", maxHeight: "74vh", borderRadius: 16, objectFit: "contain", boxShadow: "0 8px 60px rgba(0,0,0,.7)" }}
+              />
+            )}
             {/* Caption bar */}
             <div style={{ marginTop: 14, background: "rgba(255,255,255,.07)", backdropFilter: "blur(8px)", borderRadius: 14, padding: "12px 20px", display: "flex", alignItems: "center", gap: 16, minWidth: 300, maxWidth: 600, justifyContent: "space-between" }}>
               <div>
@@ -1603,7 +1658,7 @@ function LibraryAlbumsTab({ toast }) {
               >
                 <div style={{ height: 140, background: "#0f1729", position: "relative", overflow: "hidden" }}>
                   {album.cover_photo_url
-                    ? <img src={album.cover_photo_url} alt={album.title} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                    ? <MediaPreview item={{ resource_type: album.cover_resource_type ?? "image" }} src={album.cover_photo_url} alt={album.title} />
                     : <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100%", fontSize: "2.5rem", color: "#ffffff33" }}>🖼</div>
                   }
                   <div style={{ position: "absolute", top: 8, right: 8 }}><Badge label={album.type} color={tc.color} bg={tc.bg} /></div>

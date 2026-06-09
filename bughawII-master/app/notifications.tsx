@@ -1,5 +1,5 @@
-import React, { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, FlatList, RefreshControl, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { ActivityIndicator, Animated, FlatList, PanResponder, RefreshControl, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { FontAwesome } from '@expo/vector-icons';
@@ -170,6 +170,27 @@ export default function NotificationsScreen() {
   };
 
   const unreadCount = notifications.filter(isUnread).length;
+  const sectionedNotifications = useMemo(() => {
+    const start = new Date();
+    start.setHours(0, 0, 0, 0);
+    const today = notifications.filter((item) => {
+      const date = new Date(notificationDate(item) || 0);
+      return date >= start;
+    });
+    const earlier = notifications.filter((item) => {
+      const date = new Date(notificationDate(item) || 0);
+      return date < start;
+    });
+    return [
+      ...(today.length ? [{ _section: 'Today' }, ...today] : []),
+      ...(earlier.length ? [{ _section: 'Earlier' }, ...earlier] : []),
+    ];
+  }, [notifications]);
+
+  const dismissOne = (item: any) => {
+    const id = notificationId(item);
+    setNotifications((current) => current.filter((entry) => notificationId(entry) !== id));
+  };
 
   return (
     <SafeAreaView style={styles.container} edges={['left', 'right']}>
@@ -188,32 +209,30 @@ export default function NotificationsScreen() {
       </View>
 
       <FlatList
-        data={notifications}
-        keyExtractor={(item, index) => String(notificationId(item) || index)}
+        data={sectionedNotifications}
+        keyExtractor={(item, index) => String(item?._section || notificationId(item) || index)}
         renderItem={({ item }) => {
-          const unread = isUnread(item);
+          if (item?._section) return <Text style={styles.sectionLabel}>{item._section}</Text>;
           return (
-            <TouchableOpacity style={[styles.card, unread && styles.unreadCard]} activeOpacity={0.88} onPress={() => markOneRead(item)}>
-              <View style={[styles.iconBox, unread && styles.iconBoxUnread]}>
-                <FontAwesome name={notificationIcon(item) as any} size={15} color={unread ? colors.gold : colors.muted} />
-              </View>
-              <View style={{ flex: 1 }}>
-                <View style={styles.cardTop}>
-                  <Text style={styles.cardTitle} numberOfLines={1}>{notificationTitle(item)}</Text>
-                  {unread ? <View style={styles.dot} /> : null}
-                </View>
-                <Text style={styles.cardBody} numberOfLines={3}>{notificationBody(item)}</Text>
-                {!!notificationDate(item) && <Text style={styles.cardDate}>{formatDate(notificationDate(item))}</Text>}
-              </View>
-              {notificationTarget(item, subscriptionEnabled, yearbookEnabled) ? <FontAwesome name="chevron-right" size={13} color="#cbd5e1" /> : null}
-            </TouchableOpacity>
+            <NotificationRow
+              item={item}
+              onOpen={() => markOneRead(item)}
+              onDismiss={() => dismissOne(item)}
+              subscriptionEnabled={subscriptionEnabled}
+              yearbookEnabled={yearbookEnabled}
+            />
           );
         }}
         ListEmptyComponent={loading ? <ActivityIndicator color={colors.navy} style={{ marginTop: 60 }} /> : (
           <View style={styles.empty}>
-            <FontAwesome name="bell-slash" size={42} color="#cbd5e1" />
-            <Text style={styles.emptyTitle}>No Notifications</Text>
-            <Text style={styles.emptyText}>{error || 'You are all caught up.'}</Text>
+            <View style={styles.emptyIcon}>
+              <FontAwesome name="bell" size={34} color="#9CA3AF" />
+              <View style={styles.emptyCheck}>
+                <FontAwesome name="check" size={12} color="#ffffff" />
+              </View>
+            </View>
+            <Text style={styles.emptyTitle}>You&apos;re all caught up</Text>
+            <Text style={styles.emptyText}>{error || 'No new notifications'}</Text>
           </View>
         )}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); loadNotifications(); }} />}
@@ -223,26 +242,74 @@ export default function NotificationsScreen() {
   );
 }
 
+function NotificationRow({ item, onOpen, onDismiss, subscriptionEnabled, yearbookEnabled }: any) {
+  const translateX = React.useRef(new Animated.Value(0)).current;
+  const unread = isUnread(item);
+  const panResponder = React.useMemo(() => PanResponder.create({
+    onMoveShouldSetPanResponder: (_event, gesture) => Math.abs(gesture.dx) > 12 && Math.abs(gesture.dx) > Math.abs(gesture.dy),
+    onPanResponderMove: (_event, gesture) => {
+      if (gesture.dx < 0) translateX.setValue(Math.max(gesture.dx, -92));
+    },
+    onPanResponderRelease: (_event, gesture) => {
+      if (gesture.dx < -72) {
+        Animated.timing(translateX, { toValue: -420, duration: 180, useNativeDriver: true }).start(onDismiss);
+      } else {
+        Animated.spring(translateX, { toValue: 0, useNativeDriver: true }).start();
+      }
+    },
+  }), [onDismiss, translateX]);
+
+  return (
+    <View style={styles.swipeShell}>
+      <View style={styles.deleteBehind}>
+        <FontAwesome name="trash" size={16} color="#FFFFFF" />
+      </View>
+      <Animated.View style={{ transform: [{ translateX }] }} {...panResponder.panHandlers}>
+        <TouchableOpacity style={[styles.card, unread && styles.unreadCard]} activeOpacity={0.88} onPress={onOpen}>
+          <View style={[styles.iconBox, unread && styles.iconBoxUnread]}>
+            <FontAwesome name={notificationIcon(item) as any} size={15} color={unread ? colors.gold : colors.muted} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <View style={styles.cardTop}>
+              <Text style={styles.cardTitle} numberOfLines={1}>{notificationTitle(item)}</Text>
+              {unread ? <View style={styles.dot} /> : null}
+            </View>
+            <Text style={styles.cardBody} numberOfLines={3}>{notificationBody(item)}</Text>
+            {!!notificationDate(item) && <Text style={styles.cardDate}>{formatDate(notificationDate(item))}</Text>}
+          </View>
+          {notificationTarget(item, subscriptionEnabled, yearbookEnabled) ? <FontAwesome name="chevron-right" size={13} color="#cbd5e1" /> : null}
+        </TouchableOpacity>
+      </Animated.View>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f8fafc' },
+  container: { flex: 1, backgroundColor: '#F0F2F8' },
   header: { flexDirection: 'row', alignItems: 'center', gap: 14, paddingHorizontal: 18, paddingTop: 18, paddingBottom: 14 },
   backButton: { width: 42, height: 42, borderRadius: 14, backgroundColor: '#ffffff', borderWidth: 1, borderColor: colors.border, alignItems: 'center', justifyContent: 'center' },
   kicker: { color: colors.gold, fontSize: 11, fontWeight: '900', letterSpacing: 1.1, textTransform: 'uppercase' },
   title: { color: colors.navy, fontSize: 27, fontWeight: '900', marginTop: 2 },
   readButton: { minHeight: 36, justifyContent: 'center' },
-  readButtonText: { color: colors.indigo, fontSize: 12, fontWeight: '900' },
+  readButtonText: { color: '#1A2547', fontSize: 12, fontWeight: '900' },
   readButtonDisabled: { color: '#cbd5e1' },
   content: { paddingHorizontal: 18, paddingBottom: 110 },
-  card: { backgroundColor: '#ffffff', borderRadius: 18, borderWidth: 1, borderColor: colors.border, padding: 14, marginBottom: 12, flexDirection: 'row', gap: 12, ...shadows.card },
+  sectionLabel: { color: '#6B7280', fontSize: 12, fontWeight: '900', textTransform: 'uppercase', marginTop: 14, marginBottom: 8 },
+  swipeShell: { position: 'relative' },
+  deleteBehind: { position: 'absolute', right: 0, top: 0, bottom: 10, width: 86, borderRadius: 12, backgroundColor: colors.danger, alignItems: 'center', justifyContent: 'center' },
+  card: { backgroundColor: '#ffffff', borderRadius: 12, borderWidth: 1, borderColor: colors.border, padding: 12, marginBottom: 10, flexDirection: 'row', gap: 12, ...shadows.card },
   unreadCard: { borderColor: 'rgba(253,184,19,0.45)', backgroundColor: '#fffdf5' },
-  iconBox: { width: 42, height: 42, borderRadius: 14, backgroundColor: '#f1f5f9', alignItems: 'center', justifyContent: 'center' },
+  iconBox: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#f1f5f9', alignItems: 'center', justifyContent: 'center' },
   iconBoxUnread: { backgroundColor: colors.navy },
   cardTop: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   cardTitle: { color: colors.navy, fontSize: 14, fontWeight: '900', flex: 1 },
   dot: { width: 8, height: 8, borderRadius: 4, backgroundColor: colors.gold },
   cardBody: { color: colors.muted, fontSize: 12, lineHeight: 18, marginTop: 4 },
   cardDate: { color: '#94a3b8', fontSize: 11, fontWeight: '800', marginTop: 9 },
-  empty: { alignItems: 'center', paddingTop: 92, paddingHorizontal: 24 },
-  emptyTitle: { color: colors.navy, fontSize: 18, fontWeight: '900', marginTop: 14 },
-  emptyText: { color: colors.muted, fontSize: 13, textAlign: 'center', marginTop: 6 },
+  dismissButton: { width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
+  empty: { minHeight: 520, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 24 },
+  emptyIcon: { width: 74, height: 74, borderRadius: 37, backgroundColor: '#ffffff', alignItems: 'center', justifyContent: 'center' },
+  emptyCheck: { position: 'absolute', right: 9, bottom: 8, width: 24, height: 24, borderRadius: 12, backgroundColor: '#22C55E', alignItems: 'center', justifyContent: 'center' },
+  emptyTitle: { color: colors.navy, fontSize: 20, fontWeight: '900', marginTop: 16 },
+  emptyText: { color: colors.muted, fontSize: 15, textAlign: 'center', marginTop: 6 },
 });

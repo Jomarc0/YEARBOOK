@@ -27,7 +27,7 @@ const getTier = (user) => {
 
 // ─── Tab config ───────────────────────────────────────────────────────────────
 const TABS = [
-  { key: 'general',               label: 'All Photos',    icon: 'fa-images'             },
+  { key: 'general',               label: 'Gallery',       icon: 'fa-photo-film'         },
   { key: 'graduation:photos',     label: 'Graduation',    icon: 'fa-graduation-cap'     },
   { key: 'graduation:videos',     label: 'Videos',        icon: 'fa-film'               },
   { key: 'graduation:program',    label: 'Program',       icon: 'fa-file-pdf'           },
@@ -35,6 +35,65 @@ const TABS = [
   { key: 'graduation:song',       label: 'Grad Song',     icon: 'fa-music'              },
   { key: 'graduation:mass',       label: 'Baccalaureate', icon: 'fa-church'             },
 ];
+
+const searchText = (value) => String(value ?? '').toLowerCase();
+
+const albumSearchHaystack = (album, tab) => [
+  tab?.label,
+  album?.title,
+  album?.description,
+  album?.event_date,
+  album?.category,
+  ...albumMediaFiles(album).flatMap(file => [
+    file?.caption,
+    file?.title,
+    file?.file_name,
+    file?.original_name,
+    file?.mime_type,
+  ]),
+].map(searchText).join(' ');
+
+const categoryToTabKey = (category) => {
+  const normalized = String(category ?? '').toLowerCase();
+  const aliases = {
+    invitations: 'invitation',
+    songs: 'song',
+    speeches: 'videos',
+  };
+  const tabCategory = aliases[normalized] ?? normalized;
+  if (['photos', 'videos', 'program', 'invitation', 'song', 'mass'].includes(tabCategory)) {
+    return `graduation:${tabCategory}`;
+  }
+  return 'general';
+};
+
+const apiCategoryForTab = (tabKey) => {
+  const category = tabKey.split(':')[1];
+  return {
+    invitation: 'invitations',
+    song: 'songs',
+  }[category] ?? category;
+};
+
+const albumMediaFiles = (album) => {
+  const files = album?.media_files ?? album?.mediaFiles ?? album?.videos ?? [];
+  if (files.length > 0) return files;
+  return album?.photos ?? [];
+};
+const albumMediaCount = (album) => Number(albumMediaFiles(album).length || album?.file_count || album?.media_count || album?.photos_count || (album?.media_url || album?.file_path ? 1 : 0));
+const primaryAlbumMedia = (album) => album?.media_url || album?.file_path || albumMediaFiles(album)[0]?.file_path || album?.cover_photo_url || album?.thumbnail_url || '';
+
+const matchTabKey = (photo) => {
+  const category = photo?.album?.category ?? photo?.category;
+  return category ? categoryToTabKey(category) : 'general';
+};
+
+const makeFaceSearchForm = (file, type) => {
+  const fd = new FormData();
+  fd.append('face_image', file);
+  fd.append('type', type);
+  return fd;
+};
 
 // ─── Storage hook ─────────────────────────────────────────────────────────────
 function useStorageUsage() {
@@ -209,7 +268,7 @@ function CreateAlbumStep({
 }
 
 // ─── Transcript Modal ─────────────────────────────────────────────────────────
-function TranscriptModal({ photoId, videoTitle, onClose }) {
+function TranscriptModal({ photoId, albumId, videoTitle, onClose }) {
   const [transcripts, setTranscripts] = useState([]);
   const [loading,     setLoading]     = useState(true);
   const [selected,    setSelected]    = useState(null);
@@ -222,17 +281,30 @@ function TranscriptModal({ photoId, videoTitle, onClose }) {
   }, []);
 
   useEffect(() => {
-    if (!photoId) return;
+    if (!photoId && !albumId) return;
     setLoading(true);
-    transcriptApi.list({ graduation_photo_id: photoId })
-      .then(({ data }) => {
-        const list = data.data ?? data ?? [];
+    setSelected(null);
+
+    const requests = [
+      photoId ? transcriptApi.list({ graduation_photo_id: photoId }) : null,
+      albumId ? transcriptApi.list({ album_id: albumId }) : null,
+    ].filter(Boolean);
+
+    Promise.allSettled(requests)
+      .then(results => {
+        const byId = new Map();
+        results.forEach(result => {
+          if (result.status !== 'fulfilled') return;
+          const list = result.value.data.data ?? result.value.data ?? [];
+          list.forEach(item => byId.set(item.id, item));
+        });
+        const list = [...byId.values()];
         setTranscripts(list);
-        if (list.length > 0) setSelected(list[0]);
+        setSelected(list[0] ?? null);
       })
       .catch(() => setTranscripts([]))
       .finally(() => setLoading(false));
-  }, [photoId]);
+  }, [photoId, albumId]);
 
   const handleDownload = async (id, format) => {
     setDlLoading(true);
@@ -395,11 +467,6 @@ function TranscriptModal({ photoId, videoTitle, onClose }) {
                         <i className="fas fa-copy" /> Copy
                       </button>
                     )}
-                    <Link to="/graduation/speeches"
-                      className="ml-auto inline-flex items-center gap-1.5 text-[11px] font-bold text-[#3f51b5] no-underline
-                                 bg-[#3f51b5]/[0.08] px-3 py-2 rounded-xl hover:bg-[#3f51b5]/[0.15] transition-colors">
-                      <i className="fas fa-arrow-up-right-from-square text-[10px]" /> All Speeches
-                    </Link>
                   </div>
                 )}
               </div>
@@ -448,8 +515,7 @@ function GradAlbumCard({ album }) {
 
 // ─── VideoAlbumCard ───────────────────────────────────────────────────────────
 function VideoAlbumCard({ album, onClick }) {
-  const videoCount = (album.media_files ?? album.mediaFiles ?? album.videos ?? []).length
-    || (album.media_url ? 1 : 0);
+  const videoCount = albumMediaCount(album);
 
   return (
     <button onClick={() => onClick(album)}
@@ -487,7 +553,7 @@ function VideoAlbumCard({ album, onClick }) {
 }
 
 // ─── GradVideoCard ────────────────────────────────────────────────────────────
-function GradVideoCard({ video, photoId, albumTitle, badge }) {
+function GradVideoCard({ video, photoId, albumId, albumTitle, badge }) {
   const [playing,        setPlaying]        = useState(false);
   const [showTranscript, setShowTranscript] = useState(false);
 
@@ -534,6 +600,7 @@ function GradVideoCard({ video, photoId, albumTitle, badge }) {
       {showTranscript && (
         <TranscriptModal
           photoId={photoId}
+          albumId={albumId ?? video.graduation_album_id ?? video.album_id}
           videoTitle={title}
           onClose={() => setShowTranscript(false)}
         />
@@ -543,6 +610,7 @@ function GradVideoCard({ video, photoId, albumTitle, badge }) {
 }
 
 function GradProgramCard({ album, isPremium = false }) {
+  const mediaUrl = primaryAlbumMedia(album);
   return (
     <div className="rounded-3xl bg-white p-6 flex gap-5 items-start border border-black/[0.04] shadow-sm">
       <div className="w-14 h-14 rounded-2xl bg-[#fdb813]/[0.12] flex items-center justify-center shrink-0">
@@ -562,12 +630,12 @@ function GradProgramCard({ album, isPremium = false }) {
           Property of National University Lipa. All rights reserved.
         </p>
         <div className="flex gap-2.5 flex-wrap">
-          <a href={album.media_url} target="_blank" rel="noreferrer"
+          <a href={mediaUrl} target="_blank" rel="noreferrer"
             className="inline-flex items-center gap-1.5 text-sm font-bold text-white no-underline
                        bg-[#1d2b4b] px-4 py-2 rounded-xl hover:bg-[#3f51b5] transition-colors">
             <i className="fas fa-eye" /> View
           </a>
-          <ProtectedDownloadButton href={album.media_url} label="Download" isPremium={isPremium} />
+          <ProtectedDownloadButton href={mediaUrl} label="Download" isPremium={isPremium} />
         </div>
       </div>
     </div>
@@ -575,12 +643,13 @@ function GradProgramCard({ album, isPremium = false }) {
 }
 
 function GradInvitationCard({ album, isPremium = false }) {
+  const mediaUrl = primaryAlbumMedia(album);
   return (
     <div className="rounded-3xl overflow-hidden bg-white border border-black/[0.04] shadow-sm
                     hover:-translate-y-1.5 hover:shadow-xl transition-all duration-300">
       <div className="h-[240px] bg-gradient-to-br from-[#1d2b4b] to-[#2a3d66] flex items-center justify-center overflow-hidden">
-        {album.media_url?.match(/\.(jpg|jpeg|png|webp)$/i)
-          ? <ProtectedImage src={album.media_url} alt={album.title} watermarkText="© NU Lipa"
+        {mediaUrl?.match(/\.(jpg|jpeg|png|webp)(\?|$)/i)
+          ? <ProtectedImage src={mediaUrl} alt={album.title} watermarkText="© NU Lipa"
               showCopyright style={{ width: '100%', height: '100%' }}
               imgStyle={{ width: '100%', height: '100%', objectFit: 'cover' }} />
           : <div className="flex flex-col items-center gap-2.5">
@@ -596,12 +665,12 @@ function GradInvitationCard({ album, isPremium = false }) {
           Property of National University Lipa
         </p>
         <div className="flex gap-2.5">
-          <a href={album.media_url} target="_blank" rel="noreferrer"
+          <a href={mediaUrl} target="_blank" rel="noreferrer"
             className="inline-flex items-center gap-1.5 text-xs font-bold text-white no-underline
                        bg-[#1d2b4b] px-3.5 py-2 rounded-xl hover:bg-[#3f51b5] transition-colors">
             <i className="fas fa-eye" /> View
           </a>
-          <ProtectedDownloadButton href={album.media_url} label="Save" isPremium={isPremium} />
+          <ProtectedDownloadButton href={mediaUrl} label="Save" isPremium={isPremium} />
         </div>
       </div>
     </div>
@@ -609,13 +678,15 @@ function GradInvitationCard({ album, isPremium = false }) {
 }
 
 function GradSongCard({ album }) {
+  const mediaUrl = primaryAlbumMedia(album);
+  const firstMedia = albumMediaFiles(album)[0];
   const mediaRef = useRef(null);
   const [playing,        setPlaying]        = useState(false);
   const [current,        setCurrent]        = useState(0);
   const [duration,       setDur]            = useState(0);
   const [showTranscript, setShowTranscript] = useState(false);
 
-  const isVideo = /\.(mp4|mov|webm|mkv)$/i.test(album.media_url ?? '');
+  const isVideo = /\.(mp4|mov|webm|mkv)(\?|$)/i.test(mediaUrl ?? '');
   const fmt = s => !s || isNaN(s) ? '0:00' : `${Math.floor(s / 60)}:${Math.floor(s % 60).toString().padStart(2, '0')}`;
   const toggle = () => {
     if (!mediaRef.current) return;
@@ -628,7 +699,7 @@ function GradSongCard({ album }) {
       <div className="rounded-3xl bg-white overflow-hidden border border-black/[0.04] shadow-sm">
         {isVideo ? (
           <div className="bg-[#0a0f1e] relative">
-            <video ref={mediaRef} src={album.media_url}
+            <video ref={mediaRef} src={mediaUrl}
               className="w-full max-h-[220px] block bg-black"
               onTimeUpdate={() => setCurrent(mediaRef.current?.currentTime ?? 0)}
               onLoadedMetadata={() => setDur(mediaRef.current?.duration ?? 0)}
@@ -661,7 +732,7 @@ function GradSongCard({ album }) {
             <span className="absolute top-2.5 left-2.5 bg-[#fdb813]/20 text-[#fdb813] text-[10px] font-extrabold px-2.5 py-1 rounded-lg">
               <i className="fas fa-music mr-1" />AUDIO
             </span>
-            <audio ref={mediaRef} src={album.media_url}
+            <audio ref={mediaRef} src={mediaUrl}
               onTimeUpdate={() => setCurrent(mediaRef.current?.currentTime ?? 0)}
               onLoadedMetadata={() => setDur(mediaRef.current?.duration ?? 0)}
               onEnded={() => setPlaying(false)} />
@@ -690,7 +761,8 @@ function GradSongCard({ album }) {
 
       {showTranscript && (
         <TranscriptModal
-          photoId={album.id}
+          photoId={firstMedia?.id}
+          albumId={album.id}
           videoTitle={album.title}
           onClose={() => setShowTranscript(false)}
         />
@@ -703,40 +775,29 @@ function GradSongCard({ album }) {
 function FaceSearchResults({ matches, isGrad }) {
   if (!matches.length) return null;
   return (
-    <div className="mt-3 grid grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-2.5">
-      {matches.map(p => (
-        isGrad ? (
-          <Link key={p.user_id ?? p.id} to={`/profile/${p.user_id}`}
-            className="flex items-center gap-3 bg-white/[0.12] backdrop-blur-md border border-white/20
-                       rounded-[14px] p-3 no-underline hover:border-[#fdb813] transition-colors">
-            <img src={imageUrl(p.profile_picture) || avatarUrl(p.name)} alt={p.name}
-              className="w-11 h-11 rounded-xl object-cover border-2 border-[#fdb813] flex-shrink-0" />
-            <div className="min-w-0">
-              <p className="m-0 font-bold text-[13px] text-white truncate">{p.name}</p>
-              <p className="m-0 text-[11px] text-white/60">
-                <i className="fas fa-brain text-[#fdb813] mr-1" />{p.similarity}% match
-              </p>
-            </div>
-          </Link>
-        ) : (
-          <Link key={p.photo_id ?? p.id} to={p.album_id ? `/gallery/${p.album_id}` : '#'}
-            className="block rounded-[14px] overflow-hidden border border-white/20
-                       hover:border-[#fdb813] transition-all no-underline group">
+    <div className="grid grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-5">
+      {matches.map(p => {
+        const href = isGrad && p.album_id ? `/graduation/archive/${p.album_id}` : (p.album_id ? `/gallery/${p.album_id}` : '#');
+        const title = p.album?.title || p.caption || 'Matched Photo';
+
+        return (
+          <Link key={`${p.source_type ?? 'gallery'}-${p.photo_id ?? p.id}`} to={href}
+            className="block rounded-[18px] overflow-hidden border border-slate-200 bg-white
+                       hover:border-[#fdb813] hover:-translate-y-1 transition-all no-underline group shadow-sm">
             <div className="relative">
-              <img src={p.file_path} alt={p.caption || 'Photo'} className="w-full h-28 object-cover" />
-              <div className="absolute top-1.5 right-1.5 bg-black/60 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">
-                {p.similarity}%
-              </div>
+              <img src={p.file_path} alt={title} className="w-full h-40 object-cover" />
             </div>
-            {p.album?.title && (
-              <p className="m-0 text-[11px] font-bold text-white/70 px-2 py-1.5 truncate bg-black/40
-                            group-hover:bg-[#fdb813]/20 group-hover:text-white transition-colors">
-                <i className="fas fa-images mr-1" />{p.album.title}
+            <div className="px-4 py-3">
+              <p className="m-0 text-sm font-extrabold text-[#1d2b4b] truncate">
+                <i className="fas fa-images mr-1.5 text-[#fdb813]" />{title}
               </p>
-            )}
+              <p className="m-0 mt-1 text-[11px] font-bold uppercase tracking-wide text-slate-400">
+                {isGrad ? 'Graduation Match' : 'Gallery Match'}
+              </p>
+            </div>
           </Link>
-        )
-      ))}
+        );
+      })}
     </div>
   );
 }
@@ -753,6 +814,9 @@ export default function GalleryPage() {
   const [albums,        setAlbums]        = useState([]);
   const [loading,       setLoading]       = useState(true);
   const [searching,     setSearching]     = useState(false);
+  const [searchQuery,   setSearchQuery]   = useState('');
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [searchResults, setSearchResults] = useState([]);
   const [matches,       setMatches]       = useState([]);
   const [uploadStep,    setUploadStep]    = useState(null);
   const [activeAlbum,   setActiveAlbum]   = useState(null);
@@ -793,7 +857,7 @@ export default function GalleryPage() {
     setLoading(true);
     const req = tab === 'general'
       ? galleryApi.list('general', null)
-      : graduationApi.list(tab.split(':')[1]);
+      : graduationApi.list(apiCategoryForTab(tab));
     req
       .then(({ data }) => setAlbums(data.data ?? data ?? []))
       .catch(() => setAlbums([]))
@@ -802,10 +866,45 @@ export default function GalleryPage() {
 
   useEffect(() => { loadAlbums(activeTab); }, [activeTab]); // eslint-disable-line
 
+  useEffect(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) {
+      setSearchResults([]);
+      setSearchLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    setSearchLoading(true);
+
+    Promise.all(TABS.filter(tab => !tab.href).map(tab => {
+      const req = tab.key === 'general'
+        ? galleryApi.list('general', null)
+        : graduationApi.list(apiCategoryForTab(tab.key));
+
+      return req
+        .then(({ data }) => (data.data ?? data ?? []).map(album => ({ album, tab })))
+        .catch(() => []);
+    }))
+      .then(groups => {
+        if (cancelled) return;
+        setSearchResults(
+          groups.flat().filter(({ album, tab }) => albumSearchHaystack(album, tab).includes(q))
+        );
+      })
+      .finally(() => {
+        if (!cancelled) setSearchLoading(false);
+      });
+
+    return () => { cancelled = true; };
+  }, [searchQuery]);
+
   const handleTabChange = (key) => {
     setActiveTab(key);
     setUploadStep(null);
     setMatches([]);
+    setSearchQuery('');
+    setSearchResults([]);
     setActiveAlbum(null);
     setNewAlbumName('');
     setSelectedVideoAlbum(null);
@@ -839,14 +938,34 @@ export default function GalleryPage() {
   const handleFaceFile = async (file) => {
     setSearching(true);
     setMatches([]);
+    setSearchQuery('');
+    setSearchResults([]);
+    setSelectedVideoAlbum(null);
     try {
-      const fd = new FormData();
-      fd.append('face_image', file);
-      fd.append('type', isGrad ? 'graduation' : 'general');
-      if (isGrad) fd.append('category', activeTab.split(':')[1]);
-      const { data } = await galleryApi.faceSearch(fd);
-      setMatches(data.photos ?? []);
-      if (!data.photos?.length) alert('No matching photos found.');
+      const responses = await Promise.allSettled([
+        galleryApi.faceSearch(makeFaceSearchForm(file, 'general')),
+        galleryApi.faceSearch(makeFaceSearchForm(file, 'graduation')),
+      ]);
+
+      const photos = responses
+        .flatMap((result, index) => {
+          if (result.status !== 'fulfilled') return [];
+          const source = index === 0 ? 'general' : 'graduation';
+          return (result.value.data.photos ?? []).map(photo => ({ ...photo, source_type: source }));
+        })
+        .sort((a, b) => Number(b.similarity ?? 0) - Number(a.similarity ?? 0));
+
+      setMatches(photos);
+
+      if (!photos.length) {
+        alert('No matching media found.');
+        return;
+      }
+
+      const targetTab = matchTabKey(photos[0]);
+      if (targetTab !== activeTab) {
+        setActiveTab(targetTab);
+      }
     } catch (err) {
       alert(err?.response?.data?.message || 'Face search failed.');
     } finally {
@@ -868,7 +987,7 @@ export default function GalleryPage() {
   };
 
   const flattenVideosFromAlbum = (album, badge = undefined) => {
-    const vids = album.media_files ?? album.mediaFiles ?? album.videos ?? [];
+    const vids = albumMediaFiles(album);
     if (vids.length > 0) {
       return vids.map(v => ({
         video:      v,
@@ -879,7 +998,7 @@ export default function GalleryPage() {
       }));
     }
     return [{
-      video:      { ...album, file_path: album.media_url },
+      video:      { ...album, file_path: primaryAlbumMedia(album) },
       photoId:    album.id,
       albumId:    album.id,
       albumTitle: album.title,
@@ -892,6 +1011,9 @@ export default function GalleryPage() {
   const photoGradTabs  = ['graduation:photos'];
   const primaryTabs    = TABS.slice(0, 4);
   const secondaryTabs  = TABS.slice(4);
+  const hasGallerySearch = searchQuery.trim().length > 0;
+  const visibleFaceMatches = matches.filter(photo => matchTabKey(photo) === activeTab);
+  const hasFaceMatches = visibleFaceMatches.length > 0;
 
   const tabCls = (key, sm = false) =>
     `flex items-center justify-center gap-1.5 font-bold border-none cursor-pointer transition-all rounded-[14px]
@@ -918,16 +1040,6 @@ export default function GalleryPage() {
           {heroSubtitle}
         </p>
 
-        {isGrad && (
-          <div className="mb-6">
-            <Link to="/graduation/speeches"
-              className="inline-flex items-center gap-2 text-sm font-bold no-underline px-5 py-2.5 rounded-2xl transition-all
-                         bg-[#fdb813]/15 text-[#fdb813] border border-[#fdb813]/30 hover:bg-[#fdb813]/25">
-              <i className="fas fa-microphone-lines" /> Guest Speeches &amp; Transcripts
-            </Link>
-          </div>
-        )}
-
         {!isGrad && (
           <div className="max-w-[520px] mx-auto mb-7">
             <ContentOwnershipBanner message="All media in this gallery is the exclusive property of" />
@@ -937,14 +1049,18 @@ export default function GalleryPage() {
         <div className="max-w-[560px] mx-auto relative z-10">
           <div className="relative">
             <i className="fas fa-search absolute left-[18px] top-1/2 -translate-y-1/2 text-[#fdb813] text-[15px] z-[1] pointer-events-none" />
-            <input type="text" readOnly
-              placeholder={searching ? 'Searching…' : 'Click the camera icon to search by face…'}
+            <input type="text"
+              value={searchQuery}
+              onChange={e => {
+                setSearchQuery(e.target.value);
+                setMatches([]);
+              }}
+              placeholder={searching ? 'Searching...' : 'Search gallery, videos, programs, invitations...'}
               className="w-full h-11 pl-[46px] pr-14 border border-white/15 rounded-xl outline-none
-                         bg-white/10 backdrop-blur-xl text-white text-sm font-medium cursor-pointer
+                         bg-white/10 backdrop-blur-xl text-white text-sm font-medium
                          focus:bg-white/[0.18] focus:border-[#fdb813]/60 transition-all placeholder-white/50" />
             <FaceSearchButton onFile={handleFaceFile} loading={searching} />
           </div>
-          <FaceSearchResults matches={matches} isGrad={isGrad} />
         </div>
       </header>
 
@@ -952,18 +1068,32 @@ export default function GalleryPage() {
       <div className="max-w-[1000px] mx-auto -mt-4 px-5 w-full relative z-10">
         <div className="bg-white flex gap-1 p-1.5 rounded-t-[20px] shadow-sm border-b border-slate-100">
           {primaryTabs.map(tab => (
+            tab.href ? (
+              <Link key={tab.key} to={tab.href} className={`flex-1 min-w-[60px] no-underline ${tabCls(tab.key)}`}>
+                <i className={`fas ${tab.icon} text-[11px]`} />
+                {tab.label}
+              </Link>
+            ) : (
             <button key={tab.key} onClick={() => handleTabChange(tab.key)} className={`flex-1 min-w-[60px] ${tabCls(tab.key)}`}>
               <i className={`fas ${tab.icon} ${activeTab === tab.key ? 'text-[#fdb813]' : ''} text-[11px]`} />
               {tab.label}
             </button>
+            )
           ))}
         </div>
         <div className="bg-white flex gap-1 p-1.5 rounded-b-[20px] shadow-xl shadow-[#1d2b4b]/10">
           {secondaryTabs.map(tab => (
+            tab.href ? (
+              <Link key={tab.key} to={tab.href} className={`flex-1 min-w-[60px] no-underline ${tabCls(tab.key, true)}`}>
+                <i className={`fas ${tab.icon} text-[11px]`} />
+                {tab.label}
+              </Link>
+            ) : (
             <button key={tab.key} onClick={() => handleTabChange(tab.key)} className={`flex-1 min-w-[60px] ${tabCls(tab.key, true)}`}>
               <i className={`fas ${tab.icon} ${activeTab === tab.key ? 'text-[#fdb813]' : ''} text-[11px]`} />
               {tab.label}
             </button>
+            )
           ))}
         </div>
       </div>
@@ -984,7 +1114,7 @@ export default function GalleryPage() {
       {!isGrad && uploadStep && (
         <div className="max-w-[1000px] mx-auto mt-5 px-5 w-full flex flex-col gap-4">
           <div className="flex items-center gap-3">
-            {['Select Album', 'Upload Photos'].map((label, i) => {
+            {['Select Album', 'Upload Media'].map((label, i) => {
               const stepKey  = i === 0 ? 'album' : 'upload';
               const isDone   = uploadStep === 'upload' && i === 0;
               const isActive = uploadStep === stepKey;
@@ -1046,21 +1176,76 @@ export default function GalleryPage() {
                 <i className="fas fa-chevron-right text-slate-300 text-sm" />
                 <span className="text-[#1d2b4b]">{selectedVideoAlbum.title}</span>
               </>
+            ) : hasGallerySearch ? (
+              `Search Results for "${searchQuery.trim()}"`
+            ) : hasFaceMatches ? (
+              `Face Matches in ${TABS.find(t => t.key === activeTab)?.label ?? 'Gallery'}`
             ) : (
               TABS.find(t => t.key === activeTab)?.label ?? 'Albums'
             )}
           </h2>
 
-          {canUpload && !isGrad && !uploadStep && (
+          {canUpload && !isGrad && !uploadStep && !hasGallerySearch && !hasFaceMatches && (
             <button onClick={() => setUploadStep('album')}
               className="flex items-center gap-2 bg-[#1d2b4b] hover:bg-[#3f51b5] text-white border-none
                          px-5 py-2.5 rounded-[14px] text-[13px] font-bold cursor-pointer transition-colors">
-              <i className="fas fa-cloud-arrow-up text-[#fdb813]" /> Upload Photos
+              <i className="fas fa-cloud-arrow-up text-[#fdb813]" /> Upload Media
             </button>
           )}
         </div>
 
-        {loading ? (
+        {hasFaceMatches ? (
+          <FaceSearchResults matches={visibleFaceMatches} isGrad={activeTab !== 'general'} />
+        ) : hasGallerySearch ? (
+          searchLoading ? (
+            <div className="flex items-center justify-center py-24">
+              <div className="w-10 h-10 rounded-full border-[3px] border-indigo-100 border-t-[#3f51b5] animate-spin" />
+            </div>
+          ) : searchResults.length === 0 ? (
+            <div className="text-center py-20 px-5 bg-white rounded-3xl shadow-sm border border-slate-100">
+              <i className="fas fa-search text-5xl text-slate-200 block mb-4" />
+              <h3 className="text-xl font-extrabold text-[#1d2b4b] mb-2">No Gallery Results</h3>
+              <p className="text-sm text-slate-400 mb-5">Try another title, event, category, or media name.</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-[repeat(auto-fill,minmax(300px,1fr))] gap-7">
+              {searchResults.map(({ album, tab }) => (
+                <Link key={`${tab.key}-${album.id}`}
+                  to={tab.key === 'general' ? `/gallery/${album.id}` : `/graduation/archive/${album.id}`}
+                  className="block no-underline text-inherit bg-white rounded-[24px] overflow-hidden border border-slate-100 hover:-translate-y-1.5 hover:shadow-xl transition-all">
+                  <div className="h-[190px] bg-slate-100 relative overflow-hidden">
+                    {album.cover_photo_url || album.thumbnail_url || album.media_url ? (
+                      <ProtectedImage
+                        src={album.cover_photo_url || album.thumbnail_url || album.media_url}
+                        alt={album.title}
+                        watermark={false}
+                        showCopyright={false}
+                        style={{ width: '100%', height: '100%' }}
+                        imgStyle={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                      />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center text-5xl bg-gradient-to-br from-[#e8edf5] to-[#dbe3f0]">
+                        <i className={`fas ${tab.icon} text-slate-400`} />
+                      </div>
+                    )}
+                    <span className="absolute top-3 right-3 bg-[#1d2b4b] text-white text-[11px] font-black px-3 py-1.5 rounded-xl">
+                      <i className={`fas ${tab.icon} text-[#fdb813] mr-1.5`} />{tab.label}
+                    </span>
+                  </div>
+                  <div className="px-5 py-4">
+                    <h4 className="text-base font-extrabold text-[#1d2b4b] mb-2">{album.title}</h4>
+                    <p className="text-[12px] text-slate-400 m-0 flex items-center gap-1.5">
+                      <i className="fas fa-calendar text-[#fdb813]" />
+                      {album.event_date
+                        ? new Date(album.event_date).toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' })
+                        : 'No date'}
+                    </p>
+                  </div>
+                </Link>
+              ))}
+            </div>
+          )
+        ) : loading ? (
           <div className="flex items-center justify-center py-24">
             <div className="w-10 h-10 rounded-full border-[3px] border-indigo-100 border-t-[#3f51b5] animate-spin" />
           </div>
@@ -1073,7 +1258,7 @@ export default function GalleryPage() {
               <button onClick={() => setUploadStep('album')}
                 className="inline-flex items-center gap-2 bg-[#1d2b4b] hover:bg-[#3f51b5] text-white border-none
                            px-5 py-2.5 rounded-[14px] text-[13px] font-bold cursor-pointer transition-colors">
-                <i className="fas fa-cloud-arrow-up text-[#fdb813]" /> Upload Photos
+                <i className="fas fa-cloud-arrow-up text-[#fdb813]" /> Upload Media
               </button>
             )}
           </div>
@@ -1099,7 +1284,7 @@ export default function GalleryPage() {
                           }
                           <div className="absolute top-3.5 right-3.5 bg-white/95 px-3 py-[5px] rounded-xl
                                           text-[11px] font-bold text-[#1d2b4b] flex items-center gap-1">
-                            <i className="fas fa-images text-[#fdb813]" /> {album.photos_count ?? 0} photos
+                            <i className="fas fa-photo-film text-[#fdb813]" /> {album.photos_count ?? 0} media
                           </div>
                         </div>
                         <div className="px-6 py-5">
@@ -1118,7 +1303,7 @@ export default function GalleryPage() {
                                      bg-[#1d2b4b] hover:bg-[#3f51b5] text-white border-none px-3.5 py-2
                                      rounded-xl text-[11px] font-bold cursor-pointer z-10 transition-all
                                      opacity-0 group-hover:opacity-100">
-                          <i className="fas fa-plus text-[#fdb813]" /> Add Photos
+                          <i className="fas fa-plus text-[#fdb813]" /> Add Media
                         </button>
                       )}
                     </div>
@@ -1157,11 +1342,12 @@ export default function GalleryPage() {
                         </div>
                       ) : (
                         <div className="grid grid-cols-[repeat(auto-fill,minmax(300px,1fr))] gap-6">
-                          {videoItems.map(({ video, photoId, albumTitle, badge }, i) => (
+                          {videoItems.map(({ video, photoId, albumId, albumTitle, badge }, i) => (
                             <GradVideoCard
                               key={video.id ?? `v-${i}`}
                               video={video}
                               photoId={photoId}
+                              albumId={albumId}
                               albumTitle={albumTitle}
                               badge={badge}
                             />

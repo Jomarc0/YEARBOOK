@@ -2,8 +2,8 @@
  * FlipbookViewer.jsx
  * src/features/yearbook/components/flipbook/FlipbookViewer.jsx
  */
-import React, {
-  useRef, useState, useEffect, useCallback,
+import {
+  useRef, useState, useEffect, useCallback, useMemo,
 } from 'react';
 import HTMLFlipBook           from 'react-pageflip';
 import { useNavigate }        from 'react-router-dom';
@@ -21,7 +21,6 @@ const ZOOM_STEPS = [0.8, 1, 1.15, 1.3];
 
 export default function FlipbookViewer({
   pages         = [],
-  meta          = {},
   toc           = [],
   bookmarks     = [],
   searchResults = null,
@@ -33,31 +32,43 @@ export default function FlipbookViewer({
   currentUser,
   pdfReady,
   isPremium,
+  yearbookScope,
 }) {
   const navigate = useNavigate();
   const bookRef  = useRef(null);
   const wrapRef  = useRef(null);
 
   const [currentPage,  setCurrentPage]  = useState(0);
-  const [totalPages,   setTotalPages]   = useState(0);
   const [zoomIndex,    setZoomIndex]    = useState(1);
   const [fullscreen,   setFullscreen]   = useState(false);
   const [sidebarTab,   setSidebarTab]   = useState(null);
   const [isAnimating,  setIsAnimating]  = useState(false);
 
-  const { alumniData, loading: alumniLoading, lookup, clear } =
+  const { alumniData, loading: alumniLoading, clear } =
     useFlipbookAlumniLink();
 
   const currentSpread = Math.floor(currentPage / 2);
   const totalSpreads  = Math.ceil(pages.length / 2);
   const zoom          = ZOOM_STEPS[zoomIndex];
+  const renderedPages = useMemo(() => {
+    const keep = new Set([0, 1, 2, 3, pages.length - 2, pages.length - 1]);
+    const buffer = 8;
+
+    for (let i = currentPage - buffer; i <= currentPage + buffer; i += 1) {
+      if (i >= 0 && i < pages.length) keep.add(i);
+    }
+
+    return pages.map((page, idx) => (
+      keep.has(idx) ? page : { type: 'blank', side: page?.side, virtualized: true }
+    ));
+  }, [pages, currentPage]);
 
   const handleFlip = useCallback((e) => {
     setCurrentPage(e.data);
     clear();
   }, [clear]);
 
-  const handleInit      = useCallback((e) => setTotalPages(e.object.getPageCount()), []);
+  const handleInit      = useCallback(() => {}, []);
   const handleFlipStart = useCallback(() => setIsAnimating(true),  []);
   const handleFlipEnd   = useCallback(() => setIsAnimating(false), []);
 
@@ -70,13 +81,19 @@ export default function FlipbookViewer({
   }, [isAnimating]);
 
   const goToPage = useCallback((pageIndex) => {
-    bookRef.current?.pageFlip().flip(pageIndex);
-    setSidebarTab(null);
-  }, []);
+    const target = Math.max(0, Math.min(Number(pageIndex) || 0, pages.length - 1));
+    const spreadStart = target > 0 && target % 2 !== 0 ? target - 1 : target;
+    const pageFlip = bookRef.current?.pageFlip();
 
-  const goToSpread = useCallback((spreadIndex) => {
-    goToPage(spreadIndex * 2);
-  }, [goToPage]);
+    if (typeof pageFlip?.turnToPage === 'function') {
+      pageFlip.turnToPage(spreadStart);
+    } else {
+      pageFlip?.flip(spreadStart);
+    }
+
+    setCurrentPage(spreadStart);
+    setSidebarTab(null);
+  }, [pages.length]);
 
   const toggleFullscreen = useCallback(() => {
     if (!document.fullscreenElement) {
@@ -158,7 +175,7 @@ export default function FlipbookViewer({
         .alumni-popup { animation: fadeInUp 0.25s ease both; }
       `}</style>
 
-      <div className="flex w-full justify-center items-start gap-6 px-6 py-5 overflow-x-auto">
+      <div className="flex w-full justify-center items-start gap-6 px-6 pt-5 pb-8 overflow-x-auto">
 
         {sidebarTab && (
           <aside className="w-72 flex-shrink-0 sticky top-5 max-h-[78vh] overflow-y-auto rounded-xl bg-white/5 border border-white/10 backdrop-blur-sm">
@@ -166,7 +183,7 @@ export default function FlipbookViewer({
               <ThumbnailSidebar
                 toc={toc}
                 currentSpread={currentSpread}
-                onNavigate={goToSpread}
+                onNavigate={goToPage}
               />
             )}
             {sidebarTab === 'search' && (
@@ -192,7 +209,7 @@ export default function FlipbookViewer({
             transform:       `scale(${zoom})`,
             transformOrigin: 'top center',
             transition:      'transform 0.3s ease',
-            marginBottom:    zoom > 1 ? `${(zoom - 1) * PAGE_H}px` : 0,
+            marginBottom:    zoom > 1 ? `${(zoom - 1) * PAGE_H + 24}px` : 24,
           }}
         >
           <button
@@ -239,7 +256,7 @@ export default function FlipbookViewer({
             onFlipEnd={handleFlipEnd}
             className="yearbook-flipbook"
           >
-            {pages.map((page, idx) => (
+            {renderedPages.map((page, idx) => (
               <YearbookPageRenderer
                 key={idx}
                 page={page}
@@ -256,32 +273,35 @@ export default function FlipbookViewer({
         </div>
       </div>
 
-      <ControlBar
-        currentPage={currentPage}
-        totalPages={pages.length}
-        currentSpread={currentSpread}
-        totalSpreads={totalSpreads}
-        zoom={zoom}
-        zoomMin={zoomIndex === 0}
-        zoomMax={zoomIndex === ZOOM_STEPS.length - 1}
-        fullscreen={fullscreen}
-        sidebarTab={sidebarTab}
-        isBookmarked={isCurrentBookmarked}
-        batchId={batchId}
-        pdfReady={pdfReady}
-        isPremium={isPremium}
-        onPrev={flipPrev}
-        onNext={flipNext}
-        onZoomIn={zoomIn}
-        onZoomOut={zoomOut}
-        onZoomReset={zoomReset}
-        onToggleFullscreen={toggleFullscreen}
-        onToggleTOC={() => toggleSidebar('toc')}
-        onToggleSearch={() => toggleSidebar('search')}
-        onToggleBookmarks={() => toggleSidebar('bookmarks')}
-        onBookmark={handleBookmarkCurrent}
-        onDownload={() => onDownload?.(currentUser?.id)}
-      />
+      <div className="sticky bottom-0 z-20 flex justify-center bg-[#0a0a14]/92 px-4 py-3 backdrop-blur-md border-t border-white/5">
+        <ControlBar
+          currentPage={currentPage}
+          totalPages={pages.length}
+          currentSpread={currentSpread}
+          totalSpreads={totalSpreads}
+          zoom={zoom}
+          zoomMin={zoomIndex === 0}
+          zoomMax={zoomIndex === ZOOM_STEPS.length - 1}
+          fullscreen={fullscreen}
+          sidebarTab={sidebarTab}
+          isBookmarked={isCurrentBookmarked}
+          batchId={batchId}
+          pdfReady={pdfReady}
+          isPremium={isPremium}
+          yearbookScope={yearbookScope}
+          onPrev={flipPrev}
+          onNext={flipNext}
+          onZoomIn={zoomIn}
+          onZoomOut={zoomOut}
+          onZoomReset={zoomReset}
+          onToggleFullscreen={toggleFullscreen}
+          onToggleTOC={() => toggleSidebar('toc')}
+          onToggleSearch={() => toggleSidebar('search')}
+          onToggleBookmarks={() => toggleSidebar('bookmarks')}
+          onBookmark={handleBookmarkCurrent}
+          onDownload={() => onDownload?.(currentUser?.id)}
+        />
+      </div>
 
       {(alumniLoading || alumniData) && (
         <div

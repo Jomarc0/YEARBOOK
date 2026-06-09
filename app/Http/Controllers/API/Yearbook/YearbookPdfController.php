@@ -16,9 +16,26 @@ use Illuminate\Support\Facades\Storage;
 
 class YearbookPdfController extends Controller
 {
+    private const EXPORT_CACHE_VERSION = 'premium-fit-page-v6';
+
     public function export(Request $request, int $batchId)
     {
+        @set_time_limit(300);
+        @ini_set('max_execution_time', '300');
+        @ini_set('memory_limit', '1024M');
+
         $batch = Batch::findOrFail($batchId);
+        $scope = $this->yearbookScope($request);
+        $batchYear = $batch->year ?? now()->year;
+        $filename = "yearbook-{$batchYear}{$this->yearbookScopeFileSuffix($scope)}.pdf";
+        $cachePath = $this->yearbookExportCachePath($batchId, $batchYear, $scope);
+
+        if (! $request->boolean('refresh') && Storage::exists($cachePath)) {
+            return $this->withCorsHeaders($request, Storage::download($cachePath, $filename, [
+                'Content-Type' => 'application/pdf',
+                'Content-Disposition' => "attachment; filename=\"{$filename}\"",
+            ]));
+        }
 
         $faculties = Faculty::orderBy('name')
             ->get()
@@ -36,7 +53,12 @@ class YearbookPdfController extends Controller
         $facultyChunks = array_chunk($faculties, 4);
 
         $sections = Section::where('batch_id', $batchId)
+            ->when($scope['department'] !== '', fn ($query) => $query->where('department', $scope['department']))
+            ->when($scope['course'] !== '', fn ($query) => $query->where('course', $scope['course']))
             ->with(['students' => fn ($query) => $query->orderBy('last_name')->orderBy('first_name'), 'adviser'])
+            ->orderBy('department')
+            ->orderBy('course')
+            ->orderBy('name')
             ->get()
             ->map(function ($section) {
                 $students = $section->students
@@ -57,9 +79,14 @@ class YearbookPdfController extends Controller
             ->values()
             ->toArray();
 
+        if (empty($sections)) {
+            return $this->withCorsHeaders($request, response()->json([
+                'message' => 'No sections found for the selected yearbook scope.',
+            ], 404));
+        }
+
         $settings = PlatformSettings::all();
         $schoolName = $settings['school_name'] ?? config('app.name', 'National University');
-        $batchYear = $batch->year ?? now()->year;
         $yearbookTitle = $settings['yearbook_name'] ?? 'Sinag-Bughaw Yearbook';
         $classTheme = $settings['graduation_theme'] ?? 'Legacy in Motion';
         $academicYear = $settings['academic_year'] ?? null;
@@ -118,15 +145,23 @@ class YearbookPdfController extends Controller
                 'isRemoteEnabled' => false,
                 'isHtml5ParserEnabled' => true,
                 'defaultFont' => 'DejaVu Serif',
-                'dpi' => 140,
+                'dpi' => 96,
                 'isFontSubsettingEnabled' => true,
             ]);
 
-        $filename = "yearbook-{$batchYear}.pdf";
+        if ($request->query('preview') === '1') {
+            return $this->withCorsHeaders($request, $pdf->stream($filename));
+        }
 
-        return $request->query('preview') === '1'
-            ? $pdf->stream($filename)
-            : $pdf->download($filename);
+        $bytes = $pdf->output();
+        Storage::put($cachePath, $bytes);
+
+        $response = response($bytes, 200, [
+            'Content-Type' => 'application/pdf',
+            'Content-Disposition' => "attachment; filename=\"{$filename}\"",
+        ]);
+
+        return $this->withCorsHeaders($request, $response);
     }
 
     public function mobileExport(Request $request, int $batchId)
@@ -175,6 +210,9 @@ class YearbookPdfController extends Controller
 
         $sections = Section::where('batch_id', $batchId)
             ->with(['students' => fn ($query) => $query->orderBy('last_name')->orderBy('first_name')])
+            ->orderBy('department')
+            ->orderBy('course')
+            ->orderBy('name')
             ->get()
             ->map(function ($section) {
                 return [
@@ -233,6 +271,54 @@ class YearbookPdfController extends Controller
             'most_likely_to' => $student->most_likely_to ?? '',
             'photo' => $this->resolveImageBase64($student->photo ?? null),
         ];
+    }
+
+    private function withCorsHeaders(Request $request, $response)
+    {
+        $origin = $request->headers->get('Origin');
+
+        if ($origin) {
+            $response->headers->set('Access-Control-Allow-Origin', $origin);
+            $response->headers->set('Access-Control-Allow-Credentials', 'true');
+            $response->headers->set('Vary', 'Origin', false);
+        }
+
+        $response->headers->set('Access-Control-Expose-Headers', 'Content-Disposition, Content-Type');
+
+        return $response;
+    }
+
+    private function yearbookScope(Request $request): array
+    {
+        return [
+            'department' => trim((string) $request->query('department', '')),
+            'course' => trim((string) $request->query('course', '')),
+        ];
+    }
+
+    private function yearbookScopeFileSuffix(array $scope): string
+    {
+        $value = $scope['course'] !== '' ? $scope['course'] : $scope['department'];
+
+        if ($value === '') {
+            return '';
+        }
+
+        $slug = strtolower((string) preg_replace('/[^a-zA-Z0-9]+/', '-', $value));
+        $slug = trim($slug, '-');
+
+        return $slug !== '' ? "-{$slug}" : '';
+    }
+
+    private function yearbookExportCachePath(int $batchId, int|string $batchYear, array $scope): string
+    {
+        $scopeKey = sha1(json_encode([
+            'version' => self::EXPORT_CACHE_VERSION,
+            'department' => $scope['department'],
+            'course' => $scope['course'],
+        ]));
+
+        return "yearbooks/exports/{$batchYear}-{$batchId}-{$scopeKey}.pdf";
     }
 
     private function featured($students, string $field, int $limit): array

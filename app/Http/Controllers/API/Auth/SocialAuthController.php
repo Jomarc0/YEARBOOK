@@ -5,6 +5,7 @@ namespace App\Http\Controllers\API\Auth;
 use App\Http\Controllers\Controller;
 use App\Models\Consent;
 use App\Models\User;
+use App\Models\UserPresence;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
@@ -117,6 +118,13 @@ class SocialAuthController extends Controller
         // ── 5. Issue Sanctum token ────────────────────────────────────────────
         $user->tokens()->where('name', 'google-sso')->delete();
         $token = $user->createToken('google-sso')->plainTextToken;
+        UserPresence::updateOrCreate(
+            ['user_id' => $user->id],
+            [
+                'is_online'    => true,
+                'last_seen_at' => now(),
+            ]
+        );
 
         // ── 6. Send token to React via URL param ──────────────────────────────
         $mobileRedirect = session()->pull('google_oauth_redirect_uri');

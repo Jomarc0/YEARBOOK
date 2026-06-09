@@ -16,10 +16,11 @@
 import { useState, useEffect } from 'react';
 import { Link, useSearchParams, useNavigate } from 'react-router-dom';
 import { useBatch } from '@/features/batch/hooks/useBatch';
-import { batchApi, COURSES } from '@/api/batch.api';
+import { batchApi } from '@/api/batch.api';
 import { faceApi } from '@/api/gallery.api';           // FIX: added
 import FaceSearchButton from '@/components/ui/FaceSearchButton'; // FIX: added
 import { imageUrl } from '@/utils/imageUrl';           // FIX: added
+import { recordContentView } from '@/api/analytics.api';
 import Navbar from '@/components/layout/Navbar';
 import Footer from '@/components/layout/Footer';
 
@@ -38,6 +39,48 @@ function faceUserId(match) {
 function studentUserId(student) {
   const id = Number(student?.id ?? student?.user_id ?? student?.account_user_id);
   return Number.isFinite(id) && id > 0 ? id : null;
+}
+
+const COURSE_ALIASES = {
+  'bachelor of science in architecture': ['bs architecture', 'architecture'],
+  'bachelor of multimedia arts': ['bachelor of multimedia arts (bmma)', 'bmma', 'bma', 'multimedia arts'],
+  'bachelor of science in civil engineering': ['bs civil engineering', 'civil engineering'],
+  'bachelor of science in computer science': ['bs computer science', 'bscs', 'computer science'],
+  'bachelor of science in information technology': ['bs information technology', 'bsit', 'information technology'],
+  'bachelor of science in nursing': ['bs nursing', 'bsn', 'nursing'],
+  'bachelor of science in medical technology': ['bs medical technology', 'bsmt', 'medical technology'],
+  'bachelor of science in psychology': ['bs psychology', 'bsp', 'psychology'],
+  'bachelor of science in accountancy': ['bs accountancy', 'bsa', 'accountancy'],
+  'bachelor of science in business administration - financial management': ['bsba financial management', 'bsbafm', 'bsba-fm', 'financial management'],
+  'bachelor of science in business administration - marketing management': ['bsba marketing management', 'bsbamm', 'bsba-mm', 'marketing management'],
+  'bachelor of science in tourism management': ['bs tourism management', 'bbstm', 'bstm', 'tourism management'],
+  'master in management': ['mm'],
+  abm: ['accountancy business and management'],
+  stem: ['science technology engineering mathematics'],
+  humss: ['humanities and social sciences'],
+};
+
+function normalizeText(value) {
+  return String(value ?? '').trim().toLowerCase();
+}
+
+function includesSearch(value, query) {
+  return normalizeText(value).includes(query);
+}
+
+function courseMatches(studentCourse, selectedCourse) {
+  const selected = normalizeText(selectedCourse);
+  if (!selected) return true;
+
+  const course = normalizeText(studentCourse);
+  const selectedAliases = COURSE_ALIASES[selected] ?? [];
+  const courseAliases = COURSE_ALIASES[course] ?? [];
+  const selectedTerms = [selected, ...selectedAliases];
+  const courseTerms = [course, ...courseAliases];
+
+  return selectedTerms.some(term => courseTerms.some(courseTerm =>
+    courseTerm === term || courseTerm.includes(term) || term.includes(courseTerm)
+  ));
 }
 
 function usableFaceMatches(matches = []) {
@@ -93,7 +136,7 @@ async function findYearbookBatchId(year, course = null) {
   return (exactCourse ?? sameYear[0])?.id ?? null;
 }
 
-function GenerateYearbookButton({ year, course }) {
+function GenerateYearbookButton({ year, department, course }) {
   const navigate  = useNavigate();
   const [hov, setHov] = useState(false);
   const [opening, setOpening] = useState(false);
@@ -108,9 +151,15 @@ function GenerateYearbookButton({ year, course }) {
     setOpening(true);
     try {
       const batchId = await findYearbookBatchId(year, course);
-      navigate(batchId ? `/yearbook/${batchId}/view` : `/yearbook?year=${year}`);
+      const params = new URLSearchParams();
+      if (department) params.set('department', department);
+      if (course) params.set('course', course);
+      navigate(batchId ? `/yearbook/${batchId}/view${params.toString() ? `?${params.toString()}` : ''}` : `/yearbook?year=${year}`);
     } catch {
-      navigate(`/yearbook?year=${year}`);
+      const params = new URLSearchParams({ year: String(year) });
+      if (department) params.set('department', department);
+      if (course) params.set('course', course);
+      navigate(`/yearbook?${params.toString()}`);
     } finally {
       setOpening(false);
     }
@@ -144,7 +193,7 @@ function GenerateYearbookButton({ year, course }) {
   );
 }
 
-function YearbookFilterPill({ year, course }) {
+function YearbookFilterPill({ year, department, course }) {
   const navigate  = useNavigate();
   const [hov, setHov] = useState(false);
   const [opening, setOpening] = useState(false);
@@ -154,9 +203,15 @@ function YearbookFilterPill({ year, course }) {
     setOpening(true);
     try {
       const batchId = await findYearbookBatchId(year, course);
-      navigate(batchId ? `/yearbook/${batchId}/view` : `/yearbook?year=${year}`);
+      const params = new URLSearchParams();
+      if (department) params.set('department', department);
+      if (course) params.set('course', course);
+      navigate(batchId ? `/yearbook/${batchId}/view${params.toString() ? `?${params.toString()}` : ''}` : `/yearbook?year=${year}`);
     } catch {
-      navigate(`/yearbook?year=${year}`);
+      const params = new URLSearchParams({ year: String(year) });
+      if (department) params.set('department', department);
+      if (course) params.set('course', course);
+      navigate(`/yearbook?${params.toString()}`);
     } finally {
       setOpening(false);
     }
@@ -208,7 +263,7 @@ function FaceResultBanner({ matches, onClear }) {
           ))}
         </div>
         <span className="text-[0.8rem] font-bold text-amber-700">
-          <i className="fas fa-brain mr-1 text-amber-400" />
+          <i className="fas fa-camera mr-1 text-amber-400" />
           {matches.length} face match{matches.length > 1 ? 'es' : ''} — showing matched batchmates only
         </span>
       </div>
@@ -224,13 +279,19 @@ function FaceResultBanner({ matches, onClear }) {
 
 export default function BatchmatesPage() {
   const [searchParams, setSearchParams] = useSearchParams();
+  const cleanParam = (value) => {
+    if (!value) return null;
+    const normalized = String(value).trim();
+    return ['null', 'undefined', ''].includes(normalized.toLowerCase()) ? null : normalized;
+  };
   const {
     user, batchmates, loading, error,
     isPremium, filterMeta, fetchBatchmates,
   } = useBatch();
 
   const [search,       setSearch]       = useState('');
-  const [courseFilter, setCourseFilter] = useState(searchParams.get('course') || null);
+  const [courseFilter, setCourseFilter] = useState(cleanParam(searchParams.get('course')));
+  const [departmentFilter, setDepartmentFilter] = useState(cleanParam(searchParams.get('department')));
   const [yearFilter,   setYearFilter]   = useState(
     searchParams.get('year') ? Number(searchParams.get('year')) : null
   );
@@ -239,17 +300,35 @@ export default function BatchmatesPage() {
   const [faceSearching, setFaceSearching] = useState(false);
   const [faceMatches,   setFaceMatches]   = useState([]);
   const [matchedIds,    setMatchedIds]    = useState(new Set());
+  const activeYear = yearFilter ?? filterMeta.year ?? user?.graduation_year ?? null;
+  const activeCourse = courseFilter ?? filterMeta.course ?? null;
+  const activeCourseLabel = activeCourse
+    ? activeCourse.split(' ').slice(-2).join(' ')
+    : 'All Programs';
 
   useEffect(() => {
     const params = {};
+    if (departmentFilter) params.department = departmentFilter;
     if (courseFilter) params.course = courseFilter;
     if (yearFilter)   params.year   = yearFilter;
     fetchBatchmates(params);
     const next = {};
+    if (departmentFilter) next.department = departmentFilter;
     if (courseFilter) next.course = courseFilter;
     if (yearFilter)   next.year   = yearFilter;
     setSearchParams(next, { replace: true });
-  }, [courseFilter, yearFilter]);
+  }, [departmentFilter, courseFilter, yearFilter]);
+
+  useEffect(() => {
+    if (!activeYear) return;
+    recordContentView({
+      content_type: 'batch',
+      content_id: Number(activeYear),
+      title: `Batch ${activeYear}`,
+      category: activeCourse || 'All Programs',
+      url: `/batchmates?year=${activeYear}`,
+    }).catch(() => {});
+  }, [activeYear, activeCourse]);
 
   // FIX: handle face file upload
   const handleFaceFile = async (file) => {
@@ -280,18 +359,46 @@ export default function BatchmatesPage() {
     setMatchedIds(new Set());
   };
 
-  // Apply both text and face filters
-  const filtered = batchmates.filter(s => {
-    const textMatch = !search ||
-      s.name?.toLowerCase().includes(search.toLowerCase()) ||
-      s.student_id?.includes(search);
+  const searchQuery = normalizeText(search);
 
-    if (matchedIds.size > 0) return matchedIds.has(studentUserId(s)) && textMatch;
-    return textMatch;
+  // Apply text, face, and course filters against the full batch hierarchy.
+  const filtered = batchmates.filter(s => {
+    const studentSection = s.section?.name || s.section_name;
+    const studentDepartment = s.batch?.department || s.department;
+    const studentBatch = s.batch?.name || s.batch_year || s.graduation_year || filterMeta.year;
+    const textMatch = !searchQuery || [
+      s.name,
+      s.student_id,
+      s.student_no,
+      s.course,
+      studentSection,
+      studentDepartment,
+      studentBatch,
+    ].some(value => includesSearch(value, searchQuery));
+    const selectedCourse = courseFilter || null;
+    const selectedCourseMatch = !selectedCourse || courseMatches(s.course, selectedCourse);
+    const selectedDepartmentMatch = !departmentFilter || normalizeText(studentDepartment) === normalizeText(departmentFilter);
+
+    if (matchedIds.size > 0) {
+      return matchedIds.has(studentUserId(s)) && textMatch && selectedCourseMatch && selectedDepartmentMatch;
+    }
+    return textMatch && selectedCourseMatch && selectedDepartmentMatch;
   });
 
-  const activeYear = yearFilter ?? filterMeta.year ?? user?.graduation_year ?? null;
-  const activeCourse = courseFilter ?? filterMeta.course ?? user?.course ?? null;
+  const groupedBatchmates = filtered.reduce((groups, student) => {
+    const department = student.batch?.department || student.department || 'Department';
+    const course = student.course || 'Course';
+    const section = student.section?.name || student.section_name || 'No Section';
+
+    groups[department] ??= {};
+    groups[department][course] ??= {};
+    groups[department][course][section] ??= [];
+    groups[department][course][section].push(student);
+
+    return groups;
+  }, {});
+  const departmentOptions = Object.keys(groupedBatchmates);
+  const coursesForDepartment = (department) => Object.keys(groupedBatchmates[department] ?? {});
 
   return (
     <div className="min-h-screen flex flex-col"
@@ -326,9 +433,7 @@ export default function BatchmatesPage() {
         <p className="font-light mx-auto opacity-80"
           style={{ fontSize: '1rem', maxWidth: '550px' }}>
           Connect with fellow Pioneers ·{' '}
-          {filterMeta.course
-            ? filterMeta.course.split(' ').slice(-2).join(' ')
-            : user?.course?.split(' ').slice(-2).join(' ')}
+          {activeCourseLabel}
           &nbsp;· Batch {filterMeta.year ?? yearFilter ?? user?.graduation_year ?? CURRENT_YEAR}
         </p>
 
@@ -345,7 +450,7 @@ export default function BatchmatesPage() {
               <i className="fas fa-crown" /> Premium · Viewing All Profiles
             </span>
           )}
-          <GenerateYearbookButton year={activeYear} course={activeCourse} />
+          <GenerateYearbookButton year={activeYear} department={departmentFilter} course={activeCourse} />
         </div>
       </header>
 
@@ -384,23 +489,39 @@ export default function BatchmatesPage() {
           <FaceSearchButton onFile={handleFaceFile} loading={faceSearching} />
         </div>
 
-        {/* Course pills */}
-        <div className="flex flex-wrap gap-2 items-center">
-          {COURSES.slice(0, 6).map(c => (
-            <CourseChip key={c.label} label={c.label}
-              active={courseFilter === c.value}
-              onClick={() => { setCourseFilter(c.value); clearFace(); }} />
-          ))}
-          <select
-            value={courseFilter ?? ''}
-            onChange={e => { setCourseFilter(e.target.value || null); clearFace(); }}
-            className="font-bold text-xs px-3 py-2 rounded-xl border-none outline-none"
-            style={{ background: '#f1f5f9', color: '#64748b', cursor: 'pointer' }}>
-            <option value="">More ▾</option>
-            {COURSES.slice(6).map(c => (
-              <option key={String(c.value)} value={c.value ?? ''}>{c.label}</option>
+        <div className="flex flex-col gap-2">
+          <div className="flex flex-wrap gap-2 items-center">
+            <CourseChip
+              label="All Departments"
+              active={!departmentFilter}
+              onClick={() => { setDepartmentFilter(null); setCourseFilter(null); clearFace(); }}
+            />
+            {departmentOptions.map(dept => (
+              <CourseChip
+                key={dept}
+                label={dept}
+                active={departmentFilter === dept}
+                onClick={() => { setDepartmentFilter(dept); setCourseFilter(null); clearFace(); }}
+              />
             ))}
-          </select>
+          </div>
+          {departmentFilter && coursesForDepartment(departmentFilter).length > 0 && (
+            <div className="flex flex-wrap gap-2 items-center">
+              <CourseChip
+                label="All Courses"
+                active={!courseFilter}
+                onClick={() => { setCourseFilter(null); clearFace(); }}
+              />
+              {coursesForDepartment(departmentFilter).map(course => (
+                <CourseChip
+                  key={course}
+                  label={course}
+                  active={courseFilter === course}
+                  onClick={() => { setCourseFilter(course); clearFace(); }}
+                />
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Year + Yearbook pill */}
@@ -415,7 +536,7 @@ export default function BatchmatesPage() {
               <option key={y} value={y}>Batch {y}</option>
             ))}
           </select>
-          <YearbookFilterPill year={yearFilter} course={activeCourse} />
+          <YearbookFilterPill year={yearFilter} department={departmentFilter} course={activeCourse} />
         </div>
       </div>
 
@@ -430,10 +551,7 @@ export default function BatchmatesPage() {
               boxShadow:    '0 10px 25px rgba(0,0,0,0.08)',
               color:        '#475569',
             }}>
-            {matchedIds.size > 0
-              ? <><i className="fas fa-brain" style={{ color: '#fdb813' }} />{filtered.length} face match{filtered.length !== 1 ? 'es' : ''}</>
-              : <><i className="fas fa-graduation-cap" style={{ color: '#fdb813' }} />{filtered.length} batchmate{filtered.length !== 1 ? 's' : ''} found</>
-            }
+            <><i className="fas fa-graduation-cap" style={{ color: '#fdb813' }} />{filtered.length} batchmate{filtered.length !== 1 ? 's' : ''} found</>
             {!isPremium && (
               <span style={{ color: '#94a3b8', fontSize: '0.75rem' }}>
                 &nbsp;· Public profiles only
@@ -446,7 +564,6 @@ export default function BatchmatesPage() {
       {/* FIX: Face result banner */}
       {faceMatches.length > 0 && (
         <div style={{ marginTop: 12 }}>
-          <FaceResultBanner matches={faceMatches} onClear={clearFace} />
         </div>
       )}
 
@@ -503,106 +620,85 @@ export default function BatchmatesPage() {
           </div>
 
         ) : (
-          <div style={{
-            display:             'grid',
-            gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))',
-            gap:                 '28px',
-          }}>
-            {filtered.map((student, i) => {
-              // FIX: highlight matched cards
-              const userId = studentUserId(student);
-              const matchData  = faceMatches.find(m => m.user_id === userId);
-              const isMatched  = matchedIds.has(userId);
+          <div className="space-y-10">
+            {Object.entries(groupedBatchmates).map(([department, courses]) => (
+              <section key={department} className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+                <div className="mb-5 flex flex-wrap items-center gap-3">
+                  <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#1d2b4b] text-[#fdb813]">
+                    <i className="fas fa-building-columns" />
+                  </div>
+                  <div>
+                    <h2 className="m-0 text-xl font-extrabold text-[#1d2b4b]">{department}</h2>
+                    <p className="m-0 text-xs font-bold text-slate-400">
+                      {Object.values(courses).flatMap(sectionMap => Object.values(sectionMap).flat()).length} students
+                    </p>
+                  </div>
+                </div>
 
-              return (
-                <Link
-                  key={student.id}
-                  to={`/profile/${student.id}`}
-                  className="batch-card bg-white no-underline block overflow-hidden transition-all relative"
-                  style={{
-                    borderRadius:   '25px',
-                    border:         isMatched ? '2.5px solid #fdb813' : '1px solid rgba(0,0,0,0.04)',
-                    boxShadow:      isMatched
-                      ? '0 8px 32px rgba(253,184,19,0.2), 0 4px 12px rgba(0,0,0,0.04)'
-                      : '0 8px 24px rgba(0,0,0,0.04)',
-                    animationDelay: `${i * 0.04}s`,
-                  }}>
+                <div className="space-y-6">
+                  {Object.entries(courses).map(([course, sections]) => (
+                    <div key={course} className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
+                      <h3 className="m-0 mb-4 text-base font-extrabold text-[#3f51b5]">
+                        <i className="fas fa-graduation-cap mr-2 text-[#fdb813]" />{course}
+                      </h3>
 
-                  {/* FIX: face match badge */}
-                  {isMatched && matchData && (
-                    <div className="absolute top-3 left-3 z-10 flex items-center gap-1.5
-                                    bg-[#fdb813] text-[#1d2b4b] font-black text-[10px]
-                                    px-2.5 py-1.5 rounded-xl shadow">
-                      <i className="fas fa-brain text-[9px]" />
-                      {matchData.similarity != null ? `${Number(matchData.similarity).toFixed(0)}%` : 'Match'}
-                    </div>
-                  )}
+                      <div className="space-y-4">
+                        {Object.entries(sections).map(([section, students]) => (
+                          <div key={section} className="rounded-2xl bg-white p-4 ring-1 ring-slate-100">
+                            <div className="mb-3 flex items-center justify-between gap-3">
+                              <h4 className="m-0 text-sm font-black text-[#1d2b4b]">
+                                <i className="fas fa-layer-group mr-2 text-[#fdb813]" />Section {section}
+                              </h4>
+                              <span className="rounded-full bg-indigo-50 px-3 py-1 text-[11px] font-black text-[#3f51b5]">
+                                {students.length} student{students.length !== 1 ? 's' : ''}
+                              </span>
+                            </div>
 
-                  <div style={{ height: '220px', overflow: 'hidden', background: '#1d2b4b' }}>
-                    {student.profile_picture ? (
-                      <img
-                        src={imageUrl(student.profile_picture)}
-                        alt={student.name}
-                        className="w-full h-full object-cover transition-transform duration-700 hover:scale-105"
-                        style={{ filter: 'brightness(0.9)' }}
-                      />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center"
-                        style={{ fontSize: '3.5rem', fontWeight: 900, color: '#fdb813' }}>
-                        {getInitials(student.name)}
+                            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                              {students.map(student => {
+                                const userId = studentUserId(student);
+                                const matchData = faceMatches.find(m => m.user_id === userId);
+                                const isMatched = matchedIds.has(userId);
+
+                                return (
+                                  <Link key={student.id} to={`/profile/${student.id}`}
+                                    className="relative flex items-center gap-3 rounded-2xl border bg-white p-3 no-underline transition hover:-translate-y-0.5 hover:shadow-md"
+                                    style={{ borderColor: isMatched ? '#fdb813' : '#e2e8f0' }}>
+                                    <div className="h-14 w-14 shrink-0 overflow-hidden rounded-xl bg-[#1d2b4b]">
+                                      {student.profile_picture ? (
+                                        <img src={imageUrl(student.profile_picture)} alt={student.name} className="h-full w-full object-cover" />
+                                      ) : (
+                                        <div className="flex h-full w-full items-center justify-center text-lg font-black text-[#fdb813]">
+                                          {getInitials(student.name)}
+                                        </div>
+                                      )}
+                                    </div>
+                                    <div className="min-w-0 flex-1">
+                                      <h5 className="m-0 truncate text-sm font-extrabold text-[#1d2b4b]">{student.name}</h5>
+                                      <p className="m-0 mt-1 truncate text-xs font-bold text-slate-400">
+                                        Batch {student.graduation_year ?? activeYear}
+                                      </p>
+                                      {student.student_id && (
+                                        <p className="m-0 mt-1 text-[11px] text-slate-400">{student.student_id}</p>
+                                      )}
+                                    </div>
+                                    {isMatched && (
+                                      <span className="absolute right-2 top-2 rounded-full bg-[#fdb813] px-2 py-0.5 text-[10px] font-black text-[#1d2b4b]">
+                                        {matchData?.similarity != null ? `${Number(matchData.similarity).toFixed(0)}%` : 'Match'}
+                                      </span>
+                                    )}
+                                  </Link>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        ))}
                       </div>
-                    )}
-                  </div>
-
-                  <div className="text-center" style={{ padding: '22px 18px 18px' }}>
-                    <h4 className="font-extrabold capitalize mb-2"
-                      style={{ fontSize: '1.05rem', color: '#1d2b4b', lineHeight: 1.25 }}>
-                      {student.name}
-                    </h4>
-                    <span className="inline-block font-extrabold text-xs uppercase tracking-wider mb-3"
-                      style={{
-                        background:   'rgba(63,81,181,0.07)',
-                        color:        '#3f51b5',
-                        padding:      '5px 14px',
-                        borderRadius: '10px',
-                      }}>
-                      {student.course
-                        ?.split(' ')
-                        .filter(w => w[0] === w[0]?.toUpperCase() && w.length > 2)
-                        .slice(0, 2)
-                        .join(' ') || 'Student'}
-                    </span>
-                    {student.student_id && (
-                      <p className="text-xs" style={{ color: '#94a3b8' }}>{student.student_id}</p>
-                    )}
-                    {isPremium && student.section?.name && (
-                      <p className="text-xs font-semibold mt-1" style={{ color: '#3f51b5' }}>
-                        Section {student.section.name}
-                      </p>
-                    )}
-                    {isPremium && student.motto && (
-                      <p className="text-xs italic mt-2" style={{ color: '#64748b' }}>
-                        "{student.motto}"
-                      </p>
-                    )}
-                  </div>
-
-                  {!isPremium && (
-                    <div className="absolute bottom-0 left-0 right-0 flex items-center justify-center gap-2 py-2"
-                      style={{
-                        backdropFilter: 'blur(4px)',
-                        background:     'rgba(255,255,255,0.6)',
-                        borderTop:      '1px solid #f1f5f9',
-                      }}>
-                      <i className="fas fa-lock text-xs" style={{ color: '#cbd5e1' }} />
-                      <span className="text-xs font-semibold" style={{ color: '#94a3b8' }}>
-                        Limited view
-                      </span>
                     </div>
-                  )}
-                </Link>
-              );
-            })}
+                  ))}
+                </div>
+              </section>
+            ))}
           </div>
         )}
       </main>

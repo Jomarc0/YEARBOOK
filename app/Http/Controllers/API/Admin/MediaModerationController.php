@@ -13,6 +13,7 @@ use App\Models\VoiceNote;
 use App\Models\TaggedPhoto;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Carbon\Carbon;
@@ -74,6 +75,8 @@ class MediaModerationController extends Controller
                 'caption'          => $p->caption,
                 'visibility'       => $p->visibility ?? 'public',
                 'status'           => $p->status,
+                'file_type'        => $this->mediaItemType($p),
+                'resource_type'    => $this->mediaItemType($p),
                 'ai_metadata'      => $p->ai_metadata,
                 'created_at'       => $p->created_at,
                 'created_at_human' => $p->created_at
@@ -117,13 +120,19 @@ class MediaModerationController extends Controller
             'photo'    => Album::whereNotNull('user_id')
                             ->where('type', 'general')
                             ->whereHas('galleries', fn ($q) => $q->where('status', 'pending')
-                                ->whereNotNull('user_id'))
+                                ->whereNotNull('user_id')
+                                ->whereHas('media', fn ($m) => $m->where('resource_type', 'image')))
                             ->count(),
 
             'video'    => PostMedia::where('resource_type', 'video')
                             ->where('status', 'pending')
                             ->whereNotNull('photo_id')
-                            ->count(),
+                            ->count()
+                            + Gallery::where('status', 'pending')
+                                ->whereNotNull('user_id')
+                                ->whereHas('album', fn ($q) => $q->where('type', 'general'))
+                                ->whereHas('media', fn ($q) => $q->where('resource_type', 'video'))
+                                ->count(),
 
             'voice'    => VoiceNote::where('status', 'pending')->count(),
 
@@ -143,23 +152,32 @@ class MediaModerationController extends Controller
         $type   = $request->get('type',   'photo');
         $status = $request->get('status', 'pending');
 
-        return $type === 'photo'
-            ? $this->albumQueue($request, $status)
-            : $this->genericQueue($request, $type, $status);
+        if ($type === 'photo') {
+            return $this->albumQueue($request, $status);
+        }
+
+        if ($type === 'video') {
+            return $this->galleryVideoQueue($request, $status);
+        }
+
+        return $this->genericQueue($request, $type, $status);
     }
 
     private function albumQueue(Request $request, string $status): JsonResponse
     {
         $albums = Album::with([
             'user:id,first_name,last_name,profile_picture',
-            'galleries' => fn ($q) => $q->with('media')
+                'galleries' => fn ($q) => $q->with('media')
                                          ->where('status', $status)
                                          ->whereNotNull('user_id')
+                                         ->whereHas('media', fn ($m) => $m->where('resource_type', 'image'))
                                          ->orderBy('created_at', 'desc'),
         ])
         ->whereNotNull('user_id')
         ->where('type', 'general')
-        ->whereHas('galleries', fn ($q) => $q->where('status', $status)->whereNotNull('user_id'))
+        ->whereHas('galleries', fn ($q) => $q->where('status', $status)
+            ->whereNotNull('user_id')
+            ->whereHas('media', fn ($m) => $m->where('resource_type', 'image')))
         ->orderByDesc('updated_at')
         ->paginate($request->get('per_page', 12));
 
@@ -169,6 +187,8 @@ class MediaModerationController extends Controller
                 'url'              => $this->mediaItemUrl($p),
                 'caption'          => $p->caption,
                 'status'           => $p->status ?? 'pending',
+                'file_type'        => $this->mediaItemType($p),
+                'resource_type'    => $this->mediaItemType($p),
                 'rejection_reason' => $p->rejection_reason,
                 'ai_metadata'      => $p->ai_metadata,
                 'created_at'       => $p->created_at,
@@ -198,6 +218,128 @@ class MediaModerationController extends Controller
         });
 
         return response()->json($albums);
+    }
+
+    private function galleryVideoQueue(Request $request, string $status): JsonResponse
+    {
+        $galleryItems = Gallery::query()
+            ->with([
+                'user:id,first_name,last_name',
+                'album:id,title',
+                'media' => fn ($q) => $q->where('resource_type', 'video')->orderBy('sort_order'),
+            ])
+            ->where('status', $status)
+            ->whereNotNull('user_id')
+            ->whereHas('album', fn ($q) => $q->where('type', 'general'))
+            ->whereHas('media', fn ($q) => $q->where('resource_type', 'video'))
+            ->orderByDesc('created_at')
+            ->get()
+            ->map(function (Gallery $item) {
+                $media = $item->media->first();
+                $uploader = $item->user
+                    ? "{$item->user->first_name} {$item->user->last_name}"
+                    : 'Unknown';
+
+                return [
+                    'id'               => $item->id,
+                    'source'           => 'gallery',
+                    'url'              => $this->resolveUrl($media?->file_path),
+                    'filename'         => $item->caption ?: ($item->album?->title ?? 'Gallery video'),
+                    'title'            => $item->caption ?: ($item->album?->title ?? 'Gallery video'),
+                    'caption'          => $item->caption,
+                    'status'           => $item->status ?? 'pending',
+                    'file_size'        => $media?->bytes,
+                    'file_type'        => 'video',
+                    'resource_type'    => 'video',
+                    'rejection_reason' => $item->rejection_reason,
+                    'uploader'         => $uploader,
+                    'created_at'       => $item->created_at,
+                    'created_at_human' => $item->created_at
+                        ? Carbon::parse($item->created_at)->diffForHumans() : null,
+                    'album_id'         => $item->album_id,
+                    'album_title'      => $item->album?->title,
+                    'bytes'            => $media?->bytes,
+                    'width'            => $media?->width,
+                    'height'           => $media?->height,
+                    'is_reported'      => false,
+                ];
+            });
+
+        $postItems = PostMedia::query()
+            ->with('photo.user:id,first_name,last_name')
+            ->where('resource_type', 'video')
+            ->where('status', $status)
+            ->whereNotNull('photo_id')
+            ->orderByDesc('created_at')
+            ->get()
+            ->map(function (PostMedia $item) {
+                $uploader = optional(optional($item->photo)->user)->first_name
+                    ? "{$item->photo->user->first_name} {$item->photo->user->last_name}"
+                    : 'Unknown';
+
+                return [
+                    'id'               => $item->id,
+                    'source'           => 'post',
+                    'url'              => $this->resolveUrl($item->file_path ?? null),
+                    'filename'         => $item->resource_type ?? 'Video',
+                    'title'            => $item->resource_type ?? 'Video',
+                    'status'           => $item->status ?? 'pending',
+                    'file_size'        => $item->file_size ?? null,
+                    'file_type'        => 'video',
+                    'resource_type'    => 'video',
+                    'rejection_reason' => $item->rejection_reason ?? null,
+                    'uploader'         => $uploader,
+                    'created_at'       => $item->created_at,
+                    'created_at_human' => $item->created_at
+                        ? Carbon::parse($item->created_at)->diffForHumans() : null,
+                    'bytes'            => $item->bytes ?? null,
+                    'width'            => $item->width ?? null,
+                    'height'           => $item->height ?? null,
+                    'is_reported'      => $item->is_reported ?? false,
+                ];
+            });
+
+        $merged = $galleryItems
+            ->concat($postItems)
+            ->sortByDesc(fn ($item) => optional($item['created_at'])->timestamp ?? 0)
+            ->values();
+
+        $perPage = (int) $request->get('per_page', 18);
+        $page = LengthAwarePaginator::resolveCurrentPage();
+        $items = new LengthAwarePaginator(
+            $merged->forPage($page, $perPage)->values(),
+            $merged->count(),
+            $perPage,
+            $page,
+            ['path' => $request->url(), 'query' => $request->query()]
+        );
+
+        $items->getCollection()->transform(function ($item) {
+            return [
+                'id'               => $item['id'],
+                'source'           => $item['source'],
+                'url'              => $item['url'],
+                'filename'         => $item['filename'],
+                'title'            => $item['title'],
+                'caption'          => $item['caption'] ?? null,
+                'status'           => $item['status'],
+                'file_size'        => $item['file_size'],
+                'file_type'        => $item['file_type'],
+                'resource_type'    => $item['resource_type'],
+                'rejection_reason' => $item['rejection_reason'],
+                'uploader'         => $item['uploader'],
+                'created_at'       => $item['created_at'],
+                'created_at_human' => $item['created_at_human'],
+                'album_id'         => $item['album_id'] ?? null,
+                'album_title'      => $item['album_title'] ?? null,
+                'bytes'            => $item['bytes'],
+                'width'            => $item['width'],
+                'height'           => $item['height'],
+                'is_reported'      => $item['is_reported'],
+            ];
+        });
+
+        return response()->json($items);
     }
 
     private function genericQueue(Request $request, string $type, string $status): JsonResponse
@@ -277,6 +419,7 @@ class MediaModerationController extends Controller
                 'user:id,first_name,last_name,profile_picture',
                 'photos' => fn ($q) => $q->with('media')
                                          ->whereNotNull('user_id')
+                                         ->whereHas('media', fn ($m) => $m->where('resource_type', 'image'))
                                          ->orderBy('created_at', 'desc'),
             ])
             ->whereNotNull('user_id')
@@ -288,6 +431,8 @@ class MediaModerationController extends Controller
                 'url'              => $this->mediaItemUrl($p),
                 'caption'          => $p->caption,
                 'status'           => $p->status ?? 'pending',
+                'file_type'        => $this->mediaItemType($p),
+                'resource_type'    => $this->mediaItemType($p),
                 'rejection_reason' => $p->rejection_reason,
                 'ai_metadata'      => $p->ai_metadata,
                 'created_at'       => $p->created_at,
@@ -407,12 +552,16 @@ class MediaModerationController extends Controller
         try {
             Gallery::where('album_id', $albumId)
                 ->where('status', 'pending')
+                ->whereHas('media', fn ($m) => $m->where('resource_type', 'image'))
                 ->update(array_merge($update, [
                     'approved_at' => now(),
                     'approved_by' => auth('sanctum')->id(),
                 ]));
         } catch (\Exception) {
-            Gallery::where('album_id', $albumId)->where('status', 'pending')->update($update);
+            Gallery::where('album_id', $albumId)
+                ->where('status', 'pending')
+                ->whereHas('media', fn ($m) => $m->where('resource_type', 'image'))
+                ->update($update);
         }
 
         $this->log('album', $albumId, 'approved');
@@ -431,12 +580,16 @@ class MediaModerationController extends Controller
         try {
             Gallery::where('album_id', $albumId)
                 ->where('status', 'pending')
+                ->whereHas('media', fn ($m) => $m->where('resource_type', 'image'))
                 ->update(array_merge($update, [
                     'rejected_at' => now(),
                     'rejected_by' => auth('sanctum')->id(),
                 ]));
         } catch (\Exception) {
-            Gallery::where('album_id', $albumId)->where('status', 'pending')->update($update);
+            Gallery::where('album_id', $albumId)
+                ->where('status', 'pending')
+                ->whereHas('media', fn ($m) => $m->where('resource_type', 'image'))
+                ->update($update);
         }
 
         $this->log('album', $albumId, 'rejected', $request->reason);
@@ -479,9 +632,13 @@ class MediaModerationController extends Controller
             }
 
             try {
-                Gallery::where('album_id', $album->id)->update($photoUpdate);
+                Gallery::where('album_id', $album->id)
+                    ->whereHas('media', fn ($m) => $m->where('resource_type', 'image'))
+                    ->update($photoUpdate);
             } catch (\Exception) {
-                Gallery::where('album_id', $album->id)->update([
+                Gallery::where('album_id', $album->id)
+                    ->whereHas('media', fn ($m) => $m->where('resource_type', 'image'))
+                    ->update([
                     'status'           => $photoUpdate['status'],
                     'rejection_reason' => $photoUpdate['rejection_reason'],
                 ]);
@@ -593,8 +750,12 @@ class MediaModerationController extends Controller
     // MODERATION — Generic item approve / reject / revert
     // =========================================================================
 
-    public function approveItem(string $type, int $id): JsonResponse
+    public function approveItem(Request $request, string $type, int $id): JsonResponse
     {
+        if ($type === 'video' && $request->input('source') === 'gallery') {
+            return $this->approveGalleryVideo($id);
+        }
+
         $config = $this->resolveType($type);
         $item   = $config['model']::findOrFail($id);
 
@@ -620,6 +781,10 @@ class MediaModerationController extends Controller
     public function rejectItem(Request $request, string $type, int $id): JsonResponse
     {
         $request->validate(['reason' => 'required|string|max:255']);
+
+        if ($type === 'video' && $request->input('source') === 'gallery') {
+            return $this->rejectGalleryVideo($request, $id);
+        }
 
         $config = $this->resolveType($type);
         $item   = $config['model']::findOrFail($id);
@@ -649,6 +814,10 @@ class MediaModerationController extends Controller
             'status' => 'required|in:pending,approved,rejected',
             'note'   => 'nullable|string|max:500',
         ]);
+
+        if ($type === 'video' && $request->input('source') === 'gallery') {
+            return $this->revertGalleryVideo($request, $id);
+        }
 
         $config     = $this->resolveType($type);
         $item       = $config['model']::findOrFail($id);
@@ -691,6 +860,72 @@ class MediaModerationController extends Controller
     // MODERATION — Bulk approve / reject
     // =========================================================================
 
+    private function approveGalleryVideo(int $id): JsonResponse
+    {
+        $item = Gallery::whereHas('media', fn ($q) => $q->where('resource_type', 'video'))->findOrFail($id);
+
+        $item->update([
+            'status'           => 'approved',
+            'rejection_reason' => null,
+            'approved_at'      => now(),
+            'approved_by'      => auth('sanctum')->id(),
+            'rejected_at'      => null,
+        ]);
+
+        $this->log('video', $id, 'approved');
+
+        return response()->json(['message' => "Video #{$id} approved."]);
+    }
+
+    private function rejectGalleryVideo(Request $request, int $id): JsonResponse
+    {
+        $item = Gallery::whereHas('media', fn ($q) => $q->where('resource_type', 'video'))->findOrFail($id);
+
+        $item->update([
+            'status'           => 'rejected',
+            'rejection_reason' => $request->reason,
+            'rejected_at'      => now(),
+            'rejected_by'      => auth('sanctum')->id(),
+            'approved_at'      => null,
+        ]);
+
+        $this->log('video', $id, 'rejected', $request->reason);
+
+        return response()->json(['message' => "Video #{$id} rejected."]);
+    }
+
+    private function revertGalleryVideo(Request $request, int $id): JsonResponse
+    {
+        $item = Gallery::whereHas('media', fn ($q) => $q->where('resource_type', 'video'))->findOrFail($id);
+        $fromStatus = $item->status;
+        $toStatus = $request->status;
+
+        if ($fromStatus === $toStatus) {
+            return response()->json(['message' => "Status is already {$toStatus}."], 422);
+        }
+
+        $update = [
+            'status'           => $toStatus,
+            'rejection_reason' => $toStatus === 'rejected'
+                ? ($request->note ?? 'Reverted by admin') : null,
+        ];
+
+        match ($toStatus) {
+            'approved' => $update += ['approved_at' => now(), 'approved_by' => auth('sanctum')->id(), 'rejected_at' => null],
+            'rejected' => $update += ['rejected_at' => now(), 'rejected_by' => auth('sanctum')->id(), 'approved_at' => null],
+            'pending'  => $update += ['approved_at' => null, 'rejected_at' => null],
+        };
+
+        $item->update($update);
+        $this->logRevert('video', $id, $fromStatus, $toStatus, $request->note);
+
+        return response()->json([
+            'message'     => "Status reverted from {$fromStatus} to {$toStatus}.",
+            'from_status' => $fromStatus,
+            'to_status'   => $toStatus,
+        ]);
+    }
+
     public function bulkApprove(Request $request): JsonResponse
     {
         $request->validate([
@@ -703,6 +938,7 @@ class MediaModerationController extends Controller
             Gallery::whereIn('album_id', $request->ids)
                 ->where('status', 'pending')
                 ->whereNotNull('user_id')
+                ->whereHas('media', fn ($m) => $m->where('resource_type', 'image'))
                 ->update([
                     'status'           => 'approved',
                     'rejection_reason' => null,
@@ -711,6 +947,22 @@ class MediaModerationController extends Controller
                 ]);
 
             return response()->json(['message' => count($request->ids) . ' albums approved.']);
+        }
+
+        if ($request->type === 'video') {
+            $updated = Gallery::whereIn('id', $request->ids)
+                ->where('status', 'pending')
+                ->whereHas('media', fn ($m) => $m->where('resource_type', 'video'))
+                ->update([
+                    'status'           => 'approved',
+                    'rejection_reason' => null,
+                    'approved_at'      => now(),
+                    'approved_by'      => auth('sanctum')->id(),
+                ]);
+
+            if ($updated > 0) {
+                return response()->json(['message' => $updated . ' videos approved.']);
+            }
         }
 
         $config = $this->resolveType($request->type);
@@ -748,6 +1000,7 @@ class MediaModerationController extends Controller
             Gallery::whereIn('album_id', $request->ids)
                 ->where('status', 'pending')
                 ->whereNotNull('user_id')
+                ->whereHas('media', fn ($m) => $m->where('resource_type', 'image'))
                 ->update([
                     'status'           => 'rejected',
                     'rejection_reason' => $request->reason,
@@ -756,6 +1009,22 @@ class MediaModerationController extends Controller
                 ]);
 
             return response()->json(['message' => count($request->ids) . ' albums rejected.']);
+        }
+
+        if ($request->type === 'video') {
+            $updated = Gallery::whereIn('id', $request->ids)
+                ->where('status', 'pending')
+                ->whereHas('media', fn ($m) => $m->where('resource_type', 'video'))
+                ->update([
+                    'status'           => 'rejected',
+                    'rejection_reason' => $request->reason,
+                    'rejected_at'      => now(),
+                    'rejected_by'      => auth('sanctum')->id(),
+                ]);
+
+            if ($updated > 0) {
+                return response()->json(['message' => $updated . ' videos rejected.']);
+            }
         }
 
         $config = $this->resolveType($request->type);
@@ -864,7 +1133,15 @@ class MediaModerationController extends Controller
     public function mediaAlbums(Request $request): JsonResponse
     {
         $query = Album::query()
-            ->with('user:id,first_name,last_name')
+            ->with([
+                'user:id,first_name,last_name',
+                'galleries' => fn ($q) => $q
+                    ->whereHas('media', fn ($mq) => $mq->where('resource_type', 'image'))
+                    ->with(['media' => fn ($mq) => $mq
+                        ->where('resource_type', 'image')
+                        ->orderBy('sort_order')])
+                    ->orderBy('sort_order'),
+            ])
             ->withCount(['galleries as photos_count' => fn ($q) => $q
                 ->whereHas('media', fn ($mq) => $mq->where('resource_type', 'image'))])
             ->whereNotNull('user_id')
@@ -877,19 +1154,30 @@ class MediaModerationController extends Controller
 
         $items = $query->paginate($request->get('per_page', 18));
 
-        $items->getCollection()->transform(fn ($album) => [
-            'id'               => $album->id,
-            'title'            => $album->title,
-            'description'      => $album->description,
-            'type'             => $album->type,
-            'category'         => $album->category,
-            'event_date'       => $album->event_date?->format('Y-m-d'),
-            'cover_photo_url'  => $this->resolveUrl($album->cover_image ?? null),
-            'photo_count'      => $album->photos_count,
-            'owner'            => $album->user
-                ? "{$album->user->first_name} {$album->user->last_name}" : 'Unknown',
-            'created_at_human' => Carbon::parse($album->created_at)->diffForHumans(),
-        ]);
+        $items->getCollection()->transform(function ($album) {
+            $firstImage = $album->galleries
+                ->flatMap(fn ($gallery) => $gallery->media)
+                ->first();
+
+            $coverUrl = $album->cover_image
+                ? $this->resolveUrl($album->cover_image)
+                : $this->resolveUrl($firstImage?->file_path);
+
+            return [
+                'id'               => $album->id,
+                'title'            => $album->title,
+                'description'      => $album->description,
+                'type'             => $album->type,
+                'category'         => $album->category,
+                'event_date'       => $album->event_date?->format('Y-m-d'),
+                'cover_photo_url'  => $coverUrl,
+                'cover_resource_type' => $coverUrl ? 'image' : null,
+                'photo_count'      => $album->photos_count,
+                'owner'            => $album->user
+                    ? "{$album->user->first_name} {$album->user->last_name}" : 'Unknown',
+                'created_at_human' => Carbon::parse($album->created_at)->diffForHumans(),
+            ];
+        });
 
         return response()->json($items);
     }
@@ -1217,6 +1505,19 @@ class MediaModerationController extends Controller
         }
 
         return $this->resolveUrl($path);
+    }
+
+    private function mediaItemType($item): string
+    {
+        if (($item->ai_metadata['resource_type'] ?? null) === 'video') {
+            return 'video';
+        }
+
+        if (method_exists($item, 'relationLoaded') && $item->relationLoaded('media')) {
+            return $item->media->first()?->resource_type ?? 'image';
+        }
+
+        return 'image';
     }
 
     private function resolveType(string $type): array

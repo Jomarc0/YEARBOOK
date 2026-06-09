@@ -158,14 +158,22 @@ export default function AnalyticsPage({ isAuthenticated = true, currentUser = nu
     trackAnalyticsTabSwitch(tabId);
   }
 
-  function handleTrendingClick(person) {
+function handleTrendingClick(person) {
     trackTrendingClick(person);
+    if (person.type && person.type !== 'profile') {
+      navigate(person.url || '#');
+      return;
+    }
     recordProfileView(person.id);
     navigate(`/profile/${person.id}`);
   }
 
   function handleTopViewedClick(person) {
     trackTopViewedClick(person);
+    if (person.type && person.type !== 'profile') {
+      navigate(person.url || '#');
+      return;
+    }
     recordProfileView(person.id);
     navigate(`/profile/${person.id}`);
   }

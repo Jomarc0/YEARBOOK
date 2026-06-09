@@ -50,6 +50,81 @@ class BatchService
         'HUMSS'                     => 'HUMSS',
     ];
 
+    public const COURSE_ALIASES = [
+        'Bachelor of Science in Architecture' => [
+            'Bachelor of Science in Architecture',
+            'BS Architecture',
+            'BSArch',
+        ],
+        'Bachelor of Multimedia Arts' => [
+            'Bachelor of Multimedia Arts',
+            'Bachelor of Multimedia Arts (BMMA)',
+            'BMA',
+            'BMMA',
+        ],
+        'Bachelor of Science in Civil Engineering' => [
+            'Bachelor of Science in Civil Engineering',
+            'BS Civil Engineering',
+            'BSCE',
+        ],
+        'Bachelor of Science in Computer Science' => [
+            'Bachelor of Science in Computer Science',
+            'BS Computer Science',
+            'BSCS',
+        ],
+        'Bachelor of Science in Information Technology' => [
+            'Bachelor of Science in Information Technology',
+            'BS Information Technology',
+            'BSIT',
+        ],
+        'Bachelor of Science in Nursing' => [
+            'Bachelor of Science in Nursing',
+            'BS Nursing',
+            'BSN',
+        ],
+        'Bachelor of Science in Medical Technology' => [
+            'Bachelor of Science in Medical Technology',
+            'BS Medical Technology',
+            'BSMT',
+        ],
+        'Bachelor of Science in Psychology' => [
+            'Bachelor of Science in Psychology',
+            'BS Psychology',
+            'BSPsych',
+            'BSP',
+        ],
+        'Bachelor of Science in Accountancy' => [
+            'Bachelor of Science in Accountancy',
+            'BS Accountancy',
+            'BSA',
+        ],
+        'Bachelor of Science in Business Administration - Financial Management' => [
+            'Bachelor of Science in Business Administration - Financial Management',
+            'BSBA Financial Management',
+            'BSBA-FM',
+            'BSBAFM',
+        ],
+        'Bachelor of Science in Business Administration - Marketing Management' => [
+            'Bachelor of Science in Business Administration - Marketing Management',
+            'BSBA Marketing Management',
+            'BSBA-MM',
+            'BSBAMM',
+        ],
+        'Bachelor of Science in Tourism Management' => [
+            'Bachelor of Science in Tourism Management',
+            'BS Tourism Management',
+            'BSTM',
+            'BBSTM',
+        ],
+        'Master in Management' => [
+            'Master in Management',
+            'MM',
+        ],
+        'ABM' => ['ABM'],
+        'STEM' => ['STEM'],
+        'HUMSS' => ['HUMSS', 'HUMMS'],
+    ];
+
     // ── Columns ────────────────────────────────────────────────────────────
 
     private const PUBLIC_COLS = [
@@ -114,19 +189,97 @@ class BatchService
         return collect(self::DEPARTMENT_MAP)
             ->filter(fn ($dept) => $dept === $department)
             ->keys()
+            ->flatMap(fn ($course) => $this->courseVariants($course))
+            ->unique()
             ->toArray();
+    }
+
+    private function normalizeFilter(?string $value): ?string
+    {
+        if ($value === null) {
+            return null;
+        }
+
+        $value = trim($value);
+
+        return $value === '' || strtolower($value) === 'null' || strtolower($value) === 'undefined'
+            ? null
+            : $value;
+    }
+
+    private function canonicalCourse(?string $course): ?string
+    {
+        $course = $this->normalizeFilter($course);
+
+        if ($course === null) {
+            return null;
+        }
+
+        foreach (self::COURSE_ALIASES as $canonical => $aliases) {
+            if (in_array(strtolower($course), array_map('strtolower', $aliases), true)) {
+                return $canonical;
+            }
+        }
+
+        return $course;
+    }
+
+    private function courseVariants(?string $course): array
+    {
+        $canonical = $this->canonicalCourse($course);
+
+        if ($canonical === null) {
+            return [];
+        }
+
+        return array_values(array_unique(self::COURSE_ALIASES[$canonical] ?? [$canonical]));
+    }
+
+    public static function courseVariantsFor(?string $course): array
+    {
+        if ($course === null) {
+            return [];
+        }
+
+        $course = trim($course);
+
+        if ($course === '' || strtolower($course) === 'null' || strtolower($course) === 'undefined') {
+            return [];
+        }
+
+        foreach (self::COURSE_ALIASES as $canonical => $aliases) {
+            if (in_array(strtolower($course), array_map('strtolower', $aliases), true)) {
+                return array_values(array_unique($aliases));
+            }
+        }
+
+        return [$course];
+    }
+
+    private function whereCourseMatches($query, ?string $course)
+    {
+        $variants = $this->courseVariants($course);
+
+        return empty($variants) ? $query : $query->whereIn('students.course', $variants);
     }
 
     // ── Discovery: Batchmates ──────────────────────────────────────────────
 
-    public function getBatchmates(User $viewer, ?string $course = null, ?int $year = null): Collection
+    public function getBatchmates(User $viewer, ?string $course = null, ?int $year = null, ?string $department = null): Collection
     {
-        $course = $course ?? $viewer->student?->course          ?? $viewer->course;
-        $year   = $year   ?? $viewer->student?->graduation_year ?? $viewer->graduation_year;
+        $requestedYear = $year;
+        $course     = $this->normalizeFilter($course);
+        $department = $this->normalizeFilter($department);
+        $year       = $year ?? $viewer->studentRecord?->graduation_year ?? $viewer->graduation_year;
+
+        if ($course === null && $department === null && $requestedYear === null) {
+            $course = $viewer->studentRecord?->course ?? $viewer->course;
+        }
 
         return $this->baseQuery($viewer->is_premium)
-            ->when($course, fn ($q) => $q->where('course', $course))
-            ->when($year,   fn ($q) => $q->where('graduation_year', $year))
+            ->when($department, fn ($q) => $q->whereIn('students.course', $this->coursesForDepartment($department)))
+            ->when($course, fn ($q) => $this->whereCourseMatches($q, $course))
+            ->when($year,   fn ($q) => $q->where('students.graduation_year', $year))
             ->orderBy('last_name')
             ->orderBy('first_name')
             ->get()
@@ -137,7 +290,7 @@ class BatchService
 
     public function getSectionmates(User $viewer): Collection
     {
-        $sectionId = $viewer->student?->section_id ?? $viewer->section_id;
+        $sectionId = $viewer->studentRecord?->section_id ?? $viewer->section_id;
 
         if (! $sectionId) {
             return collect();
@@ -167,13 +320,13 @@ class BatchService
             );
         }
 
-        if (! empty($filters['course']))      $query->where('course',          $filters['course']);
-        if (! empty($filters['year']))        $query->where('graduation_year', (int) $filters['year']);
-        if (! empty($filters['section_id']))  $query->where('section_id',      (int) $filters['section_id']);
+        if (! empty($filters['course']))      $this->whereCourseMatches($query, $filters['course']);
+        if (! empty($filters['year']))        $query->where('students.graduation_year', (int) $filters['year']);
+        if (! empty($filters['section_id']))  $query->where('students.section_id',      (int) $filters['section_id']);
 
         if (! empty($filters['department'])) {
             $courses = $this->coursesForDepartment($filters['department']);
-            $query->whereIn('course', $courses);
+            $query->whereIn('students.course', $courses);
         }
 
         return $query
@@ -187,10 +340,10 @@ class BatchService
 
     public function getCrossProgram(User $viewer, array $filters = [], int $perPage = 40): LengthAwarePaginator
     {
-        $viewerCourse = $viewer->student?->course ?? $viewer->course;
+        $viewerCourse = $viewer->studentRecord?->course ?? $viewer->course;
 
         $query = $this->baseQuery($viewer->is_premium)
-            ->when($viewerCourse, fn ($q) => $q->where('course', '!=', $viewerCourse));
+            ->when($viewerCourse, fn ($q) => $q->whereNotIn('students.course', $this->courseVariants($viewerCourse)));
 
         if (! empty($filters['search'])) {
             $term = '%' . $filters['search'] . '%';
@@ -202,17 +355,17 @@ class BatchService
             );
         }
 
-        if (! empty($filters['course']))     $query->where('course',          $filters['course']);
-        if (! empty($filters['year']))       $query->where('graduation_year', (int) $filters['year']);
+        if (! empty($filters['course']))     $this->whereCourseMatches($query, $filters['course']);
+        if (! empty($filters['year']))       $query->where('students.graduation_year', (int) $filters['year']);
 
         if (! empty($filters['department'])) {
             $courses = $this->coursesForDepartment($filters['department']);
-            $query->whereIn('course', $courses);
+            $query->whereIn('students.course', $courses);
         }
 
         return $query
-            ->orderBy('course')
-            ->orderBy('graduation_year', 'desc')
+            ->orderBy('students.course')
+            ->orderBy('students.graduation_year', 'desc')
             ->orderBy('last_name')
             ->orderBy('first_name')
             ->paginate($perPage)
@@ -223,13 +376,13 @@ class BatchService
 
     public function getCrossProgramStats(User $viewer): array
     {
-        $viewerCourse = $viewer->student?->course ?? $viewer->course;
+        $viewerCourse = $viewer->studentRecord?->course ?? $viewer->course;
 
-        $base = Student::when($viewerCourse, fn ($q) => $q->where('course', '!=', $viewerCourse));
+        $base = Student::when($viewerCourse, fn ($q) => $q->whereNotIn('students.course', $this->courseVariants($viewerCourse)));
 
         return [
             'total_students' => (clone $base)->count(),
-            'total_programs' => (clone $base)->distinct()->count('course'),
+            'total_programs' => (clone $base)->distinct()->count('students.course'),
             'departments'    => (clone $base)
                 ->join('batches', 'students.batch_id', '=', 'batches.id')
                 ->distinct()
@@ -244,8 +397,8 @@ class BatchService
     public function getByDepartment(User $viewer, string $department): Collection
     {
         return $this->baseQuery($viewer->is_premium)
-            ->whereIn('course', $this->coursesForDepartment($department))
-            ->orderBy('course')
+            ->whereIn('students.course', $this->coursesForDepartment($department))
+            ->orderBy('students.course')
             ->orderBy('last_name')
             ->get()
             ->map(fn ($s) => $this->formatStudent($s))
@@ -257,9 +410,44 @@ class BatchService
     public function getBatchesByDepartment(): Collection
     {
         return Batch::withCount('students')
-            ->with('sections:id,batch_id,name')
+            ->with([
+                'sections:id,batch_id,name,course,department,batch_year',
+                'sections.students' => function ($query) {
+                    $query->select([
+                        'id',
+                        'section_id',
+                        'batch_id',
+                        'first_name',
+                        'last_name',
+                        'student_no',
+                        'course',
+                        'graduation_year',
+                        'photo',
+                    ])->with('userAccount:id,student_record_id');
+                },
+            ])
             ->orderBy('graduation_year', 'desc')
             ->get()
+            ->map(function (Batch $batch) {
+                $batch->sections->transform(function ($section) use ($batch) {
+                    $section->students->transform(function (Student $student) use ($section, $batch) {
+                        $student->name = trim("{$student->first_name} {$student->last_name}");
+                        $student->profile_picture = $student->photo_url ?? $student->photo;
+                        $student->account_user_id = $student->userAccount?->id;
+                        $student->user_id = $student->userAccount?->id;
+                        $student->section_name = $section->name;
+                        $student->batch_name = $batch->name;
+                        $student->batch_year = $batch->graduation_year;
+                        $student->department = $batch->department;
+
+                        return $student;
+                    });
+
+                    return $section;
+                });
+
+                return $batch;
+            })
             ->groupBy('department');
     }
 
@@ -290,6 +478,12 @@ class BatchService
 
     public static function getDepartment(string $course): string
     {
+        foreach (self::COURSE_ALIASES as $canonical => $aliases) {
+            if (in_array(strtolower($course), array_map('strtolower', $aliases), true)) {
+                return self::DEPARTMENT_MAP[$canonical] ?? 'General';
+            }
+        }
+
         return self::DEPARTMENT_MAP[$course] ?? 'General';
     }
 
@@ -316,6 +510,10 @@ class BatchService
 
         $data['name']            = trim("{$student->first_name} {$student->last_name}");
         $data['profile_picture'] = $student->photo_url ?? $student->photo;
+        $data['department']      = $student->batch?->department
+            ?: self::getDepartment((string) $student->course);
+        $data['section_name']    = $student->section?->name;
+        $data['batch_year']      = $student->batch?->graduation_year ?? $student->graduation_year;
 
         return $data;
     }

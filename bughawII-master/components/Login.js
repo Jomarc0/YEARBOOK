@@ -7,6 +7,7 @@ import * as WebBrowser from 'expo-web-browser';
 import { Stack, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { FontAwesome } from '@expo/vector-icons';
+import { Image } from 'expo-image';
 import { acceptConsent, fetchCurrentUser, forgotPassword, getAppConfig, getConsentStatus, getErrorMessage, login, resetPassword, saveToken, sendOtp, STORAGE_BASE_URL, unwrap, verifyOtp, verifyResetOtp } from '../lib/api';
 
 const emptyOtp = ['', '', '', '', '', ''];
@@ -24,6 +25,7 @@ export default function Login() {
   const [showConsent, setShowConsent] = useState(false);
   const [consentChecked, setConsentChecked] = useState(false);
   const [appConfig, setAppConfig] = useState(null);
+  const [resendSeconds, setResendSeconds] = useState(45);
 
   const yearbookName = appConfig?.yearbook_name || 'Sinag-Bughaw Digital Yearbook';
   const brandName = (yearbookName.replace(/\s*Digital Yearbook/i, '') || 'Sinag-Bughaw').toUpperCase();
@@ -43,6 +45,13 @@ export default function Login() {
     };
   }, []);
 
+  useEffect(() => {
+    if (step !== 'otp' && step !== 'resetOtp') return undefined;
+    if (resendSeconds <= 0) return undefined;
+    const timer = setInterval(() => setResendSeconds((current) => Math.max(0, current - 1)), 1000);
+    return () => clearInterval(timer);
+  }, [resendSeconds, step]);
+
   const handleLogin = async () => {
     if (!email || !password) {
       Alert.alert('Missing fields', 'Please enter your email and password.');
@@ -54,6 +63,7 @@ export default function Login() {
       await login(email.trim(), password);
       await sendOtp(email.trim());
       setStep('otp');
+      setResendSeconds(45);
       setOtp(emptyOtp);
       setTimeout(() => otpRefs.current[0]?.focus?.(), 150);
     } catch (error) {
@@ -154,6 +164,7 @@ export default function Login() {
       setLoading(true);
       await sendOtp(email.trim());
       setOtp(emptyOtp);
+      setResendSeconds(45);
       Alert.alert('OTP sent', 'A new code has been sent to your email.');
     } catch (error) {
       Alert.alert('Resend failed', getErrorMessage(error, 'Unable to resend OTP.'));
@@ -173,6 +184,7 @@ export default function Login() {
       await forgotPassword(email.trim());
       setOtp(emptyOtp);
       setStep('resetOtp');
+      setResendSeconds(45);
       setTimeout(() => otpRefs.current[0]?.focus?.(), 150);
       Alert.alert('Reset code sent', 'Check your email for the reset OTP.');
     } catch (error) {
@@ -242,9 +254,8 @@ export default function Login() {
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.flex}>
         <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
           <View style={styles.header}>
-            <Text style={styles.brandKicker}>{brandName}</Text>
             <View style={styles.iconContainer}>
-              <FontAwesome name={step === 'otp' ? 'envelope-open-o' : 'lock'} size={30} color="#1d2b4b" />
+              <Image source={require('../assets/images/nuicon.svg')} style={styles.logoMark} contentFit="contain" />
             </View>
             <Text style={styles.title}>{showConsent ? 'Privacy Agreement' : step === 'otp' || step === 'resetOtp' ? 'Check Your Email' : step === 'resetPassword' ? 'Create New Password' : 'Welcome Back'}</Text>
             <Text style={styles.subtitle}>
@@ -357,8 +368,8 @@ export default function Login() {
                 <Text style={styles.buttonText}>{loading ? 'Verifying...' : step === 'resetOtp' ? 'Verify Reset Code' : 'Verify and Sign In'}</Text>
               </TouchableOpacity>
 
-              <TouchableOpacity style={styles.secondaryButton} onPress={step === 'resetOtp' ? startPasswordReset : handleResend} disabled={loading}>
-                <Text style={styles.secondaryButtonText}>Resend Code</Text>
+              <TouchableOpacity style={[styles.secondaryButton, resendSeconds > 0 && styles.secondaryButtonDisabled]} onPress={step === 'resetOtp' ? startPasswordReset : handleResend} disabled={loading || resendSeconds > 0}>
+                <Text style={styles.secondaryButtonText}>{resendSeconds > 0 ? `Resend in 0:${String(resendSeconds).padStart(2, '0')}` : 'Resend Code'}</Text>
               </TouchableOpacity>
 
               <TouchableOpacity style={styles.textButton} onPress={() => setStep('form')}>
@@ -388,6 +399,7 @@ const styles = StyleSheet.create({
   header: { alignItems: 'center', marginBottom: 24 },
   brandKicker: { color: '#fdb813', backgroundColor: '#1d2b4b', overflow: 'hidden', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 999, fontSize: 11, fontWeight: '900', letterSpacing: 1, marginBottom: 18 },
   iconContainer: { width: 78, height: 78, backgroundColor: '#eef2ff', borderRadius: 14, justifyContent: 'center', alignItems: 'center', marginBottom: 18, borderWidth: 1, borderColor: '#e2e8f0' },
+  logoMark: { width: 48, height: 48 },
   title: { fontSize: 28, fontWeight: '900', color: '#1d2b4b', marginBottom: 8, textAlign: 'center' },
   subtitle: { fontSize: 15, color: '#8E8E93', textAlign: 'center', lineHeight: 22 },
   form: { flex: 1 },
@@ -400,6 +412,7 @@ const styles = StyleSheet.create({
   button: { minHeight: 58, backgroundColor: '#1d2b4b', borderRadius: 16, justifyContent: 'center', alignItems: 'center', marginTop: 10 },
   buttonText: { fontSize: 16, fontWeight: '900', color: '#FFFFFF' },
   secondaryButton: { minHeight: 54, backgroundColor: '#FFFFFF', borderRadius: 16, justifyContent: 'center', alignItems: 'center', marginTop: 12, borderWidth: 1, borderColor: '#1d2b4b' },
+  secondaryButtonDisabled: { opacity: 0.5 },
   secondaryButtonText: { color: '#1d2b4b', fontWeight: 'bold' },
   textButton: { alignItems: 'center', padding: 16 },
   dividerRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginVertical: 16 },

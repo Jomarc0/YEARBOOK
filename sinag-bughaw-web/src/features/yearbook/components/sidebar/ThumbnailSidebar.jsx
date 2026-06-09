@@ -32,6 +32,19 @@ function TocIcon({ name }) {
   );
 }
 
+function splitTocLabel(label = '') {
+  const parts = String(label).split(' - ').map(part => part.trim()).filter(Boolean);
+
+  if (parts.length < 2) {
+    return { title: label, subtitle: null };
+  }
+
+  return {
+    title: parts.at(-1),
+    subtitle: parts.slice(0, -1).join(' - '),
+  };
+}
+
 export default function ThumbnailSidebar({ toc, currentSpread, onNavigate }) {
   return (
     <div className="flex flex-col h-full">
@@ -58,11 +71,12 @@ export default function ThumbnailSidebar({ toc, currentSpread, onNavigate }) {
             {toc.map((entry, i) => {
               const spreadIndex = Math.floor(entry.pageIndex / 2);
               const isActive    = spreadIndex === currentSpread;
+              const label = splitTocLabel(entry.label);
 
               return (
                 <li key={i}>
                   <button
-                    onClick={() => onNavigate(spreadIndex)}
+                    onClick={() => onNavigate(entry.pageIndex)}
                     className={`
                       w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-left
                       transition-all duration-150
@@ -80,15 +94,24 @@ export default function ThumbnailSidebar({ toc, currentSpread, onNavigate }) {
                       <TocIcon name={entry.icon} />
                     </span>
 
-                    {/* Label */}
                     <span
-                      className="flex-1 text-xs leading-snug truncate"
+                      className="min-w-0 flex-1 leading-snug"
                       style={{
                         color:      isActive ? '#fff' : 'rgba(255,255,255,.55)',
                         fontWeight: isActive ? 500 : 400,
                       }}
                     >
-                      {entry.label}
+                      <span className="block break-words text-[12px]">
+                        {label.title}
+                      </span>
+                      {label.subtitle && (
+                        <span
+                          className="mt-0.5 block break-words text-[10px] leading-tight"
+                          style={{ color: isActive ? 'rgba(255,255,255,.68)' : 'rgba(255,255,255,.36)' }}
+                        >
+                          {label.subtitle}
+                        </span>
+                      )}
                     </span>
 
                     {/* Active indicator */}

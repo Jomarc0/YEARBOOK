@@ -4,9 +4,9 @@
  *
  * Sections:
  *  - Overview stats cards
- *  - Profile views over time (line chart via SVG)
- *  - Top viewed profiles
- *  - Trending students
+ *  - Views over time (line chart via SVG)
+ *  - Top viewed profiles and content
+ *  - Trending profiles and content
  *  - Platform engagement breakdown
  *  - Online presence
  *
@@ -169,11 +169,12 @@ function TopProfilesList({ items, loading }) {
 // ─── Presence Panel ───────────────────────────────────────────────────────────
 function PresencePanel({ data, loading }) {
   if (loading) return <div className="flex flex-col gap-2">{Array.from({ length: 5 }).map((_, i) => <div key={i} className="flex gap-2.5"><Skeleton className="h-8 w-8 rounded-full" /><div className="flex-1"><Skeleton className="mb-1.5 h-2.5 w-2/5" /><Skeleton className="h-2.5 w-1/4" /></div></div>)}</div>;
-  if (!data?.length) return <div className="py-8 text-center text-sm text-slate-500">No presence data.</div>;
+  const onlineUsers = data?.filter((u) => u.is_online) ?? [];
+  if (!onlineUsers.length) return <div className="py-8 text-center text-sm text-slate-500">No users online.</div>;
 
   return (
     <div className="flex max-h-80 flex-col gap-2 overflow-y-auto">
-      {data.map((u) => (
+      {onlineUsers.map((u) => (
         <div key={u.user_id} className="flex items-center gap-2.5">
           <div className="relative">
             <Avatar src={u.profile_picture} name={u.name} size={34} />
@@ -258,7 +259,7 @@ export default function AnalyticsPage() {
     <div className="min-h-screen bg-slate-50 px-6 py-7 animate-[fadeIn_.3s_ease]">
       <div className="mb-6">
         <h1 className="text-3xl font-black tracking-tight text-slate-800">Analytics & Engagement</h1>
-        <p className="mt-1 text-sm text-slate-500">Platform-wide engagement, profile views, and user activity.</p>
+        <p className="mt-1 text-sm text-slate-500">Platform-wide engagement, content views, and user activity.</p>
       </div>
 
       {loadingOverview ? (
@@ -268,7 +269,7 @@ export default function AnalyticsPage() {
       ) : overview && (
         <div className="mb-6 grid grid-cols-[repeat(auto-fit,minmax(180px,1fr))] gap-3.5">
           <StatCard toneClass="text-indigo-600" label="Total Users" value={overview.total_users?.toLocaleString()} sub="Registered students" />
-          <StatCard toneClass="text-violet-600" label="Profile Views" value={overview.total_views?.toLocaleString()} sub="All time" />
+          <StatCard toneClass="text-violet-600" label="Total Views" value={overview.total_views?.toLocaleString()} sub="Profiles and content" />
           <StatCard toneClass="text-emerald-600" label="Views Today" value={overview.views_today?.toLocaleString()} sub="Last 24 hours" />
           <StatCard toneClass="text-emerald-600" label="Online Now" value={overview.online_now?.toLocaleString()} sub="Active users" />
         </div>
@@ -276,7 +277,7 @@ export default function AnalyticsPage() {
 
       <div className="mb-4 grid grid-cols-1 gap-4 xl:grid-cols-2">
         <Section
-          title="Profile Views Trend"
+          title="Views Trend"
           action={
             <div className="flex gap-1.5">
               {[7, 30, 90].map((d) => (

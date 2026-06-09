@@ -69,6 +69,9 @@ export default function PaymentPage() {
     try {
       const { data } = await paymentsApi.createIntent(plan);
       if (data.checkout_url) {
+        if (data.session_id) {
+          localStorage.setItem('pending_paymongo_session_id', data.session_id);
+        }
         window.location.href = data.checkout_url;
       }
     } catch (err) {

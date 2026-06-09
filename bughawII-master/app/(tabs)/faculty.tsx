@@ -8,11 +8,17 @@ import { getAppConfig, getErrorMessage, getFaculty, getFacultyMember, imageUrl, 
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 const { height } = Dimensions.get('window');
+const CARD_WIDTH = (Dimensions.get('window').width - 56) / 2;
 
 const memberId = (member: any) => member?.id || member?.faculty_id;
 const memberName = (member: any) => member?.name || member?.full_name || 'Faculty Member';
 const memberRole = (member: any) => member?.role || member?.position || member?.title || 'Faculty';
 const memberPhoto = (member: any) => imageUrl(member?.image_url || member?.photo || member?.profile_picture || member?.profile_pic || member?.image);
+const friendlyFacultyError = (error: any) => (
+  error?.message === 'Network Error'
+    ? 'Unable to connect to the faculty directory. Pull down to retry.'
+    : getErrorMessage(error, 'Unable to load faculty records.')
+);
 
 export default function FacultyScreen() {
   const [groups, setGroups] = useState<any[]>([]);
@@ -46,7 +52,7 @@ export default function FacultyScreen() {
         setActiveDept('All Departments');
       }
     } catch (requestError: any) {
-      setError(getErrorMessage(requestError, 'Unable to load faculty records.'));
+      setError(friendlyFacultyError(requestError));
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -113,9 +119,10 @@ export default function FacultyScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <StatusBar style="light" />
+      <StatusBar style="dark" />
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Faculty</Text>
+        <Text style={styles.headerKicker}>Faculty</Text>
+        <Text style={styles.headerTitle}>Educators</Text>
       </View>
 
       <ScrollView
@@ -123,22 +130,7 @@ export default function FacultyScreen() {
         contentContainerStyle={styles.scrollContent}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); loadFaculty(); }} />}
       >
-        <View style={styles.pageHeader}>
-          <Text style={styles.pageTitle}>Our Educators</Text>
-          <Text style={styles.pageSubtitle}>Faculty directory from the Sinag Bughaw system</Text>
-          {!loading ? (
-            <View style={styles.statsRow}>
-              <View style={styles.statCard}>
-                <Text style={styles.statValue}>{totalFaculty}</Text>
-                <Text style={styles.statLabel}>Faculty Members</Text>
-              </View>
-              <View style={styles.statCard}>
-                <Text style={styles.statValue}>{groups.length}</Text>
-                <Text style={styles.statLabel}>Departments</Text>
-              </View>
-            </View>
-          ) : null}
-        </View>
+        {!loading ? <Text style={styles.facultySubtitle}>{totalFaculty} faculty across {groups.length} departments</Text> : null}
 
         <View style={styles.searchContainer}>
           <FontAwesome name="search" size={18} color="#C7C7CC" style={styles.searchIcon} />
@@ -189,11 +181,11 @@ export default function FacultyScreen() {
               <View style={styles.deptLine} />
             </View>
             <FlatList
-              horizontal
+              scrollEnabled={false}
+              numColumns={2}
               data={dept.faculty}
-              showsHorizontalScrollIndicator={false}
               keyExtractor={(item, index) => String(memberId(item) || index)}
-              contentContainerStyle={styles.horizontalScroll}
+              columnWrapperStyle={styles.facultyGridRow}
               renderItem={({ item }) => (
                 <TouchableOpacity
                   style={styles.facultyCard}
@@ -268,10 +260,12 @@ export default function FacultyScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f4f7fe' },
-  header: { backgroundColor: '#1d2b4b', paddingTop: 45, paddingHorizontal: 24, paddingBottom: 20 },
-  headerTitle: { fontSize: 24, fontWeight: 'bold', color: '#fdb813' },
-  scrollContent: { paddingVertical: 24 },
+  container: { flex: 1, backgroundColor: '#F0F2F8' },
+  header: { height: 56, paddingHorizontal: 18, justifyContent: 'center' },
+  headerKicker: { color: '#F5A623', fontSize: 12, fontWeight: '900', letterSpacing: 1.2, textTransform: 'uppercase' },
+  headerTitle: { fontSize: 24, fontWeight: '900', color: '#1A2547' },
+  scrollContent: { paddingTop: 10, paddingBottom: 24 },
+  facultySubtitle: { color: '#6B7280', fontSize: 13, marginHorizontal: 18, marginBottom: 14 },
   pageHeader: { paddingHorizontal: 24, marginBottom: 20 },
   pageTitle: { fontSize: 32, fontWeight: 'bold', color: '#1C1C1E' },
   pageSubtitle: { fontSize: 14, color: '#8E8E93', marginTop: 4 },
@@ -279,13 +273,13 @@ const styles = StyleSheet.create({
   statCard: { flex: 1, backgroundColor: '#1d2b4b', borderRadius: 16, padding: 15 },
   statValue: { color: '#fdb813', fontSize: 24, fontWeight: '900' },
   statLabel: { color: 'rgba(255,255,255,0.64)', fontSize: 10, fontWeight: '900', marginTop: 3, letterSpacing: 0.7, textTransform: 'uppercase' },
-  searchContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'white', borderRadius: 16, paddingHorizontal: 16, height: 56, borderWidth: 1, borderColor: '#E5E7EB', marginHorizontal: 24, marginBottom: 24 },
+  searchContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#F3F4F6', borderRadius: 12, paddingHorizontal: 16, height: 56, marginHorizontal: 18, marginBottom: 14 },
   searchIcon: { marginRight: 12 },
   searchInput: { flex: 1, fontSize: 16, color: '#000000' },
   clearButton: { width: 32, height: 32, borderRadius: 10, backgroundColor: '#f1f5f9', alignItems: 'center', justifyContent: 'center' },
-  deptTabs: { paddingHorizontal: 24, gap: 8, paddingBottom: 20 },
-  deptTab: { minHeight: 40, borderRadius: 999, borderWidth: 1, borderColor: '#e2e8f0', backgroundColor: '#ffffff', paddingHorizontal: 13, flexDirection: 'row', alignItems: 'center', gap: 6 },
-  deptTabActive: { backgroundColor: '#fdb813', borderColor: '#fdb813' },
+  deptTabs: { paddingHorizontal: 18, gap: 8, paddingBottom: 20 },
+  deptTab: { height: 32, borderRadius: 12, borderWidth: 1, borderColor: '#1A2547', backgroundColor: 'transparent', paddingHorizontal: 13, flexDirection: 'row', alignItems: 'center', gap: 6 },
+  deptTabActive: { backgroundColor: '#F5A623', borderColor: '#F5A623' },
   deptDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#fdb813' },
   deptDotActive: { backgroundColor: '#1d2b4b' },
   deptTabText: { color: '#64748b', fontSize: 12, fontWeight: '900' },
@@ -293,20 +287,21 @@ const styles = StyleSheet.create({
   deptTabCount: { color: '#94a3b8', fontSize: 11, fontWeight: '800' },
   deptTabCountActive: { color: 'rgba(29,43,75,0.65)' },
   emptyText: { color: '#8E8E93', fontSize: 14, textAlign: 'center', padding: 24 },
-  section: { marginBottom: 40 },
-  deptHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 20, paddingHorizontal: 24 },
+  section: { marginBottom: 30 },
+  deptHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 12, paddingHorizontal: 18 },
   deptName: { fontSize: 14, fontWeight: 'bold', color: '#1d2b4b', marginRight: 8, textTransform: 'uppercase', letterSpacing: 1.5 },
   deptCount: { color: '#1d2b4b', backgroundColor: '#fdb813', overflow: 'hidden', borderRadius: 999, paddingHorizontal: 8, paddingVertical: 3, fontSize: 10, fontWeight: '900', marginRight: 12 },
   deptLine: { flex: 1, height: 1, backgroundColor: '#E5E7EB' },
+  facultyGridRow: { paddingHorizontal: 18, gap: 12 },
   horizontalScroll: { paddingHorizontal: 24 },
-  facultyCard: { width: Dimensions.get('window').width * 0.6, backgroundColor: 'white', borderRadius: 14, padding: 14, marginRight: 14, alignItems: 'center', borderWidth: 1, borderColor: '#e2e8f0', shadowColor: '#0f172a', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.04, shadowRadius: 10, elevation: 2 },
-  imageWrapper: { width: '100%', aspectRatio: 1, borderRadius: 14, overflow: 'hidden', marginBottom: 16, position: 'relative', backgroundColor: '#eef2ff' },
+  facultyCard: { width: CARD_WIDTH, backgroundColor: 'white', borderRadius: 12, marginBottom: 12, overflow: 'hidden', borderWidth: 1, borderColor: '#e2e8f0', shadowColor: '#0f172a', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.04, shadowRadius: 10, elevation: 2 },
+  imageWrapper: { width: '100%', aspectRatio: 4 / 3, overflow: 'hidden', position: 'relative', backgroundColor: '#eef2ff' },
   facultyImage: { width: '100%', height: '100%' },
   avatarFallback: { backgroundColor: '#1d2b4b', justifyContent: 'center', alignItems: 'center' },
   avatarFallbackText: { color: '#FFFFFF', fontWeight: 'bold', fontSize: 42 },
   roleBadge: { position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: 'rgba(53, 64, 142, 0.9)', paddingVertical: 8, alignItems: 'center' },
   roleText: { color: 'white', fontSize: 11, fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: 0.5 },
-  memberName: { fontSize: 18, fontWeight: 'bold', color: '#1C1C1E', textAlign: 'center' },
+  memberName: { fontSize: 14, fontWeight: '900', color: '#1A2547', padding: 10, minHeight: 48 },
   modalOverlay: { flex: 1, justifyContent: 'flex-end' },
   absoluteFill: { ...StyleSheet.absoluteFillObject },
   modalContainer: { backgroundColor: 'white', borderTopLeftRadius: 16, borderTopRightRadius: 16, height: height * 0.9, overflow: 'hidden' },

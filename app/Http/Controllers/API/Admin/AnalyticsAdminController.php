@@ -11,6 +11,7 @@ use App\Models\TaggedPhoto;
 use App\Models\ProfileView;
 use App\Models\User;
 use App\Models\UserPresence;
+use App\Services\Analytics\EngagementAnalyticsService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -18,12 +19,19 @@ use Carbon\Carbon;
 
 class AnalyticsAdminController extends Controller
 {
+    public function __construct(
+        private readonly EngagementAnalyticsService $analytics
+    ) {}
+
     public function overview(): JsonResponse
     {
+        $contentViews = DB::table('content_views');
+
         return response()->json([
             'total_users'    => User::where('role', 'student')->count(),
-            'total_views'    => ProfileView::count(),
-            'views_today'    => ProfileView::whereDate('created_at', today())->count(),
+            'total_views'    => ProfileView::count() + (clone $contentViews)->count(),
+            'views_today'    => ProfileView::whereDate('created_at', today())->count()
+                + (clone $contentViews)->whereDate('created_at', today())->count(),
             'total_messages' => Message::count(),
             'online_now'     => UserPresence::where('is_online', true)
                 ->where('last_seen_at', '>=', now()->subMinutes(5))
@@ -35,23 +43,28 @@ class AnalyticsAdminController extends Controller
     {
         $days = max(7, min((int) $request->get('days', 30), 90));
 
-        $data = ProfileView::query()
+        $profileData = ProfileView::query()
             ->where('created_at', '>=', now()->subDays($days))
             ->selectRaw('DATE(created_at) as date, COUNT(*) as value')
             ->groupBy('date')
             ->orderBy('date')
-            ->get()
-            ->map(fn($row) => [
-                'label' => Carbon::parse($row->date)->format('M d'),
-                'value' => (int) $row->value,
-            ]);
+            ->pluck('value', 'date');
+
+        $contentData = DB::table('content_views')
+            ->where('created_at', '>=', now()->subDays($days))
+            ->selectRaw('DATE(created_at) as date, COUNT(*) as value')
+            ->groupBy('date')
+            ->orderBy('date')
+            ->pluck('value', 'date');
 
         $filled = [];
         for ($i = $days - 1; $i >= 0; $i--) {
             $date  = now()->subDays($i)->format('Y-m-d');
             $label = Carbon::parse($date)->format('M d');
-            $match = $data->firstWhere('label', $label);
-            $filled[] = ['label' => $label, 'value' => $match ? $match['value'] : 0];
+            $filled[] = [
+                'label' => $label,
+                'value' => (int) ($profileData[$date] ?? 0) + (int) ($contentData[$date] ?? 0),
+            ];
         }
 
         return response()->json(['data' => $filled]);
@@ -61,39 +74,11 @@ class AnalyticsAdminController extends Controller
     {
         $limit = max(1, min((int) $request->get('limit', 10), 50));
 
-        $data = ProfileView::query()
-            ->selectRaw('viewed_user_id, COUNT(*) as view_count')
-            ->groupBy('viewed_user_id')
-            ->orderByDesc('view_count')
-            ->limit($limit)
-            ->get();
-
-        $userIds = $data->pluck('viewed_user_id');
-
-        $users = DB::table('users')
-            ->leftJoin('students', 'users.student_record_id', '=', 'students.id')
-            ->whereIn('users.id', $userIds)
-            ->select(
-                'users.id',
-                'users.first_name',
-                'users.last_name',
-                'users.profile_picture',
-                'students.course',
-                'students.graduation_year'
-            )
-            ->get()
-            ->keyBy('id');
-
-        $result = $data->map(fn($row) => [
-            'id'              => $row->viewed_user_id,
-            'name'            => isset($users[$row->viewed_user_id])
-                ? trim("{$users[$row->viewed_user_id]->first_name} {$users[$row->viewed_user_id]->last_name}")
-                : 'Unknown',
-            'profile_picture' => $users[$row->viewed_user_id]?->profile_picture ?? null,
-            'course'          => $users[$row->viewed_user_id]?->course ?? null,
-            'graduation_year' => $users[$row->viewed_user_id]?->graduation_year ?? null,
-            'view_count'      => (int) $row->view_count,
-        ]);
+        $result = collect($this->analytics->mixedTopViewed($limit))
+            ->map(fn ($row) => [
+                ...$row,
+                'view_count' => (int) ($row['views'] ?? $row['total_views'] ?? 0),
+            ]);
 
         return response()->json(['data' => $result]);
     }
@@ -102,40 +87,11 @@ class AnalyticsAdminController extends Controller
     {
         $limit = max(1, min((int) $request->get('limit', 10), 50));
 
-        $data = ProfileView::query()
-            ->where('created_at', '>=', now()->subDays(7))
-            ->selectRaw('viewed_user_id, COUNT(*) as view_count')
-            ->groupBy('viewed_user_id')
-            ->orderByDesc('view_count')
-            ->limit($limit)
-            ->get();
-
-        $userIds = $data->pluck('viewed_user_id');
-
-        $users = DB::table('users')
-            ->leftJoin('students', 'users.student_record_id', '=', 'students.id')
-            ->whereIn('users.id', $userIds)
-            ->select(
-                'users.id',
-                'users.first_name',
-                'users.last_name',
-                'users.profile_picture',
-                'students.course',
-                'students.graduation_year'
-            )
-            ->get()
-            ->keyBy('id');
-
-        $result = $data->map(fn($row) => [
-            'id'              => $row->viewed_user_id,
-            'name'            => isset($users[$row->viewed_user_id])
-                ? trim("{$users[$row->viewed_user_id]->first_name} {$users[$row->viewed_user_id]->last_name}")
-                : 'Unknown',
-            'profile_picture' => $users[$row->viewed_user_id]?->profile_picture ?? null,
-            'course'          => $users[$row->viewed_user_id]?->course ?? null,
-            'graduation_year' => $users[$row->viewed_user_id]?->graduation_year ?? null,
-            'view_count'      => (int) $row->view_count,
-        ]);
+        $result = collect($this->analytics->mixedTrending($limit))
+            ->map(fn ($row) => [
+                ...$row,
+                'view_count' => (int) ($row['views_this_week'] ?? $row['views'] ?? 0),
+            ]);
 
         return response()->json(['data' => $result]);
     }
@@ -155,7 +111,8 @@ class AnalyticsAdminController extends Controller
     {
         $items = UserPresence::query()
             ->with('user:id,first_name,last_name,profile_picture')
-            ->orderByDesc('is_online')
+            ->where('is_online', true)
+            ->where('last_seen_at', '>=', now()->subMinutes(5))
             ->orderByDesc('last_seen_at')
             ->limit(50)
             ->get()

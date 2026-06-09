@@ -10,6 +10,7 @@ use App\Models\Consent;
 use App\Models\OtpVerification;
 use App\Models\Student;
 use App\Models\User;
+use App\Models\UserPresence;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\ValidationException;
@@ -153,6 +154,7 @@ class AuthController extends Controller
         RateLimiter::clear($key);
 
         $token = $user->createToken('app-token')->plainTextToken;
+        $this->markPresence($user->id, true);
 
         return response()->json([
             'user'             => $user->load('studentRecord', 'section'),
@@ -426,6 +428,7 @@ class AuthController extends Controller
 
     public function logout(Request $request)
     {
+        $this->markPresence($request->user()->id, false);
         $request->user()->currentAccessToken()->delete();
         return response()->json(['message' => 'Logged out.']);
     }
@@ -433,6 +436,7 @@ class AuthController extends Controller
     public function me(Request $request)
     {
         $user = $request->user()->load('studentRecord', 'section');
+        $this->markPresence($user->id, true);
         $sub  = \App\Models\Subscription::where('user_id', $user->id)->latest()->first();
         $activeSub = $sub?->isActive() ? $sub : null;
 
@@ -443,5 +447,16 @@ class AuthController extends Controller
             'tier'          => $activeSub?->tier ?? 'free',
             'plan'          => $activeSub?->plan ?? 'free',
         ]);
+    }
+
+    private function markPresence(int $userId, bool $isOnline): void
+    {
+        UserPresence::updateOrCreate(
+            ['user_id' => $userId],
+            [
+                'is_online'    => $isOnline,
+                'last_seen_at' => now(),
+            ]
+        );
     }
 }

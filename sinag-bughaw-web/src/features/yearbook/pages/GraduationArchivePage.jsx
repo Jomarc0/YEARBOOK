@@ -22,6 +22,19 @@ import { graduationApi } from '@/api/yearbook.api';
 import { galleryApi } from '@/api/gallery.api';
 import FaceSearchButton from '@/components/ui/FaceSearchButton';
 import { imageUrl, avatarUrl } from '@/utils/imageUrl';
+import { recordContentView } from '@/api/analytics.api';
+
+const graduationViewType = (category) => {
+  switch (category) {
+    case 'photos': return 'graduation_photo';
+    case 'videos': return 'graduation_video';
+    case 'program': return 'graduation_program';
+    case 'invitation': return 'graduation_invitation';
+    case 'song': return 'graduation_song';
+    case 'mass': return 'baccalaureate_mass';
+    default: return 'graduation_album';
+  }
+};
 
 // ── Lightbox ──────────────────────────────────────────────────────────────────
 function Lightbox({ photos, index, onClose }) {
@@ -116,6 +129,17 @@ export default function GraduationArchivePage() {
       .catch(() => setAlbum(null))
       .finally(() => setLoading(false));
   }, [id]);
+
+  useEffect(() => {
+    if (!album?.id) return;
+    recordContentView({
+      content_type: graduationViewType(album.category),
+      content_id: album.id,
+      title: album.title,
+      category: album.category,
+      url: `/graduation/archive/${album.id}`,
+    }).catch(() => {});
+  }, [album?.id]);
 
   // ── Face search: uses /gallery/face-search which returns { photos: [...] }
   // Each photo in the response has: photo_id, file_path, similarity, album
@@ -233,10 +257,10 @@ export default function GraduationArchivePage() {
                 {photos.length} photo{photos.length !== 1 ? 's' : ''}
               </span>
               {/* FIX: show match count badge when face search is active */}
-              {hasFaceFilter && (
+              {false && (
                 <span className="flex items-center gap-2 bg-[#fdb813]/20 border border-[#fdb813]/40
                                  px-3 py-1 rounded-full text-[#fdb813] text-xs font-bold">
-                  <i className="fas fa-brain" />
+                  <i className="fas fa-camera" />
                   {matchedPhotoIds.size} face match{matchedPhotoIds.size !== 1 ? 'es' : ''} highlighted
                   <button onClick={clearSearch}
                     className="ml-1 bg-transparent border-none text-[#fdb813] cursor-pointer text-xs font-bold p-0">
@@ -261,7 +285,7 @@ export default function GraduationArchivePage() {
             <input
               type="text"
               readOnly
-              placeholder={searching ? 'Searching…' : hasFaceFilter ? `${matchedPhotoIds.size} matching photos highlighted below` : 'Click the camera icon to search by face…'}
+              placeholder={searching ? 'Searching…' : 'Click the camera icon to search by face…'}
               className="w-full h-[52px] pl-[50px] pr-14 border border-white/15 rounded-[14px]
                          outline-none bg-white/10 backdrop-blur-xl text-white text-sm font-medium
                          cursor-pointer placeholder-white/50 box-border transition-all
@@ -272,7 +296,7 @@ export default function GraduationArchivePage() {
           </div>
 
           {/* FIX: Profile pills for matched students (navigate to profile) */}
-          {matchedUserIds.length > 0 && (
+          {false && (
             <div className="mt-3">
               <p className="text-white/50 text-[11px] font-bold uppercase tracking-wider mb-2">
                 <i className="fas fa-user-tag mr-1 text-[#fdb813]" />
@@ -294,7 +318,7 @@ export default function GraduationArchivePage() {
                     <div className="min-w-0">
                       <p className="m-0 font-bold text-[13px] text-white truncate">{m.name}</p>
                       <p className="m-0 text-[11px] text-white/60">
-                        <i className="fas fa-brain text-[#fdb813] mr-1" />{m.similarity}% match
+                        <i className="fas fa-camera text-[#fdb813] mr-1" />{m.similarity}% match
                       </p>
                     </div>
                   </Link>
@@ -304,7 +328,7 @@ export default function GraduationArchivePage() {
           )}
 
           {/* FIX: Photo-level match pills */}
-          {faceMatches.length > 0 && matchedUserIds.length === 0 && (
+          {false && (
             <p className="mt-2 text-white/60 text-[12px]">
               <i className="fas fa-arrow-down text-[#fdb813] mr-1" />
               Matched photos are highlighted below with a gold border.
@@ -324,10 +348,10 @@ export default function GraduationArchivePage() {
         ) : (
           <>
             {/* FIX: Face filter info bar */}
-            {hasFaceFilter && (
+            {false && (
               <div className="mb-5 flex items-center gap-3 px-4 py-3 bg-[#fdb813]/10 border border-[#fdb813]/30
                               rounded-2xl text-sm font-semibold text-amber-700">
-                <i className="fas fa-brain text-[#fdb813]" />
+                <i className="fas fa-camera text-[#fdb813]" />
                 Showing {matchedPhotoIds.size} matched photo{matchedPhotoIds.size !== 1 ? 's' : ''} first
                 — remaining {photos.length - matchedPhotoIds.size} photos are dimmed.
                 <button onClick={clearSearch}
@@ -362,11 +386,11 @@ export default function GraduationArchivePage() {
                     onClick={() => setLightbox(i)}
                   >
                     {/* FIX: match badge on highlighted photos */}
-                    {isMatch && (
+                    {false && (
                       <div className="absolute top-2.5 left-2.5 z-10 flex items-center gap-1.5
                                       bg-[#fdb813] text-[#1d2b4b] font-black text-[10px]
                                       px-2.5 py-1.5 rounded-xl shadow">
-                        <i className="fas fa-brain text-[9px]" />
+                        <i className="fas fa-camera text-[9px]" />
                         {similarity != null ? `${Number(similarity).toFixed(0)}%` : 'Match'}
                       </div>
                     )}

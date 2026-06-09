@@ -70,15 +70,14 @@ class AnnouncementController extends Controller
                     body:        $announcement->body,
                     actionUrl:   $validated['action_url']   ?? null,
                     actionLabel: $validated['action_label'] ?? null,
-                )->onQueue('emails');
+                );
 
                 $emailQueued++;
             });
         }
 
         if ($sendPush) {
-            User::whereNotNull('fcm_token')
-                ->select('id', 'fcm_token')
+            User::select('id', 'fcm_token')
                 ->chunkById(100, function ($users) use ($announcement) {
                     foreach ($users as $user) {
                         SendPushNotification::dispatch(
@@ -87,7 +86,7 @@ class AnnouncementController extends Controller
                             $announcement->body,
                             ['type' => 'announcement', 'id' => (string) $announcement->id],
                             'announcement',
-                        )->onQueue('push');
+                        );
                     }
                 });
         }

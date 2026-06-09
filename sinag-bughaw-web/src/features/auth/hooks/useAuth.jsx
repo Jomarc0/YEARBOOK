@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import { authApi } from '@/api/auth.api';
+import { presenceApi } from '@/api/messaging.api';
 
 const AuthContext = createContext(null);
 
@@ -45,6 +46,27 @@ export function AuthProvider({ children }) {
       localStorage.removeItem('sb_token');
     }
   }, []);
+
+  useEffect(() => {
+    if (!user) return undefined;
+
+    const markOnline = () => presenceApi.update(true).catch(() => {});
+    const markOffline = () => presenceApi.update(false).catch(() => {});
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') markOnline();
+    };
+
+    markOnline();
+    const interval = setInterval(markOnline, 60_000);
+    window.addEventListener('beforeunload', markOffline);
+    document.addEventListener('visibilitychange', handleVisibility);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('beforeunload', markOffline);
+      document.removeEventListener('visibilitychange', handleVisibility);
+    };
+  }, [user]);
 
   return (
     <AuthContext.Provider value={{ user, loading, loginCredentials, fetchUser, logout, setToken }}>

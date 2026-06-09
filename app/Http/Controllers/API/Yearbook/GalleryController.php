@@ -62,20 +62,32 @@ class GalleryController extends Controller
     // ─────────────────────────────────────────────────────────────────────────
     public function show(int $id): JsonResponse
     {
+        $userId = Auth::id();
+
         $album = Album::with([
-            'photos' => function ($q) {
-                $q->where('status', 'approved')
-                  ->where('visibility', 'public')
+            'photos' => function ($q) use ($userId) {
+                $q->where(function ($visibilityQuery) use ($userId) {
+                    $visibilityQuery
+                        ->where(fn ($approved) => $approved
+                            ->where('status', 'approved')
+                            ->where('visibility', 'public'));
+
+                    if ($userId) {
+                        $visibilityQuery->orWhere('user_id', $userId);
+                    }
+                })
                   ->select([
                       'id',
                       'album_id',
                       'user_id',
                       'caption',
                       'status',
+                      'visibility',
                       'ai_metadata',
                       'sort_order',
                       'created_at',
                   ])
+                  ->orderByDesc('created_at')
                   ->orderBy('sort_order')
                   ->with([
                       'media' => fn ($m) => $m->select([
@@ -97,7 +109,13 @@ class GalleryController extends Controller
         // Hoist the first media file_path onto each photo so the frontend
         // can access photo.file_path directly instead of photo.media[0].file_path
         $album->photos->each(function ($photo) {
-            $photo->file_path = $photo->media->first()?->file_path;
+            $media = $photo->media->first();
+            $photo->file_path = $media?->file_path;
+            $photo->resource_type = $media?->resource_type ?? ($photo->ai_metadata['resource_type'] ?? 'image');
+            $photo->file_type = $photo->resource_type;
+            $photo->bytes = $media?->bytes;
+            $photo->width = $media?->width;
+            $photo->height = $media?->height;
         });
 
         return response()->json([

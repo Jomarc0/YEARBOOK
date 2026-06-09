@@ -8,7 +8,6 @@ export default function TabLayout() {
       tabBar={(props) => <CustomTabBar {...props} />}
       screenOptions={{
         headerShown: false,
-        tabBarPosition: 'top' as any,
       }}
     >
       <Tabs.Screen
@@ -27,6 +26,7 @@ export default function TabLayout() {
         name="faculty"
         options={{
           title: 'Faculty',
+          href: null,
         }}
       />
       <Tabs.Screen
@@ -39,25 +39,26 @@ export default function TabLayout() {
         name="sections"
         options={{
           title: 'Sections',
+          href: null,
         }}
       />
       <Tabs.Screen
         name="discovery"
         options={{
-          title: 'Discovery',
+          title: 'Discover',
         }}
       />
       <Tabs.Screen
         name="analytics"
         options={{
           title: 'Analytics',
+          href: null,
         }}
       />
       <Tabs.Screen
         name="profile"
         options={{
-          title: 'Profile',
-          href: null,
+          title: 'More',
         }}
       />
     </Tabs>

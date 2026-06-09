@@ -10,6 +10,7 @@ use App\Models\Photo;
 use App\Models\Student;
 use App\Models\TaggedPhoto;
 use App\Models\User;
+use App\Models\UserNotification;
 use App\Notifications\PhotoTaggedNotification;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -23,6 +24,21 @@ class StudentController extends Controller
     public function __construct(
         private readonly StorageServiceInterface $storage
     ) {}
+
+    private function notifyProfileUpdate(User $user, string $body): void
+    {
+        UserNotification::create([
+            'user_id' => $user->id,
+            'type' => 'profile_update',
+            'title' => 'Profile updated',
+            'body' => $body,
+            'data' => [
+                'type' => 'profile_update',
+                'sender_name' => 'Sinag-Bughaw',
+                'action_url' => '/profile',
+            ],
+        ]);
+    }
 
     // ── List ──────────────────────────────────────────────────────────────────
 
@@ -195,6 +211,7 @@ class StudentController extends Controller
         ProcessFaceIndexing::dispatch($user->fresh()->load('studentRecord'));
 
         AuditLog::record($request, 'API Update Photo', 'Updated profile photo for ' . $user->email);
+        $this->notifyProfileUpdate($user, 'Your profile picture was updated successfully.');
 
         return response()->json([
             'message'         => 'Photo updated.',
@@ -207,8 +224,10 @@ class StudentController extends Controller
     public function updateBio(Request $request): JsonResponse
     {
         $request->validate(['bio' => 'nullable|string|max:255']);
-        $request->user()->update(['bio' => $request->bio]);
-        AuditLog::record($request, 'API Update Bio', 'Updated bio for ' . $request->user()->email);
+        $user = $request->user();
+        $user->update(['bio' => $request->bio]);
+        AuditLog::record($request, 'API Update Bio', 'Updated bio for ' . $user->email);
+        $this->notifyProfileUpdate($user, 'Your profile bio was updated successfully.');
         return response()->json(['success' => true, 'new_bio' => $request->user()->bio]);
     }
 
@@ -225,9 +244,11 @@ class StudentController extends Controller
             'password.confirmed'                => 'Passwords do not match.',
         ]);
 
-        $request->user()->update(['password' => Hash::make($request->password)]);
+        $user = $request->user();
+        $user->update(['password' => Hash::make($request->password)]);
 
-        AuditLog::record($request, 'API Update Password', 'Changed password for ' . $request->user()->email);
+        AuditLog::record($request, 'API Update Password', 'Changed password for ' . $user->email);
+        $this->notifyProfileUpdate($user, 'Your password was updated successfully.');
 
         return response()->json([
             'success' => true,

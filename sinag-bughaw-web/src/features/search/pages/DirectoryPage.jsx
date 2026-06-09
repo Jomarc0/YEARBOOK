@@ -4,6 +4,7 @@ import Navbar from '@/components/layout/Navbar';
 import Footer from '@/components/layout/Footer';
 import { studentsApi } from '@/api/student.api';
 import { faceApi } from '@/api/gallery.api';
+import { useAuth } from '@/features/auth/hooks/useAuth';
 import FaceSearchButton from '@/components/ui/FaceSearchButton';
 import { imageUrl, avatarUrl } from '@/utils/imageUrl';
 import { COURSE_FILTERS, getCourseShort } from '@/utils/courseShort';
@@ -89,7 +90,7 @@ function FaceMatchBanner({ matches, onClear }) {
           ))}
         </div>
         <span className="text-[#fdb813] text-xs font-bold">
-          <i className="fas fa-brain mr-1" />
+          <i className="fas fa-camera mr-1" />
           {matches.length} face match{matches.length > 1 ? 'es' : ''} found
           {matches[0] && (
             <span className="text-white/70 font-normal ml-1.5">
@@ -148,10 +149,10 @@ function StudentCard({ student, index, isMatched, matchData }) {
         </div>
 
         {/* Face match badge */}
-        {isMatched && (
+        {false && (
           <div className="absolute top-3 left-3 z-10 flex items-center gap-1.5 bg-[#fdb813] text-[#1d2b4b]
                           font-black text-[10px] px-2.5 py-1.5 rounded-xl">
-            <i className="fas fa-brain text-[9px]" />
+            <i className="fas fa-camera text-[9px]" />
             {matchData?.similarity?.toFixed(0) ?? '—'}% match
           </div>
         )}
@@ -179,6 +180,7 @@ function StudentCard({ student, index, isMatched, matchData }) {
 // ─── Main Page ────────────────────────────────────────────────────────────────
 export default function DirectoryPage() {
   const [searchParams] = useSearchParams();
+  const { user } = useAuth();
 
   const [students, setStudents] = useState([]);
   const [loading,  setLoading]  = useState(true);
@@ -200,6 +202,10 @@ export default function DirectoryPage() {
   const suggestTimer = useRef(null);
 
   const isFaceMode = faceMatches.length > 0;
+  const currentUserId = Number(user?.id);
+  const visibleStudents = Number.isFinite(currentUserId) && currentUserId > 0
+    ? students.filter(student => studentUserId(student) !== currentUserId)
+    : students;
 
   // ── Fetch students ───────────────────────────────────────────────────────
   const fetchStudents = useCallback(async (q = query, c = course, p = 1) => {
@@ -225,13 +231,17 @@ export default function DirectoryPage() {
     setSuggestLoading(true);
     try {
       const { data } = await studentsApi.suggest({ q });
-      setSuggestions(data.suggestions ?? []);
+      const hiddenId = Number(user?.id);
+      setSuggestions((data.suggestions ?? []).filter(s => {
+        const id = Number(s?.id ?? s?.user_id ?? s?.account_user_id);
+        return !Number.isFinite(hiddenId) || hiddenId <= 0 || id !== hiddenId;
+      }));
     } catch {
       setSuggestions([]);
     } finally {
       setSuggestLoading(false);
     }
-  }, []);
+  }, [user?.id]);
 
   useEffect(() => { fetchStudents(); }, []); // eslint-disable-line
 
@@ -336,7 +346,7 @@ export default function DirectoryPage() {
                   onChange={e => handleSearch(e.target.value)}
                   onFocus={() => setShowSuggest(true)}
                   onBlur={() => setTimeout(() => setShowSuggest(false), 160)}
-                  placeholder={isFaceMode ? 'Showing face match results…' : 'Search names, student IDs, or programs…'}
+                  placeholder="Search names, student IDs, or programs…"
                   className={`w-full h-12 pl-11 pr-14 rounded-xl bg-white/8 text-white text-sm outline-none
                                placeholder-white/40 transition-all
                                ${isFaceMode ? 'border-[1.5px] border-[#fdb813]' : 'border-[1.5px] border-transparent'}`}
@@ -355,7 +365,6 @@ export default function DirectoryPage() {
               </div>
             </div>
 
-            <FaceMatchBanner matches={faceMatches} onClear={() => { clearFaceResults(); reset(); }} />
           </div>
         </div>
       </header>
@@ -374,14 +383,9 @@ export default function DirectoryPage() {
       </div>
 
       {/* ── Result count ── */}
-      {!loading && (
+      {!loading && !isFaceMode && (
         <p className="text-center text-xs text-slate-400 mt-3 mb-0 px-4">
-          {isFaceMode ? (
-            <>
-              <i className="fas fa-brain mr-1 text-[#3f51b5]" />
-              Showing <strong className="text-[#1d2b4b]">{faceMatches.length}</strong> face match{faceMatches.length !== 1 ? 'es' : ''}
-            </>
-          ) : query ? (
+          {query ? (
             <>
               Found <strong className="text-[#1d2b4b]">{total}</strong> result{total !== 1 ? 's' : ''} for "
               <strong className="text-[#3f51b5]">{query}</strong>"
@@ -407,7 +411,7 @@ export default function DirectoryPage() {
             <p className="text-sm font-medium">{faceSearching ? 'Scanning faces…' : 'Searching…'}</p>
           </div>
 
-        ) : students.length === 0 ? (
+        ) : visibleStudents.length === 0 ? (
           /* Empty state */
           <div className="text-center py-24 bg-white rounded-3xl shadow-sm border border-slate-100 px-6">
             <i className="fas fa-user-slash text-7xl text-slate-100 mb-5 block" />
@@ -428,7 +432,7 @@ export default function DirectoryPage() {
           <>
             {/* Student grid */}
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 sm:gap-6">
-              {students.map((student, i) => (
+              {visibleStudents.map((student, i) => (
                 <StudentCard
                   key={student.id}
                   student={student}

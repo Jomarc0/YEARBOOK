@@ -9,10 +9,11 @@
  *   4. Back button now goes to /yearbook/:batchId instead of -1 so the user
  *      always has a sensible escape route even after a hard refresh.
  */
-import React, { Suspense } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import React, { Suspense, useState } from 'react';
+import { useParams, useNavigate, Link, useSearchParams } from 'react-router-dom';
 import { useYearbook } from '../hooks/useYearbook';
 import { useAuth } from '@/features/auth/hooks/useAuth';
+import { recordContentView } from '@/api/analytics.api';
 
 const FlipbookViewer = React.lazy(() =>
   import('../components/flipbook/FlipbookViewer'),
@@ -24,7 +25,13 @@ const BG   = '#0a0a14';
 export default function FlipbookViewerPage() {
   const { batchId }   = useParams();
   const navigate      = useNavigate();
+  const [searchParams] = useSearchParams();
   const { user: currentUser } = useAuth();
+  const [shareState, setShareState] = useState('idle');
+  const yearbookScope = React.useMemo(() => ({
+    department: searchParams.get('department') || undefined,
+    course: searchParams.get('course') || undefined,
+  }), [searchParams]);
 
   // isPremium: true when the user has an active premium subscription OR
   // when the platform has disabled subscription gating entirely.
@@ -38,7 +45,49 @@ export default function FlipbookViewerPage() {
     loading, error,
     meta, pages, toc, bookmarks, searchResults,
     search, addBookmark, removeBookmark, downloadPdf,
-  } = useYearbook(batchId);
+  } = useYearbook(batchId, yearbookScope);
+  const scopeLabel = meta?.scope?.label || yearbookScope.course || yearbookScope.department;
+
+  const handleShare = React.useCallback(async () => {
+    const shareUrl = window.location.href;
+    const title = `${meta?.title ?? 'Sinag-Bughaw Yearbook'} ${meta?.year ?? ''}${scopeLabel ? ` - ${scopeLabel}` : ''}`.trim();
+
+    try {
+      if (navigator.share) {
+        await navigator.share({ title, url: shareUrl });
+      } else if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(shareUrl);
+      } else {
+        const input = document.createElement('input');
+        input.value = shareUrl;
+        input.setAttribute('readonly', '');
+        input.style.position = 'fixed';
+        input.style.opacity = '0';
+        document.body.appendChild(input);
+        input.select();
+        document.execCommand('copy');
+        input.remove();
+      }
+
+      setShareState('copied');
+      window.setTimeout(() => setShareState('idle'), 1800);
+    } catch (err) {
+      if (err?.name === 'AbortError') return;
+      setShareState('error');
+      window.setTimeout(() => setShareState('idle'), 2200);
+    }
+  }, [meta, scopeLabel]);
+
+  React.useEffect(() => {
+    if (!batchId || !meta) return;
+    recordContentView({
+      content_type: 'yearbook',
+      content_id: Number(batchId),
+      title: meta?.batch?.name || meta?.title || `Yearbook ${batchId}`,
+      category: scopeLabel || (meta?.batch?.graduation_year ? `Batch ${meta.batch.graduation_year}` : 'yearbook'),
+      url: `/yearbook/${batchId}/view${window.location.search}`,
+    }).catch(() => {});
+  }, [batchId, meta, scopeLabel]);
 
   // ── Loading ────────────────────────────────────────────────────────────────
   if (loading) {
@@ -113,15 +162,20 @@ export default function FlipbookViewerPage() {
             fontFamily: 'Cormorant Garamond, Georgia, serif',
             fontSize: 14, color: 'rgba(255,255,255,.5)',
           }}>
-            {meta?.title ?? 'Senior Yearbook'} · {meta?.year}
+            {meta?.title ?? 'Senior Yearbook'} · {meta?.year}{scopeLabel ? ` · ${scopeLabel}` : ''}
           </p>
         </div>
 
         {/* Copy share link */}
         <button
-          onClick={() => navigator.clipboard?.writeText(window.location.href)}
+          onClick={handleShare}
           className="flex items-center gap-1.5 text-xs transition-opacity hover:opacity-80"
-          style={{ color: 'rgba(255,255,255,.35)', background: 'none', border: 'none', cursor: 'pointer' }}
+          style={{
+            color: shareState === 'error' ? '#e24b4a' : shareState === 'copied' ? '#c9a84c' : 'rgba(255,255,255,.35)',
+            background: 'none',
+            border: 'none',
+            cursor: 'pointer',
+          }}
           title="Copy shareable link"
         >
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
@@ -133,7 +187,7 @@ export default function FlipbookViewerPage() {
             <line x1="8.59"  y1="13.51" x2="15.42" y2="17.49"/>
             <line x1="15.41" y1="6.51"  x2="8.59"  y2="10.49"/>
           </svg>
-          Share
+          {shareState === 'copied' ? 'Copied' : shareState === 'error' ? 'Share failed' : 'Share'}
         </button>
       </div>
 
@@ -149,6 +203,7 @@ export default function FlipbookViewerPage() {
           batchId={batchId}
           pdfReady={!!meta?.pdfReady}
           isPremium={isPremium}
+          yearbookScope={yearbookScope}
           onSearch={search}
           onAddBookmark={addBookmark}
           onRemoveBookmark={removeBookmark}

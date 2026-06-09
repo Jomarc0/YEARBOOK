@@ -45,10 +45,10 @@ const { height } = Dimensions.get('window');
 const TABS = [
   { key: 'posts', label: 'Posts', icon: 'th-large' },
   { key: 'tagged', label: 'Tagged', icon: 'tag' },
-  { key: 'yearbook', label: 'Yearbook', icon: 'book' },
   { key: 'academic', label: 'Academic', icon: 'graduation-cap' },
   { key: 'achievements', label: 'Awards', icon: 'trophy' },
   { key: 'voice', label: 'Voice', icon: 'microphone' },
+  { key: 'analytics', label: 'Analytics', icon: 'bar-chart' },
 ];
 
 const VISIBILITY = [
@@ -62,6 +62,11 @@ const fullName = (user: any) => user?.name || 'Student';
 const profilePhoto = (user: any) => imageUrl(user?.profile_picture || user?.profile_pic || safeStudent(user)?.photo);
 const initials = (name = '') => name.trim().split(/\s+/).slice(0, 2).map((part) => part[0]?.toUpperCase()).join('') || 'NU';
 const course = (user: any) => safeStudent(user)?.course || user?.course || 'Pioneer Student';
+const programAbbrev = (user: any) => {
+  const value = course(user);
+  if (!value || value === 'Pioneer Student') return 'N/A';
+  return value.split(/\s+/).filter((part: string) => !['of', 'in', 'and', '-'].includes(part.toLowerCase())).map((part: string) => part[0]).join('').slice(0, 8) || 'N/A';
+};
 const graduationYear = (user: any) => safeStudent(user)?.graduation_year || user?.graduation_year || user?.batch_year || '';
 const studentNo = (user: any) => safeStudent(user)?.student_no || user?.student_id || user?.student_no || '';
 const motto = (user: any) => safeStudent(user)?.motto || user?.motto || '';
@@ -124,6 +129,7 @@ export default function ProfileScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
   const requestedTab = typeof params.tab === 'string' ? params.tab : '';
+  const requestedSheet = typeof params.sheet === 'string' ? params.sheet : '';
   const requestedPhotoId = typeof params.photoId === 'string' ? params.photoId : '';
   const requestedPhotoUrl = typeof params.photoUrl === 'string' ? params.photoUrl : '';
   const [user, setUser] = useState<any>(null);
@@ -251,7 +257,16 @@ export default function ProfileScreen() {
     React.useCallback(() => {
       if (requestedTab && TABS.some((item) => item.key === requestedTab)) setActiveTab(requestedTab);
       loadProfile();
-    }, [loadProfile, requestedTab])
+      if (requestedSheet === 'settings') {
+        setTimeout(() => {
+          setSettingsOpen(true);
+          Animated.parallel([
+            Animated.timing(fadeAnim, { toValue: 1, duration: 220, useNativeDriver: true }),
+            Animated.spring(slideAnim, { toValue: 0, useNativeDriver: true, tension: 50, friction: 8 }),
+          ]).start();
+        }, 250);
+      }
+    }, [fadeAnim, loadProfile, requestedSheet, requestedTab, slideAnim])
   );
 
   const openSheet = (type: 'settings' | 'password') => {
@@ -602,7 +617,7 @@ export default function ProfileScreen() {
   const stats = useMemo(() => [
     { label: 'Posts', value: posts.length },
     { label: 'Views', value: user?.profile_views || 0 },
-    { label: 'Program', value: course(user).split(' ').map((part: string) => part[0]).join('').slice(0, 6) || 'NU' },
+    { label: 'Program', value: programAbbrev(user) },
   ], [posts.length, user]);
 
   const renderHeader = () => (
@@ -611,6 +626,9 @@ export default function ProfileScreen() {
         <View style={styles.cover}>
           <View style={styles.coverDot} />
           <View style={styles.coverGlow} />
+          <TouchableOpacity style={styles.settingsButton} onPress={() => openSheet('settings')}>
+            <FontAwesome name="gear" size={16} color="#1A2547" />
+          </TouchableOpacity>
         </View>
         <View style={styles.profileBody}>
           <TouchableOpacity style={styles.avatarRing} onPress={handlePickProfilePicture} disabled={saving}>
@@ -622,6 +640,9 @@ export default function ProfileScreen() {
 
           <View style={styles.nameRow}>
             <Text style={styles.name}>{fullName(user)}</Text>
+            <TouchableOpacity style={styles.nameEditButton} onPress={() => openSheet('settings')}>
+              <FontAwesome name="pencil" size={13} color="#1A2547" />
+            </TouchableOpacity>
             {premiumBadgeEnabled && isPremium(user) && (
               <View style={styles.tierBadge}>
                 <FontAwesome name="star" size={10} color="#1d2b4b" />
@@ -634,14 +655,11 @@ export default function ProfileScreen() {
 
           <View style={styles.actionRow}>
             {(premiumEnabled && !isPremium(user)) || (isPremium(user) && yearbookEnabled) ? (
-              <TouchableOpacity style={styles.primaryButton} onPress={() => isPremium(user) ? router.push('/yearbook') : router.push('/payment' as any)}>
+              <TouchableOpacity style={isPremium(user) ? styles.primaryButton : styles.outlinePremiumButton} onPress={() => isPremium(user) ? router.push('/yearbook') : router.push('/payment' as any)}>
                 <FontAwesome name={isPremium(user) ? 'book' : 'star'} size={14} color="#fdb813" />
-                <Text style={styles.primaryButtonText}>{isPremium(user) ? 'View Yearbook' : 'Go Premium'}</Text>
+                <Text style={isPremium(user) ? styles.primaryButtonText : styles.outlinePremiumText}>{isPremium(user) ? 'View Yearbook' : 'Go Premium'}</Text>
               </TouchableOpacity>
             ) : null}
-            <TouchableOpacity style={styles.iconButton} onPress={() => openSheet('settings')}>
-              <FontAwesome name="pencil" size={16} color="#1d2b4b" />
-            </TouchableOpacity>
           </View>
 
           <View style={styles.statsRow}>
@@ -659,7 +677,6 @@ export default function ProfileScreen() {
       <View style={styles.tabs}>
         {TABS.map((item) => {
           const active = activeTab === item.key;
-          if (item.key === 'yearbook' && !isGraduate(user)) return null;
           return (
             <TouchableOpacity key={item.key} style={[styles.tab, active && styles.tabActive]} onPress={() => setActiveTab(item.key)}>
               <FontAwesome name={item.icon as any} size={13} color={active ? '#fdb813' : '#94a3b8'} />
@@ -759,17 +776,6 @@ export default function ProfileScreen() {
       );
     }
 
-    if (activeTab === 'yearbook') {
-      return (
-        <View style={styles.card}>
-          <InfoRow icon="graduation-cap" label="Class Of" value={graduationYear(user) || 'Not set'} />
-          <InfoRow icon="quote-left" label="Motto" value={motto(user) || 'No motto yet.'} />
-          <InfoRow icon="heart" label="Fondest Memory" value={safeStudent(user)?.fondest_memory || user?.fondest_memory || 'No memory added yet.'} />
-          <InfoRow icon="rocket" label="Future Plans" value={safeStudent(user)?.future_plans || user?.future_plans || 'No future plans added yet.'} />
-        </View>
-      );
-    }
-
     if (activeTab === 'academic') {
       return (
         <View style={styles.card}>
@@ -832,6 +838,28 @@ export default function ProfileScreen() {
       ) : <Empty icon="microphone-slash" title="No Voice Notes Yet" text="Approved voice memories from classmates will appear here." />;
     }
 
+    if (activeTab === 'analytics') {
+      const analytics = [
+        { label: 'Profile views', value: user?.views_count || user?.profile_views || 0, icon: 'eye' },
+        { label: 'Trending rank', value: user?.trending_rank ? `#${user.trending_rank}` : 'N/A', icon: 'line-chart' },
+        { label: 'Photos uploaded', value: posts.length, icon: 'image' },
+        { label: 'Messages sent', value: user?.messages_sent || 0, icon: 'send' },
+      ];
+      return (
+        <View style={styles.analyticsGrid}>
+          {analytics.map((item) => (
+            <View key={item.label} style={styles.analyticsCard}>
+              <View style={styles.analyticsIcon}>
+                <FontAwesome name={item.icon as any} size={15} color="#F5A623" />
+              </View>
+              <Text style={styles.analyticsValue}>{item.value}</Text>
+              <Text style={styles.analyticsLabel}>{item.label}</Text>
+            </View>
+          ))}
+        </View>
+      );
+    }
+
     return null;
   };
 
@@ -847,17 +875,6 @@ export default function ProfileScreen() {
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); loadProfile(); }} />}
       />
 
-      <View style={styles.footerActions}>
-        <TouchableOpacity style={styles.footerButton} onPress={() => openSheet('password')}>
-          <FontAwesome name="lock" size={15} color="#1d2b4b" />
-          <Text style={styles.footerButtonText}>Password</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={[styles.footerButton, styles.logoutButton]} onPress={handleSignOut}>
-          <FontAwesome name="sign-out" size={15} color="#dc2626" />
-          <Text style={[styles.footerButtonText, { color: '#dc2626' }]}>Sign Out</Text>
-        </TouchableOpacity>
-      </View>
-
       <SettingsModal
         visible={settingsOpen}
         fadeAnim={fadeAnim}
@@ -871,6 +888,11 @@ export default function ProfileScreen() {
         removeAchievement={removeAchievement}
         saveSettings={saveSettings}
         saving={saving}
+        openPassword={() => {
+          closeSheet();
+          setTimeout(() => openSheet('password'), 220);
+        }}
+        signOut={handleSignOut}
       />
 
       <PasswordModal
@@ -1161,7 +1183,6 @@ function PostEditorModal(props: any) {
 function InfoRow({ icon, label, value }: { icon: any; label: string; value: any }) {
   return (
     <View style={styles.infoRow}>
-      <View style={styles.infoIcon}><FontAwesome name={icon} size={13} color="#fdb813" /></View>
       <View style={{ flex: 1 }}>
         <Text style={styles.infoLabel}>{label}</Text>
         <Text style={styles.infoValue}>{String(value || 'Not set')}</Text>
@@ -1181,7 +1202,7 @@ function Empty({ icon, title, text }: { icon: any; title: string; text: string }
 }
 
 function SettingsModal(props: any) {
-  const { visible, fadeAnim, slideAnim, closeSheet, form, setForm, achievementForm, addAchievement, updateAchievement, removeAchievement, saveSettings, saving } = props;
+  const { visible, fadeAnim, slideAnim, closeSheet, form, setForm, achievementForm, addAchievement, updateAchievement, removeAchievement, saveSettings, saving, openPassword, signOut } = props;
   return (
     <Modal visible={visible} transparent animationType="none" onRequestClose={closeSheet}>
       <View style={styles.modalOverlay}>
@@ -1199,7 +1220,7 @@ function SettingsModal(props: any) {
               <TextInput style={[styles.input, styles.textArea]} value={form.bio} onChangeText={(bio) => setForm((current: any) => ({ ...current, bio }))} multiline placeholder="Tell your batchmates about you..." />
 
               <Text style={styles.inputLabel}>MOTTO</Text>
-              <TextInput style={styles.input} value={form.motto} onChangeText={(mottoText) => setForm((current: any) => ({ ...current, motto: mottoText }))} placeholder="Your yearbook quote..." />
+              <TextInput style={styles.input} value={form.motto} onChangeText={(mottoText) => setForm((current: any) => ({ ...current, motto: mottoText }))} maxLength={255} placeholder="Your yearbook quote..." />
 
               <Text style={styles.inputLabel}>VISIBILITY</Text>
               {VISIBILITY.map((item) => (
@@ -1241,6 +1262,15 @@ function SettingsModal(props: any) {
 
               <TouchableOpacity style={styles.saveButton} onPress={saveSettings} disabled={saving}>
                 <Text style={styles.saveButtonText}>{saving ? 'Saving...' : 'Save Profile Settings'}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.settingsActionRow} onPress={openPassword}>
+                <FontAwesome name="lock" size={15} color="#1A2547" />
+                <Text style={styles.settingsActionText}>Password</Text>
+                <FontAwesome name="chevron-right" size={12} color="#9CA3AF" />
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.settingsActionRow} onPress={signOut}>
+                <FontAwesome name="sign-out" size={15} color="#EF4444" />
+                <Text style={[styles.settingsActionText, { color: '#EF4444' }]}>Sign Out</Text>
               </TouchableOpacity>
             </ScrollView>
           </KeyboardAvoidingView>
@@ -1287,6 +1317,7 @@ const styles = StyleSheet.create({
   cover: { height: 136, backgroundColor: '#1d2b4b', overflow: 'hidden' },
   coverDot: { ...StyleSheet.absoluteFillObject, opacity: 0.08, backgroundColor: '#fdb813' },
   coverGlow: { position: 'absolute', right: -58, top: -70, width: 180, height: 180, borderRadius: 90, backgroundColor: 'rgba(253,184,19,0.08)' },
+  settingsButton: { position: 'absolute', right: 14, top: 14, width: 40, height: 40, borderRadius: 13, backgroundColor: '#FFFFFF', alignItems: 'center', justifyContent: 'center' },
   profileBody: { paddingHorizontal: 20, paddingBottom: 22, alignItems: 'center' },
   avatarRing: { marginTop: -58, padding: 4, backgroundColor: '#ffffff', borderRadius: 60, borderWidth: 3, borderColor: '#fdb813' },
   avatarFallback: { backgroundColor: '#1d2b4b', justifyContent: 'center', alignItems: 'center' },
@@ -1294,6 +1325,7 @@ const styles = StyleSheet.create({
   editBadge: { position: 'absolute', right: 2, bottom: 7, width: 28, height: 28, borderRadius: 14, backgroundColor: '#fdb813', alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: '#ffffff' },
   nameRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', flexWrap: 'wrap', gap: 8, marginTop: 14 },
   name: { color: '#1d2b4b', fontSize: 24, fontWeight: '900', textAlign: 'center' },
+  nameEditButton: { width: 32, height: 32, borderRadius: 10, borderWidth: 1, borderColor: '#E5E7EB', alignItems: 'center', justifyContent: 'center', backgroundColor: '#FFFFFF' },
   tierBadge: { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: '#fef3c7', borderRadius: 999, paddingHorizontal: 10, paddingVertical: 5 },
   tierText: { color: '#1d2b4b', fontSize: 10, fontWeight: '900' },
   meta: { color: '#64748b', fontSize: 13, textAlign: 'center', marginTop: 7 },
@@ -1301,6 +1333,8 @@ const styles = StyleSheet.create({
   actionRow: { flexDirection: 'row', gap: 10, width: '100%', marginTop: 18 },
   primaryButton: { flex: 1, height: 46, borderRadius: 13, backgroundColor: '#1d2b4b', alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 8 },
   primaryButtonText: { color: '#ffffff', fontSize: 13, fontWeight: '900' },
+  outlinePremiumButton: { flex: 1, height: 46, borderRadius: 13, borderWidth: 1, borderColor: '#1A2547', backgroundColor: '#ffffff', alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 8 },
+  outlinePremiumText: { color: '#1A2547', fontSize: 13, fontWeight: '900' },
   iconButton: { width: 48, height: 46, borderRadius: 13, borderWidth: 1, borderColor: '#e2e8f0', alignItems: 'center', justifyContent: 'center', backgroundColor: '#f8fafc' },
   statsRow: { flexDirection: 'row', width: '100%', borderTopWidth: 1, borderTopColor: '#eef2ff', marginTop: 20, paddingTop: 16 },
   statItem: { flex: 1, alignItems: 'center' },
@@ -1308,15 +1342,20 @@ const styles = StyleSheet.create({
   statLabel: { color: '#94a3b8', fontSize: 10, fontWeight: '800', marginTop: 3 },
   tabs: { marginHorizontal: 14, marginBottom: 12, backgroundColor: '#ffffff', borderRadius: 16, flexDirection: 'row', overflow: 'hidden', borderWidth: 1, borderColor: '#e2e8f0' },
   tab: { flex: 1, minHeight: 58, alignItems: 'center', justifyContent: 'center', gap: 5 },
-  tabActive: { backgroundColor: '#f8fafc', borderBottomWidth: 2, borderBottomColor: '#1d2b4b' },
+  tabActive: { backgroundColor: '#f8fafc', borderBottomWidth: 2, borderBottomColor: '#F5A623' },
   tabText: { color: '#94a3b8', fontSize: 10, fontWeight: '900' },
   tabTextActive: { color: '#1d2b4b' },
   errorText: { marginHorizontal: 16, color: '#dc2626', textAlign: 'center', marginBottom: 10 },
   card: { marginHorizontal: 14, backgroundColor: '#ffffff', borderRadius: 18, borderWidth: 1, borderColor: '#e2e8f0', padding: 18 },
-  infoRow: { flexDirection: 'row', gap: 12, paddingVertical: 13, borderBottomWidth: 1, borderBottomColor: '#f1f5f9' },
+  infoRow: { paddingVertical: 13, borderBottomWidth: 1, borderBottomColor: '#f1f5f9' },
   infoIcon: { width: 34, height: 34, borderRadius: 10, backgroundColor: '#1d2b4b', alignItems: 'center', justifyContent: 'center' },
-  infoLabel: { color: '#94a3b8', fontSize: 10, fontWeight: '900', letterSpacing: 0.8 },
-  infoValue: { color: '#1d2b4b', fontSize: 14, fontWeight: '700', marginTop: 3 },
+  infoLabel: { color: '#6B7280', fontSize: 12, fontWeight: '900', letterSpacing: 0.8, textTransform: 'uppercase' },
+  infoValue: { color: '#1A2547', fontSize: 16, fontWeight: '900', marginTop: 3 },
+  analyticsGrid: { marginHorizontal: 14, flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+  analyticsCard: { width: '48%', borderRadius: 12, backgroundColor: '#ffffff', borderWidth: 1, borderColor: '#e2e8f0', padding: 14 },
+  analyticsIcon: { width: 36, height: 36, borderRadius: 12, backgroundColor: '#E8ECF4', alignItems: 'center', justifyContent: 'center', marginBottom: 10 },
+  analyticsValue: { color: '#1A2547', fontSize: 20, fontWeight: '900' },
+  analyticsLabel: { color: '#6B7280', fontSize: 12, marginTop: 3 },
   postGrid: { marginHorizontal: 14, flexDirection: 'row', flexWrap: 'wrap', gap: 3, borderRadius: 18, overflow: 'hidden' },
   postActionRow: { marginHorizontal: 14, marginBottom: 12, alignItems: 'flex-end' },
   featureNotice: { marginHorizontal: 14, marginBottom: 12, borderRadius: 14, backgroundColor: '#fffbeb', borderWidth: 1, borderColor: '#fde68a', paddingHorizontal: 13, paddingVertical: 11, flexDirection: 'row', alignItems: 'center', gap: 8 },
@@ -1411,4 +1450,6 @@ const styles = StyleSheet.create({
   removeAchievement: { alignSelf: 'flex-end', width: 28, height: 28, borderRadius: 14, backgroundColor: '#fee2e2', alignItems: 'center', justifyContent: 'center', marginBottom: 6 },
   saveButton: { minHeight: 50, borderRadius: 14, backgroundColor: '#1d2b4b', alignItems: 'center', justifyContent: 'center', marginTop: 16, marginBottom: 28 },
   saveButtonText: { color: '#ffffff', fontSize: 14, fontWeight: '900' },
+  settingsActionRow: { minHeight: 56, borderTopWidth: 1, borderTopColor: '#E5E7EB', flexDirection: 'row', alignItems: 'center', gap: 12 },
+  settingsActionText: { flex: 1, color: '#1A2547', fontSize: 16, fontWeight: '900' },
 });

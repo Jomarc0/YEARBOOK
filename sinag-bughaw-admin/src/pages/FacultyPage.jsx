@@ -37,6 +37,48 @@ import ConfirmModal from "../components/shared/ConfirmModal";
 
 const PER_PAGE = 4;
 
+const loadImage = (src) => new Promise((resolve, reject) => {
+  const img = new Image();
+  img.onload = () => resolve(img);
+  img.onerror = reject;
+  img.src = src;
+});
+
+async function makeFacultyPhotoFile({ file, previewUrl, zoom, x, y }) {
+  const size = 512;
+  const image = await loadImage(previewUrl);
+  const canvas = document.createElement("canvas");
+  canvas.width = size;
+  canvas.height = size;
+
+  const ctx = canvas.getContext("2d");
+  const baseScale = Math.max(size / image.naturalWidth, size / image.naturalHeight);
+  const scale = baseScale * zoom;
+  const drawWidth = image.naturalWidth * scale;
+  const drawHeight = image.naturalHeight * scale;
+  const drawX = (size / 2) + ((x / 100) * size) - (drawWidth / 2);
+  const drawY = (size / 2) + ((y / 100) * size) - (drawHeight / 2);
+
+  ctx.drawImage(image, drawX, drawY, drawWidth, drawHeight);
+
+  const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.92));
+  if (!blob) throw new Error("Could not prepare faculty photo.");
+
+  const name = file?.name?.replace(/\.[^.]+$/, "") || "faculty-photo";
+  return new File([blob], `${name}-faculty.jpg`, { type: "image/jpeg" });
+}
+
+function createPhotoDraft(file) {
+  return {
+    file,
+    previewUrl: URL.createObjectURL(file),
+    zoom: 1,
+    x: 0,
+    y: 0,
+    aspect: 1,
+  };
+}
+
 export default function FacultyPage({ showToast }) {
   const [list,        setList]        = useState([]);
   const [meta,        setMeta]        = useState(null);
@@ -49,6 +91,8 @@ export default function FacultyPage({ showToast }) {
   const [editing,     setEditing]     = useState(null);   // id of expanded record
   const [showAddForm, setShowAddForm] = useState(false);
   const [addPreview,  setAddPreview]  = useState(null);
+  const [addPhotoFile, setAddPhotoFile] = useState(null);
+  const [addPhotoDraft, setAddPhotoDraft] = useState(null);
 
   const timer      = useRef(null);
   const formRef    = useRef(null);
@@ -101,8 +145,7 @@ export default function FacultyPage({ showToast }) {
     fd.append("department", raw.get("department"));
     fd.append("bio",        raw.get("bio") ?? "");
 
-    const file = addFileRef.current?.files[0];
-    if (file) fd.append("image", file);
+    if (addPhotoFile) fd.append("image", addPhotoFile);
 
     try {
       await api.post("/admin/faculty", fd, {
@@ -112,6 +155,8 @@ export default function FacultyPage({ showToast }) {
       formRef.current?.reset();
       if (addFileRef.current) addFileRef.current.value = "";
       setAddPreview(null);
+      setAddPhotoFile(null);
+      setAddPhotoDraft(null);
       setShowAddForm(false);
       setPage(1);
       load(1, search);
@@ -160,6 +205,33 @@ export default function FacultyPage({ showToast }) {
   };
 
   // ── Render ─────────────────────────────────────────────────────────────────
+  const clearAddPhoto = () => {
+    setAddPreview(null);
+    setAddPhotoFile(null);
+    setAddPhotoDraft(null);
+    if (addFileRef.current) addFileRef.current.value = "";
+  };
+
+  const handleAddPhotoSelected = (file) => {
+    if (!file) {
+      clearAddPhoto();
+      return;
+    }
+    setAddPhotoDraft(createPhotoDraft(file));
+  };
+
+  const applyAddPhotoDraft = async () => {
+    if (!addPhotoDraft) return;
+    try {
+      const cropped = await makeFacultyPhotoFile(addPhotoDraft);
+      setAddPhotoFile(cropped);
+      setAddPreview(URL.createObjectURL(cropped));
+      setAddPhotoDraft(null);
+    } catch {
+      showFlash("Could not prepare selected photo.", "error");
+    }
+  };
+
   return (
     <div className="px-6 py-7">
       <PageHdr
@@ -221,7 +293,7 @@ export default function FacultyPage({ showToast }) {
                           />
                           <button
                             type="button"
-                            onClick={() => { setAddPreview(null); if (addFileRef.current) addFileRef.current.value = ""; }}
+                            onClick={clearAddPhoto}
                             className="absolute -top-1.5 -right-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-red-500 text-white text-xs shadow"
                           >✕</button>
                         </div>
@@ -231,11 +303,7 @@ export default function FacultyPage({ showToast }) {
                         type="file"
                         accept="image/*"
                         className="text-sm text-slate-600"
-                        onChange={(e) => {
-                          const file = e.target.files[0];
-                          if (file) setAddPreview(URL.createObjectURL(file));
-                          else setAddPreview(null);
-                        }}
+                        onChange={(e) => handleAddPhotoSelected(e.target.files[0])}
                       />
                     </div>
                   </FField>
@@ -325,11 +393,150 @@ export default function FacultyPage({ showToast }) {
         onConfirm={handleDelete}
         onCancel={() => setConfirm(null)}
       />
+
+      <FacultyPhotoEditor
+        draft={addPhotoDraft}
+        setDraft={setAddPhotoDraft}
+        fileRef={addFileRef}
+        saving={saving}
+        onCancel={clearAddPhoto}
+        onApply={applyAddPhotoDraft}
+      />
     </div>
   );
 }
 
 // ─── FacultyCard ──────────────────────────────────────────────────────────────
+function FacultyPhotoEditor({ draft, setDraft, fileRef, saving, onCancel, onApply }) {
+  const dragRef = useRef({ active: false, startX: 0, startY: 0, originX: 0, originY: 0 });
+  const clamp = (value) => Math.max(-45, Math.min(45, Math.round(value)));
+
+  if (!draft) return null;
+
+  const previewStyle = {
+    left: `${50 + draft.x}%`,
+    top: `${50 + draft.y}%`,
+    transform: `translate(-50%, -50%) scale(${draft.zoom})`,
+    width: draft.aspect >= 1 ? "auto" : "100%",
+    height: draft.aspect >= 1 ? "100%" : "auto",
+  };
+
+  const startDrag = (e) => {
+    e.preventDefault();
+    e.currentTarget.setPointerCapture(e.pointerId);
+    dragRef.current = {
+      active: true,
+      startX: e.clientX,
+      startY: e.clientY,
+      originX: draft.x,
+      originY: draft.y,
+    };
+  };
+
+  const moveDrag = (e) => {
+    if (!dragRef.current.active) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const nextX = dragRef.current.originX + ((e.clientX - dragRef.current.startX) / rect.width) * 100;
+    const nextY = dragRef.current.originY + ((e.clientY - dragRef.current.startY) / rect.height) * 100;
+    setDraft((current) => current ? { ...current, x: clamp(nextX), y: clamp(nextY) } : current);
+  };
+
+  const stopDrag = (e) => {
+    dragRef.current.active = false;
+    if (e.currentTarget.hasPointerCapture(e.pointerId)) {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-[9500] flex items-center justify-center bg-slate-950/60 px-4 backdrop-blur-sm">
+      <div className="w-full max-w-md overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-2xl">
+        <div className="flex items-start justify-between gap-3 border-b border-slate-100 px-5 py-4">
+          <div>
+            <h3 className="m-0 text-base font-black text-slate-800">Position Faculty Photo</h3>
+            <p className="m-0 mt-0.5 text-xs text-slate-500">Drag and zoom the image before saving it.</p>
+          </div>
+          <button
+            type="button"
+            onClick={onCancel}
+            className="flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 transition hover:bg-slate-50 hover:text-slate-800"
+            aria-label="Cancel photo"
+          >
+            x
+          </button>
+        </div>
+
+        <div className="px-5 py-5">
+          <div
+            className="relative mx-auto h-56 w-56 touch-none cursor-grab overflow-hidden rounded-2xl border-4 border-indigo-100 bg-slate-100 shadow-inner active:cursor-grabbing"
+            onPointerDown={startDrag}
+            onPointerMove={moveDrag}
+            onPointerUp={stopDrag}
+            onPointerCancel={stopDrag}
+          >
+            <img
+              src={draft.previewUrl}
+              alt="Faculty photo preview"
+              className="absolute max-w-none select-none"
+              style={previewStyle}
+              onLoad={(e) => {
+                const image = e.currentTarget;
+                const aspect = image.naturalWidth / image.naturalHeight;
+                setDraft((current) => current ? { ...current, aspect } : current);
+              }}
+              draggable="false"
+            />
+          </div>
+          <p className="m-0 mt-3 text-center text-xs font-semibold text-slate-400">Drag to reposition the photo.</p>
+
+          <label className="mt-5 block">
+            <div className="mb-2 flex items-center justify-between">
+              <span className="text-[11px] font-black uppercase tracking-wider text-slate-400">Zoom</span>
+              <span className="text-[11px] font-bold text-slate-700">{Math.round(draft.zoom * 100)}%</span>
+            </div>
+            <input
+              type="range"
+              min="1"
+              max="2.4"
+              step="0.01"
+              value={draft.zoom}
+              onChange={(e) => setDraft((current) => current ? { ...current, zoom: Number(e.target.value) } : current)}
+              className="w-full accent-indigo-600"
+            />
+          </label>
+        </div>
+
+        <div className="flex items-center justify-between gap-3 border-t border-slate-100 bg-slate-50 px-5 py-4">
+          <button
+            type="button"
+            onClick={() => fileRef.current?.click()}
+            className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-xs font-bold text-slate-700 transition hover:bg-slate-100"
+          >
+            Choose Another
+          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={onCancel}
+              className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-xs font-bold text-slate-500 transition hover:bg-slate-100"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={onApply}
+              disabled={saving}
+              className="rounded-xl bg-indigo-600 px-4 py-2.5 text-xs font-black text-white shadow-sm transition hover:bg-indigo-700 disabled:opacity-60"
+            >
+              Use Photo
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function FacultyCard({ fac, isEditing, saving, onToggleEdit, onUpdate, onDelete }) {
   const [f, setF] = useState({
     name:       fac.name,
@@ -338,6 +545,8 @@ function FacultyCard({ fac, isEditing, saving, onToggleEdit, onUpdate, onDelete 
     bio:        fac.bio ?? "",
   });
   const [editPreview, setEditPreview] = useState(null);
+  const [editPhotoFile, setEditPhotoFile] = useState(null);
+  const [editPhotoDraft, setEditPhotoDraft] = useState(null);
   const fileRef = useRef(null);
   const set = (k, v) => setF((p) => ({ ...p, [k]: v }));
 
@@ -351,6 +560,33 @@ function FacultyCard({ fac, isEditing, saving, onToggleEdit, onUpdate, onDelete 
     });
   }, [fac]);
 
+  const clearEditPhoto = () => {
+    setEditPreview(null);
+    setEditPhotoFile(null);
+    setEditPhotoDraft(null);
+    if (fileRef.current) fileRef.current.value = "";
+  };
+
+  const handleEditPhotoSelected = (file) => {
+    if (!file) {
+      clearEditPhoto();
+      return;
+    }
+    setEditPhotoDraft(createPhotoDraft(file));
+  };
+
+  const applyEditPhotoDraft = async () => {
+    if (!editPhotoDraft) return;
+    try {
+      const cropped = await makeFacultyPhotoFile(editPhotoDraft);
+      setEditPhotoFile(cropped);
+      setEditPreview(URL.createObjectURL(cropped));
+      setEditPhotoDraft(null);
+    } catch {
+      setEditPhotoDraft(null);
+    }
+  };
+
   const handleSubmit = (e) => {
     e.preventDefault();
     const fd = new FormData();
@@ -358,10 +594,16 @@ function FacultyCard({ fac, isEditing, saving, onToggleEdit, onUpdate, onDelete 
     fd.append("title",      f.title);
     fd.append("department", f.department);
     fd.append("bio",        f.bio);
-    if (fileRef.current?.files[0]) {
-      fd.append("image", fileRef.current.files[0]);
+    if (editPhotoFile) {
+      fd.append("image", editPhotoFile);
     }
     onUpdate(fd);
+    clearEditPhoto();
+  };
+
+  const handleToggleEdit = () => {
+    if (isEditing) clearEditPhoto();
+    onToggleEdit();
   };
 
   return (
@@ -393,7 +635,7 @@ function FacultyCard({ fac, isEditing, saving, onToggleEdit, onUpdate, onDelete 
 
         {/* Edit toggle */}
         <button
-          onClick={onToggleEdit}
+          onClick={handleToggleEdit}
           className="shrink-0 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-indigo-600 transition hover:bg-indigo-50"
         >
           {isEditing ? "Cancel" : "Edit"}
@@ -432,7 +674,7 @@ function FacultyCard({ fac, isEditing, saving, onToggleEdit, onUpdate, onDelete 
                   {editPreview && (
                     <button
                       type="button"
-                      onClick={() => { setEditPreview(null); if (fileRef.current) fileRef.current.value = ""; }}
+                      onClick={clearEditPhoto}
                       className="absolute -top-1.5 -right-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-red-500 text-white text-xs shadow"
                     >✕</button>
                   )}
@@ -444,14 +686,10 @@ function FacultyCard({ fac, isEditing, saving, onToggleEdit, onUpdate, onDelete 
                   type="file"
                   accept="image/*"
                   className="text-sm text-slate-600"
-                  onChange={(e) => {
-                    const file = e.target.files[0];
-                    if (file) setEditPreview(URL.createObjectURL(file));
-                    else setEditPreview(null);
-                  }}
+                  onChange={(e) => handleEditPhotoSelected(e.target.files[0])}
                 />
                 <p className="mt-1 text-xs text-slate-400">
-                  {editPreview ? "New photo selected — click Update to save." : fac.photo ? "Pick a new file to replace the current photo." : "No photo yet."}
+                  {editPreview ? "New photo positioned - click Update to save." : fac.photo ? "Pick a new file to replace the current photo." : "No photo yet."}
                 </p>
               </div>
             </div>
@@ -465,6 +703,14 @@ function FacultyCard({ fac, isEditing, saving, onToggleEdit, onUpdate, onDelete 
               Delete
             </Btn>
           </div>
+          <FacultyPhotoEditor
+            draft={editPhotoDraft}
+            setDraft={setEditPhotoDraft}
+            fileRef={fileRef}
+            saving={saving}
+            onCancel={clearEditPhoto}
+            onApply={applyEditPhotoDraft}
+          />
         </form>
       )}
     </div>

@@ -342,24 +342,6 @@ export default function GraduationPage() {
             />
             <FaceSearchButton onFile={handleFaceFile} loading={searching} />
           </div>
-          {matches.length > 0 && (
-            <div className="mt-3 grid grid-cols-[repeat(auto-fill,minmax(200px,1fr))] gap-2.5 text-left">
-              {matches.map(m => (
-                <Link key={m.user_id} to={`/profile/${m.user_id}`}
-                  className="flex items-center gap-3 bg-white/[0.12] backdrop-blur-md border border-white/20
-                             rounded-[14px] p-3 no-underline hover:border-[#fdb813] transition-colors">
-                  <img src={imageUrl(m.profile_picture) || avatarUrl(m.name)} alt={m.name}
-                    className="w-11 h-11 rounded-xl object-cover border-2 border-[#fdb813] flex-shrink-0" />
-                  <div className="min-w-0">
-                    <p className="m-0 font-bold text-[13px] text-white truncate">{m.name}</p>
-                    <p className="m-0 text-[11px] text-white/60">
-                      <i className="fas fa-brain text-[#fdb813] mr-1" />{m.similarity}% match
-                    </p>
-                  </div>
-                </Link>
-              ))}
-            </div>
-          )}
         </div>
 
         <Link to="/graduation/speeches"

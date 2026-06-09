@@ -5,6 +5,7 @@ namespace App\Http\Controllers\API\Section;
 use App\Http\Controllers\Controller;
 use App\Models\Section;
 use App\Models\Student;
+use App\Services\Student\BatchService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -29,7 +30,11 @@ class SectionController extends Controller
         }
 
         if ($request->filled('course')) {
-            $query->where('course', $request->course);
+            $courses = BatchService::courseVariantsFor($request->course);
+
+            if ($courses) {
+                $query->whereIn('course', $courses);
+            }
         }
 
         return response()->json($query->orderBy('name')->get());
