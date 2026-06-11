@@ -29,6 +29,8 @@ const PALETTES = [
   ['bg-violet-100', 'text-violet-800'],
 ];
 
+const QUICK_EMOJIS = ['😀', '😂', '😍', '🥰', '😭', '🙏', '👍', '🔥', '🎉', '💙', '💛', '✨'];
+
 function paletteFor(name = '') {
   const code = [...name].reduce((acc, c) => acc + c.charCodeAt(0), 0);
   return PALETTES[code % PALETTES.length];
@@ -74,17 +76,24 @@ export default function MessagesPage() {
   } = useMessaging(recipientId ? Number(recipientId) : null);
 
   const [body, setBody] = useState('');
+  const [image, setImage] = useState(null);
+  const [imagePreview, setImagePreview] = useState(null);
+  const [showEmoji, setShowEmoji] = useState(false);
   const [recipient, setRecipient] = useState(null);
   const [search, setSearch] = useState('');
   const bottomRef = useRef();
+  const fileRef = useRef();
 
   useEffect(() => {
-    if (!recipientId) { setRecipient(null); return; }
+    if (!recipientId) {
+      queueMicrotask(() => setRecipient(null));
+      return;
+    }
     const fromConversation = conversations
       .map((conv) => (String(conv.sender_id) === String(user?.id) ? conv.receiver : conv.sender))
       .find((person) => String(person?.id) === String(recipientId));
 
-    if (fromConversation) setRecipient(fromConversation);
+    if (fromConversation) queueMicrotask(() => setRecipient(fromConversation));
 
     messagesApi.participant(recipientId)
       .then(({ data }) => setRecipient(data ?? fromConversation ?? null))
@@ -97,13 +106,41 @@ export default function MessagesPage() {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [thread, isTyping]);
 
+  useEffect(() => () => {
+    if (imagePreview) URL.revokeObjectURL(imagePreview);
+  }, [imagePreview]);
+
   const handleSend = async (e) => {
     e.preventDefault();
-    if (!body.trim() || !recipientId) return;
+    if ((!body.trim() && !image) || !recipientId) return;
     const text = body;
+    const selectedImage = image;
     setBody('');
-    try { await sendMessage(Number(recipientId), text); }
-    catch { setBody(text); }
+    setImage(null);
+    setImagePreview(null);
+    setShowEmoji(false);
+    try { await sendMessage(Number(recipientId), text.trim(), selectedImage); }
+    catch {
+      setBody(text);
+      setImage(selectedImage);
+      setImagePreview(selectedImage ? URL.createObjectURL(selectedImage) : null);
+    }
+  };
+
+  const handleImageChange = (e) => {
+    const selected = e.target.files?.[0] ?? null;
+    if (selected) {
+      if (imagePreview) URL.revokeObjectURL(imagePreview);
+      setImage(selected);
+      setImagePreview(URL.createObjectURL(selected));
+    }
+    e.target.value = '';
+  };
+
+  const clearImage = () => {
+    if (imagePreview) URL.revokeObjectURL(imagePreview);
+    setImage(null);
+    setImagePreview(null);
   };
 
   const handleKeyDown = useCallback(() => {
@@ -157,6 +194,7 @@ export default function MessagesPage() {
               if (!other) return null;
               const active = String(recipientId) === String(other.id);
               const online = onlineUsers.has(other.id);
+              const unread = Number(conv.unread_count ?? 0) > 0;
               return (
                 <Link
                   key={conv.id}
@@ -168,16 +206,12 @@ export default function MessagesPage() {
                     <OnlineDot online={online} />
                   </div>
                   <div className="min-w-0 flex-1">
-                    <p className="m-0 truncate text-sm font-black text-[#1d2b4b]">{other.name}</p>
-                    <p className="m-0 truncate text-xs text-slate-400">{conv.body}</p>
+                    <p className={`m-0 truncate text-sm text-[#1d2b4b] ${unread ? 'font-black' : 'font-bold'}`}>{other.name}</p>
+                    <p className={`m-0 truncate text-xs ${unread ? 'font-bold text-[#1d2b4b]' : 'text-slate-400'}`}>{conv.body || (conv.image_url ? 'Sent an image' : '')}</p>
                   </div>
                   <div className="flex shrink-0 flex-col items-end gap-1">
                     <span className="text-[11px] text-slate-400">{formatTime(conv.created_at)}</span>
-                    {conv.unread_count > 0 && (
-                      <span className="min-w-5 rounded-full bg-[#fdb813] px-1.5 py-0.5 text-center text-[10px] font-black text-[#1d2b4b]">
-                        {conv.unread_count}
-                      </span>
-                    )}
+                    {unread && <span className="h-2.5 w-2.5 rounded-full bg-blue-500" aria-label={`${conv.unread_count} unread`} />}
                   </div>
                 </Link>
               );
@@ -233,10 +267,18 @@ export default function MessagesPage() {
                 <div className="flex flex-col gap-3">
                   {thread.map((msg) => {
                     const mine = String(msg.sender_id) === String(user?.id);
+                    const msgImage = msg.image_url || msg.image_path;
                     return (
                       <div key={msg.id} className={`flex ${mine ? 'justify-end' : 'justify-start'}`}>
                         <div className={`max-w-[min(78%,520px)] rounded-2xl px-4 py-2.5 text-sm leading-relaxed shadow-sm ${mine ? 'rounded-br-md bg-[#1d2b4b] text-white' : 'rounded-bl-md border border-slate-200 bg-white text-[#1d2b4b]'}`}>
-                          {msg.body}
+                          {msgImage && (
+                            <img
+                              src={imageUrl(msgImage)}
+                              alt="Message attachment"
+                              className="mb-2 max-h-72 w-full rounded-xl object-cover"
+                            />
+                          )}
+                          {msg.body && <p className="m-0 whitespace-pre-wrap">{msg.body}</p>}
                           <div className={`mt-1 text-[10px] ${mine ? 'text-white/45' : 'text-slate-400'}`}>
                             {formatTime(msg.created_at)}
                             {mine && msg.is_read && <span className="ml-1 text-[#fdb813]">Seen</span>}
@@ -259,24 +301,68 @@ export default function MessagesPage() {
                 </div>
               </div>
 
-              <form onSubmit={handleSend} className="flex items-center gap-3 border-t border-slate-200 bg-white p-3">
-                <div className="flex h-11 flex-1 items-center gap-2 rounded-xl border border-transparent bg-slate-100 px-3 transition focus-within:border-[#fdb813] focus-within:bg-white">
-                  <i className="far fa-smile text-slate-400" />
-                  <input
-                    value={body}
-                    onChange={(e) => setBody(e.target.value)}
-                    onKeyDown={handleKeyDown}
-                    placeholder="Type a message..."
-                    className="w-full border-0 bg-transparent text-sm text-[#1d2b4b] outline-none placeholder:text-slate-400"
-                  />
+              <form onSubmit={handleSend} className="relative border-t border-slate-200 bg-white p-3">
+                {showEmoji && (
+                  <div className="absolute bottom-[76px] left-3 z-10 grid grid-cols-6 gap-1 rounded-2xl border border-slate-200 bg-white p-2 shadow-xl">
+                    {QUICK_EMOJIS.map((emoji) => (
+                      <button
+                        key={emoji}
+                        type="button"
+                        onClick={() => setBody((current) => `${current}${emoji}`)}
+                        className="grid h-9 w-9 place-items-center rounded-lg border-0 bg-white text-lg transition hover:bg-slate-100"
+                      >
+                        {emoji}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {image && (
+                  <div className="mb-2 flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 p-2">
+                    <img src={imagePreview} alt="Selected attachment" className="h-14 w-14 rounded-lg object-cover" />
+                    <div className="min-w-0 flex-1">
+                      <p className="m-0 truncate text-xs font-black text-[#1d2b4b]">{image.name}</p>
+                      <p className="m-0 text-[11px] text-slate-400">Ready to send</p>
+                    </div>
+                    <button type="button" onClick={clearImage} className="grid h-8 w-8 place-items-center rounded-lg border-0 bg-white text-slate-500">
+                      <i className="fas fa-times" />
+                    </button>
+                  </div>
+                )}
+                <div className="flex items-center gap-3">
+                  <input ref={fileRef} type="file" accept="image/*" onChange={handleImageChange} className="hidden" />
+                  <button
+                    type="button"
+                    onClick={() => fileRef.current?.click()}
+                    className="grid h-11 w-11 place-items-center rounded-xl border border-slate-200 bg-white text-[#1d2b4b] transition hover:border-[#fdb813]"
+                    aria-label="Attach image"
+                  >
+                    <i className="far fa-image" />
+                  </button>
+                  <div className="flex h-11 flex-1 items-center gap-2 rounded-xl border border-transparent bg-slate-100 px-3 transition focus-within:border-[#fdb813] focus-within:bg-white">
+                    <button
+                      type="button"
+                      onClick={() => setShowEmoji((value) => !value)}
+                      className="grid h-8 w-8 place-items-center rounded-lg border-0 bg-transparent text-slate-400 transition hover:bg-white hover:text-[#1d2b4b]"
+                      aria-label="Add emoji"
+                    >
+                      <i className="far fa-smile" />
+                    </button>
+                    <input
+                      value={body}
+                      onChange={(e) => setBody(e.target.value)}
+                      onKeyDown={handleKeyDown}
+                      placeholder="Type a message..."
+                      className="w-full border-0 bg-transparent text-sm text-[#1d2b4b] outline-none placeholder:text-slate-400"
+                    />
+                  </div>
+                  <button
+                    type="submit"
+                    disabled={!body.trim() && !image}
+                    className="grid h-11 w-11 place-items-center rounded-xl border-0 bg-[#fdb813] text-[#1d2b4b] transition hover:bg-amber-400 disabled:bg-slate-200 disabled:text-slate-400"
+                  >
+                    <i className="fas fa-paper-plane" />
+                  </button>
                 </div>
-                <button
-                  type="submit"
-                  disabled={!body.trim()}
-                  className="grid h-11 w-11 place-items-center rounded-xl border-0 bg-[#fdb813] text-[#1d2b4b] transition hover:bg-amber-400 disabled:bg-slate-200 disabled:text-slate-400"
-                >
-                  <i className="fas fa-paper-plane" />
-                </button>
               </form>
             </>
           ) : (

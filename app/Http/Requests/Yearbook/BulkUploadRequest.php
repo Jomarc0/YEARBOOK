@@ -7,12 +7,9 @@ namespace App\Http\Requests\Yearbook;
 use Illuminate\Foundation\Http\FormRequest;
 
 /**
- * BulkUploadRequest
- *
+
  * Validates bulk photo uploads.
- * The hard per-tier file count limit (5 free / 50 premium)
- * is enforced inside CloudinaryService — not here.
- * This provides the HTTP-level baseline guard only.
+ * The hard per-tier file count limit  50 premium
  */
 class BulkUploadRequest extends FormRequest
 {

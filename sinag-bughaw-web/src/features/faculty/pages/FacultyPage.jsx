@@ -2,6 +2,7 @@ import { useFacultyGroups } from '@/features/faculty/hooks/useFacultyGroups';
 import DepartmentSection from '../components/DepartmentSection';
 import Navbar from '@/components/layout/Navbar';
 import Footer from '@/components/layout/Footer';
+import FilterTabStrip from '@/components/ui/FilterTabStrip';
 
 function SearchIcon() {
   return (
@@ -32,6 +33,15 @@ function EmptyIcon() {
   );
 }
 
+function shortDepartmentLabel(name = '') {
+  return String(name)
+    .replace(/^Bachelor of Science in Business Administration\s*-\s*/i, 'BSBA ')
+    .replace(/^Bachelor of Science in\s+/i, '')
+    .replace(/^Bachelor of\s+/i, '')
+    .replace(/^BS\s+/i, '')
+    .trim();
+}
+
 export default function FacultyPage() {
   const {
     groups,
@@ -51,7 +61,7 @@ export default function FacultyPage() {
     <div className="flex min-h-screen flex-col bg-[#f4f7fe] font-sans text-[#1d2b4b]">
       <Navbar />
 
-      <header className="bg-gradient-to-br from-[#1d2b4b] to-[#2a3d66] px-5 py-10 text-white sm:px-[8%]">
+      <header className="min-h-[140px] bg-gradient-to-br from-[#1d2b4b] to-[#2a3d66] px-5 py-8 text-white sm:px-[8%]">
         <div className="mx-auto flex max-w-[1180px] flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
           <div className="max-w-xl">
             <span className="inline-flex items-center gap-2 rounded-full border border-[#fdb813]/30 bg-[#fdb813]/15 px-3 py-1 text-[10px] font-black uppercase tracking-widest text-[#fdb813]">
@@ -111,30 +121,20 @@ export default function FacultyPage() {
 
       {!loading && !search && groups.length > 1 && (
         <nav className="border-b border-slate-200 bg-white px-5 py-3 shadow-sm sm:px-[8%]" aria-label="Filter by department">
-          <div className="mx-auto flex max-w-[1180px] flex-wrap gap-2" role="tablist">
-            <button
-              type="button"
-              role="tab"
-              aria-selected={activeDeptId === null}
-              className={`rounded-full border px-4 py-2 text-xs font-black transition ${activeDeptId === null ? 'border-[#fdb813] bg-[#fdb813] text-[#1d2b4b]' : 'border-slate-200 bg-white text-slate-600 hover:border-[#fdb813]/50 hover:text-[#1d2b4b]'}`}
-              onClick={() => handleDeptTab(null)}
-            >
-              All Departments <span className="opacity-60">({totalFaculty})</span>
-            </button>
-
-            {groups.map((g) => (
-              <button
-                key={g.id}
-                type="button"
-                role="tab"
-                aria-selected={activeDeptId === g.id}
-                className={`rounded-full border px-4 py-2 text-xs font-black transition ${activeDeptId === g.id ? 'border-[#fdb813] bg-[#fdb813] text-[#1d2b4b]' : 'border-slate-200 bg-white text-slate-600 hover:border-[#fdb813]/50 hover:text-[#1d2b4b]'}`}
-                onClick={() => handleDeptTab(g.id)}
-              >
-                <span className="mr-2 inline-block h-1.5 w-1.5 rounded-full bg-[#fdb813]" aria-hidden="true" />
-                {g.code ?? g.name} <span className="opacity-60">({g.faculty_count})</span>
-              </button>
-            ))}
+          <div className="mx-auto max-w-[1180px]">
+            <FilterTabStrip
+              ariaLabel="Filter faculty by department"
+              activeValue={activeDeptId}
+              onChange={handleDeptTab}
+              tabs={[
+                { label: 'All Departments', value: null, count: totalFaculty },
+                ...groups.map((g) => ({
+                  label: shortDepartmentLabel(g.name),
+                  value: g.id,
+                  count: g.faculty_count,
+                })),
+              ]}
+            />
           </div>
         </nav>
       )}

@@ -12,7 +12,7 @@ class Admin extends Authenticatable
 {
     use HasFactory, HasApiTokens;
 
-    // ─── Role constants ───────────────────────────────────────────────────────
+    // Role constants 
     const ROLE_ADMIN       = 'admin';
     const ROLE_SUPER_ADMIN = 'super_admin';
 
@@ -34,7 +34,7 @@ class Admin extends Authenticatable
         'last_login_at' => 'datetime',
     ];
 
-    // ─── Role helpers ─────────────────────────────────────────────────────────
+    // Role helpers 
 
     public function isSuperAdmin(): bool
     {
@@ -46,7 +46,7 @@ class Admin extends Authenticatable
         return $this->role === self::ROLE_ADMIN;
     }
 
-    // ─── Query scopes ─────────────────────────────────────────────────────────
+    // Query scopes
 
     public function scopeActive($query)
     {
@@ -63,7 +63,7 @@ class Admin extends Authenticatable
         return $query->where('role', self::ROLE_ADMIN);
     }
 
-    // ─── Relationships ────────────────────────────────────────────────────────
+    // Relationships 
 
     /** The super admin who created this account */
     public function creator(): BelongsTo

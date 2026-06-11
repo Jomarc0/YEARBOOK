@@ -1,41 +1,90 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, FlatList, RefreshControl, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, FlatList, Modal, RefreshControl, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Image } from 'expo-image';
 import { StatusBar } from 'expo-status-bar';
 import { useRouter } from 'expo-router';
 import { FontAwesome } from '@expo/vector-icons';
-import * as Haptics from 'expo-haptics';
-import { getAppConfig, getBatches, getErrorMessage, getSections, unwrap } from '../../lib/api';
+import * as ImagePicker from 'expo-image-picker';
+import { generateYearbook, getBatches, getErrorMessage, imageUrl, searchFace, unwrap } from '../../lib/api';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import FilterDropdown from '../../components/FilterDropdown';
 
-const COURSE_FILTERS = [
-  { label: 'All Programs', value: 'All Programs' },
-  { label: 'BS Architecture', value: 'Bachelor of Science in Architecture' },
-  { label: 'BS Civil Engineering', value: 'Bachelor of Science in Civil Engineering' },
-  { label: 'BS Computer Science', value: 'Bachelor of Science in Computer Science' },
-  { label: 'BS Information Technology', value: 'Bachelor of Science in Information Technology' },
-  { label: 'BS Nursing', value: 'Bachelor of Science in Nursing' },
-  { label: 'BS Medical Technology', value: 'Bachelor of Science in Medical Technology' },
-  { label: 'BS Psychology', value: 'Bachelor of Science in Psychology' },
-  { label: 'BS Accountancy', value: 'Bachelor of Science in Accountancy' },
-  { label: 'BSBA Financial Management', value: 'Bachelor of Science in Business Administration - Financial Management' },
-  { label: 'BSBA Marketing Management', value: 'Bachelor of Science in Business Administration - Marketing Management' },
-  { label: 'BS Tourism Management', value: 'Bachelor of Science in Tourism Management' },
-  { label: 'ABM', value: 'ABM' },
-  { label: 'STEM', value: 'STEM' },
-  { label: 'HUMSS', value: 'HUMSS' },
-];
+const COLORS = {
+  navy: '#1B2A5E',
+  gold: '#F5A623',
+  background: '#F0F2F7',
+  card: '#FFFFFF',
+  border: '#E0E3EC',
+  muted: '#888888',
+};
 
-const sectionId = (section: any) => section?.id || section?.section_id;
-const sectionName = (section: any) => section?.name || section?.title || section?.section || 'Section';
-const sectionCourse = (section: any) => section?.course || section?.program || section?.batch?.course || 'Academic section';
-const sectionYear = (section: any) => section?.batch?.graduation_year || section?.graduation_year || section?.year || '2025';
-const sectionCount = (section: any) => section?.students_count ?? section?.student_count ?? section?.students?.length ?? 0;
 const batchId = (batch: any) => batch?.id || batch?.batch_id;
-const batchYear = (batch: any) => batch?.graduation_year || batch?.year || batch?.name || 'Batch';
-const batchCourse = (batch: any) => batch?.course || batch?.department || 'Graduation batch';
+const batchYear = (batch: any) => batch?.graduation_year || batch?.year || '2025';
+const batchCourse = (batch: any) => batch?.course || batch?.program || 'Graduation batch';
+const batchDepartment = (batch: any) => batch?.department || batch?.college || 'Department';
 const batchStudents = (batch: any) => batch?.students_count ?? batch?.student_count ?? batch?.total_students ?? 0;
-const batchSections = (batch: any) => batch?.sections || [];
+const batchSections = (batch: any) => batch?.sections || batch?.section_list || batch?.section_names || [];
+const normalizedBatchSections = (batch: any): string[] => Array.from(new Set<string>(batchSections(batch).map((section: any) => section?.name || section?.section || String(section)).filter(Boolean)));
+const batchSectionsCount = (batch: any) => batch?.sections_count ?? batch?.section_count ?? normalizedBatchSections(batch).length ?? 0;
+const batchStudentNames = (batch: any) => {
+  const students = batch?.students || batch?.student_list || [];
+  return Array.isArray(students) ? students.map((student: any) => student?.name || student?.full_name || '').filter(Boolean) : [];
+};
+const studentName = (student: any) => student?.name || student?.full_name || `${student?.first_name || ''} ${student?.last_name || ''}`.trim() || 'Student';
+const studentInitials = (student: any) => studentName(student).split(' ').filter(Boolean).slice(0, 2).map((part: string) => part[0]).join('').toUpperCase() || 'NU';
+const studentId = (student: any) => student?.id || student?.student_id;
+const studentUserId = (student: any) => student?.user_id || student?.account_user_id || student?.user?.id || student?.userAccount?.id;
+const studentPhoto = (student: any) => imageUrl(
+  student?.profile_picture ||
+  student?.profile_pic ||
+  student?.photo_url ||
+  student?.photo ||
+  student?.avatar ||
+  student?.avatar_url ||
+  student?.image_url ||
+  student?.user?.profile_picture ||
+  student?.user?.profile_pic ||
+  student?.user?.photo ||
+  student?.student?.profile_picture ||
+  student?.student?.photo_url ||
+  student?.student?.photo ||
+  student?.student_record?.photo ||
+  student?.studentRecord?.photo,
+);
+const faceMatchIds = (match: any) => [
+  match?.student_record_id,
+  match?.student_id,
+  match?.id,
+  match?.user_id,
+  match?.account_user_id,
+].filter(Boolean).map(String);
+const studentMatchIds = (student: any) => [
+  studentId(student),
+  studentUserId(student),
+  student?.student_record_id,
+].filter(Boolean).map(String);
+const sectionStudents = (section: any) => Array.isArray(section?.students) ? section.students : [];
+const groupedBatchSections = (batch: any) => {
+  const groups = new Map<string, { department: string; courses: Map<string, any[]> }>();
+
+  (Array.isArray(batch?.sections) ? batch.sections : []).forEach((section: any) => {
+    const department = section?.department || batchDepartment(batch);
+    const course = section?.course || batchCourse(batch);
+    if (!groups.has(department)) groups.set(department, { department, courses: new Map() });
+    const group = groups.get(department)!;
+    if (!group.courses.has(course)) group.courses.set(course, []);
+    group.courses.get(course)!.push(section);
+  });
+
+  return Array.from(groups.values()).map((group) => ({
+    department: group.department,
+    studentCount: Array.from(group.courses.values()).flat().reduce((sum, section) => sum + sectionStudents(section).length, 0),
+    courses: Array.from(group.courses.entries()).map(([course, sections]) => ({
+      course,
+      studentCount: sections.reduce((sum, section) => sum + sectionStudents(section).length, 0),
+      sections,
+    })),
+  }));
+};
 
 const flattenBatches = (payload: any) => {
   const data = unwrap(payload);
@@ -44,36 +93,71 @@ const flattenBatches = (payload: any) => {
   return Object.values(data).flatMap((group: any) => Array.isArray(group) ? group : []);
 };
 
+function BottomSheetFilter({ visible, title = 'Filter', options, selected, onSelect, onApply, onClose }: {
+  visible: boolean;
+  title?: string;
+  options: { label: string; value: string }[];
+  selected: string;
+  onSelect: (value: string) => void;
+  onApply: () => void;
+  onClose: () => void;
+}) {
+  return (
+    <Modal transparent visible={visible} animationType="slide" onRequestClose={onClose}>
+      <View style={styles.sheetOverlay}>
+        <TouchableOpacity style={styles.sheetBackdrop} activeOpacity={1} onPress={onClose} />
+        <View style={styles.sheet}>
+          <View style={styles.sheetHandle} />
+          <Text style={styles.sheetTitle}>{title}</Text>
+          <ScrollView style={styles.sheetScroll} showsVerticalScrollIndicator={false}>
+            {options.map((option) => {
+              const active = selected === option.value;
+              return (
+                <TouchableOpacity key={option.value} style={styles.sheetOption} onPress={() => onSelect(option.value)} activeOpacity={0.84}>
+                  <Text style={styles.sheetOptionText}>{option.label}</Text>
+                  <View style={[styles.sheetCircle, active && styles.sheetCircleActive]}>
+                    {active ? <FontAwesome name="check" size={11} color={COLORS.navy} /> : null}
+                  </View>
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+          <TouchableOpacity style={styles.sheetApply} onPress={onApply}>
+            <Text style={styles.sheetApplyText}>Apply filter</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
 export default function SectionsScreen() {
   const router = useRouter();
-  const [mode, setMode] = useState<'sections' | 'batches'>('sections');
-  const [sections, setSections] = useState<any[]>([]);
   const [batches, setBatches] = useState<any[]>([]);
   const [query, setQuery] = useState('');
-  const [activeCourse, setActiveCourse] = useState('All Programs');
+  const [detailQuery, setDetailQuery] = useState('');
+  const [detailDepartment, setDetailDepartment] = useState('All Departments');
+  const [detailCourse, setDetailCourse] = useState('All Courses');
+  const [detailSection, setDetailSection] = useState('All Sections');
+  const [detailFilterSheet, setDetailFilterSheet] = useState<null | 'department' | 'course' | 'section'>(null);
+  const [detailFaceMatchedIds, setDetailFaceMatchedIds] = useState<Set<string>>(new Set());
+  const [detailFaceSearching, setDetailFaceSearching] = useState(false);
+  const [activeDepartment, setActiveDepartment] = useState('All Departments');
+  const [deptSheetOpen, setDeptSheetOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
-  const [appConfig, setAppConfig] = useState<any>(null);
-  const features = appConfig?.features || {};
-  const yearbookEnabled = features.enable_flipbook_viewer !== false && features.publish_yearbook !== false;
-  const directoryEnabled = features.enable_student_directory_search !== false;
-
+  const [selectedBatch, setSelectedBatch] = useState<any>(null);
+  const directoryEnabled = true;
   const loadData = useCallback(async () => {
     try {
       setError('');
       if (!refreshing) setLoading(true);
-      const [configPayload, sectionPayload, batchPayload] = await Promise.all([
-        getAppConfig().catch(() => null),
-        getSections(),
-        getBatches(),
-      ]);
-      if (configPayload) setAppConfig(unwrap(configPayload));
-      const nextSections = unwrap(sectionPayload);
-      setSections(Array.isArray(nextSections) ? nextSections : []);
+
+      const batchPayload = await getBatches();
       setBatches(flattenBatches(batchPayload));
     } catch (requestError: any) {
-      setError(getErrorMessage(requestError, 'Unable to load sections and batches.'));
+      setError(getErrorMessage(requestError, 'Unable to load academic batches.'));
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -84,193 +168,422 @@ export default function SectionsScreen() {
     loadData();
   }, [loadData]);
 
-  const filteredSections = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    return sections.filter((section) => {
-      const byCourse = activeCourse === 'All Programs' || sectionCourse(section) === activeCourse;
-      const text = `${sectionName(section)} ${sectionCourse(section)} ${sectionYear(section)}`.toLowerCase();
-      return byCourse && (!q || text.includes(q));
-    });
-  }, [activeCourse, query, sections]);
+  const departmentFilters = useMemo(() => {
+    const departments = Array.from(new Set(batches.map(batchDepartment).filter(Boolean)));
+    return ['All Departments', ...departments];
+  }, [batches]);
 
   const filteredBatches = useMemo(() => {
     const q = query.trim().toLowerCase();
     return batches.filter((batch) => {
-      const byCourse = activeCourse === 'All Programs' || batch?.course === activeCourse;
-      const text = `${batchYear(batch)} ${batchCourse(batch)} ${batch?.department || ''}`.toLowerCase();
-      return byCourse && (!q || text.includes(q));
+      const byDepartment = activeDepartment === 'All Departments' || batchDepartment(batch) === activeDepartment;
+      const text = `${batchYear(batch)} ${batchCourse(batch)} ${batchDepartment(batch)} ${normalizedBatchSections(batch).join(' ')} ${batchStudentNames(batch).join(' ')}`.toLowerCase();
+      return byDepartment && (!q || text.includes(q));
     });
-  }, [activeCourse, batches, query]);
+  }, [activeDepartment, batches, query]);
 
-  const renderSection = ({ item }: { item: any }) => (
-    <TouchableOpacity
-      style={styles.sectionCard}
-      activeOpacity={0.9}
-      onPress={() => {
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-        router.push({ pathname: '/directory', params: { filter: sectionName(item) } });
-      }}
-    >
-      <View style={styles.cardTopRow}>
-        <View style={styles.iconBox}>
-          <FontAwesome name="stack-overflow" size={16} color="#3f51b5" />
-        </View>
-        <View style={styles.yearPill}>
-          <Text style={styles.yearPillText}>{sectionYear(item)}</Text>
-        </View>
-      </View>
-      <Text style={styles.cardTitle}>Section {sectionName(item)}</Text>
-      <Text style={styles.cardCourse} numberOfLines={2}>{sectionCourse(item)}</Text>
-      <Text style={styles.cardYear}>{sectionYear(item)}</Text>
-      <View style={styles.countRow}>
-        <FontAwesome name="users" size={13} color="#fdb813" />
-        <Text style={styles.countText}>{sectionCount(item)} students</Text>
-      </View>
-    </TouchableOpacity>
-  );
+  const handleOpenYearbook = async (batch: any) => {
+    const id = batchId(batch);
+    if (!id) {
+      Alert.alert('Yearbook unavailable', 'This batch does not have a yearbook yet.');
+      return;
+    }
+
+    await generateYearbook(id).catch(() => null);
+    router.push({
+      pathname: '/yearbook',
+      params: { batchId: String(id), view: '1' },
+    } as any);
+  };
+
+  const openBatchDetail = (batch: any) => {
+    setDetailQuery('');
+    setDetailDepartment('All Departments');
+    setDetailCourse('All Courses');
+    setDetailSection('All Sections');
+    setDetailFaceMatchedIds(new Set());
+    setDetailFilterSheet(null);
+    setSelectedBatch(batch);
+  };
+
+  const handleDetailFaceSearch = async () => {
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) {
+      Alert.alert('Permission needed', 'Allow photo access to search by face.');
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.8 });
+    if (result.canceled || !result.assets?.[0]) return;
+
+    const asset = result.assets[0];
+    const form = new FormData();
+    form.append('face_image', {
+      uri: asset.uri,
+      name: asset.fileName || 'section-face-search.jpg',
+      type: asset.mimeType || 'image/jpeg',
+    } as any);
+
+    try {
+      setDetailFaceSearching(true);
+      const payload = await searchFace(form);
+      const matches = payload?.matches || payload?.data?.matches || [];
+      const ids = new Set<string>(matches.flatMap(faceMatchIds));
+      setDetailFaceMatchedIds(ids);
+      if (!ids.size) {
+        Alert.alert('No face match', 'No matching student was found in this batch.');
+      }
+    } catch (requestError: any) {
+      Alert.alert('Face search failed', getErrorMessage(requestError, 'Unable to run face search.'));
+    } finally {
+      setDetailFaceSearching(false);
+    }
+  };
 
   const renderBatch = ({ item }: { item: any }) => {
-    const id = batchId(item);
-    const sectionsList = batchSections(item);
-    const shownSections = sectionsList.slice(0, 3);
-    const extra = Math.max(sectionsList.length - shownSections.length, 0);
+    const sections = normalizedBatchSections(item);
+    const previewSections = sections.slice(0, 3);
+    const moreSections = Math.max(0, sections.length - previewSections.length);
 
     return (
       <View style={styles.batchCard}>
         <View style={styles.batchTop}>
-          <View style={styles.batchIcon}>
-            <FontAwesome name="institution" size={15} color="#fdb813" />
+          <Text style={styles.batchYearTitle}>{batchYear(item)}</Text>
+          <Text style={styles.batchWatermark}>{batchYear(item)}</Text>
+        </View>
+        <Text style={styles.batchTitle} numberOfLines={2}>{batchCourse(item)}</Text>
+        <Text style={styles.departmentText}>{batchDepartment(item)}</Text>
+
+        <View style={styles.statsRow}>
+          <View style={styles.statItem}>
+            <FontAwesome name="users" size={12} color={COLORS.muted} />
+            <Text style={styles.countText}>{batchStudents(item)} students</Text>
           </View>
-          <View style={styles.batchCountPill}>
-            <Text style={styles.batchCountText}>{sectionsList.length || item?.sections_count || 0} sections</Text>
+          <View style={styles.statItem}>
+            <FontAwesome name="graduation-cap" size={12} color={COLORS.muted} />
+            <Text style={styles.countText}>{batchSectionsCount(item)} sections</Text>
           </View>
         </View>
-        <View style={styles.batchTitleRow}>
-          <Text style={styles.batchTitle}>{batchYear(item)}</Text>
-          <Text style={styles.batchYearGold}>{batchYear(item)}</Text>
-        </View>
-        <View style={styles.countRow}>
-          <FontAwesome name="users" size={13} color="#64748b" />
-          <Text style={styles.countText}>{batchStudents(item)} students</Text>
-        </View>
+
         <View style={styles.sectionsPreview}>
-          <View style={styles.previewHeader}>
-            <FontAwesome name="stack-overflow" size={12} color="#fdb813" />
-            <Text style={styles.previewHeaderText}>{sectionsList.length || item?.sections_count || 0} sections</Text>
-          </View>
-          <View style={styles.sectionChips}>
-            {shownSections.map((section: any) => (
-              <View key={section.id || section.name} style={styles.sectionChip}>
-                <Text style={styles.sectionChipText}>{section.name || sectionName(section)}</Text>
+          <View style={styles.sectionPillRow}>
+            {(previewSections.length ? previewSections : ['No sections yet']).map((section: string) => (
+              <View key={section} style={styles.sectionPill}>
+                <Text style={styles.sectionPillText}>{section}</Text>
               </View>
             ))}
-            {extra > 0 ? (
-              <View style={styles.moreChip}>
-                <Text style={styles.moreChipText}>+{extra} more</Text>
+            {moreSections ? (
+              <View style={[styles.sectionPill, styles.sectionPillMore]}>
+                <Text style={styles.sectionPillMoreText}>+{moreSections} more</Text>
               </View>
             ) : null}
           </View>
         </View>
-        <View style={styles.divider} />
-        {directoryEnabled ? (
-        <TouchableOpacity
-          style={styles.batchmateButton}
-          onPress={() => router.push({ pathname: '/directory', params: { batch: String(id || batchYear(item)) } } as any)}
-        >
-          <Text style={styles.batchmateText}>View Batchmates →</Text>
-        </TouchableOpacity>
-        ) : (
-          <View style={styles.directoryDisabledPill}>
-            <FontAwesome name="lock" size={11} color="#475569" />
-            <Text style={styles.directoryDisabledText}>Directory disabled</Text>
-          </View>
-        )}
-        {yearbookEnabled ? (
+
+        <View style={styles.actionRow}>
+          {directoryEnabled ? (
+            <TouchableOpacity
+              style={styles.batchmateButton}
+              onPress={() => openBatchDetail(item)}
+            >
+              <Text style={styles.batchmateText}>View Batchmates →</Text>
+            </TouchableOpacity>
+          ) : (
+            <View style={styles.directoryDisabledPill}>
+              <FontAwesome name="lock" size={11} color="#475569" />
+              <Text style={styles.directoryDisabledText}>Directory disabled</Text>
+            </View>
+          )}
+
           <TouchableOpacity
-            style={styles.viewYearbookButton}
-            onPress={() => router.push({ pathname: '/yearbook', params: { batchId: String(id) } } as any)}
-            disabled={!id}
+            style={styles.generateButton}
+            onPress={() => handleOpenYearbook(item)}
           >
-            <FontAwesome name="eye" size={12} color="#1d2b4b" />
-            <Text style={styles.viewYearbookText}>View Yearbook</Text>
+            <FontAwesome name="book" size={12} color="#fdb813" />
+            <Text style={styles.generateText}>Open Yearbook - {batchYear(item)}</Text>
           </TouchableOpacity>
-        ) : (
-          <View style={styles.yearbookDisabledPill}>
-            <FontAwesome name="lock" size={11} color="#92590e" />
-            <Text style={styles.yearbookDisabledText}>Yearbook unpublished</Text>
-          </View>
-        )}
+        </View>
       </View>
     );
   };
 
-  const data = mode === 'sections' ? filteredSections : filteredBatches;
+  const renderBatchDetail = () => {
+    const detailSearch = detailQuery.trim().toLowerCase();
+    const baseGroups = groupedBatchSections(selectedBatch);
+    const detailDepartmentOptions = ['All Departments', ...baseGroups.map((group) => group.department)];
+    const detailCourseOptions = ['All Courses', ...Array.from(new Set(baseGroups.flatMap((group) => group.courses.map((courseGroup) => courseGroup.course))))];
+    const detailSectionOptions = ['All Sections', ...Array.from(new Set(baseGroups.flatMap((group) => group.courses.flatMap((courseGroup) => courseGroup.sections.map((section: any) => section?.name || 'Section')))))];
+    const faceActive = detailFaceMatchedIds.size > 0;
+    const groups = groupedBatchSections(selectedBatch).map((departmentGroup) => {
+      const departmentMatches = String(departmentGroup.department || '').toLowerCase().includes(detailSearch);
+      const selectedDepartmentMatch = detailDepartment === 'All Departments' || departmentGroup.department === detailDepartment;
+      if (!selectedDepartmentMatch) return { ...departmentGroup, courses: [] };
+
+      const courses = departmentGroup.courses.map((courseGroup) => {
+        const courseMatches = String(courseGroup.course || '').toLowerCase().includes(detailSearch);
+        const selectedCourseMatch = detailCourse === 'All Courses' || courseGroup.course === detailCourse;
+        if (!selectedCourseMatch) return { ...courseGroup, sections: [] };
+
+        const sections = courseGroup.sections.map((section: any) => {
+          const sectionName = section?.name || 'Section';
+          const sectionMatches = String(sectionName).toLowerCase().includes(detailSearch);
+          const selectedSectionMatch = detailSection === 'All Sections' || sectionName === detailSection;
+          if (!selectedSectionMatch) return { ...section, students: [] };
+
+          const filteredStudents = sectionStudents(section).filter((student: any) => {
+            const studentMatches = `${studentName(student)} ${studentId(student) || ''}`.toLowerCase().includes(detailSearch);
+            const textMatch = !detailSearch || departmentMatches || courseMatches || sectionMatches || studentMatches;
+            const faceMatch = !faceActive || studentMatchIds(student).some((id) => detailFaceMatchedIds.has(id));
+            return textMatch && faceMatch;
+          });
+
+          return { ...section, students: filteredStudents };
+        }).filter((section: any) => sectionStudents(section).length);
+
+        return { ...courseGroup, sections };
+      }).filter((courseGroup) => courseGroup.sections.length);
+
+      return { ...departmentGroup, courses };
+    }).filter((departmentGroup) => departmentGroup.courses.length);
+
+    return (
+      <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
+        <StatusBar style="light" />
+        <View style={styles.detailHero}>
+          <TouchableOpacity style={styles.detailBack} onPress={() => { setDetailQuery(''); setSelectedBatch(null); }}>
+            <FontAwesome name="chevron-left" size={18} color={COLORS.navy} />
+          </TouchableOpacity>
+          <Text style={styles.detailEyebrow}>National University Lipa</Text>
+          <Text style={styles.detailTitle}>Your <Text style={styles.heroGold}>Batchmates</Text></Text>
+          <Text style={styles.detailSubtitle}>Batch {batchYear(selectedBatch)} - {batchStudents(selectedBatch)} students - {batchSectionsCount(selectedBatch)} sections</Text>
+          <TouchableOpacity style={styles.detailYearbookButton} onPress={() => handleOpenYearbook(selectedBatch)}>
+            <FontAwesome name="book" size={12} color={COLORS.gold} />
+            <Text style={styles.detailYearbookText}>Open Yearbook {batchYear(selectedBatch)}</Text>
+          </TouchableOpacity>
+        </View>
+
+        <ScrollView contentContainerStyle={styles.detailContent} showsVerticalScrollIndicator={false}>
+          <View style={styles.detailSearchShell}>
+            <FontAwesome name="search" size={14} color="#94a3b8" />
+            <TextInput
+              style={styles.detailSearchInput}
+              placeholder="Search department, course, section, or student"
+              placeholderTextColor="#94a3b8"
+              value={detailQuery}
+              onChangeText={(value) => {
+                setDetailQuery(value);
+                setDetailFaceMatchedIds(new Set());
+              }}
+            />
+            {detailQuery ? (
+              <TouchableOpacity style={styles.detailSearchClear} onPress={() => setDetailQuery('')} activeOpacity={0.8}>
+                <FontAwesome name="times" size={12} color="#94a3b8" />
+              </TouchableOpacity>
+            ) : null}
+            <TouchableOpacity style={styles.detailSearchCamera} onPress={handleDetailFaceSearch} disabled={detailFaceSearching} activeOpacity={0.82}>
+              {detailFaceSearching ? <ActivityIndicator color={COLORS.gold} size="small" /> : <FontAwesome name="camera" size={14} color={COLORS.gold} />}
+            </TouchableOpacity>
+          </View>
+          <View style={styles.detailFilterRow}>
+            <TouchableOpacity style={[styles.detailFilterButton, styles.detailFilterDepartment]} onPress={() => setDetailFilterSheet('department')}>
+              <View style={styles.detailFilterCopy}>
+                <Text style={[styles.detailFilterLabel, styles.detailFilterDepartmentLabel]}>Department</Text>
+                <Text style={[styles.detailFilterValue, styles.detailFilterDepartmentValue]} numberOfLines={1}>{detailDepartment}</Text>
+              </View>
+              <FontAwesome name="chevron-down" size={11} color={COLORS.navy} />
+            </TouchableOpacity>
+            <TouchableOpacity style={[styles.detailFilterButton, styles.detailFilterCourse]} onPress={() => setDetailFilterSheet('course')}>
+              <View style={styles.detailFilterCopy}>
+                <Text style={[styles.detailFilterLabel, styles.detailFilterCourseLabel]}>Course</Text>
+                <Text style={[styles.detailFilterValue, styles.detailFilterCourseValue]} numberOfLines={1}>{detailCourse}</Text>
+              </View>
+              <FontAwesome name="chevron-down" size={11} color={COLORS.gold} />
+            </TouchableOpacity>
+            <TouchableOpacity style={[styles.detailFilterButton, styles.detailFilterSection]} onPress={() => setDetailFilterSheet('section')}>
+              <View style={styles.detailFilterCopy}>
+                <Text style={[styles.detailFilterLabel, styles.detailFilterSectionLabel]}>Section</Text>
+                <Text style={[styles.detailFilterValue, styles.detailFilterSectionValue]} numberOfLines={1}>{detailSection}</Text>
+              </View>
+              <FontAwesome name="chevron-down" size={11} color="#94a3b8" />
+            </TouchableOpacity>
+          </View>
+          {faceActive ? (
+            <View style={styles.faceBanner}>
+              <Text style={styles.faceBannerText}>{detailFaceMatchedIds.size} face match{detailFaceMatchedIds.size === 1 ? '' : 'es'} found</Text>
+              <TouchableOpacity onPress={() => setDetailFaceMatchedIds(new Set())}>
+                <Text style={styles.faceBannerClear}>Clear</Text>
+              </TouchableOpacity>
+            </View>
+          ) : null}
+          {groups.length ? groups.map((departmentGroup) => (
+            <View key={departmentGroup.department} style={styles.departmentGroupCard}>
+              <View style={styles.departmentHeader}>
+                <View style={styles.departmentIcon}>
+                  <FontAwesome name="institution" size={14} color={COLORS.gold} />
+                </View>
+                <View>
+                  <Text style={styles.departmentTitle}>{departmentGroup.department}</Text>
+                  <Text style={styles.departmentMeta}>{departmentGroup.studentCount} students</Text>
+                </View>
+              </View>
+
+              {departmentGroup.courses.map((courseGroup) => (
+                <View key={courseGroup.course} style={styles.courseGroupCard}>
+                  <View style={styles.courseHeader}>
+                    <FontAwesome name="graduation-cap" size={12} color={COLORS.gold} />
+                    <Text style={styles.courseTitle}>{courseGroup.course}</Text>
+                  </View>
+
+                  {courseGroup.sections.map((section: any) => {
+                    const students = sectionStudents(section);
+                    return (
+                      <View key={String(section?.id || section?.name)} style={styles.detailSectionCard}>
+                        <View style={styles.detailSectionHeader}>
+                          <View style={styles.detailSectionTitleRow}>
+                            <FontAwesome name="cube" size={10} color={COLORS.gold} />
+                            <Text style={styles.detailSectionTitle}>Section {section?.name || 'Section'}</Text>
+                          </View>
+                          <View style={styles.sectionCountBadge}>
+                            <Text style={styles.sectionCountText}>{students.length} students</Text>
+                          </View>
+                        </View>
+
+                        <View style={styles.studentGrid}>
+                          {students.map((student: any) => {
+                            const photo = studentPhoto(student);
+                            return (
+                              <TouchableOpacity
+                                key={String(studentId(student) || studentName(student))}
+                                style={styles.detailStudentCard}
+                                activeOpacity={0.88}
+                                onPress={() => router.push({
+                                  pathname: '/student/[id]',
+                                  params: {
+                                    id: String(studentId(student)),
+                                    source: 'discovery',
+                                    ...(studentUserId(student) ? { userId: String(studentUserId(student)) } : {}),
+                                  },
+                                } as any)}
+                              >
+                                <View style={styles.detailStudentAvatar}>
+                                  {photo ? (
+                                    <Image source={photo} style={styles.detailStudentAvatarImage} contentFit="cover" />
+                                  ) : (
+                                    <Text style={styles.detailStudentInitials}>{studentInitials(student)}</Text>
+                                  )}
+                                </View>
+                                <View style={styles.detailStudentCopy}>
+                                  <Text style={styles.detailStudentName} numberOfLines={1}>{studentName(student)}</Text>
+                                  <Text style={styles.detailStudentMeta} numberOfLines={1}>Batch {batchYear(selectedBatch)}</Text>
+                                </View>
+                              </TouchableOpacity>
+                            );
+                          })}
+                        </View>
+                      </View>
+                    );
+                  })}
+                </View>
+              ))}
+            </View>
+          )) : (
+            <View style={styles.emptyPanel}>
+              <FontAwesome name="users" size={38} color="#cbd5e1" />
+              <Text style={styles.emptyTitle}>No Batchmates Found</Text>
+              <Text style={styles.emptyText}>This batch has no sections or students yet.</Text>
+            </View>
+          )}
+        </ScrollView>
+        <BottomSheetFilter
+          visible={detailFilterSheet === 'department'}
+          title="Filter by department"
+          options={detailDepartmentOptions.map((department) => ({ label: department, value: department }))}
+          selected={detailDepartment}
+          onSelect={(value) => { setDetailDepartment(value); setDetailFilterSheet(null); }}
+          onApply={() => setDetailFilterSheet(null)}
+          onClose={() => setDetailFilterSheet(null)}
+        />
+        <BottomSheetFilter
+          visible={detailFilterSheet === 'course'}
+          title="Filter by course"
+          options={detailCourseOptions.map((course) => ({ label: course, value: course }))}
+          selected={detailCourse}
+          onSelect={(value) => { setDetailCourse(value); setDetailFilterSheet(null); }}
+          onApply={() => setDetailFilterSheet(null)}
+          onClose={() => setDetailFilterSheet(null)}
+        />
+        <BottomSheetFilter
+          visible={detailFilterSheet === 'section'}
+          title="Filter by section"
+          options={detailSectionOptions.map((section) => ({ label: section, value: section }))}
+          selected={detailSection}
+          onSelect={(value) => { setDetailSection(value); setDetailFilterSheet(null); }}
+          onApply={() => setDetailFilterSheet(null)}
+          onClose={() => setDetailFilterSheet(null)}
+        />
+      </SafeAreaView>
+    );
+  };
+
+  if (selectedBatch) {
+    return renderBatchDetail();
+  }
 
   return (
-    <SafeAreaView style={styles.container} edges={['left', 'right']}>
+    <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
       <StatusBar style="light" />
       <FlatList
-        data={data}
-        keyExtractor={(item, index) => String((mode === 'sections' ? sectionId(item) : batchId(item)) || index)}
-        renderItem={mode === 'sections' ? renderSection : renderBatch}
-        numColumns={2}
-        columnWrapperStyle={mode === 'sections' ? styles.columnWrapper : undefined}
+        data={filteredBatches}
+        keyExtractor={(item, index) => String(batchId(item) || index)}
+        renderItem={renderBatch}
         ListHeaderComponent={(
           <>
             <View style={styles.hero}>
-              <Text style={styles.heroTitle}>Sections & <Text style={styles.heroGold}>Batches</Text></Text>
-              <Text style={styles.heroSubtitle}>Browse academic sections and graduation batches.</Text>
+              <Text style={styles.heroEyebrow}>National University Lipa</Text>
+              <Text style={styles.heroTitle}>Academic Batches</Text>
+              <Text style={styles.heroSubtitle}>Browse batches by department, course, section, and students.</Text>
               <View style={styles.searchShell}>
-                <FontAwesome name="search" size={15} color="#fdb813" />
+                <FontAwesome name="search" size={15} color="#94a3b8" />
                 <TextInput
                   style={styles.searchInput}
-                  placeholder="Search sections, courses, students..."
-                  placeholderTextColor="rgba(255,255,255,0.48)"
+                  placeholder="Search students, sections, courses..."
+                  placeholderTextColor="#94a3b8"
                   value={query}
                   onChangeText={setQuery}
                 />
                 <View style={styles.searchCamera}>
-                  <FontAwesome name="camera" size={14} color="#fdb813" />
+                  <FontAwesome name="camera" size={14} color={COLORS.gold} />
                 </View>
               </View>
-              <View style={styles.modeSwitch}>
-                <TouchableOpacity style={[styles.modeButton, mode === 'sections' && styles.modeActive]} onPress={() => setMode('sections')}>
-                  <FontAwesome name="stack-overflow" size={13} color={mode === 'sections' ? '#1d2b4b' : 'rgba(255,255,255,0.65)'} />
-                  <Text style={[styles.modeText, mode === 'sections' && styles.modeTextActive]}>Sections</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={[styles.modeButton, mode === 'batches' && styles.modeActive]} onPress={() => setMode('batches')}>
-                  <FontAwesome name="graduation-cap" size={13} color={mode === 'batches' ? '#1d2b4b' : 'rgba(255,255,255,0.65)'} />
-                  <Text style={[styles.modeText, mode === 'batches' && styles.modeTextActive]}>Batches</Text>
-                </TouchableOpacity>
+            </View>
+
+            <View style={styles.filterBar}>
+              <View style={styles.filterLabelRow}>
+                <FontAwesome name="institution" size={11} color={COLORS.gold} />
+                <Text style={styles.filterLabel}>Filter by department</Text>
               </View>
-            </View>
-            <View style={styles.filterSelectWrap}>
-              <FilterDropdown
-                label="Program"
-                icon="graduation-cap"
-                options={COURSE_FILTERS.map((item) => ({
-                  ...item,
-                  icon: item.value === 'All Programs' ? 'users' : 'graduation-cap',
-                }))}
-                value={activeCourse}
-                onChange={setActiveCourse}
-              />
-            </View>
-            {mode === 'batches' ? (
-              <View style={styles.batchSummary}>
-                <View style={styles.batchSummaryIcon}>
-                  <FontAwesome name="institution" size={15} color="#fdb813" />
+              <TouchableOpacity style={styles.departmentDropdown} onPress={() => setDeptSheetOpen(true)}>
+                <View>
+                  <Text style={styles.dropdownLabel}>Department</Text>
+                  <Text style={styles.dropdownValue}>{activeDepartment}</Text>
                 </View>
-                <Text style={styles.batchSummaryText}>{filteredBatches.length} batch{filteredBatches.length === 1 ? '' : 'es'}</Text>
+                <FontAwesome name="chevron-down" size={11} color={COLORS.navy} />
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.batchSummary}>
+              <View style={styles.batchSummaryIcon}>
+                <FontAwesome name="institution" size={15} color="#fdb813" />
               </View>
-            ) : null}
+              <Text style={styles.batchSummaryText}>{filteredBatches.length} batch{filteredBatches.length === 1 ? '' : 'es'}</Text>
+            </View>
             {error ? <Text style={styles.errorText}>{error}</Text> : null}
           </>
         )}
         ListEmptyComponent={loading ? <ActivityIndicator color="#1d2b4b" style={{ marginTop: 34 }} /> : (
           <View style={styles.emptyPanel}>
-            <FontAwesome name={mode === 'sections' ? 'stack-overflow' : 'graduation-cap'} size={38} color="#cbd5e1" />
-            <Text style={styles.emptyTitle}>No {mode === 'sections' ? 'Sections' : 'Batches'} Found</Text>
+            <FontAwesome name="graduation-cap" size={38} color="#cbd5e1" />
+            <Text style={styles.emptyTitle}>No Batches Found</Text>
             <Text style={styles.emptyText}>Try adjusting your search or filters.</Text>
           </View>
         )}
@@ -278,74 +591,137 @@ export default function SectionsScreen() {
         contentContainerStyle={styles.scrollContent}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); loadData(); }} />}
       />
+      <BottomSheetFilter
+        visible={deptSheetOpen}
+        title="Filter by department"
+        options={departmentFilters.map((department) => ({ label: department, value: department }))}
+        selected={activeDepartment}
+        onSelect={(value) => { setActiveDepartment(value); setDeptSheetOpen(false); }}
+        onApply={() => setDeptSheetOpen(false)}
+        onClose={() => setDeptSheetOpen(false)}
+      />
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f4f7fe' },
+  container: { flex: 1, backgroundColor: COLORS.background },
   scrollContent: { paddingBottom: 0 },
-  hero: { backgroundColor: '#34479b', paddingTop: 70, paddingHorizontal: 22, paddingBottom: 58, borderBottomLeftRadius: 28, borderBottomRightRadius: 28, alignItems: 'center' },
-  heroTitle: { color: '#ffffff', fontSize: 34, fontWeight: '900', textAlign: 'center' },
-  heroGold: { color: '#fdb813' },
-  heroSubtitle: { color: 'rgba(255,255,255,0.76)', fontSize: 15, marginTop: 8, marginBottom: 22, textAlign: 'center' },
-  searchShell: { width: '100%', minHeight: 56, borderRadius: 16, backgroundColor: 'rgba(255,255,255,0.12)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.18)', flexDirection: 'row', alignItems: 'center', paddingLeft: 14, marginBottom: 26 },
-  searchInput: { flex: 1, color: '#ffffff', fontSize: 14, marginLeft: 12 },
-  searchCamera: { width: 38, height: 38, borderRadius: 10, borderWidth: 1, borderColor: '#fdb813', alignItems: 'center', justifyContent: 'center', marginRight: 8 },
-  modeSwitch: { flexDirection: 'row', backgroundColor: 'rgba(255,255,255,0.12)', borderRadius: 16, padding: 5 },
-  modeButton: { flexDirection: 'row', alignItems: 'center', minWidth: 118, justifyContent: 'center', paddingVertical: 12, borderRadius: 13 },
-  modeActive: { backgroundColor: '#ffffff' },
-  modeText: { color: 'rgba(255,255,255,0.7)', fontWeight: '900', marginLeft: 8 },
-  modeTextActive: { color: '#1d2b4b' },
-  filterSelectWrap: { paddingHorizontal: 18, paddingTop: 24, paddingBottom: 18 },
-  filterContent: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 8, paddingHorizontal: 18, paddingTop: 30, paddingBottom: 22 },
-  filterPill: { backgroundColor: '#ffffff', borderWidth: 1, borderColor: '#dbe3ef', borderRadius: 13, paddingHorizontal: 14, paddingVertical: 10 },
-  filterActive: { backgroundColor: '#1d2b4b', borderColor: '#1d2b4b' },
-  filterText: { color: '#475569', fontSize: 12, fontWeight: '800' },
-  filterTextActive: { color: '#ffffff' },
-  columnWrapper: { paddingHorizontal: 14, gap: 12 },
-  sectionCard: { flex: 1, backgroundColor: '#ffffff', borderRadius: 18, borderWidth: 1, borderColor: '#dbe3ef', padding: 18, marginBottom: 14, minHeight: 218 },
-  cardTopRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 22 },
-  iconBox: { width: 44, height: 44, borderRadius: 12, backgroundColor: '#eef2ff', alignItems: 'center', justifyContent: 'center' },
-  yearPill: { backgroundColor: '#f8fafc', borderRadius: 8, paddingHorizontal: 11, paddingVertical: 5 },
-  yearPillText: { color: '#64748b', fontSize: 12, fontWeight: '900' },
-  cardTitle: { color: '#1d2b4b', fontSize: 18, lineHeight: 22, fontWeight: '900', marginBottom: 6 },
-  cardCourse: { color: '#1d39c4', fontSize: 12, fontWeight: '700', minHeight: 30 },
-  cardYear: { color: '#94a3b8', fontSize: 12, marginTop: 8, marginBottom: 12 },
-  countRow: { flexDirection: 'row', alignItems: 'center', gap: 7 },
-  countText: { color: '#475569', fontSize: 13, fontWeight: '700' },
+  hero: { backgroundColor: COLORS.navy, padding: 20, paddingTop: 54, borderBottomLeftRadius: 24, borderBottomRightRadius: 24, alignItems: 'center' },
+  heroEyebrow: { color: 'rgba(255,255,255,0.4)', fontSize: 10, fontWeight: '900', textTransform: 'uppercase', letterSpacing: 1.2, marginBottom: 8 },
+  heroTitle: { color: '#ffffff', fontSize: 24, fontWeight: '900', textAlign: 'center' },
+  heroGold: { color: COLORS.gold },
+  heroSubtitle: { color: 'rgba(255,255,255,0.6)', fontSize: 12, lineHeight: 18, marginTop: 8, marginBottom: 18, textAlign: 'center' },
+  searchShell: { width: '100%', minHeight: 42, borderRadius: 20, backgroundColor: '#FFFFFF', flexDirection: 'row', alignItems: 'center', paddingLeft: 14 },
+  searchInput: { flex: 1, color: COLORS.navy, fontSize: 13, marginLeft: 10 },
+  searchCamera: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center', marginRight: 4 },
+  departmentRow: { gap: 8, paddingRight: 22 },
+  departmentPill: { minHeight: 34, borderRadius: 999, borderWidth: 1, borderColor: 'rgba(255,255,255,0.3)', paddingHorizontal: 13, alignItems: 'center', justifyContent: 'center' },
+  departmentPillActive: { backgroundColor: '#ffffff', borderColor: '#ffffff' },
+  departmentPillText: { color: 'rgba(255,255,255,0.78)', fontSize: 11, fontWeight: '900' },
+  departmentPillTextActive: { color: '#1d2b4b' },
+  filterBar: { backgroundColor: '#FFFFFF', paddingHorizontal: 14, paddingVertical: 10, borderBottomWidth: 0.5, borderBottomColor: COLORS.border },
+  filterLabelRow: { flexDirection: 'row', alignItems: 'center', gap: 7, marginBottom: 8 },
+  filterLabel: { color: COLORS.muted, fontSize: 10, textTransform: 'uppercase', fontWeight: '900' },
+  departmentDropdown: { minHeight: 46, borderRadius: 20, backgroundColor: COLORS.gold, paddingHorizontal: 14, paddingVertical: 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  dropdownLabel: { color: COLORS.navy, fontSize: 11, fontWeight: '900' },
+  dropdownValue: { color: COLORS.navy, fontSize: 11, fontWeight: '800', marginTop: 2 },
+  statsRow: { marginTop: 8, flexDirection: 'row', gap: 16 },
+  statItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  countText: { color: COLORS.muted, fontSize: 12, fontWeight: '700' },
   batchSummary: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 22, marginBottom: 18 },
   batchSummaryIcon: { width: 40, height: 40, borderRadius: 10, backgroundColor: '#1d2b4b', alignItems: 'center', justifyContent: 'center', marginRight: 12 },
   batchSummaryText: { color: '#64748b', fontSize: 13, fontWeight: '900', backgroundColor: '#eef2ff', overflow: 'hidden', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 6 },
-  batchCard: { backgroundColor: '#ffffff', borderRadius: 16, borderWidth: 1, borderColor: '#dbe3ef', marginHorizontal: 22, marginBottom: 18, padding: 18 },
-  batchTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 22 },
+  batchCard: { backgroundColor: '#ffffff', borderRadius: 16, borderWidth: 0.5, borderColor: COLORS.border, marginHorizontal: 14, marginBottom: 12, padding: 16 },
+  batchTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  batchYearTitle: { color: COLORS.navy, fontSize: 22, fontWeight: '900' },
+  batchWatermark: { color: COLORS.gold, fontSize: 48, fontWeight: '900', opacity: 0.15, position: 'absolute', right: 0, top: -16 },
   batchIcon: { width: 40, height: 40, borderRadius: 10, backgroundColor: '#1d2b4b', alignItems: 'center', justifyContent: 'center' },
-  batchCountPill: { backgroundColor: '#f8fafc', borderRadius: 8, paddingHorizontal: 11, paddingVertical: 5 },
-  batchCountText: { color: '#64748b', fontSize: 12, fontWeight: '900' },
-  batchTitleRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 },
-  batchTitle: { color: '#1d2b4b', fontSize: 20, fontWeight: '900' },
+  yearPill: { backgroundColor: '#f8fafc', borderRadius: 8, paddingHorizontal: 11, paddingVertical: 5 },
+  yearPillText: { color: '#64748b', fontSize: 12, fontWeight: '900' },
+  batchTitleRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, marginBottom: 8 },
+  batchTitle: { color: COLORS.navy, fontSize: 15, lineHeight: 20, fontWeight: '900', marginTop: 4 },
   batchYearGold: { color: '#fdb813', fontSize: 23, fontWeight: '900' },
-  sectionsPreview: { backgroundColor: '#f8fafc', borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 12, padding: 12, marginTop: 12 },
-  previewHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 9 },
-  previewHeaderText: { color: '#475569', fontSize: 12, fontWeight: '900', marginLeft: 6 },
-  sectionChips: { flexDirection: 'row', flexWrap: 'wrap', gap: 7 },
-  sectionChip: { backgroundColor: '#ffffff', borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 999, paddingHorizontal: 10, paddingVertical: 5 },
-  sectionChipText: { color: '#3f51b5', fontSize: 10, fontWeight: '800' },
-  moreChip: { backgroundColor: '#1d2b4b', borderRadius: 999, paddingHorizontal: 10, paddingVertical: 5 },
-  moreChipText: { color: '#ffffff', fontSize: 10, fontWeight: '900' },
+  departmentText: { color: COLORS.muted, fontSize: 12, fontWeight: '800' },
+  sectionsPreview: { backgroundColor: '#F7F8FB', borderRadius: 10, padding: 10, marginTop: 10 },
+  sectionPillRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+  sectionPill: { backgroundColor: '#FFFFFF', borderWidth: 0.5, borderColor: COLORS.border, borderRadius: 20, paddingHorizontal: 10, paddingVertical: 3 },
+  sectionPillText: { color: COLORS.navy, fontSize: 11, fontWeight: '800' },
+  sectionPillMore: { backgroundColor: COLORS.navy, borderColor: COLORS.navy },
+  sectionPillMoreText: { color: '#FFFFFF', fontSize: 11, fontWeight: '900' },
   divider: { height: 1, backgroundColor: '#e2e8f0', marginVertical: 16 },
-  batchmateButton: { alignSelf: 'flex-start', backgroundColor: '#eef2ff', paddingHorizontal: 16, paddingVertical: 11, borderRadius: 10, marginBottom: 12 },
-  batchmateText: { color: '#3f51b5', fontSize: 12, fontWeight: '900' },
-  directoryDisabledPill: { alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center', gap: 7, backgroundColor: '#f8fafc', borderWidth: 1, borderColor: '#e2e8f0', paddingHorizontal: 13, paddingVertical: 9, borderRadius: 10, marginBottom: 12 },
-  directoryDisabledText: { color: '#475569', fontSize: 12, fontWeight: '900' },
-  viewYearbookButton: { alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#fdb813', paddingHorizontal: 16, paddingVertical: 11, borderRadius: 10, marginBottom: 12 },
-  viewYearbookText: { color: '#1d2b4b', fontSize: 12, fontWeight: '900' },
-  yearbookDisabledPill: { alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center', gap: 7, backgroundColor: '#fffbeb', borderWidth: 1, borderColor: '#fde68a', paddingHorizontal: 13, paddingVertical: 9, borderRadius: 10, marginBottom: 12 },
-  yearbookDisabledText: { color: '#92590e', fontSize: 12, fontWeight: '900' },
-  generateButton: { alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#1d2b4b', paddingHorizontal: 16, paddingVertical: 11, borderRadius: 10 },
-  generateText: { color: '#fdb813', fontSize: 12, fontWeight: '900' },
+  actionRow: { flexDirection: 'row', gap: 8, alignItems: 'stretch', marginTop: 12 },
+  batchmateButton: { flex: 1, minHeight: 40, backgroundColor: '#FFFFFF', borderWidth: 1.5, borderColor: COLORS.navy, paddingHorizontal: 10, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
+  batchmateText: { color: COLORS.navy, fontSize: 12, fontWeight: '900', textAlign: 'center' },
+  directoryDisabledPill: { flex: 1, minHeight: 46, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7, backgroundColor: '#f8fafc', borderWidth: 1, borderColor: '#e2e8f0', paddingHorizontal: 10, borderRadius: 10 },
+  directoryDisabledText: { color: '#475569', fontSize: 11, fontWeight: '900' },
+  generateButton: { flex: 1, minHeight: 40, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, backgroundColor: COLORS.navy, paddingHorizontal: 10, borderRadius: 10 },
+  generateText: { color: '#FFFFFF', fontSize: 12, fontWeight: '900', textAlign: 'center' },
+  detailHero: { backgroundColor: COLORS.navy, paddingHorizontal: 20, paddingTop: 54, paddingBottom: 26, borderBottomLeftRadius: 24, borderBottomRightRadius: 24, alignItems: 'center' },
+  detailBack: { position: 'absolute', left: 16, top: 48, width: 44, height: 44, borderRadius: 15, backgroundColor: '#ffffff', alignItems: 'center', justifyContent: 'center' },
+  detailEyebrow: { color: 'rgba(255,255,255,0.42)', fontSize: 10, fontWeight: '900', letterSpacing: 1.1, textTransform: 'uppercase' },
+  detailTitle: { color: '#ffffff', fontSize: 27, fontWeight: '900', marginTop: 8, textAlign: 'center' },
+  detailSubtitle: { color: 'rgba(255,255,255,0.66)', fontSize: 12, lineHeight: 18, marginTop: 8, textAlign: 'center' },
+  detailYearbookButton: { marginTop: 16, minHeight: 38, borderRadius: 999, borderWidth: 1, borderColor: 'rgba(253,184,19,0.7)', paddingHorizontal: 16, flexDirection: 'row', gap: 8, alignItems: 'center', justifyContent: 'center' },
+  detailYearbookText: { color: COLORS.gold, fontSize: 11, fontWeight: '900' },
+  detailContent: { paddingHorizontal: 14, paddingTop: 18, paddingBottom: 120 },
+  detailSearchShell: { minHeight: 48, borderRadius: 16, backgroundColor: '#ffffff', borderWidth: 1, borderColor: '#dbe4f0', flexDirection: 'row', alignItems: 'center', paddingLeft: 14, paddingRight: 6, marginBottom: 14 },
+  detailSearchInput: { flex: 1, minWidth: 0, color: COLORS.navy, fontSize: 13, fontWeight: '800', marginLeft: 10 },
+  detailSearchClear: { width: 36, height: 36, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: '#f8fafc' },
+  detailSearchCamera: { width: 36, height: 36, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(245,166,35,0.12)' },
+  detailFilterRow: { flexDirection: 'row', gap: 8, marginBottom: 12 },
+  detailFilterButton: { flex: 1, minHeight: 48, borderRadius: 14, borderWidth: 1, borderColor: '#dbe4f0', backgroundColor: '#ffffff', paddingHorizontal: 10, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 6 },
+  detailFilterCopy: { flex: 1, minWidth: 0 },
+  detailFilterLabel: { color: '#94a3b8', fontSize: 9, fontWeight: '900', textTransform: 'uppercase', marginBottom: 3 },
+  detailFilterValue: { color: COLORS.navy, fontSize: 11, fontWeight: '900' },
+  detailFilterDepartment: { backgroundColor: COLORS.gold, borderColor: COLORS.gold },
+  detailFilterDepartmentLabel: { color: COLORS.navy },
+  detailFilterDepartmentValue: { color: COLORS.navy },
+  detailFilterCourse: { backgroundColor: COLORS.navy, borderColor: COLORS.navy },
+  detailFilterCourseLabel: { color: '#FFFFFF' },
+  detailFilterCourseValue: { color: COLORS.gold },
+  detailFilterSection: { backgroundColor: '#FFFFFF', borderColor: COLORS.border },
+  detailFilterSectionLabel: { color: COLORS.navy },
+  detailFilterSectionValue: { color: COLORS.muted },
+  faceBanner: { marginBottom: 12, borderRadius: 14, borderWidth: 1, borderColor: 'rgba(245,166,35,0.35)', backgroundColor: 'rgba(245,166,35,0.12)', paddingHorizontal: 12, paddingVertical: 9, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  faceBannerText: { color: '#9a6100', fontSize: 12, fontWeight: '900' },
+  faceBannerClear: { color: COLORS.navy, fontSize: 12, fontWeight: '900' },
+  departmentGroupCard: { backgroundColor: '#ffffff', borderRadius: 18, borderWidth: 1, borderColor: COLORS.border, padding: 14, marginBottom: 16 },
+  departmentHeader: { flexDirection: 'row', alignItems: 'center', gap: 11, marginBottom: 12 },
+  departmentIcon: { width: 40, height: 40, borderRadius: 11, backgroundColor: COLORS.navy, alignItems: 'center', justifyContent: 'center' },
+  departmentTitle: { color: COLORS.navy, fontSize: 17, fontWeight: '900' },
+  departmentMeta: { color: '#8fa0bf', fontSize: 11, fontWeight: '800', marginTop: 2 },
+  courseGroupCard: { backgroundColor: '#f8fafc', borderRadius: 14, borderWidth: 1, borderColor: '#edf2f7', padding: 10, marginTop: 10 },
+  courseHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 },
+  courseTitle: { color: '#3347d8', fontSize: 13, fontWeight: '900', flex: 1 },
+  detailSectionCard: { backgroundColor: '#ffffff', borderRadius: 14, borderWidth: 1, borderColor: '#edf2f7', padding: 10, marginBottom: 10 },
+  detailSectionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 10 },
+  detailSectionTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 7, flex: 1 },
+  detailSectionTitle: { color: COLORS.navy, fontSize: 12, fontWeight: '900' },
+  sectionCountBadge: { borderRadius: 999, backgroundColor: '#eef2ff', paddingHorizontal: 9, paddingVertical: 4 },
+  sectionCountText: { color: '#3347d8', fontSize: 9, fontWeight: '900' },
+  studentGrid: { gap: 8 },
+  detailStudentCard: { minHeight: 62, borderRadius: 12, borderWidth: 1, borderColor: '#dbe4f0', backgroundColor: '#ffffff', flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10, gap: 10 },
+  detailStudentAvatar: { width: 44, height: 44, borderRadius: 10, backgroundColor: COLORS.navy, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
+  detailStudentAvatarImage: { width: '100%', height: '100%' },
+  detailStudentInitials: { color: COLORS.gold, fontSize: 14, fontWeight: '900' },
+  detailStudentCopy: { flex: 1, minWidth: 0 },
+  detailStudentName: { color: '#071b3d', fontSize: 13, fontWeight: '900' },
+  detailStudentMeta: { color: '#8fa0bf', fontSize: 10, fontWeight: '800', marginTop: 2 },
   errorText: { color: '#dc2626', textAlign: 'center', marginBottom: 14 },
   emptyPanel: { marginHorizontal: 20, backgroundColor: '#ffffff', borderRadius: 18, borderWidth: 1, borderColor: '#e2e8f0', paddingVertical: 54, alignItems: 'center' },
   emptyTitle: { color: '#1d2b4b', fontSize: 18, fontWeight: '900', marginTop: 16 },
   emptyText: { color: '#8E8E93', fontSize: 14, textAlign: 'center', marginTop: 6 },
+  sheetOverlay: { flex: 1, justifyContent: 'flex-end' },
+  sheetBackdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.35)' },
+  sheet: { backgroundColor: '#FFFFFF', borderTopLeftRadius: 20, borderTopRightRadius: 20, paddingHorizontal: 18, paddingTop: 10, paddingBottom: 26, maxHeight: '82%' },
+  sheetHandle: { width: 36, height: 4, borderRadius: 999, backgroundColor: '#D1D5E0', alignSelf: 'center', marginBottom: 12 },
+  sheetTitle: { color: COLORS.navy, fontSize: 13, fontWeight: '900', marginBottom: 10 },
+  sheetScroll: { maxHeight: 420 },
+  sheetOption: { minHeight: 40, paddingVertical: 9, borderBottomWidth: 0.5, borderBottomColor: COLORS.background, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  sheetOptionText: { color: COLORS.navy, fontSize: 13 },
+  sheetCircle: { width: 20, height: 20, borderRadius: 10, borderWidth: 1.5, borderColor: '#D1D5E0', alignItems: 'center', justifyContent: 'center' },
+  sheetCircleActive: { backgroundColor: COLORS.gold, borderColor: COLORS.gold },
+  sheetApply: { backgroundColor: COLORS.navy, borderRadius: 12, paddingVertical: 11, alignItems: 'center', marginTop: 12 },
+  sheetApplyText: { color: '#FFFFFF', fontSize: 13, fontWeight: '900' },
 });

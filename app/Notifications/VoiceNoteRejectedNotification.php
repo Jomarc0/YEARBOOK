@@ -1,7 +1,4 @@
 <?php
-// ── VoiceNoteRejectedNotification.php ──────────────────────────────────────────
-// Sent to the SENDER when admin rejects their voice note
-
 namespace App\Notifications;
 
 use App\Models\VoiceNote;

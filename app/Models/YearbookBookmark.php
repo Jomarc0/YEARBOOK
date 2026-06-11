@@ -5,12 +5,6 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
-/**
- * YearbookBookmark
- * app/Models/YearbookBookmark.php
- *
- * Stores a user's bookmarked yearbook page.
- */
 class YearbookBookmark extends Model
 {
     protected $fillable = [

@@ -11,9 +11,8 @@ use Illuminate\Http\Request;
 
 class SectionController extends Controller
 {
-    // ── GET /api/sections ──────────────────────────────────────────────────
+    // GET /api/sections 
     // All sections with student count + avatar preview.
-    // Supports ?batch_id= and ?course= filters.
 
     public function index(Request $request): JsonResponse
     {
@@ -40,8 +39,8 @@ class SectionController extends Controller
         return response()->json($query->orderBy('name')->get());
     }
 
-    // ── GET /api/sections/{id} ─────────────────────────────────────────────
-    // Single section + paginated students — respects premium & visibility rules.
+    // GET /api/sections/{id} 
+    // Single section + paginated students espects premium & visibility rules.
 
     public function show(Request $request, int $id): JsonResponse
     {
@@ -51,7 +50,7 @@ class SectionController extends Controller
         $section = Section::with('batch:id,name,graduation_year,department')
             ->findOrFail($id);
 
-        // ── Base Student query ───────────────────────────────────────────
+        // Base Student query 
 
         $studentQuery = Student::where('section_id', $id)
             ->orderBy('last_name')

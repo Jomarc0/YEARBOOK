@@ -30,7 +30,7 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-slate-100 p-4 md:p-6">
+    <div className="min-h-screen flex items-center justify-center bg-gray-100 p-4 md:p-6">
       <div className="grid w-full max-w-6xl overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl lg:grid-cols-2">
         <div
           className="relative flex flex-col justify-between gap-6 bg-cover bg-center p-8 text-slate-50 md:p-11"
@@ -38,8 +38,6 @@ export default function LoginPage() {
             backgroundImage: `linear-gradient(165deg, rgba(0, 23, 72, .92) 0%, rgba(0, 47, 135, .86) 60%, rgba(0, 53, 150, .82) 100%), url("${buildingSrc}")`,
           }}
         >
-          <div className="absolute bottom-0 left-0 right-0 h-1 bg-amber-400" />
-
           <div>
             <div className="mb-4 grid h-16 w-16 place-items-center overflow-hidden rounded-xl border border-amber-300/60 bg-white shadow-lg">
               <img src={logoSrc} alt="National University Logo" className="h-[86%] w-[86%] object-contain" />
@@ -65,8 +63,17 @@ export default function LoginPage() {
           </div>
 
           {error && (
-            <div className="mb-5 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700">
-              {error}
+            <div className="mb-5 flex items-start gap-3 rounded-xl border border-red-100 border-l-4 border-l-red-500 bg-red-50 px-4 py-3 text-sm font-semibold text-red-600">
+              <span className="shrink-0 text-red-500" aria-hidden="true">⚠</span>
+              <span className="flex-1">{error}</span>
+              <button
+                type="button"
+                onClick={() => setError("")}
+                className="-mr-1 rounded-md px-1.5 text-base leading-none text-red-500 transition hover:bg-red-100 hover:text-red-700"
+                aria-label="Dismiss error"
+              >
+                ×
+              </button>
             </div>
           )}
 
@@ -83,7 +90,7 @@ export default function LoginPage() {
                 onChange={(e) => setUsername(e.target.value)}
                 required
                 autoFocus
-                className="h-12 w-full rounded-xl border border-slate-300 bg-white px-4 text-sm text-slate-700 outline-none transition focus:border-blue-700 focus:ring-2 focus:ring-blue-200"
+                className="h-12 w-full rounded-xl border border-gray-200 bg-white px-4 text-sm text-slate-700 outline-none transition focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
               />
             </div>
 
@@ -99,7 +106,7 @@ export default function LoginPage() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required
-                  className="h-12 w-full rounded-xl border border-slate-300 bg-white px-4 pr-12 text-sm text-slate-700 outline-none transition focus:border-blue-700 focus:ring-2 focus:ring-blue-200"
+                  className="h-12 w-full rounded-xl border border-gray-200 bg-white px-4 pr-12 text-sm text-slate-700 outline-none transition focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
                 />
                 <button
                   type="button"

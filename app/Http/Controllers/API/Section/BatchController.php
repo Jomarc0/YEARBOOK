@@ -12,8 +12,7 @@ class BatchController extends Controller
 {
     public function __construct(private readonly BatchService $batchService) {}
 
-    // ── GET /api/batches ───────────────────────────────────────────────────
-
+    // GET /api/batches
     public function index(): JsonResponse
     {
         $grouped = $this->batchService->getBatchesByDepartment();
@@ -24,7 +23,7 @@ class BatchController extends Controller
         ]);
     }
 
-    // ── GET /api/batches/{batch} ───────────────────────────────────────────
+    //  GET /api/batches/{batch}
 
     public function show(Batch $batch): JsonResponse
     {
@@ -34,7 +33,7 @@ class BatchController extends Controller
         ]);
     }
 
-    // ── GET /api/batches/{batch}/students ──────────────────────────────────
+    // GET /api/batches/{batch}/students 
 
     public function students(Request $request, Batch $batch): JsonResponse
     {
@@ -50,7 +49,7 @@ class BatchController extends Controller
         ]);
     }
 
-    // ── GET /api/batchmates ────────────────────────────────────────────────
+    //GET /api/batchmates
 
     public function batchmates(Request $request): JsonResponse
     {
@@ -90,7 +89,7 @@ class BatchController extends Controller
             : $value;
     }
 
-    // ── GET /api/discover/sectionmates ─────────────────────────────────────
+    // GET /api/discover/sectionmates
 
     public function sectionmates(Request $request): JsonResponse
     {
@@ -106,13 +105,14 @@ class BatchController extends Controller
         ]);
     }
 
-    // ── GET /api/discover/school ───────────────────────────────────────────
+    //GET /api/discover/school 
 
     public function wholeSchool(Request $request): JsonResponse
     {
         $viewer    = $request->user();
         $filters   = $request->only(['search', 'course', 'department', 'year', 'section_id']);
-        $paginated = $this->batchService->getWholeSchool($viewer, $filters, 40);
+        $perPage   = min(max((int) $request->query('per_page', 200), 1), 500);
+        $paginated = $this->batchService->getWholeSchool($viewer, $filters, $perPage);
 
         return response()->json([
             'data'       => $paginated,
@@ -122,13 +122,14 @@ class BatchController extends Controller
         ]);
     }
 
-    // ── GET /api/discover/cross-program ───────────────────────────────────
+    // GET /api/discover/cross-program
 
     public function crossProgram(Request $request): JsonResponse
     {
         $viewer    = $request->user();
         $filters   = $request->only(['search', 'course', 'department', 'year', 'exclude_course']);
-        $paginated = $this->batchService->getCrossProgram($viewer, $filters, 40);
+        $perPage   = min(max((int) $request->query('per_page', 200), 1), 500);
+        $paginated = $this->batchService->getCrossProgram($viewer, $filters, $perPage);
         $stats     = $this->batchService->getCrossProgramStats($viewer);
 
         return response()->json([
@@ -140,7 +141,7 @@ class BatchController extends Controller
         ]);
     }
 
-    // ── GET /api/discover/department/{department} ──────────────────────────
+    // GET /api/discover/department/{department} 
 
     public function byDepartment(Request $request, string $department): JsonResponse
     {

@@ -12,10 +12,6 @@ use Illuminate\Support\Str;
 
 /**
  * LocalStorageService
- *
- * Fallback driver used when Cloudinary credentials are absent (local dev, CI).
- * Stores files under storage/app/public and returns local URLs.
- * Not recommended for production — configure Cloudinary for that.
  */
 class LocalStorageService implements StorageServiceInterface
 {

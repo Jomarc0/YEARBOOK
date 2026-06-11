@@ -13,7 +13,7 @@ use Illuminate\Http\Request;
 
 class VoiceNoteController extends Controller
 {
-    // ── GET /voice-notes/inbox ─────────────────────────────────────────────────
+    // GET /voice-notes/inbox
     // Approved notes sent TO the authenticated user
     public function inbox(Request $request): JsonResponse
     {
@@ -26,8 +26,8 @@ class VoiceNoteController extends Controller
         return response()->json($notes);
     }
 
-    // ── GET /voice-notes/outbox ────────────────────────────────────────────────
-    // All notes the authenticated user has SENT (any status)
+    // GET /voice-notes/outbox 
+    // All notes the authenticated user has SENT 
     public function outbox(Request $request): JsonResponse
     {
         $notes = VoiceNote::with(['recipient:id,name,profile_picture'])
@@ -38,7 +38,7 @@ class VoiceNoteController extends Controller
         return response()->json($notes);
     }
 
-    // ── GET /voice-notes/profile/{userId} ─────────────────────────────────────
+    // GET /voice-notes/profile/{userId} 
     // Approved notes on a student's public profile
     public function forProfile(Request $request, int $userId): JsonResponse
     {
@@ -51,7 +51,7 @@ class VoiceNoteController extends Controller
         return response()->json($notes);
     }
 
-    // ── POST /voice-notes ──────────────────────────────────────────────────────
+    // POST /voice-notes
     // Send a voice note to a classmate
     public function store(SendVoiceNoteRequest $request): JsonResponse
     {
@@ -90,7 +90,7 @@ class VoiceNoteController extends Controller
         ], 201);
     }
 
-    // ── DELETE /voice-notes/{id} ───────────────────────────────────────────────
+    // DELETE /voice-notes/{id}
     // Sender can delete their own note
     public function destroy(Request $request, int $id): JsonResponse
     {

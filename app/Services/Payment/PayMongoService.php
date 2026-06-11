@@ -29,8 +29,7 @@ class PayMongoService
         ?string $successUrl = null,
         ?string $cancelUrl = null
     ): array {
-        $frontendUrl = env('FRONTEND_URL', 'http://localhost:5173'); // ← frontend, not APP_URL
-
+        $frontendUrl = env('FRONTEND_URL', 'http://localhost:5173'); 
         $response = Http::withBasicAuth($this->secretKey, '')
             ->post("{$this->baseUrl}/checkout_sessions", [
                 'data' => [

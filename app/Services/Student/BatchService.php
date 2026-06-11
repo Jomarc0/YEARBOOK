@@ -10,7 +10,7 @@ use Illuminate\Support\Collection;
 
 class BatchService
 {
-    // ── NU Lipa Department & Course Maps ───────────────────────────────────
+    // NU Lipa Department & Course Maps 
 
     public const DEPARTMENT_MAP = [
         'Bachelor of Science in Architecture'           => 'SACE',
@@ -125,7 +125,7 @@ class BatchService
         'HUMSS' => ['HUMSS', 'HUMMS'],
     ];
 
-    // ── Columns ────────────────────────────────────────────────────────────
+    // Columns 
 
     private const PUBLIC_COLS = [
         'id',
@@ -174,16 +174,14 @@ class BatchService
         return $isPremium ? self::PREMIUM_COLS : self::PUBLIC_COLS;
     }
 
-    // ── Base query ─────────────────────────────────────────────────────────
-
+    // Base query 
     public function baseQuery(bool $isPremium)
     {
         return Student::select($this->cols($isPremium))
             ->with(['section:id,name', 'batch:id,name,graduation_year,department']);
     }
 
-    // ── Helpers ────────────────────────────────────────────────────────────
-
+    // Helpers 
     private function coursesForDepartment(string $department): array
     {
         return collect(self::DEPARTMENT_MAP)
@@ -263,8 +261,7 @@ class BatchService
         return empty($variants) ? $query : $query->whereIn('students.course', $variants);
     }
 
-    // ── Discovery: Batchmates ──────────────────────────────────────────────
-
+    // Discovery: Batchmates
     public function getBatchmates(User $viewer, ?string $course = null, ?int $year = null, ?string $department = null): Collection
     {
         $requestedYear = $year;
@@ -286,8 +283,7 @@ class BatchService
             ->map(fn ($s) => $this->formatStudent($s));
     }
 
-    // ── Discovery: Sectionmates ────────────────────────────────────────────
-
+    // Discovery: Sectionmates 
     public function getSectionmates(User $viewer): Collection
     {
         $sectionId = $viewer->studentRecord?->section_id ?? $viewer->section_id;
@@ -304,7 +300,7 @@ class BatchService
             ->map(fn ($s) => $this->formatStudent($s));
     }
 
-    // ── Discovery: Whole School ────────────────────────────────────────────
+    // Discovery: Whole School 
 
     public function getWholeSchool(User $viewer, array $filters = [], int $perPage = 40): LengthAwarePaginator
     {
@@ -336,7 +332,7 @@ class BatchService
             ->through(fn ($s) => $this->formatStudent($s));
     }
 
-    // ── Discovery: Cross-Program ───────────────────────────────────────────
+    // Discovery: Cross-Program 
 
     public function getCrossProgram(User $viewer, array $filters = [], int $perPage = 40): LengthAwarePaginator
     {
@@ -372,7 +368,7 @@ class BatchService
             ->through(fn ($s) => $this->formatStudent($s));
     }
 
-    // ── Discovery: Cross-Program Stats ────────────────────────────────────
+    // Discovery: Cross-Program Stats 
 
     public function getCrossProgramStats(User $viewer): array
     {
@@ -392,7 +388,7 @@ class BatchService
         ];
     }
 
-    // ── Discovery: By Department ───────────────────────────────────────────
+    // Discovery: By Department 
 
     public function getByDepartment(User $viewer, string $department): Collection
     {
@@ -405,8 +401,7 @@ class BatchService
             ->groupBy('course');
     }
 
-    // ── Batch Helpers ──────────────────────────────────────────────────────
-
+    // Batch Helpers 
     public function getBatchesByDepartment(): Collection
     {
         return Batch::withCount('students')

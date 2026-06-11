@@ -1,5 +1,6 @@
 import { Stack } from "expo-router";
 import React, { useEffect, useState } from "react";
+import { GestureHandlerRootView } from "react-native-gesture-handler";
 import MaintenanceNotice from "../components/MaintenanceNotice";
 import { getAppConfig, unwrap } from "../lib/api";
 
@@ -23,30 +24,24 @@ export default function RootLayout() {
       }
     };
     loadConfig();
-    return () => { active = false; };
+    const interval = setInterval(loadConfig, 30000);
+    return () => {
+      active = false;
+      clearInterval(interval);
+    };
   }, []);
 
   if (maintenance) {
-    return <MaintenanceNotice config={config} />;
+    return (
+      <GestureHandlerRootView style={{ flex: 1 }}>
+        <MaintenanceNotice config={config} />
+      </GestureHandlerRootView>
+    );
   }
 
   return (
-    <Stack screenOptions={{ headerShown: false }}>
-      <Stack.Screen name="index" />
-      <Stack.Screen name="login" />
-      <Stack.Screen name="signup" />
-      <Stack.Screen name="sso/callback" />
-      <Stack.Screen name="(tabs)" />
-      <Stack.Screen name="messages" />
-      <Stack.Screen name="notifications" />
-      <Stack.Screen name="student/[id]" />
-      <Stack.Screen name="alumni" />
-      <Stack.Screen name="payment" />
-      <Stack.Screen name="voice-notes" />
-      <Stack.Screen name="transcripts" />
-      <Stack.Screen name="yearbook" />
-      <Stack.Screen name="maintenance" />
-      <Stack.Screen name="+not-found" />
-    </Stack>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <Stack screenOptions={{ headerShown: false }} />
+    </GestureHandlerRootView>
   );
 }

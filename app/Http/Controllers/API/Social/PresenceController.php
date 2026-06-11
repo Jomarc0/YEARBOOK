@@ -41,7 +41,7 @@ class PresenceController extends Controller
         return response()->json(['ok' => true]);
     }
     /**
-     * Bulk-fetch presence for a list of user IDs (used when loading conversations).
+     * Bulk-fetch presence for a list of user IDs .
      */
     public function bulk(Request $request): JsonResponse
     {

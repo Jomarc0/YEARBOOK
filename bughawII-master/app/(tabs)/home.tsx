@@ -1,13 +1,14 @@
-import { ActivityIndicator, AppState, FlatList, Modal, RefreshControl, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, AppState, FlatList, RefreshControl, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { Image } from 'expo-image';
 import { FontAwesome } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import { useRouter } from 'expo-router';
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import * as Haptics from 'expo-haptics';
 import { useFocusEffect } from '@react-navigation/native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
+  clearSession,
   fetchCurrentUser,
   getAppConfig,
   getBatchmates,
@@ -16,190 +17,511 @@ import {
   getFeed,
   getMessagesUnreadCount,
   getNotifications,
+  getMemoryDigest,
   getTrending,
   imageUrl,
   paginationMeta,
+  recordFeedPostView,
   searchAll,
-  tagStudentsOnPost,
   unwrap,
 } from '../../lib/api';
 
-const FILTERS = [
-  { key: 'all', label: 'All posts' },
+const NAVY = '#1B2A4A';
+const AMBER = '#F5A623';
+const BACKGROUND = '#F0F2F7';
+const DIVIDER = '#E5E7EB';
+
+const FEED_FILTERS = [
+  { key: 'all', label: 'All' },
   { key: 'public', label: 'Public' },
   { key: 'batchmates', label: 'Batchmates' },
   { key: 'mine', label: 'My posts' },
 ];
 
-const QUICK_ACTIONS = [
+const QUICK_LINKS = [
   { label: 'Directory', icon: 'users', route: '/directory' },
   { label: 'Faculty', icon: 'briefcase', route: '/faculty' },
   { label: 'Gallery', icon: 'image', route: '/gallery' },
   { label: 'Yearbook', icon: 'book', route: '/yearbook' },
 ];
 
-const visibilityMap: Record<string, { label: string; icon: any; color: string; bg: string }> = {
-  public: { label: 'Public', icon: 'globe', color: '#047857', bg: '#ecfdf5' },
-  batchmates: { label: 'Batchmates', icon: 'users', color: '#3f51b5', bg: '#eef2ff' },
-  private: { label: 'Private', icon: 'lock', color: '#64748b', bg: '#f1f5f9' },
+const visibilityLabels: Record<string, { label: string; icon: any }> = {
+  public: { label: 'Public', icon: 'globe' },
+  batchmates: { label: 'Batchmates', icon: 'users' },
+  private: { label: 'Private', icon: 'lock' },
 };
 
-const isVideoMedia = (media: any) => {
-  const path = String(media?.file_path || '');
-  return media?.resource_type === 'video' || /(\.mp4|\.mov|\.webm)(\?|$)/i.test(path);
+const compactNumber = (value: any) => {
+  const numeric = Number(value || 0);
+  if (!Number.isFinite(numeric)) return '0';
+  if (numeric >= 1000) return `${(numeric / 1000).toFixed(numeric >= 10000 ? 0 : 1)}k`;
+  return numeric.toLocaleString();
 };
 
-const getMediaUri = (media: any) => imageUrl(media?.file_path);
+const firstNameOf = (person: any) => {
+  const name = String(person?.name || person?.full_name || 'Student').trim();
+  return name.split(/\s+/)[0] || 'Student';
+};
 
-function Avatar({ user, size = 42 }: { user: any; size?: number }) {
-  const uri = imageUrl(user?.profile_picture || user?.profile_pic);
-  const letter = (user?.name?.trim?.()[0] || 'U').toUpperCase();
-  const style = { width: size, height: size, borderRadius: 10 };
+const initialsOf = (person: any) => {
+  const words = String(person?.name || person?.full_name || 'Student').trim().split(/\s+/).filter(Boolean);
+  const letters = words.length > 1 ? `${words[0][0]}${words[words.length - 1][0]}` : words[0]?.slice(0, 2);
+  return (letters || 'ST').toUpperCase();
+};
 
-  if (uri) return <Image source={uri} style={[styles.avatar, style]} contentFit="cover" />;
+const mediaItemsOf = (post: any) => (Array.isArray(post?.media) ? post.media.filter((item: any) => item?.file_path) : []);
 
+const mediaUriOf = (media: any) => imageUrl(media?.file_path || media?.thumbnail_path || media?.url);
+const meaningfulText = (value: any) => {
+  const text = String(value || '').replace(/\s+/g, ' ').trim();
+  const compact = text.replace(/[^a-z0-9]/gi, '').toLowerCase();
+  if (text.length < 3 || compact.length < 3) return false;
+  if (/^(test|asdf|qwerty|sample|lorem|abc|haha)+$/i.test(compact)) return false;
+  if (/^(.)\1{2,}$/.test(compact)) return false;
+  return true;
+};
+const shouldShowFeedPost = (post: any) => {
+  const status = String(post?.status || post?.moderation_status || post?.approval_status || '').toLowerCase();
+  if (['pending', 'rejected', 'unapproved', 'hidden', 'flagged'].includes(status)) return false;
+  if (post?.is_approved === false || post?.approved === false || post?.is_public === false) return false;
+  return mediaItemsOf(post).length > 0 || meaningfulText(post?.caption || post?.body || post?.message);
+};
+
+function DividerLine() {
+  return <View style={styles.divider} />;
+}
+
+function Badge({ count }: { count: number }) {
+  if (!count) return null;
   return (
-    <View style={[styles.avatarFallback, style]}>
-      <Text style={styles.avatarText}>{letter}</Text>
+    <View style={styles.badge}>
+      <Text style={styles.badgeText}>{count > 9 ? '9+' : count}</Text>
     </View>
   );
 }
 
-function VisibilityPill({ visibility }: { visibility: string }) {
-  const config = visibilityMap[visibility] || visibilityMap.private;
+function HeaderIcon({ icon, count, onPress }: { icon: any; count: number; onPress: () => void }) {
+  return (
+    <TouchableOpacity style={styles.headerIconButton} onPress={onPress} activeOpacity={0.82}>
+      <FontAwesome name={icon} size={15} color="#ffffff" />
+      <Badge count={count} />
+    </TouchableOpacity>
+  );
+}
+
+function Avatar({ user, size = 'medium' }: { user: any; size?: 'small' | 'medium' | 'large' | 'post' }) {
+  const uri = imageUrl(user?.profile_picture || user?.profile_pic || user?.avatar);
+  const avatarSize =
+    size === 'small' ? styles.avatarSmall :
+    size === 'large' ? styles.avatarLarge :
+    size === 'post' ? styles.avatarPost :
+    styles.avatarMedium;
+  const textSize =
+    size === 'small' ? styles.avatarTextSmall :
+    size === 'large' ? styles.avatarTextLarge :
+    size === 'post' ? styles.avatarTextPost :
+    styles.avatarTextMedium;
+
+  if (uri) {
+    return <Image source={uri} style={[styles.avatarBase, avatarSize]} contentFit="cover" />;
+  }
 
   return (
-    <View style={[styles.visibilityPill, { backgroundColor: config.bg }]}>
-      <FontAwesome name={config.icon} size={9} color={config.color} />
-      <Text style={[styles.visibilityText, { color: config.color }]}>{config.label}</Text>
+    <View style={[styles.avatarBase, avatarSize, styles.avatarFallback]}>
+      <Text style={[styles.avatarText, textSize]}>{initialsOf(user)}</Text>
     </View>
   );
 }
 
-function FeedPost({
-  post,
-  currentUser,
-  onOpenProfile,
-  onMessage,
-  onTag,
+function SectionHeader({ title, onSeeAll }: { title: string; onSeeAll?: () => void }) {
+  return (
+    <View style={styles.sectionHeader}>
+      <Text style={styles.sectionTitle}>{title}</Text>
+      {onSeeAll ? (
+        <TouchableOpacity onPress={onSeeAll} activeOpacity={0.75}>
+          <Text style={styles.seeAll}>See all</Text>
+        </TouchableOpacity>
+      ) : null}
+    </View>
+  );
+}
+
+function QuickLinks({ onPress }: { onPress: (route: string) => void }) {
+  return (
+    <FlatList
+      data={QUICK_LINKS}
+      keyExtractor={(item) => item.label}
+      horizontal
+      scrollEnabled={false}
+      contentContainerStyle={styles.quickList}
+      renderItem={({ item }) => (
+        <TouchableOpacity style={styles.quickItem} onPress={() => onPress(item.route)} activeOpacity={0.82}>
+          <View style={styles.quickIconBox}>
+            <FontAwesome name={item.icon as any} size={18} color={AMBER} />
+          </View>
+          <Text style={styles.quickLabel} numberOfLines={1}>{item.label}</Text>
+        </TouchableOpacity>
+      )}
+    />
+  );
+}
+
+function StatsRow({ batchmatesCount, trendingCount, memoriesCount }: { batchmatesCount: number; trendingCount: number; memoriesCount: number }) {
+  const stats = [
+    { key: 'batchmates', label: 'Batchmates', value: batchmatesCount, subtitle: 'Your circle', amber: false },
+    { key: 'trending', label: 'Trending', value: trendingCount, subtitle: 'This week', amber: true },
+    { key: 'memories', label: 'Memories', value: memoriesCount, subtitle: 'Recent posts', amber: false },
+  ].filter((stat) => stat.key !== 'batchmates' || stat.value > 0);
+
+  return (
+    <View style={styles.statsRow}>
+      {stats.map((stat) => (
+        <View key={stat.key} style={styles.statCard}>
+          <Text style={styles.statLabel}>{stat.label}</Text>
+          <Text style={[styles.statValue, stat.amber && styles.statValueAmber]}>{compactNumber(stat.value)}</Text>
+          <Text style={styles.statSubtitle}>{stat.subtitle}</Text>
+        </View>
+      ))}
+    </View>
+  );
+}
+
+function SuggestedBatchmates({ students, onOpen, onSeeAll }: { students: any[]; onOpen: (student: any) => void; onSeeAll: () => void }) {
+  if (!students.length) return null;
+
+  return (
+    <View style={styles.sectionBlock}>
+      <SectionHeader title="Suggested Batchmates" onSeeAll={onSeeAll} />
+      <FlatList
+        data={students.slice(0, 12)}
+        keyExtractor={(item, index) => String(item?.id || `${item?.name}-${index}`)}
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.horizontalList}
+        renderItem={({ item }) => (
+          <TouchableOpacity style={styles.batchmateItem} onPress={() => onOpen(item)} activeOpacity={0.84}>
+            <Avatar user={item} size="large" />
+            <Text style={styles.batchmateName} numberOfLines={1}>{firstNameOf(item)}</Text>
+          </TouchableOpacity>
+        )}
+      />
+    </View>
+  );
+}
+
+function TrendingThisWeek({ students, onOpen, onSeeAll }: { students: any[]; onOpen: (student: any) => void; onSeeAll: () => void }) {
+  if (!students.length) return null;
+
+  return (
+    <View style={styles.sectionBlock}>
+      <SectionHeader title="Trending This Week" onSeeAll={onSeeAll} />
+      <FlatList
+        data={students.slice(0, 12)}
+        keyExtractor={(item, index) => String(item?.id || `${item?.name}-${index}`)}
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.horizontalList}
+        renderItem={({ item, index }) => (
+          <TouchableOpacity style={styles.trendingCard} onPress={() => onOpen(item)} activeOpacity={0.84}>
+            <View style={styles.rankBadge}>
+              <Text style={styles.rankText}>#{index + 1}</Text>
+            </View>
+            <Avatar user={item} size="small" />
+            <View style={styles.trendingInfo}>
+              <Text style={styles.trendingName} numberOfLines={1}>{firstNameOf(item)}</Text>
+              <Text style={styles.trendingViews} numberOfLines={1}>
+                {compactNumber(item?.views_this_week || item?.views || item?.total_views)} views
+              </Text>
+            </View>
+          </TouchableOpacity>
+        )}
+      />
+    </View>
+  );
+}
+
+const allowedMemoryType = (value: any) => ['on_this_day', 'appeared_in_photo', 'profile_viewed'].includes(String(value || '').toLowerCase());
+const shouldShowMemory = (memory: any) => {
+  const type = String(memory?.content_type || memory?.type || '').toLowerCase();
+  const title = String(memory?.title || '').toLowerCase();
+  if (!allowedMemoryType(type) || type === 'trending') return false;
+  if (title.includes('sample') || title.includes('qa')) return false;
+  return true;
+};
+
+const memoryThumb = (memory: any) => imageUrl(
+  memory?.thumbnail_url ||
+  memory?.thumbnail ||
+  memory?.image ||
+  memory?.photo_url ||
+  memory?.file_path ||
+  memory?.cover_url
+);
+
+const memoryIcon = (type: string) => {
+  if (type === 'on_this_day') return 'history';
+  if (type === 'appeared_in_photo') return 'image';
+  return 'eye';
+};
+
+function MemoryDigest({
+  memories,
+  loading,
+  error,
+  onOpen,
+  onRetry,
 }: {
-  post: any;
-  currentUser: any;
-  onOpenProfile: (user: any) => void;
-  onMessage: (user: any) => void;
-  onTag: (post: any) => void;
+  memories: any[];
+  loading: boolean;
+  error: string;
+  onOpen: (memory: any) => void;
+  onRetry: () => void;
 }) {
-  const media = Array.isArray(post?.media) ? post.media.filter((item: any) => item?.file_path) : [];
-  const [mediaIndex, setMediaIndex] = useState(0);
-  const selectedMedia = media[Math.min(mediaIndex, Math.max(media.length - 1, 0))];
-  const source = getMediaUri(selectedMedia);
-  const mediaCount = media.length;
-  const isVideo = isVideoMedia(selectedMedia);
-  const isOwn = post?.user_id === currentUser?.id;
-  const canNavigateMedia = mediaCount > 1;
+  const visibleMemories = memories.filter(shouldShowMemory).slice(0, 3);
 
-  const showNextMedia = (direction: 1 | -1) => {
-    if (!canNavigateMedia) return;
+  return (
+    <View style={styles.memoryDigestCard}>
+      <View style={styles.memoryDigestHeader}>
+        <View style={styles.memoryDigestTitleRow}>
+          <FontAwesome name="clock-o" size={14} color={AMBER} />
+          <Text style={styles.memoryDigestTitle}>Memory Digest</Text>
+        </View>
+        {error ? (
+          <TouchableOpacity style={styles.memoryRetryButton} onPress={onRetry} activeOpacity={0.8}>
+            <Text style={styles.memoryRetryText}>Retry</Text>
+          </TouchableOpacity>
+        ) : null}
+      </View>
+
+      {loading ? (
+        <View style={styles.memoryRows}>
+          {[0, 1, 2].map((item) => (
+            <View key={item} style={styles.memorySkeletonRow}>
+              <View style={styles.memorySkeletonIcon} />
+              <View style={styles.memorySkeletonText}>
+                <View style={styles.memorySkeletonLineWide} />
+                <View style={styles.memorySkeletonLineShort} />
+              </View>
+            </View>
+          ))}
+        </View>
+      ) : error ? (
+        <View style={styles.memoryEmptyState}>
+          <Text style={styles.memoryEmptyTitle}>Could not load memories</Text>
+          <Text style={styles.memoryEmptySubtitle}>Check your connection and try again.</Text>
+        </View>
+      ) : visibleMemories.length ? (
+        <View style={styles.memoryRows}>
+          {visibleMemories.map((item, index) => {
+            const type = String(item?.content_type || item?.type || '').toLowerCase();
+            const thumb = type === 'appeared_in_photo' ? memoryThumb(item) : null;
+            return (
+              <TouchableOpacity
+                key={String(item?.id || item?.photo_id || item?.content_id || `${type}-${index}`)}
+                style={styles.memoryRow}
+                onPress={() => onOpen(item)}
+                activeOpacity={0.84}
+              >
+                {thumb ? (
+                  <Image source={thumb} style={styles.memoryThumb} contentFit="cover" />
+                ) : (
+                  <View style={styles.memoryIconBox}>
+                    <FontAwesome name={memoryIcon(type) as any} size={15} color={AMBER} />
+                  </View>
+                )}
+                <View style={styles.memoryRowBody}>
+                  <Text style={styles.memoryRowTitle} numberOfLines={1}>{item?.title || 'Yearbook memory'}</Text>
+                  <Text style={styles.memoryRowSubtitle} numberOfLines={1}>{item?.subtitle || item?.album || 'Your highlight'}</Text>
+                </View>
+                <Text style={styles.memoryTimestamp} numberOfLines={1}>{item?.timestamp || item?.tagged_at || item?.taken_at || ''}</Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+      ) : (
+        <View style={styles.memoryEmptyState}>
+          <Text style={styles.memoryEmptyTitle}>No memories yet</Text>
+          <Text style={styles.memoryEmptySubtitle}>Your highlights and appearances will show up here</Text>
+        </View>
+      )}
+    </View>
+  );
+}
+
+function AnalyticsSnapshot({ metrics }: { metrics: { key: string; label: string; icon: any; value: number; trend: number }[] }) {
+  const visible = metrics.some((metric) => Number(metric.value || 0) > 0);
+  if (!visible) return null;
+
+  return (
+    <View style={styles.sectionBlock}>
+      <SectionHeader title="Analytics Snapshot" />
+      <View style={styles.analyticsGrid}>
+        {metrics.map((metric) => {
+          const hasValue = Number(metric.value || 0) > 0;
+          const positive = Number(metric.trend || metric.value || 0) >= 0;
+          return (
+            <View key={metric.key} style={styles.metricCard}>
+              <View style={styles.metricIcon}>
+                <FontAwesome name={metric.icon} size={15} color={AMBER} />
+              </View>
+              <View style={styles.metricValueRow}>
+                <Text style={styles.metricValue}>{hasValue ? compactNumber(metric.value) : '—'}</Text>
+                {hasValue ? (
+                  <Text style={[styles.metricTrend, positive ? styles.trendUp : styles.trendDown]}>
+                    {positive ? '↑' : '↓'}
+                  </Text>
+                ) : null}
+              </View>
+              <Text style={styles.metricLabel}>{metric.label}</Text>
+              <Text style={styles.metricWeek}>This week</Text>
+            </View>
+          );
+        })}
+      </View>
+    </View>
+  );
+}
+
+function FilterPills({ active, onChange }: { active: string; onChange: (key: string) => void }) {
+  return (
+    <FlatList
+      data={FEED_FILTERS}
+      keyExtractor={(item) => item.key}
+      horizontal
+      showsHorizontalScrollIndicator={false}
+      contentContainerStyle={styles.filterList}
+      renderItem={({ item }) => {
+        const isActive = active === item.key;
+        return (
+          <TouchableOpacity
+            style={[styles.filterPill, isActive && styles.filterPillActive]}
+            onPress={() => onChange(item.key)}
+            activeOpacity={0.82}
+          >
+            <Text style={[styles.filterPillText, isActive && styles.filterPillTextActive]}>{item.label}</Text>
+          </TouchableOpacity>
+        );
+      }}
+    />
+  );
+}
+
+function SearchResults({ results, onOpen }: { results: any[]; onOpen: (item: any) => void }) {
+  if (!results.length) {
+    return (
+      <View style={styles.searchResults}>
+        <Text style={styles.searchEmpty}>No results found.</Text>
+      </View>
+    );
+  }
+
+  return (
+    <View style={styles.searchResults}>
+      {results.map((item) => (
+        <TouchableOpacity key={`${item.type}-${item.id}`} style={styles.resultRow} onPress={() => onOpen(item)} activeOpacity={0.8}>
+          <Avatar user={item} size="small" />
+          <View style={styles.resultCopy}>
+            <Text style={styles.resultName} numberOfLines={1}>{item.name || 'Result'}</Text>
+            <Text style={styles.resultType}>{item.type}</Text>
+          </View>
+          <FontAwesome name="chevron-right" size={11} color="#CBD5E1" />
+        </TouchableOpacity>
+      ))}
+    </View>
+  );
+}
+
+function AudienceBadge({ visibility }: { visibility: string }) {
+  const key = visibilityLabels[visibility] ? visibility : 'private';
+  const config = visibilityLabels[key];
+  return (
+    <View style={[styles.audienceBadge, key === 'public' && styles.audiencePublic, key === 'batchmates' && styles.audienceBatchmates]}>
+      <FontAwesome name={config.icon} size={9} color={key === 'private' ? '#64748B' : NAVY} />
+      <Text style={[styles.audienceText, key === 'private' && styles.audiencePrivateText]}>{config.label}</Text>
+    </View>
+  );
+}
+
+function FeedPost({ post, currentUser, onOpenProfile }: { post: any; currentUser: any; onOpenProfile: (user: any) => void }) {
+  const media = mediaItemsOf(post);
+  const [mediaIndex, setMediaIndex] = useState(0);
+  const activeMedia = media[Math.min(mediaIndex, Math.max(media.length - 1, 0))];
+  const mediaUri = mediaUriOf(activeMedia);
+  const owner = post?.user || post?.student || currentUser;
+  const taggedPeople = Array.isArray(post?.tagged_students)
+    ? post.tagged_students
+    : Array.isArray(post?.tagged_users)
+      ? post.tagged_users
+      : Array.isArray(post?.tags)
+        ? post.tags
+        : [];
+
+  const tapAction = () => Haptics.selectionAsync();
+  const moveMedia = (direction: 1 | -1) => {
+    if (media.length < 2) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    setMediaIndex((current) => (current + direction + mediaCount) % mediaCount);
+    setMediaIndex((current) => (current + direction + media.length) % media.length);
   };
 
   return (
     <View style={styles.postCard}>
       <View style={styles.postHeader}>
-        <TouchableOpacity onPress={() => onOpenProfile(post?.user)}>
-          <Avatar user={post?.user} />
+        <TouchableOpacity onPress={() => onOpenProfile(owner)} activeOpacity={0.82}>
+          <Avatar user={owner} size="post" />
         </TouchableOpacity>
-        <TouchableOpacity style={styles.postUserInfo} onPress={() => onOpenProfile(post?.user)}>
-          <View style={styles.postNameRow}>
-            <Text style={styles.postName} numberOfLines={1}>{post?.user?.name || 'Yearbook user'}</Text>
-            {isOwn ? <Text style={styles.youText}>(you)</Text> : null}
-          </View>
-          <View style={styles.postMetaRow}>
-            <Text style={styles.postMeta} numberOfLines={1}>{post?.user?.course || 'Pioneer Student'}</Text>
-            <Text style={styles.dot}>•</Text>
-            <Text style={styles.postMeta}>{post?.time_ago || 'Recently'}</Text>
-          </View>
+        <TouchableOpacity style={styles.postHeaderCopy} onPress={() => onOpenProfile(owner)} activeOpacity={0.82}>
+          <Text style={styles.postName} numberOfLines={1}>{owner?.name || 'Yearbook user'}</Text>
+          <Text style={styles.postTime} numberOfLines={1}>{post?.time_ago || post?.created_at_human || 'Recently'}</Text>
         </TouchableOpacity>
-        <VisibilityPill visibility={post?.visibility} />
+        <AudienceBadge visibility={post?.visibility || post?.audience || 'public'} />
       </View>
 
-      {source && !isVideo ? (
-        <View style={styles.mediaWrap}>
-          <Image source={source} style={styles.postImage} contentFit="cover" />
-          {canNavigateMedia ? (
+      {mediaUri ? (
+        <View style={styles.postMediaWrap}>
+          <Image source={mediaUri} style={styles.postImage} contentFit="cover" />
+          {media.length > 1 ? (
             <>
-              <Text style={styles.mediaCounter}>{mediaIndex + 1} / {mediaCount}</Text>
-              <TouchableOpacity style={[styles.mediaNavButton, styles.mediaNavLeft]} onPress={() => showNextMedia(-1)}>
-                <FontAwesome name="chevron-left" size={12} color="#ffffff" />
+              <View style={styles.mediaCounter}>
+                <Text style={styles.mediaCounterText}>{mediaIndex + 1} / {media.length}</Text>
+              </View>
+              <TouchableOpacity style={[styles.mediaNavButton, styles.mediaNavLeft]} onPress={() => moveMedia(-1)}>
+                <FontAwesome name="chevron-left" size={13} color="#ffffff" />
               </TouchableOpacity>
-              <TouchableOpacity style={[styles.mediaNavButton, styles.mediaNavRight]} onPress={() => showNextMedia(1)}>
-                <FontAwesome name="chevron-right" size={12} color="#ffffff" />
+              <TouchableOpacity style={[styles.mediaNavButton, styles.mediaNavRight]} onPress={() => moveMedia(1)}>
+                <FontAwesome name="chevron-right" size={13} color="#ffffff" />
               </TouchableOpacity>
               <View style={styles.mediaDots}>
                 {media.map((item: any, index: number) => (
-                  <View key={`${item.id || item.file_path}-${index}`} style={[styles.mediaDot, index === mediaIndex && styles.mediaDotActive]} />
+                  <TouchableOpacity
+                    key={String(item?.id || item?.file_path || index)}
+                    style={[styles.mediaDot, index === mediaIndex && styles.mediaDotActive]}
+                    onPress={() => setMediaIndex(index)}
+                  />
                 ))}
               </View>
             </>
           ) : null}
         </View>
-      ) : source && isVideo ? (
-        <View style={styles.videoPlaceholder}>
-          <FontAwesome name="video-camera" size={22} color="#fdb813" />
-          <Text style={styles.videoText}>Video post</Text>
-          <Text style={styles.videoHint} numberOfLines={1}>{selectedMedia?.file_path?.split?.('/')?.pop?.() || 'Attached video'}</Text>
-          {canNavigateMedia ? (
-            <View style={styles.videoNavRow}>
-              <TouchableOpacity style={styles.videoNavButton} onPress={() => showNextMedia(-1)}>
-                <FontAwesome name="chevron-left" size={11} color="#fdb813" />
-                <Text style={styles.videoNavText}>Previous</Text>
-              </TouchableOpacity>
-              <Text style={styles.videoCount}>{mediaIndex + 1} / {mediaCount}</Text>
-              <TouchableOpacity style={styles.videoNavButton} onPress={() => showNextMedia(1)}>
-                <Text style={styles.videoNavText}>Next</Text>
-                <FontAwesome name="chevron-right" size={11} color="#fdb813" />
-              </TouchableOpacity>
-            </View>
-          ) : null}
+      ) : (
+        <View style={styles.postImagePlaceholder}>
+          <FontAwesome name="image" size={28} color="#CBD5E1" />
         </View>
-      ) : mediaCount ? (
-        <View style={styles.videoPlaceholder}>
-          <FontAwesome name="video-camera" size={22} color="#fdb813" />
-          <Text style={styles.videoText}>Video post</Text>
-        </View>
-      ) : null}
+      )}
 
-      {post?.caption ? <Text style={styles.caption}>{post.caption}</Text> : null}
-
-      {post?.tagged_students?.length ? (
-        <View style={styles.tagStrip}>
+      {post?.caption ? <Text style={styles.postCaption}>{post.caption}</Text> : null}
+      {taggedPeople.length ? (
+        <View style={styles.taggedPeopleStrip}>
           <FontAwesome name="tag" size={12} color="#3f51b5" />
-          <Text style={styles.tagText} numberOfLines={2}>
-            {post.tagged_students.map((student: any) => student.name).join(', ')}
+          <Text style={styles.taggedPeopleText} numberOfLines={2}>
+            Tagged: {taggedPeople.map((person: any) => person?.name || person?.full_name || person?.student?.name || 'Student').join(', ')}
           </Text>
         </View>
       ) : null}
 
-      <View style={styles.postFooter}>
-        <Text style={styles.postStat}>{Number(post?.views_count || 0).toLocaleString()} views</Text>
-        <Text style={styles.postStat}>{mediaCount || 0} media</Text>
-      </View>
-
       <View style={styles.postActions}>
-        <TouchableOpacity style={styles.postActionButton} onPress={() => onOpenProfile(post?.user)}>
-          <FontAwesome name="user" size={12} color="#3f51b5" />
-          <Text style={styles.postActionText}>Profile</Text>
-        </TouchableOpacity>
-        {!isOwn ? (
-          <TouchableOpacity style={styles.postActionButton} onPress={() => onMessage(post?.user)}>
-            <FontAwesome name="comment" size={12} color="#3f51b5" />
-            <Text style={styles.postActionText}>Message</Text>
-          </TouchableOpacity>
-        ) : null}
-        <TouchableOpacity style={styles.postActionButton} onPress={() => onTag(post)}>
-          <FontAwesome name="tag" size={12} color="#3f51b5" />
-          <Text style={styles.postActionText}>Tag</Text>
+        <TouchableOpacity style={styles.postAction} onPress={tapAction} activeOpacity={0.78}>
+          <FontAwesome name="share" size={14} color={NAVY} />
+          <Text style={styles.postActionText}>Share</Text>
         </TouchableOpacity>
       </View>
     </View>
@@ -222,19 +544,43 @@ export default function HomeScreen() {
   const [loadingMore, setLoadingMore] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
-  const [tagPost, setTagPost] = useState<any>(null);
-  const [selectedTagIds, setSelectedTagIds] = useState<number[]>([]);
-  const [tagQuery, setTagQuery] = useState('');
-  const [tagSaving, setTagSaving] = useState(false);
-  const [tagError, setTagError] = useState('');
   const [appConfig, setAppConfig] = useState<any>(null);
   const [unreadMessages, setUnreadMessages] = useState(0);
   const [unreadNotifications, setUnreadNotifications] = useState(0);
+  const [memoriesCount, setMemoriesCount] = useState(0);
+  const [memories, setMemories] = useState<any[]>([]);
+  const [memoriesLoading, setMemoriesLoading] = useState(false);
+  const [memoriesError, setMemoriesError] = useState('');
+  const viewedPostIds = useRef(new Set<string>());
+
   const postsEnabled = appConfig?.features?.allow_student_posts !== false;
-  const directoryEnabled = appConfig?.features?.enable_student_directory_search !== false;
+  const firstName = useMemo(() => firstNameOf(currentUser || {}), [currentUser]);
+  const searchResultList = useMemo(() => {
+    const faculty = Array.isArray(searchResults?.faculty) ? searchResults.faculty : [];
+    const students = Array.isArray(searchResults?.students) ? searchResults.students : [];
+    const postsData = Array.isArray(searchResults?.posts) ? searchResults.posts : [];
+    return [
+      ...students.map((item: any) => ({ ...item, type: 'Student' })),
+      ...faculty.map((item: any) => ({ ...item, type: 'Faculty' })),
+      ...postsData.map((item: any) => ({ ...item, type: 'Content' })),
+    ].slice(0, 6);
+  }, [searchResults]);
+
+  const analyticsMetrics = useMemo(() => {
+    const views = Number(currentUser?.profile_views ?? currentUser?.views_count ?? currentUser?.analytics?.profile_views ?? 0) || 0;
+    const uploaded = Number(currentUser?.photos_uploaded ?? currentUser?.analytics?.photos_uploaded ?? posts.length ?? 0) || 0;
+    const sent = Number(currentUser?.messages_sent ?? currentUser?.analytics?.messages_sent ?? 0) || 0;
+    const rank = Number(currentUser?.trending_rank ?? currentUser?.analytics?.trending_rank ?? 0) || 0;
+    return [
+      { key: 'views', label: 'Profile views', icon: 'eye', value: views, trend: Number(currentUser?.profile_views_trend ?? currentUser?.analytics?.profile_views_trend ?? views) || 0 },
+      { key: 'photos', label: 'Photos uploaded', icon: 'image', value: uploaded, trend: Number(currentUser?.photos_uploaded_trend ?? currentUser?.analytics?.photos_uploaded_trend ?? uploaded) || 0 },
+      { key: 'messages', label: 'Messages sent', icon: 'send', value: sent, trend: Number(currentUser?.messages_sent_trend ?? currentUser?.analytics?.messages_sent_trend ?? sent) || 0 },
+      { key: 'rank', label: 'Trending rank', icon: 'line-chart', value: rank, trend: Number(currentUser?.trending_rank_trend ?? currentUser?.analytics?.trending_rank_trend ?? rank) || 0 },
+    ];
+  }, [currentUser, posts.length]);
 
   useFocusEffect(
-    React.useCallback(() => {
+    useCallback(() => {
       let active = true;
       const loadUser = async () => {
         const storedUser = await getCurrentUser();
@@ -248,6 +594,7 @@ export default function HomeScreen() {
           if (active && configPayload) setAppConfig(unwrap(configPayload));
         } catch {}
       };
+
       loadUser();
       return () => { active = false; };
     }, [])
@@ -276,19 +623,6 @@ export default function HomeScreen() {
     }
   }, []);
 
-  useEffect(() => {
-    loadBadges();
-    const timer = setInterval(loadBadges, 45000);
-    const subscription = AppState.addEventListener('change', (status) => {
-      if (status === 'active') loadBadges();
-    });
-
-    return () => {
-      clearInterval(timer);
-      subscription.remove();
-    };
-  }, [loadBadges]);
-
   const loadFeed = useCallback(async (nextPage = 1, append = false) => {
     if (!postsEnabled) {
       setPosts([]);
@@ -303,10 +637,11 @@ export default function HomeScreen() {
     try {
       setError('');
       if (!append && !refreshing) setLoading(true);
-      const payload = await getFeed({ filter, page: nextPage, per_page: 10, q: query || undefined });
+      const payload = await getFeed({ filter, page: nextPage, per_page: 10, q: query.trim() || undefined });
       const nextPosts = unwrap(payload);
       const meta = paginationMeta(payload);
-      setPosts((current) => append ? [...current, ...nextPosts] : nextPosts);
+      const visiblePosts = nextPosts.filter(shouldShowFeedPost);
+      setPosts((current) => append ? [...current, ...visiblePosts] : visiblePosts);
       setPage(meta.currentPage);
       setLastPage(meta.lastPage);
     } catch (requestError: any) {
@@ -319,15 +654,61 @@ export default function HomeScreen() {
     }
   }, [filter, postsEnabled, query, refreshing]);
 
+  const loadMemories = useCallback(async () => {
+    if (!currentUser) {
+      setMemories([]);
+      setMemoriesCount(0);
+      setMemoriesError('');
+      setMemoriesLoading(false);
+      return;
+    }
+
+    try {
+      setMemoriesLoading(true);
+      setMemoriesError('');
+      const payload = await getMemoryDigest();
+      const raw = unwrap(payload);
+      const list = Array.isArray(raw)
+        ? raw
+        : raw?.memories || raw?.items || raw?.recommendations || [];
+      const filtered = (Array.isArray(list) ? list : []).filter(shouldShowMemory);
+      setMemories(filtered.slice(0, 3));
+      setMemoriesCount(filtered.length);
+    } catch (requestError: any) {
+      setMemories([]);
+      setMemoriesCount(0);
+      setMemoriesError('Could not load memories');
+      if (requestError?.response?.status === 401) {
+        await clearSession();
+        router.replace('/login' as any);
+      }
+    } finally {
+      setMemoriesLoading(false);
+    }
+  }, [currentUser, router]);
+
   const loadSidebarData = useCallback(async () => {
     const [batchmatesResult, trendingResult] = await Promise.allSettled([
-      getBatchmates({ per_page: 10 }),
+      getBatchmates({ per_page: 12 }),
       getTrending(),
     ]);
 
-    if (batchmatesResult.status === 'fulfilled') setBatchmates((unwrap(batchmatesResult.value) || []).slice(0, 6));
-    if (trendingResult.status === 'fulfilled') setTrending((unwrap(trendingResult.value) || []).slice(0, 5));
+    if (batchmatesResult.status === 'fulfilled') setBatchmates((unwrap(batchmatesResult.value) || []).slice(0, 12));
+    if (trendingResult.status === 'fulfilled') setTrending((unwrap(trendingResult.value) || []).slice(0, 12));
   }, []);
+
+  useEffect(() => {
+    loadBadges();
+    const timer = setInterval(loadBadges, 45000);
+    const subscription = AppState.addEventListener('change', (status) => {
+      if (status === 'active') loadBadges();
+    });
+
+    return () => {
+      clearInterval(timer);
+      subscription.remove();
+    };
+  }, [loadBadges]);
 
   useEffect(() => {
     loadFeed(1, false);
@@ -336,6 +717,10 @@ export default function HomeScreen() {
   useEffect(() => {
     loadSidebarData();
   }, [loadSidebarData]);
+
+  useEffect(() => {
+    loadMemories();
+  }, [loadMemories]);
 
   useEffect(() => {
     let alive = true;
@@ -351,7 +736,9 @@ export default function HomeScreen() {
           setSearchResults(result?.results || result?.data?.results || result?.data || result);
           setShowSearch(true);
         }
-      } catch {}
+      } catch {
+        if (alive) setShowSearch(false);
+      }
     };
     const timer = setTimeout(run, 350);
     return () => {
@@ -360,12 +747,23 @@ export default function HomeScreen() {
     };
   }, [query]);
 
-  const firstName = useMemo(() => currentUser?.name?.split?.(' ')?.[0] || 'Pioneer', [currentUser]);
+  const onRefresh = () => {
+    setRefreshing(true);
+    loadFeed(1, false);
+    loadSidebarData();
+    loadMemories();
+    loadBadges();
+  };
 
   const handleLoadMore = () => {
-    if (loadingMore || page >= lastPage) return;
+    if (loadingMore || loading || page >= lastPage) return;
     setLoadingMore(true);
     loadFeed(page + 1, true);
+  };
+
+  const changeFilter = (nextFilter: string) => {
+    Haptics.selectionAsync();
+    setFilter(nextFilter);
   };
 
   const openProfile = (user: any) => {
@@ -376,488 +774,901 @@ export default function HomeScreen() {
     if (user?.name) router.push({ pathname: '/directory', params: { q: user.name } } as any);
   };
 
-  const openMessage = (user: any) => {
-    if (!user?.id) return;
-    router.push({ pathname: '/messages', params: { userId: String(user.id), name: user.name || 'Student' } } as any);
-  };
-
-  const openTagModal = (post: any) => {
-    if (!postsEnabled) return;
-    setTagPost(post);
-    setSelectedTagIds((post?.tagged_students || []).map((student: any) => Number(student.id)).filter(Boolean));
-    setTagQuery('');
-    setTagError('');
-  };
-
-  const closeTagModal = () => {
-    if (tagSaving) return;
-    setTagPost(null);
-    setSelectedTagIds([]);
-    setTagQuery('');
-    setTagError('');
-  };
-
-  const saveTags = async () => {
-    if (!tagPost?.id || !selectedTagIds.length) {
-      setTagError('Choose at least one batchmate to tag.');
+  const openSearchResult = (item: any) => {
+    setShowSearch(false);
+    Haptics.selectionAsync();
+    if (item.type === 'Faculty') {
+      router.push('/faculty' as any);
       return;
     }
-
-    try {
-      setTagSaving(true);
-      setTagError('');
-      const result = await tagStudentsOnPost({ photo_id: tagPost.id, student_ids: selectedTagIds });
-      const taggedStudents = result?.tagged_students || result?.data?.tagged_students || [];
-      setPosts((current) => current.map((post) => (
-        post.id === tagPost.id ? { ...post, tagged_students: taggedStudents } : post
-      )));
-      setTagPost(null);
-      setSelectedTagIds([]);
-      setTagQuery('');
-      setTagError('');
-    } catch (requestError: any) {
-      setTagError(getErrorMessage(requestError, 'Unable to save tags.'));
-    } finally {
-      setTagSaving(false);
+    if (item.type === 'Content') {
+      router.push('/gallery' as any);
+      return;
     }
+    openProfile(item);
   };
 
-  const filteredBatchmates = batchmates.filter((student: any) => {
-    const needle = tagQuery.trim().toLowerCase();
-    if (!needle) return true;
-    return `${student?.name || ''} ${student?.course || ''}`.toLowerCase().includes(needle);
-  });
+  const openMemory = (memory: any) => {
+    Haptics.selectionAsync();
+    const type = String(memory?.content_type || memory?.type || '').toLowerCase();
+    const id = memory?.content_id || memory?.id || memory?.photo_id || memory?.album_id;
+    if (type === 'profile_viewed') {
+      router.push('/analytics' as any);
+      return;
+    }
+    if (type === 'appeared_in_photo') {
+      router.push({
+        pathname: '/gallery',
+        params: {
+          ...(memory?.album_id ? { albumId: String(memory.album_id) } : {}),
+          ...(memory?.photo_id ? { photoId: String(memory.photo_id) } : {}),
+        },
+      } as any);
+      return;
+    }
+    if (type === 'on_this_day') {
+      if (memory?.album_id || memory?.photo_id) {
+        router.push({
+          pathname: '/gallery',
+          params: {
+            ...(memory?.album_id ? { albumId: String(memory.album_id) } : {}),
+            ...(memory?.photo_id ? { photoId: String(memory.photo_id) } : {}),
+          },
+        } as any);
+        return;
+      }
+      if (memory?.user_id) {
+        router.push({ pathname: '/student/[id]', params: { id: String(memory.user_id) } } as any);
+        return;
+      }
+    }
+    if (type.includes('student') || type.includes('profile') || memory?.user_id) {
+      router.push({ pathname: '/student/[id]', params: { id: String(memory?.user_id || id) } } as any);
+      return;
+    }
+    if (type.includes('yearbook') || memory?.batch_id) {
+      router.push({
+        pathname: '/yearbook',
+        params: {
+          ...(memory?.batch_id ? { batchId: String(memory.batch_id) } : {}),
+          ...(memory?.batch_id ? { view: '1' } : {}),
+          ...(memory?.page_index !== undefined ? { pageIndex: String(memory.page_index) } : {}),
+        },
+      } as any);
+      return;
+    }
+    router.push('/gallery' as any);
+  };
 
-  const results = [
-    ...(searchResults?.faculty || []).map((item: any) => ({ ...item, type: 'Faculty' })),
-    ...(searchResults?.students || []).map((item: any) => ({ ...item, type: 'Student' })),
-  ].slice(0, 6);
+  const onViewablePostsChanged = useRef(({ viewableItems }: any) => {
+    viewableItems.forEach(({ item }: any) => {
+      const id = item?.id || item?.photo_id;
+      if (!id) return;
+      const key = String(id);
+      if (viewedPostIds.current.has(key)) return;
+      viewedPostIds.current.add(key);
+      recordFeedPostView(id).catch(() => {});
+    });
+  }).current;
 
-  const renderBadge = (count: number) => {
-    if (!count) return null;
-    return (
-      <View style={styles.badge}>
-        <Text style={styles.badgeText}>{count > 9 ? '9+' : count}</Text>
+  const viewabilityConfig = useRef({ itemVisiblePercentThreshold: 55, minimumViewTime: 650 }).current;
+
+  const renderHeader = () => (
+    <View>
+      <View style={styles.hero}>
+        <View style={styles.headerRow}>
+          <View style={styles.greetingBlock}>
+            <Text style={styles.greeting}>Welcome back,</Text>
+            <Text style={styles.firstName}>{firstName}</Text>
+          </View>
+          <View style={styles.headerActions}>
+            <HeaderIcon icon="bell" count={unreadNotifications} onPress={() => router.push('/notifications' as any)} />
+            <HeaderIcon icon="commenting" count={unreadMessages} onPress={() => router.push('/messages' as any)} />
+          </View>
+        </View>
+
+        <View style={styles.searchBar}>
+          <FontAwesome name="search" size={15} color="#94A3B8" />
+          <TextInput
+            style={styles.searchInput}
+            value={query}
+            onChangeText={setQuery}
+            placeholder="Search students, faculty, content..."
+            placeholderTextColor="#94A3B8"
+            returnKeyType="search"
+          />
+        </View>
+        {showSearch ? <SearchResults results={searchResultList} onOpen={openSearchResult} /> : null}
       </View>
-    );
-  };
+
+      <View style={styles.pageContent}>
+        <QuickLinks onPress={(route) => router.push(route as any)} />
+        <DividerLine />
+        <StatsRow batchmatesCount={batchmates.length} trendingCount={trending.length} memoriesCount={memoriesCount || posts.length} />
+        <DividerLine />
+        {currentUser ? (
+          <MemoryDigest
+            memories={memories}
+            loading={memoriesLoading}
+            error={memoriesError}
+            onOpen={openMemory}
+            onRetry={loadMemories}
+          />
+        ) : null}
+        <DividerLine />
+        <SuggestedBatchmates students={batchmates} onOpen={openProfile} onSeeAll={() => router.push('/discovery' as any)} />
+        <TrendingThisWeek students={trending} onOpen={openProfile} onSeeAll={() => router.push('/analytics' as any)} />
+        <AnalyticsSnapshot metrics={analyticsMetrics} />
+        <DividerLine />
+        {postsEnabled ? <FilterPills active={filter} onChange={changeFilter} /> : null}
+        {loading ? <ActivityIndicator color={NAVY} style={styles.loader} /> : null}
+        {error ? <Text style={styles.errorText}>{error}</Text> : null}
+      </View>
+    </View>
+  );
 
   return (
     <SafeAreaView style={styles.container}>
-      <StatusBar style="dark" />
+      <StatusBar style="light" />
       <FlatList
         data={posts}
         keyExtractor={(item, index) => String(item?.id || index)}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); loadFeed(1, false); loadSidebarData(); }} />}
-        onEndReached={handleLoadMore}
-        onEndReachedThreshold={0.35}
-        ListHeaderComponent={(
-          <>
-            <View style={styles.appHeader}>
-              <View style={styles.headerSpacer} />
-              <View style={styles.headerActions}>
-                <TouchableOpacity style={styles.headerIconButton} onPress={() => router.push('/notifications')}>
-                  <FontAwesome name="bell" size={16} color="#1d2b4b" />
-                  {renderBadge(unreadNotifications)}
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.headerIconButton} onPress={() => router.push('/messages')}>
-                  <FontAwesome name="commenting" size={16} color="#1d2b4b" />
-                  {renderBadge(unreadMessages)}
-                </TouchableOpacity>
-              </View>
-            </View>
-
-            <View style={styles.topArea}>
-              <View style={styles.greetingRow}>
-                <View>
-                  <Text style={styles.kicker}>Mabuhay, Pioneer!</Text>
-                  <Text style={styles.title}>Welcome back,</Text>
-                  <Text style={styles.name}>{firstName}</Text>
-                </View>
-              </View>
-
-              <View style={styles.searchBox}>
-                <FontAwesome name="search" size={15} color="#94a3b8" />
-                <TextInput
-                  style={styles.searchInput}
-                  value={query}
-                  onChangeText={setQuery}
-                  placeholder="Search students, faculty, or content..."
-                  placeholderTextColor="#94a3b8"
-                  returnKeyType="search"
-                />
-              </View>
-
-              {showSearch ? (
-                <View style={styles.searchDrop}>
-                  {results.length ? results.map((item: any) => (
-                    <TouchableOpacity
-                      key={`${item.type}-${item.id}`}
-                      style={styles.resultRow}
-                      onPress={() => {
-                        setShowSearch(false);
-                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                        router.push(item.type === 'Faculty' ? '/faculty' : { pathname: '/student/[id]', params: { id: String(item.id) } } as any);
-                      }}
-                    >
-                      <Avatar user={item} size={34} />
-                      <View style={styles.resultInfo}>
-                        <Text style={styles.resultName} numberOfLines={1}>{item.name}</Text>
-                        <Text style={styles.resultType}>{item.type}</Text>
-                      </View>
-                    </TouchableOpacity>
-                  )) : <Text style={styles.emptySearch}>No results found.</Text>}
-                </View>
-              ) : null}
-            </View>
-
-            <View style={styles.quickActions}>
-              {QUICK_ACTIONS.map((item) => (
-                <TouchableOpacity key={item.label} style={styles.quickAction} onPress={() => router.push(item.route as any)}>
-                  <View style={styles.quickIcon}>
-                    <FontAwesome name={item.icon as any} size={16} color="#fdb813" />
-                  </View>
-                  <Text style={styles.quickText} numberOfLines={1}>{item.label}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-
-            {!postsEnabled ? (
-              <View style={styles.featureNotice}>
-                <FontAwesome name="lock" size={14} color="#92590e" />
-                <Text style={styles.featureNoticeText}>Student posts are currently disabled by platform settings.</Text>
-              </View>
-            ) : null}
-
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.statsRow}>
-              {directoryEnabled ? (
-                <TouchableOpacity style={styles.statCard} onPress={() => router.push('/directory')}>
-                  <Text style={styles.sideKicker}>Batchmates</Text>
-                  <Text style={styles.sideValue}>{batchmates.length}</Text>
-                  <Text style={styles.sideCopy}>Your circle</Text>
-                </TouchableOpacity>
-              ) : null}
-              <TouchableOpacity style={styles.statCard} onPress={() => router.push('/analytics')}>
-                <Text style={styles.sideKickerGold}>Trending</Text>
-                <Text style={styles.sideValue}>{trending.length}</Text>
-                <Text style={styles.sideCopy}>This week</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.statCard} onPress={() => router.push('/gallery')}>
-                <Text style={styles.sideKicker}>Memories</Text>
-                <Text style={styles.sideValue}>{posts.length}</Text>
-                <Text style={styles.sideCopy}>Recent posts</Text>
-              </TouchableOpacity>
-            </ScrollView>
-
-            <TouchableOpacity style={styles.alumniTrackCard} onPress={() => router.push('/alumni' as any)}>
-              <View style={styles.alumniIcon}>
-                <FontAwesome name="briefcase" size={16} color="#fdb813" />
-              </View>
-              <View style={{ flex: 1, minWidth: 0 }}>
-                <Text style={styles.alumniTitle}>Alumni Track</Text>
-                <Text style={styles.alumniText}>Careers, links, and yearbook connections</Text>
-              </View>
-              <FontAwesome name="chevron-right" size={13} color="#94a3b8" />
-            </TouchableOpacity>
-
-            {batchmates.length ? (
-              <View style={styles.sectionBlock}>
-                <Text style={styles.panelTitle}>Suggested Batchmates</Text>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.horizontalList}>
-                  {batchmates.slice(0, 8).map((student: any) => (
-                    <TouchableOpacity key={student.id} style={styles.batchmateCard} onPress={() => openProfile(student)}>
-                      <Avatar user={student} size={48} />
-                      <Text style={styles.miniName} numberOfLines={1}>{student.name}</Text>
-                      <Text style={styles.miniMeta} numberOfLines={1}>{student.course || 'Student'}</Text>
-                      <TouchableOpacity style={styles.miniMessageButton} onPress={() => openMessage(student)}>
-                        <FontAwesome name="comment" size={11} color="#3f51b5" />
-                      </TouchableOpacity>
-                    </TouchableOpacity>
-                  ))}
-                </ScrollView>
-              </View>
-            ) : null}
-
-            {trending.length ? (
-              <View style={styles.sectionBlock}>
-                <View style={styles.panelTitleRow}>
-                  <Text style={styles.panelTitle}>Trending This Week</Text>
-                  <TouchableOpacity onPress={() => router.push('/analytics')}>
-                    <Text style={styles.panelLink}>See all</Text>
-                  </TouchableOpacity>
-                </View>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.horizontalList}>
-                  {trending.slice(0, 8).map((student: any, index: number) => (
-                    <TouchableOpacity key={student.id || `${student.name}-${index}`} style={styles.trendingCard} onPress={() => openProfile(student)}>
-                      <Text style={styles.trendingRank}>#{index + 1}</Text>
-                      <Avatar user={student} size={34} />
-                      <Text style={styles.miniName} numberOfLines={1}>{student.name || 'Student'}</Text>
-                      <Text style={styles.miniMeta} numberOfLines={1}>
-                        {Number(student.views_this_week || student.views || student.total_views || 0).toLocaleString()} views
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </ScrollView>
-              </View>
-            ) : null}
-
-            {postsEnabled ? (
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRow}>
-                {FILTERS.map((item) => {
-                  const active = filter === item.key;
-                  return (
-                    <TouchableOpacity
-                      key={item.key}
-                      style={[styles.filterButton, active && styles.filterButtonActive]}
-                      onPress={() => {
-                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                        setFilter(item.key);
-                      }}
-                    >
-                      <Text style={[styles.filterText, active && styles.filterTextActive]}>{item.label}</Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </ScrollView>
-            ) : null}
-
-            {loading ? <ActivityIndicator color="#1d2b4b" style={{ marginVertical: 24 }} /> : null}
-            {error ? <Text style={styles.errorText}>{error}</Text> : null}
-          </>
-        )}
-        renderItem={({ item }) => (
-          <FeedPost
-            post={item}
-            currentUser={currentUser}
-            onOpenProfile={openProfile}
-            onMessage={openMessage}
-            onTag={openTagModal}
-          />
-        )}
+        renderItem={({ item }) => <FeedPost post={item} currentUser={currentUser} onOpenProfile={openProfile} />}
+        ListHeaderComponent={renderHeader}
         ListEmptyComponent={!loading ? (
           <View style={styles.emptyFeed}>
-            <FontAwesome name={postsEnabled ? 'photo' : 'lock'} size={28} color="#cbd5e1" />
-            <Text style={styles.emptyTitle}>{postsEnabled ? 'No posts here yet.' : 'Posts Disabled'}</Text>
-            <Text style={styles.emptyText}>{postsEnabled ? (filter === 'mine' ? 'Upload your first photo in Gallery.' : 'Check back later.') : 'The dashboard feed is currently disabled.'}</Text>
+            <FontAwesome name={postsEnabled ? 'photo' : 'lock'} size={28} color="#CBD5E1" />
+            <Text style={styles.emptyTitle}>{postsEnabled ? 'No posts yet' : 'Posts Disabled'}</Text>
+            <Text style={styles.emptyText}>{postsEnabled ? 'Your feed will appear here once memories are shared.' : 'Student posts are currently disabled by platform settings.'}</Text>
           </View>
         ) : null}
-        ListFooterComponent={loadingMore ? <ActivityIndicator color="#1d2b4b" style={{ marginVertical: 18 }} /> : <View style={{ height: 110 }} />}
-        contentContainerStyle={styles.content}
+        ListFooterComponent={loadingMore ? <ActivityIndicator color={NAVY} style={styles.footerLoader} /> : <View style={styles.feedFooter} />}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={NAVY} />}
+        onEndReached={handleLoadMore}
+        onEndReachedThreshold={0.35}
+        onViewableItemsChanged={onViewablePostsChanged}
+        viewabilityConfig={viewabilityConfig}
+        contentContainerStyle={styles.feedContent}
       />
-
-      <Modal visible={!!tagPost} transparent animationType="slide" onRequestClose={closeTagModal}>
-        <View style={styles.modalBackdrop}>
-          <View style={styles.tagModal}>
-            <View style={styles.modalGrabber} />
-            <View style={styles.modalHeader}>
-              <View>
-                <Text style={styles.modalTitle}>Tag Batchmates</Text>
-                <Text style={styles.modalSubtitle}>Add people connected to this post.</Text>
-              </View>
-              <TouchableOpacity style={styles.iconClose} onPress={closeTagModal}>
-                <FontAwesome name="times" size={14} color="#64748b" />
-              </TouchableOpacity>
-            </View>
-
-            <View style={styles.modalSearch}>
-              <FontAwesome name="search" size={13} color="#94a3b8" />
-              <TextInput
-                style={styles.modalSearchInput}
-                value={tagQuery}
-                onChangeText={setTagQuery}
-                placeholder="Search batchmates..."
-                placeholderTextColor="#94a3b8"
-              />
-            </View>
-
-            {tagError ? <Text style={styles.tagError}>{tagError}</Text> : null}
-
-            <ScrollView style={styles.tagList} showsVerticalScrollIndicator={false}>
-              {filteredBatchmates.length ? filteredBatchmates.map((student: any) => {
-                const id = Number(student.id);
-                const selected = selectedTagIds.includes(id);
-                return (
-                  <TouchableOpacity
-                    key={student.id}
-                    style={[styles.tagStudentRow, selected && styles.tagStudentRowActive]}
-                    onPress={() => {
-                      setSelectedTagIds((current) => (
-                        current.includes(id) ? current.filter((item) => item !== id) : [...current, id]
-                      ));
-                    }}
-                  >
-                    <Avatar user={student} size={36} />
-                    <View style={styles.tagStudentInfo}>
-                      <Text style={styles.tagStudentName} numberOfLines={1}>{student.name}</Text>
-                      <Text style={styles.tagStudentMeta} numberOfLines={1}>{student.course || 'Student'}</Text>
-                    </View>
-                    <View style={[styles.checkCircle, selected && styles.checkCircleActive]}>
-                      {selected ? <FontAwesome name="check" size={10} color="#ffffff" /> : null}
-                    </View>
-                  </TouchableOpacity>
-                );
-              }) : (
-                <View style={styles.emptyTagState}>
-                  <FontAwesome name="users" size={22} color="#cbd5e1" />
-                  <Text style={styles.emptyTagText}>No batchmates found.</Text>
-                </View>
-              )}
-            </ScrollView>
-
-            <View style={styles.modalFooter}>
-              <Text style={styles.selectedCount}>{selectedTagIds.length} selected</Text>
-              <TouchableOpacity
-                style={[styles.saveTagButton, tagSaving && styles.saveTagButtonDisabled]}
-                onPress={saveTags}
-                disabled={tagSaving}
-              >
-                {tagSaving ? <ActivityIndicator size="small" color="#1d2b4b" /> : <Text style={styles.saveTagText}>Save Tags</Text>}
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F0F2F8' },
-  content: { paddingBottom: 0 },
-  appHeader: { height: 56, backgroundColor: '#F0F2F8', paddingHorizontal: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  headerSpacer: { flex: 1 },
-  brandRow: { flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: 10 },
-  brandCopy: { flex: 1, minWidth: 0 },
-  brandTitle: { color: '#ffffff', fontSize: 13, fontWeight: '900', letterSpacing: 0.8 },
-  brandSub: { color: '#fdb813', fontSize: 9, fontWeight: '900', letterSpacing: 1.1, marginTop: 1 },
-  headerActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  headerIconButton: { width: 48, height: 48, borderRadius: 24, backgroundColor: '#ffffff', alignItems: 'center', justifyContent: 'center' },
-  badge: { position: 'absolute', right: 4, top: 3, minWidth: 16, height: 16, borderRadius: 8, paddingHorizontal: 4, backgroundColor: '#fdb813', borderWidth: 2, borderColor: '#ffffff', alignItems: 'center', justifyContent: 'center' },
-  badgeText: { color: '#1d2b4b', fontSize: 8, fontWeight: '900' },
-  topArea: { paddingHorizontal: 18, paddingTop: 16, paddingBottom: 10 },
-  kicker: { color: '#94a3b8', fontSize: 11, fontWeight: '900', letterSpacing: 1, textTransform: 'uppercase' },
-  greetingRow: { marginBottom: 16 },
-  title: { color: '#1A2547', fontSize: 21, fontWeight: '800' },
-  name: { color: '#F5A623', fontSize: 24, fontWeight: '900', marginTop: -2 },
-  searchBox: { minHeight: 56, backgroundColor: '#F3F4F6', borderRadius: 12, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14 },
-  searchInput: { flex: 1, color: '#1d2b4b', fontSize: 14, marginLeft: 10 },
-  searchDrop: { backgroundColor: '#ffffff', borderRadius: 14, borderWidth: 1, borderColor: '#e2e8f0', marginTop: 8, overflow: 'hidden' },
-  resultRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#f1f5f9' },
-  resultInfo: { flex: 1, marginLeft: 10 },
-  resultName: { color: '#1d2b4b', fontSize: 13, fontWeight: '800' },
-  resultType: { color: '#94a3b8', fontSize: 11, marginTop: 1 },
-  emptySearch: { color: '#94a3b8', textAlign: 'center', padding: 18 },
-  avatar: { backgroundColor: '#eef2ff' },
-  avatarFallback: { backgroundColor: '#1d2b4b', justifyContent: 'center', alignItems: 'center' },
-  avatarText: { color: '#fdb813', fontWeight: '900' },
-  quickActions: { flexDirection: 'row', paddingHorizontal: 18, gap: 10, marginBottom: 14 },
-  quickAction: { flex: 1, minWidth: 0, alignItems: 'center', gap: 7 },
-  quickIcon: { width: 48, height: 48, borderRadius: 16, backgroundColor: '#1A2547', alignItems: 'center', justifyContent: 'center' },
-  quickText: { color: '#1d2b4b', fontSize: 10, fontWeight: '900' },
-  filterRow: { gap: 8, paddingHorizontal: 18, paddingTop: 2, paddingBottom: 16 },
-  filterButton: { paddingHorizontal: 14, paddingVertical: 9, borderRadius: 999, borderWidth: 1, borderColor: '#e2e8f0', backgroundColor: '#ffffff' },
-  filterButtonActive: { backgroundColor: '#1d2b4b', borderColor: '#1d2b4b' },
-  filterText: { color: '#64748b', fontSize: 12, fontWeight: '800' },
-  filterTextActive: { color: '#fdb813' },
-  featureNotice: { marginHorizontal: 18, marginBottom: 14, borderRadius: 14, backgroundColor: '#fffbeb', borderWidth: 1, borderColor: '#fde68a', paddingHorizontal: 13, paddingVertical: 11, flexDirection: 'row', alignItems: 'center', gap: 8 },
-  featureNoticeText: { color: '#92590e', fontSize: 12, fontWeight: '900', flex: 1 },
-  statsRow: { gap: 10, paddingHorizontal: 18, paddingBottom: 14 },
-  statCard: { width: 112, backgroundColor: '#ffffff', borderRadius: 14, borderWidth: 1, borderColor: '#e2e8f0', padding: 13 },
-  alumniTrackCard: { marginHorizontal: 18, marginBottom: 14, minHeight: 72, borderRadius: 12, backgroundColor: '#ffffff', borderWidth: 1, borderColor: '#e2e8f0', flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14 },
-  alumniIcon: { width: 44, height: 44, borderRadius: 12, backgroundColor: '#1A2547', alignItems: 'center', justifyContent: 'center' },
-  alumniTitle: { color: '#1A2547', fontSize: 15, fontWeight: '900' },
-  alumniText: { color: '#6B7280', fontSize: 12, marginTop: 2 },
-  sideGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, paddingHorizontal: 18, marginBottom: 14 },
-  sideCard: { flexGrow: 1, flexBasis: '30%', backgroundColor: '#ffffff', borderRadius: 14, borderWidth: 1, borderColor: '#e2e8f0', padding: 14 },
-  sideCardDark: { flexGrow: 1, flexBasis: '30%', backgroundColor: '#1d2b4b', borderRadius: 14, padding: 14 },
-  sideCardGold: { flexGrow: 1, flexBasis: '30%', backgroundColor: '#fdb813', borderRadius: 14, padding: 14 },
-  sideKicker: { color: '#94a3b8', fontSize: 10, fontWeight: '900', textTransform: 'uppercase', letterSpacing: 0.8 },
-  sideKickerGold: { color: 'rgba(253, 184, 19, 0.75)', fontSize: 10, fontWeight: '900', textTransform: 'uppercase', letterSpacing: 0.8 },
-  sideKickerNavy: { color: 'rgba(29, 43, 75, 0.72)', fontSize: 10, fontWeight: '900', textTransform: 'uppercase', letterSpacing: 0.8 },
-  sideValue: { color: '#1d2b4b', fontSize: 24, fontWeight: '900', marginTop: 6 },
-  sideValueDark: { color: '#ffffff', fontSize: 24, fontWeight: '900', marginTop: 6 },
-  sideValueGold: { color: '#1d2b4b', fontSize: 23, fontWeight: '900', marginTop: 6 },
-  sideCopy: { color: '#64748b', fontSize: 11, marginTop: 2 },
-  sideCopyDark: { color: 'rgba(255, 255, 255, 0.55)', fontSize: 11, marginTop: 2 },
-  sideCopyNavy: { color: 'rgba(29, 43, 75, 0.70)', fontSize: 11, marginTop: 2 },
-  horizontalPanel: { backgroundColor: '#ffffff', borderRadius: 14, borderWidth: 1, borderColor: '#e2e8f0', marginHorizontal: 18, padding: 14, marginBottom: 14 },
-  sectionBlock: { marginBottom: 14 },
-  horizontalList: { gap: 10, paddingHorizontal: 18 },
-  panelTitleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 },
-  panelTitle: { color: '#1d2b4b', fontSize: 15, fontWeight: '900', marginHorizontal: 18, marginBottom: 9 },
-  panelLink: { color: '#3f51b5', fontSize: 11, fontWeight: '900' },
-  miniList: { gap: 8 },
-  miniItem: { flexDirection: 'row', alignItems: 'center' },
-  miniInfo: { flex: 1, marginLeft: 9 },
-  miniName: { color: '#1d2b4b', fontSize: 12, fontWeight: '800' },
-  miniMeta: { color: '#94a3b8', fontSize: 10, marginTop: 1 },
-  miniMessageButton: { width: 34, height: 34, borderRadius: 12, backgroundColor: '#eef2ff', alignItems: 'center', justifyContent: 'center' },
-  batchmateCard: { width: 92, minHeight: 126, backgroundColor: 'transparent', alignItems: 'center', paddingVertical: 6, gap: 6 },
-  trendingCard: { width: 118, minHeight: 124, backgroundColor: '#ffffff', borderRadius: 16, borderWidth: 1, borderColor: '#e2e8f0', alignItems: 'center', padding: 12, gap: 6 },
-  trendingRow: { flexDirection: 'row', alignItems: 'center', minHeight: 42 },
-  trendingRank: { width: 28, color: '#cbd5e1', fontSize: 11, fontWeight: '900' },
-  postCard: { backgroundColor: '#ffffff', borderRadius: 14, borderWidth: 1, borderColor: '#e2e8f0', marginHorizontal: 18, marginBottom: 14, overflow: 'hidden' },
-  postHeader: { flexDirection: 'row', alignItems: 'center', padding: 12 },
-  postUserInfo: { flex: 1, marginLeft: 10, minWidth: 0 },
-  postNameRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  postName: { color: '#1d2b4b', fontSize: 13, fontWeight: '900', maxWidth: '80%' },
-  youText: { color: '#94a3b8', fontSize: 10 },
-  postMetaRow: { flexDirection: 'row', alignItems: 'center', marginTop: 2 },
-  postMeta: { color: '#94a3b8', fontSize: 11, maxWidth: 120 },
-  dot: { color: '#cbd5e1', fontSize: 11, marginHorizontal: 5 },
-  visibilityPill: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 999 },
-  visibilityText: { fontSize: 10, fontWeight: '800', marginLeft: 4 },
-  mediaWrap: { backgroundColor: '#020617', position: 'relative' },
-  postImage: { width: '100%', aspectRatio: 1 },
-  mediaCounter: { position: 'absolute', top: 10, right: 10, backgroundColor: 'rgba(15, 23, 42, 0.7)', color: '#ffffff', fontSize: 11, fontWeight: '800', paddingHorizontal: 9, paddingVertical: 4, borderRadius: 999, overflow: 'hidden' },
-  mediaNavButton: { position: 'absolute', top: '46%', width: 34, height: 34, borderRadius: 999, backgroundColor: 'rgba(15, 23, 42, 0.55)', alignItems: 'center', justifyContent: 'center' },
-  mediaNavLeft: { left: 10 },
-  mediaNavRight: { right: 10 },
-  mediaDots: { position: 'absolute', bottom: 10, alignSelf: 'center', flexDirection: 'row', gap: 5, backgroundColor: 'rgba(15, 23, 42, 0.45)', borderRadius: 999, paddingHorizontal: 8, paddingVertical: 5 },
-  mediaDot: { width: 5, height: 5, borderRadius: 999, backgroundColor: 'rgba(255, 255, 255, 0.45)' },
-  mediaDotActive: { width: 12, backgroundColor: '#ffffff' },
-  videoPlaceholder: { height: 180, backgroundColor: '#1d2b4b', justifyContent: 'center', alignItems: 'center' },
-  videoText: { color: '#ffffff', fontWeight: '800', marginTop: 8 },
-  videoHint: { color: 'rgba(255, 255, 255, 0.55)', fontSize: 11, marginTop: 4, maxWidth: '76%' },
-  videoNavRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: 14 },
-  videoNavButton: { minHeight: 32, borderRadius: 999, borderWidth: 1, borderColor: 'rgba(253, 184, 19, 0.35)', paddingHorizontal: 12, flexDirection: 'row', alignItems: 'center', gap: 6 },
-  videoNavText: { color: '#fdb813', fontSize: 11, fontWeight: '800' },
-  videoCount: { color: '#ffffff', fontSize: 11, fontWeight: '900' },
-  caption: { color: '#334155', fontSize: 13, lineHeight: 19, paddingHorizontal: 14, paddingTop: 12 },
-  tagStrip: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#eef2ff', marginHorizontal: 14, marginTop: 12, padding: 10, borderRadius: 10 },
-  tagText: { flex: 1, color: '#3f51b5', fontSize: 12, fontWeight: '700', marginLeft: 8 },
-  postFooter: { flexDirection: 'row', justifyContent: 'space-between', borderTopWidth: 1, borderTopColor: '#f1f5f9', paddingHorizontal: 14, paddingVertical: 12, marginTop: 12 },
-  postStat: { color: '#64748b', fontSize: 11, fontWeight: '700' },
-  postActions: { flexDirection: 'row', gap: 8, paddingHorizontal: 12, paddingBottom: 12 },
-  postActionButton: { flex: 1, minHeight: 38, borderRadius: 10, backgroundColor: '#f8fafc', borderWidth: 1, borderColor: '#e2e8f0', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 },
-  postActionText: { color: '#3f51b5', fontSize: 11, fontWeight: '900' },
-  modalBackdrop: { flex: 1, backgroundColor: 'rgba(15, 23, 42, 0.45)', justifyContent: 'flex-end' },
-  tagModal: { maxHeight: '78%', backgroundColor: '#ffffff', borderTopLeftRadius: 22, borderTopRightRadius: 22, paddingHorizontal: 18, paddingTop: 10, paddingBottom: 24 },
-  modalGrabber: { width: 44, height: 5, borderRadius: 999, backgroundColor: '#cbd5e1', alignSelf: 'center', marginBottom: 12 },
-  modalHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 },
-  modalTitle: { color: '#1d2b4b', fontSize: 18, fontWeight: '900' },
-  modalSubtitle: { color: '#94a3b8', fontSize: 12, marginTop: 2 },
-  iconClose: { width: 36, height: 36, borderRadius: 12, backgroundColor: '#f1f5f9', alignItems: 'center', justifyContent: 'center' },
-  modalSearch: { minHeight: 46, borderRadius: 12, backgroundColor: '#f8fafc', borderWidth: 1, borderColor: '#e2e8f0', flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, marginBottom: 10 },
-  modalSearchInput: { flex: 1, color: '#1d2b4b', fontSize: 14, marginLeft: 9 },
-  tagError: { color: '#dc2626', fontSize: 12, fontWeight: '700', marginBottom: 8 },
-  tagList: { maxHeight: 330 },
-  tagStudentRow: { flexDirection: 'row', alignItems: 'center', padding: 10, borderRadius: 12, borderWidth: 1, borderColor: '#f1f5f9', marginBottom: 8, backgroundColor: '#ffffff' },
-  tagStudentRowActive: { borderColor: '#bfdbfe', backgroundColor: '#eef2ff' },
-  tagStudentInfo: { flex: 1, marginLeft: 10, minWidth: 0 },
-  tagStudentName: { color: '#1d2b4b', fontSize: 13, fontWeight: '900' },
-  tagStudentMeta: { color: '#94a3b8', fontSize: 11, marginTop: 1 },
-  checkCircle: { width: 22, height: 22, borderRadius: 999, borderWidth: 1, borderColor: '#cbd5e1', alignItems: 'center', justifyContent: 'center' },
-  checkCircleActive: { backgroundColor: '#3f51b5', borderColor: '#3f51b5' },
-  emptyTagState: { alignItems: 'center', paddingVertical: 34 },
-  emptyTagText: { color: '#94a3b8', fontSize: 13, fontWeight: '700', marginTop: 8 },
-  modalFooter: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingTop: 12 },
-  selectedCount: { color: '#64748b', fontSize: 12, fontWeight: '800' },
-  saveTagButton: { minWidth: 126, minHeight: 42, borderRadius: 12, backgroundColor: '#fdb813', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 18 },
-  saveTagButtonDisabled: { opacity: 0.65 },
-  saveTagText: { color: '#1d2b4b', fontSize: 13, fontWeight: '900' },
-  errorText: { color: '#dc2626', marginHorizontal: 18, marginBottom: 12, fontSize: 13 },
-  emptyFeed: { backgroundColor: '#ffffff', borderRadius: 14, borderWidth: 1, borderColor: '#e2e8f0', marginHorizontal: 18, paddingVertical: 42, alignItems: 'center' },
-  emptyTitle: { color: '#64748b', fontSize: 14, fontWeight: '800', marginTop: 12 },
-  emptyText: { color: '#94a3b8', fontSize: 12, marginTop: 4 },
+  container: {
+    flex: 1,
+    backgroundColor: BACKGROUND,
+  },
+  feedContent: {
+    paddingBottom: 112,
+  },
+  hero: {
+    backgroundColor: NAVY,
+    paddingHorizontal: 20,
+    paddingTop: 18,
+    paddingBottom: 20,
+  },
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 18,
+  },
+  greetingBlock: {
+    flex: 1,
+    minWidth: 0,
+  },
+  greeting: {
+    color: '#FFFFFF',
+    fontSize: 18,
+    fontWeight: '800',
+  },
+  firstName: {
+    color: AMBER,
+    fontSize: 28,
+    fontWeight: '900',
+    marginTop: 2,
+  },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  headerIconButton: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  badge: {
+    position: 'absolute',
+    top: -3,
+    right: -3,
+    minWidth: 15,
+    height: 15,
+    borderRadius: 8,
+    backgroundColor: AMBER,
+    borderWidth: 1,
+    borderColor: NAVY,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 3,
+  },
+  badgeText: {
+    color: NAVY,
+    fontSize: 8,
+    fontWeight: '900',
+  },
+  searchBar: {
+    minHeight: 52,
+    borderRadius: 26,
+    backgroundColor: '#F3F4F6',
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+  },
+  searchInput: {
+    flex: 1,
+    color: NAVY,
+    fontSize: 14,
+    marginLeft: 10,
+  },
+  searchResults: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 18,
+    marginTop: 10,
+    borderWidth: 1,
+    borderColor: DIVIDER,
+    overflow: 'hidden',
+  },
+  searchEmpty: {
+    color: '#94A3B8',
+    fontSize: 13,
+    padding: 16,
+    textAlign: 'center',
+  },
+  resultRow: {
+    minHeight: 54,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: DIVIDER,
+  },
+  resultCopy: {
+    flex: 1,
+    marginLeft: 10,
+    minWidth: 0,
+  },
+  resultName: {
+    color: NAVY,
+    fontSize: 13,
+    fontWeight: '900',
+  },
+  resultType: {
+    color: '#94A3B8',
+    fontSize: 11,
+    marginTop: 1,
+  },
+  pageContent: {
+    backgroundColor: BACKGROUND,
+    paddingTop: 16,
+  },
+  divider: {
+    height: 1,
+    backgroundColor: DIVIDER,
+    marginHorizontal: 20,
+    marginVertical: 16,
+  },
+  quickList: {
+    flexGrow: 1,
+    paddingHorizontal: 20,
+    justifyContent: 'space-between',
+  },
+  quickItem: {
+    width: 72,
+    alignItems: 'center',
+  },
+  quickIconBox: {
+    width: 46,
+    height: 46,
+    borderRadius: 13,
+    backgroundColor: NAVY,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  quickLabel: {
+    color: NAVY,
+    fontSize: 10,
+    fontWeight: '800',
+    marginTop: 7,
+  },
+  statsRow: {
+    flexDirection: 'row',
+    gap: 10,
+    paddingHorizontal: 20,
+  },
+  statCard: {
+    flex: 1,
+    minHeight: 104,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: DIVIDER,
+    padding: 12,
+    justifyContent: 'center',
+  },
+  statLabel: {
+    color: '#64748B',
+    fontSize: 9,
+    fontWeight: '900',
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
+  },
+  statValue: {
+    color: NAVY,
+    fontSize: 25,
+    fontWeight: '900',
+    marginTop: 7,
+  },
+  statValueAmber: {
+    color: AMBER,
+  },
+  statSubtitle: {
+    color: '#94A3B8',
+    fontSize: 11,
+    fontWeight: '700',
+    marginTop: 2,
+  },
+  sectionBlock: {
+    marginBottom: 16,
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    marginBottom: 10,
+  },
+  sectionTitle: {
+    color: NAVY,
+    fontSize: 16,
+    fontWeight: '900',
+  },
+  seeAll: {
+    color: AMBER,
+    fontSize: 12,
+    fontWeight: '900',
+  },
+  horizontalList: {
+    gap: 10,
+    paddingHorizontal: 20,
+  },
+  batchmateItem: {
+    width: 70,
+    alignItems: 'center',
+  },
+  batchmateName: {
+    color: NAVY,
+    fontSize: 11,
+    fontWeight: '900',
+    marginTop: 6,
+    textAlign: 'center',
+  },
+  trendingCard: {
+    width: 156,
+    minHeight: 74,
+    borderRadius: 16,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: DIVIDER,
+    padding: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  rankBadge: {
+    position: 'absolute',
+    top: 7,
+    right: 8,
+    borderRadius: 999,
+    backgroundColor: '#FFF7E8',
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+  },
+  rankText: {
+    color: AMBER,
+    fontSize: 9,
+    fontWeight: '900',
+  },
+  trendingInfo: {
+    flex: 1,
+    marginLeft: 9,
+    minWidth: 0,
+    paddingRight: 22,
+  },
+  trendingName: {
+    color: NAVY,
+    fontSize: 13,
+    fontWeight: '900',
+  },
+  trendingViews: {
+    color: '#94A3B8',
+    fontSize: 11,
+    fontWeight: '700',
+    marginTop: 2,
+  },
+  memoryDigestCard: {
+    marginHorizontal: 20,
+    marginBottom: 2,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: DIVIDER,
+    backgroundColor: '#FFFFFF',
+    padding: 14,
+  },
+  memoryDigestHeader: {
+    minHeight: 28,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  memoryDigestTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+  },
+  memoryDigestTitle: {
+    color: NAVY,
+    fontSize: 15,
+    fontWeight: '900',
+  },
+  memoryRetryButton: {
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: '#FDE7B7',
+    backgroundColor: '#FFF7E8',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+  },
+  memoryRetryText: {
+    color: AMBER,
+    fontSize: 11,
+    fontWeight: '900',
+  },
+  memoryRows: {
+    gap: 10,
+  },
+  memoryRow: {
+    minHeight: 58,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    borderTopWidth: 1,
+    borderTopColor: '#F1F5F9',
+    paddingTop: 10,
+  },
+  memoryThumb: {
+    width: 42,
+    height: 42,
+    borderRadius: 12,
+    backgroundColor: '#E2E8F0',
+  },
+  memoryIconBox: {
+    width: 42,
+    height: 42,
+    borderRadius: 12,
+    backgroundColor: '#FFF7E8',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  memoryRowBody: {
+    flex: 1,
+    minWidth: 0,
+  },
+  memoryRowTitle: {
+    color: NAVY,
+    fontSize: 13,
+    fontWeight: '900',
+  },
+  memoryRowSubtitle: {
+    color: '#64748B',
+    fontSize: 11,
+    fontWeight: '700',
+    marginTop: 3,
+  },
+  memoryTimestamp: {
+    maxWidth: 76,
+    color: '#94A3B8',
+    fontSize: 10,
+    fontWeight: '800',
+    textAlign: 'right',
+  },
+  memoryEmptyState: {
+    borderTopWidth: 1,
+    borderTopColor: '#F1F5F9',
+    paddingTop: 16,
+    paddingBottom: 8,
+    alignItems: 'center',
+  },
+  memoryEmptyTitle: {
+    color: NAVY,
+    fontSize: 13,
+    fontWeight: '900',
+  },
+  memoryEmptySubtitle: {
+    color: '#94A3B8',
+    fontSize: 11,
+    fontWeight: '700',
+    textAlign: 'center',
+    marginTop: 4,
+  },
+  memorySkeletonRow: {
+    minHeight: 54,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    borderTopWidth: 1,
+    borderTopColor: '#F1F5F9',
+    paddingTop: 10,
+  },
+  memorySkeletonIcon: {
+    width: 42,
+    height: 42,
+    borderRadius: 12,
+    backgroundColor: '#E2E8F0',
+  },
+  memorySkeletonText: {
+    flex: 1,
+    gap: 8,
+  },
+  memorySkeletonLineWide: {
+    width: '74%',
+    height: 10,
+    borderRadius: 999,
+    backgroundColor: '#E2E8F0',
+  },
+  memorySkeletonLineShort: {
+    width: '46%',
+    height: 9,
+    borderRadius: 999,
+    backgroundColor: '#EEF2F7',
+  },
+  analyticsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+    paddingHorizontal: 20,
+  },
+  metricCard: {
+    width: '48.5%',
+    minHeight: 122,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: DIVIDER,
+    padding: 13,
+  },
+  metricIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: 12,
+    backgroundColor: '#FFF7E8',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  metricValueRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    marginTop: 9,
+  },
+  metricValue: {
+    color: NAVY,
+    fontSize: 22,
+    fontWeight: '900',
+  },
+  metricTrend: {
+    fontSize: 13,
+    fontWeight: '900',
+  },
+  trendUp: {
+    color: '#16A34A',
+  },
+  trendDown: {
+    color: '#DC2626',
+  },
+  metricLabel: {
+    color: NAVY,
+    fontSize: 12,
+    fontWeight: '800',
+    marginTop: 2,
+  },
+  metricWeek: {
+    color: '#94A3B8',
+    fontSize: 11,
+    marginTop: 2,
+  },
+  filterList: {
+    gap: 8,
+    paddingHorizontal: 20,
+    paddingBottom: 14,
+  },
+  filterPill: {
+    minHeight: 36,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: DIVIDER,
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 15,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  filterPillActive: {
+    backgroundColor: NAVY,
+    borderColor: NAVY,
+  },
+  filterPillText: {
+    color: '#64748B',
+    fontSize: 12,
+    fontWeight: '900',
+  },
+  filterPillTextActive: {
+    color: '#FFFFFF',
+  },
+  loader: {
+    marginVertical: 18,
+  },
+  footerLoader: {
+    marginVertical: 18,
+  },
+  errorText: {
+    color: '#DC2626',
+    fontSize: 13,
+    fontWeight: '700',
+    marginHorizontal: 20,
+    marginBottom: 12,
+  },
+  avatarBase: {
+    backgroundColor: '#E2E8F0',
+  },
+  avatarSmall: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+  },
+  avatarMedium: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+  },
+  avatarLarge: {
+    width: 54,
+    height: 54,
+    borderRadius: 27,
+  },
+  avatarPost: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+  },
+  avatarFallback: {
+    backgroundColor: NAVY,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avatarText: {
+    color: AMBER,
+    fontWeight: '900',
+  },
+  avatarTextSmall: {
+    fontSize: 12,
+  },
+  avatarTextMedium: {
+    fontSize: 14,
+  },
+  avatarTextLarge: {
+    fontSize: 17,
+  },
+  avatarTextPost: {
+    fontSize: 13,
+  },
+  postCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: DIVIDER,
+    marginHorizontal: 20,
+    marginBottom: 14,
+    overflow: 'hidden',
+  },
+  postHeader: {
+    minHeight: 64,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 11,
+  },
+  postHeaderCopy: {
+    flex: 1,
+    minWidth: 0,
+    marginLeft: 10,
+  },
+  postName: {
+    color: NAVY,
+    fontSize: 14,
+    fontWeight: '900',
+  },
+  postTime: {
+    color: '#94A3B8',
+    fontSize: 11,
+    fontWeight: '700',
+    marginTop: 2,
+  },
+  audienceBadge: {
+    minHeight: 25,
+    borderRadius: 13,
+    paddingHorizontal: 8,
+    backgroundColor: '#F1F5F9',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+  },
+  audiencePublic: {
+    backgroundColor: '#FFF7E8',
+  },
+  audienceBatchmates: {
+    backgroundColor: '#EEF2FF',
+  },
+  audienceText: {
+    color: NAVY,
+    fontSize: 10,
+    fontWeight: '900',
+  },
+  audiencePrivateText: {
+    color: '#64748B',
+  },
+  postMediaWrap: {
+    position: 'relative',
+    width: '100%',
+    aspectRatio: 1,
+    backgroundColor: '#E2E8F0',
+  },
+  postImage: {
+    width: '100%',
+    height: '100%',
+    backgroundColor: '#E2E8F0',
+  },
+  mediaCounter: {
+    position: 'absolute',
+    top: 10,
+    right: 10,
+    borderRadius: 999,
+    backgroundColor: 'rgba(15, 23, 42, 0.68)',
+    paddingHorizontal: 9,
+    paddingVertical: 5,
+  },
+  mediaCounterText: {
+    color: '#FFFFFF',
+    fontSize: 10,
+    fontWeight: '900',
+  },
+  mediaNavButton: {
+    position: 'absolute',
+    top: '50%',
+    marginTop: -18,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(15, 23, 42, 0.54)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  mediaNavLeft: {
+    left: 10,
+  },
+  mediaNavRight: {
+    right: 10,
+  },
+  mediaDots: {
+    position: 'absolute',
+    bottom: 12,
+    left: 0,
+    right: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+  },
+  mediaDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+    backgroundColor: 'rgba(255, 255, 255, 0.55)',
+  },
+  mediaDotActive: {
+    width: 18,
+    backgroundColor: '#FFFFFF',
+  },
+  postImagePlaceholder: {
+    width: '100%',
+    aspectRatio: 1,
+    backgroundColor: '#F1F5F9',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  postCaption: {
+    color: NAVY,
+    fontSize: 14,
+    lineHeight: 20,
+    paddingHorizontal: 14,
+    paddingTop: 12,
+    fontWeight: '700',
+  },
+  taggedPeopleStrip: {
+    marginHorizontal: 14,
+    marginTop: 10,
+    borderRadius: 12,
+    backgroundColor: '#EEF2FF',
+    borderWidth: 1,
+    borderColor: '#DBEAFE',
+    paddingHorizontal: 11,
+    paddingVertical: 9,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  taggedPeopleText: {
+    flex: 1,
+    color: '#3F51B5',
+    fontSize: 12,
+    fontWeight: '900',
+    lineHeight: 17,
+  },
+  postActions: {
+    flexDirection: 'row',
+    borderTopWidth: 1,
+    borderTopColor: DIVIDER,
+    marginTop: 12,
+  },
+  postAction: {
+    flex: 1,
+    minHeight: 46,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+  },
+  postActionText: {
+    color: NAVY,
+    fontSize: 12,
+    fontWeight: '900',
+  },
+  emptyFeed: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: DIVIDER,
+    marginHorizontal: 20,
+    paddingVertical: 44,
+    alignItems: 'center',
+  },
+  emptyTitle: {
+    color: NAVY,
+    fontSize: 16,
+    fontWeight: '900',
+    marginTop: 12,
+  },
+  emptyText: {
+    color: '#94A3B8',
+    fontSize: 13,
+    textAlign: 'center',
+    marginTop: 5,
+    paddingHorizontal: 30,
+  },
+  feedFooter: {
+    height: 18,
+  },
 });

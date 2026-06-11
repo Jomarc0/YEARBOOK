@@ -11,7 +11,7 @@ use Illuminate\Http\Request;
 
 class VoiceNoteAdminController extends Controller
 {
-    // ── GET /admin/voice-notes?status=pending ──────────────────────────────────
+    // GET /admin/voice-notes?status=pending
     public function index(Request $request): JsonResponse
     {
         $status = $request->query('status', 'pending');
@@ -28,7 +28,7 @@ class VoiceNoteAdminController extends Controller
         return response()->json($notes);
     }
 
-    // ── POST /admin/voice-notes/{id}/approve ───────────────────────────────────
+    // POST /admin/voice-notes/{id}/approve 
     public function approve(Request $request, int $id): JsonResponse
     {
         $note = VoiceNote::with(['sender', 'recipient'])->findOrFail($id);
@@ -52,7 +52,7 @@ class VoiceNoteAdminController extends Controller
         ]);
     }
 
-    // ── POST /admin/voice-notes/{id}/reject ────────────────────────────────────
+    // POST /admin/voice-notes/{id}/reject 
     public function reject(Request $request, int $id): JsonResponse
     {
         $request->validate([
@@ -81,7 +81,7 @@ class VoiceNoteAdminController extends Controller
         ]);
     }
 
-    // ── GET /admin/voice-notes/stats ──────────────────────────────────────────
+    // GET /admin/voice-notes/stats 
     public function stats(): JsonResponse
     {
         return response()->json([

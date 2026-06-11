@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\API\Social;
 
 use App\Http\Controllers\Controller;
+use App\Models\User;
 use App\Models\UserNotification;
 use Illuminate\Notifications\DatabaseNotification;
 use Illuminate\Http\Request;
@@ -30,9 +31,12 @@ class NotificationController extends Controller
                     'type' => $notification->type,
                     'title' => $notification->title,
                     'body' => $notification->body,
-                    'data' => $data,
+                    'data' => array_merge($data, [
+                        'sender_avatar' => $data['sender_avatar'] ?? $this->senderAvatar($data['sender_id'] ?? null),
+                    ]),
                     'sender_name' => $data['sender_name'] ?? null,
                     'sender_id' => $data['sender_id'] ?? null,
+                    'receiver_id' => $notification->user_id,
                     'is_read' => $notification->is_read,
                     'read_at' => $notification->is_read ? $notification->updated_at?->toIso8601String() : null,
                     'created_at' => $notification->created_at?->toIso8601String(),
@@ -53,10 +57,12 @@ class NotificationController extends Controller
                     'type' => $data['type'] ?? class_basename($notification->type),
                     'title' => $data['title'] ?? $data['message'] ?? 'Notification',
                     'body' => $data['body'] ?? $data['message'] ?? '',
-                    'data' => $data,
+                    'data' => array_merge($data, [
+                        'sender_avatar' => $data['sender_avatar'] ?? $this->senderAvatar($data['sender_id'] ?? null),
+                    ]),
                     'sender_name' => $data['sender_name'] ?? null,
                     'sender_id' => $data['sender_id'] ?? null,
-                    'receiver_id' => $data['receiver_id'] ?? null,
+                    'receiver_id' => $data['receiver_id'] ?? $notification->notifiable_id,
                     'message_id' => $data['message_id'] ?? null,
                     'is_read' => filled($notification->read_at),
                     'read_at' => $notification->read_at?->toIso8601String(),
@@ -113,5 +119,10 @@ class NotificationController extends Controller
             ->update(['read_at' => now()]);
 
         return response()->json(['message' => 'All notifications marked as read.']);
+    }
+
+    private function senderAvatar(mixed $senderId): ?string
+    {
+        return $senderId ? User::find($senderId)?->profile_picture : null;
     }
 }

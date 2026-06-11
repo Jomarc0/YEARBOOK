@@ -17,7 +17,6 @@ class User extends Authenticatable
 {
     use HasFactory, Notifiable, HasApiTokens, Searchable, SoftDeletes;
 
-    // ── Department / Course constants (unchanged — still needed for display) ──
 
     public const DEPARTMENT_COURSES = [
         'SACE' => [
@@ -77,28 +76,28 @@ class User extends Authenticatable
         return null;
     }
 
-    // ── Fillable ───────────────────────────────────────────────────────────
+    // illable 
     // Only auth + account fields. All yearbook data lives in students table.
 
     protected $fillable = [
-        // ── Identity ──────────────────────────────────────────────────────
+        // Identity 
         'first_name',
         'last_name',
         'name',
 
-        // ── Auth ──────────────────────────────────────────────────────────
+        //  Auth 
         'email',
         'password',
         'role',
 
-        // ── Link to yearbook record ────────────────────────────────────────
+        // Link to yearbook record
         'student_record_id',
 
-        // ── Section / Batch ───────────────────────────────────────────────
+        // Section / Batch 
         'section_id',
         'batch_id',
 
-        // ── Profile (user-owned, not yearbook data) ────────────────────────
+        // Profile (user-owned, not yearbook data) 
         'avatar',
         'bio',
         'profile_visibility',
@@ -110,12 +109,10 @@ class User extends Authenticatable
         'graduation_year',
         'batch',
         'motto',
-
-        // ── Consent / Verification ────────────────────────────────────────
+        //  Consent / Verification 
         'email_verified',
         'consent_accepted',
-
-        // ── SSO ───────────────────────────────────────────────────────────
+        //  SSO 
         'google_id',
         'google_token',
         'fcm_token',
@@ -161,12 +158,8 @@ class User extends Authenticatable
         ];
     }
 
-    // ── Relationships ──────────────────────────────────────────────────────
+    // Relationships
 
-    /**
-     * The linked yearbook/student record managed by admin.
-     * Null = browse account (no yearbook match).
-     */
     public function studentRecord(): BelongsTo
     {
         return $this->belongsTo(Student::class, 'student_record_id');
@@ -212,11 +205,8 @@ class User extends Authenticatable
         return $this->hasMany(TaggedPhoto::class);
     }
 
-    // ── Convenience helpers ────────────────────────────────────────────────
+    // Convenience helpers 
 
-    /**
-     * Whether this user is linked to an admin-managed student record.
-     */
     public function isLinkedToStudent(): bool
     {
         return ! is_null($this->student_record_id);
@@ -230,10 +220,6 @@ class User extends Authenticatable
             ->latest()
             ->first();
     }
-
-    // ── Accessors — proxy to studentRecord (single source of truth) ───────
-    // These let existing code like $user->course, $user->ambition, etc.
-    // keep working without any changes to controllers or frontend.
 
     public function getStudentIdAttribute(): ?string
     {
@@ -371,7 +357,7 @@ class User extends Authenticatable
             ?? null;
     }
 
-    // ── Other accessors ────────────────────────────────────────────────────
+    // Other accessors 
 
     public function getFullNameAttribute(): string
     {
@@ -394,8 +380,7 @@ class User extends Authenticatable
         return ! is_null($this->google_id);
     }
 
-    // ── Meilisearch ────────────────────────────────────────────────────────
-
+    //Meilisearch 
     public function searchableAs(): string
     {
         return 'users';

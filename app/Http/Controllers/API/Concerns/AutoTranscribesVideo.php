@@ -5,27 +5,16 @@ namespace App\Http\Controllers\API\Concerns;
 use App\Jobs\AI\AutoTranscribeVideo;
 use Illuminate\Support\Facades\Log;
 
-/**
- * AutoTranscribesVideo
- * ─────────────────────────────────────────────────────────────
- * Drop into any controller that uploads video/audio to Cloudinary.
- * Call maybeQueueTranscription() after each successful upload.
- */
+
 trait AutoTranscribesVideo
 {
-    /**
-     * @param  array    $uploadResult       Needs 'secure_url' + 'public_id'
-     * @param  string   $title
-     * @param  int      $userId
-     * @param  int|null $albumId            Links transcript → album
-     * @param  int|null $graduationPhotoId  Links transcript → specific video/photo
-     */
+
     protected function maybeQueueTranscription(
         array  $uploadResult,
         string $title,
         int    $userId,
         ?int   $albumId           = null,
-        ?int   $graduationPhotoId = null,  // ← NEW
+        ?int   $graduationPhotoId = null,  
     ): void {
         if (blank(config('services.groq.key'))) {
             return;

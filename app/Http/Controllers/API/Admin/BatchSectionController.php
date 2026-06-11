@@ -13,11 +13,6 @@ use Illuminate\Http\Request;
 class BatchSectionController extends Controller
 {
     use AuditsAdminActions;
-
-    // ══════════════════════════════════════════════════════════════════════════
-    // BATCHES
-    // ══════════════════════════════════════════════════════════════════════════
-
     // GET /api/admin/batches
     public function batchIndex(Request $request): JsonResponse
     {
@@ -167,10 +162,7 @@ class BatchSectionController extends Controller
         return response()->json(['message' => 'Batch moved to trash.']);
     }
 
-    // ══════════════════════════════════════════════════════════════════════════
     // SECTIONS
-    // ══════════════════════════════════════════════════════════════════════════
-
     // GET /api/admin/sections
     public function sectionIndex(Request $request): JsonResponse
     {

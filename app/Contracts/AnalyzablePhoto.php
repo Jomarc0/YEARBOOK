@@ -2,9 +2,6 @@
 
 namespace App\Contracts;
 
-/**
- * @mixin \Illuminate\Database\Eloquent\Model
- */
 interface AnalyzablePhoto
 {
     public function markAiQueued(): bool;

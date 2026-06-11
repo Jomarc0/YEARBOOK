@@ -34,7 +34,7 @@ class Album extends Model
         'sort_order'   => 'integer',
     ];
 
-    // ─── Relationships ────────────────────────────────────────────────────────
+    // Relationships
 
     public function user(): BelongsTo
     {
@@ -54,7 +54,7 @@ class Album extends Model
         return $this->hasMany(Gallery::class)->orderBy('sort_order');
     }
 
-    // ─── Scopes ───────────────────────────────────────────────────────────────
+    // Scopes 
 
     public function scopePublished(Builder $query): Builder
     {

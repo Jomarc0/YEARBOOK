@@ -5,6 +5,7 @@ import ConsentModal from '@/features/auth/components/ConsentModal';
 import { AppConfigProvider, useAppConfig } from '@/features/platform/AppConfigProvider';
 import FeatureRoute from '@/features/platform/FeatureRoute';
 import MaintenancePage from '@/pages/MaintenancePage';
+import AnnouncementsPage from '@/pages/AnnouncementsPage';
 
 // ── Auth ──────────────────────────────────────────────────────────────────────
 import LandingPage        from '@/pages/LandingPage';
@@ -189,7 +190,7 @@ export default function App() {
                 path="/flipbook"
                 element={
                   <ProtectedRoute>
-                    <FeatureRoute features={['enable_flipbook_viewer', 'publish_yearbook']}>
+                    <FeatureRoute features="enable_flipbook_viewer">
                       <FlipbookPage />
                     </FeatureRoute>
                   </ProtectedRoute>
@@ -199,9 +200,7 @@ export default function App() {
                 path="/yearbook"
                 element={
                   <ProtectedRoute>
-                    <FeatureRoute features="publish_yearbook">
-                      <YearbookHomePage />
-                    </FeatureRoute>
+                    <YearbookHomePage />
                   </ProtectedRoute>
                 }
               />
@@ -247,6 +246,7 @@ export default function App() {
               <Route path="/messages"     element={<ProtectedRoute><MessagesPage /></ProtectedRoute>} />
               <Route path="/messages/:id" element={<ProtectedRoute><MessagesPage /></ProtectedRoute>} />
               <Route path="/voice-notes"  element={<ProtectedRoute><VoiceNotesPage /></ProtectedRoute>} />
+              <Route path="/announcements" element={<ProtectedRoute><AnnouncementsPage /></ProtectedRoute>} />
 
               {/* ── Payment ────────────────────────────────────────────── */}
               <Route
@@ -272,6 +272,10 @@ export default function App() {
               />
 
               {/* ── Alumni Tracker ─────────────────────────────────────── */}
+              <Route
+                path="/alumni"
+                element={<ProtectedRoute><AlumniTrackerPage /></ProtectedRoute>}
+              />
               <Route
                 path="/alumni-tracker"
                 element={<ProtectedRoute><AlumniTrackerPage /></ProtectedRoute>}

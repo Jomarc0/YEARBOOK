@@ -20,18 +20,13 @@ class Subscription extends Model
         'expires_at' => 'datetime',
     ];
 
-    // =========================================================================
     // RELATIONSHIPS
-    // =========================================================================
 
     public function user()
     {
         return $this->belongsTo(User::class);
     }
 
-    // =========================================================================
-    // YOUR EXISTING METHODS (unchanged)
-    // =========================================================================
 
     public function isActive(): bool
     {
@@ -49,14 +44,9 @@ class Subscription extends Model
         return $this->isActive() && in_array($this->tier, ['standard', 'premium']);
     }
 
-    // =========================================================================
-    // ADDED: Cloudinary storage tier resolution
-    // =========================================================================
+    //Cloudinary storage tier resolution
 
     /**
-     * Resolves which config key in config/cloudinary.php tiers[] this
-     * subscription maps to.
-     *
      * plan=free,    tier=standard → 'free'
      * plan=premium, tier=standard → 'premium_standard'
      * plan=premium, tier=premium  → 'premium'
@@ -76,12 +66,6 @@ class Subscription extends Model
         };
     }
 
-    /**
-     * Human-readable label for the storage tier.
-     * Use this in API responses or UI display.
-     *
-     * @return string 'Free' | 'Premium Standard' | 'Premium HD'
-     */
     public function getStorageTierLabelAttribute(): string
     {
         return match ($this->storage_tier_key) {
@@ -91,12 +75,6 @@ class Subscription extends Model
         };
     }
 
-    /**
-     * Storage limit in bytes for this subscription's tier.
-     * Reads from config/cloudinary.php — no hardcoded values.
-     *
-     * @return int
-     */
     public function getStorageLimitBytesAttribute(): int
     {
         return (int) config(
@@ -105,11 +83,6 @@ class Subscription extends Model
         );
     }
 
-    /**
-     * Whether HD uploads are allowed for this tier.
-     *
-     * @return bool
-     */
     public function getHdEnabledAttribute(): bool
     {
         return (bool) config(
@@ -118,11 +91,6 @@ class Subscription extends Model
         );
     }
 
-    /**
-     * Max number of files allowed per bulk upload request.
-     *
-     * @return int
-     */
     public function getBulkUploadLimitAttribute(): int
     {
         return (int) config(

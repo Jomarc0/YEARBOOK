@@ -7,32 +7,32 @@ use Illuminate\Http\Request;
 
 class AuditLog extends Model
 {
-    // ── Auth ──────────────────────────────────────────────────────────────────
+    // Auth
     const ACTION_LOGIN           = 'Login';
     const ACTION_LOGOUT          = 'Logout';
     const ACTION_LOGIN_FAILED    = 'Login Failed';
     const ACTION_PASSWORD_RESET  = 'Password Reset';
 
-    // ── Albums ────────────────────────────────────────────────────────────────
+    // Albums 
     const ACTION_ALBUM_CREATED   = 'Album Created';
     const ACTION_ALBUM_UPDATED   = 'Album Updated';
     const ACTION_ALBUM_DELETED   = 'Album Deleted';
 
-    // ── Photos ────────────────────────────────────────────────────────────────
+    // Photos
     const ACTION_PHOTO_UPLOADED  = 'Photo Uploaded';
     const ACTION_PHOTO_DELETED   = 'Photo Deleted';
     const ACTION_PHOTO_APPROVED  = 'Photo Approved';
     const ACTION_PHOTO_REJECTED  = 'Photo Rejected';
     const ACTION_PHOTO_REVERTED  = 'Photo Reverted';
 
-    // ── Videos ────────────────────────────────────────────────────────────────
+    // Videos 
     const ACTION_VIDEO_UPLOADED  = 'Video Uploaded';
     const ACTION_VIDEO_DELETED   = 'Video Deleted';
     const ACTION_VIDEO_APPROVED  = 'Video Approved';
     const ACTION_VIDEO_REJECTED  = 'Video Rejected';
     const ACTION_VIDEO_REVERTED  = 'Video Reverted';
 
-    // ── Users / Students / Faculty ────────────────────────────────────────────
+    // Users / Students / Faculty 
     const ACTION_USER_CREATED      = 'User Created';
     const ACTION_USER_UPDATED      = 'User Updated';
     const ACTION_USER_DELETED      = 'User Deleted';
@@ -41,34 +41,34 @@ class AuditLog extends Model
     const ACTION_FACULTY_REMOVED   = 'Faculty Removed';
     const ACTION_STUDENT_DELETED   = 'Student Deleted';
 
-    // ── Batch ─────────────────────────────────────────────────────────────────
+    //  Batch
     const ACTION_BATCH_CREATED     = 'Batch Created';
     const ACTION_BATCH_UPDATED     = 'Batch Updated';
     const ACTION_BATCH_DELETED     = 'Batch Deleted';
 
-    // ── Section ───────────────────────────────────────────────────────────────
+    // Section 
     const ACTION_SECTION_CREATED   = 'Section Created';
     const ACTION_SECTION_UPDATED   = 'Section Updated';
     const ACTION_SECTION_DELETED   = 'Section Deleted';
 
-    // ── Trash ─────────────────────────────────────────────────────────────────
+    // Trash
     const ACTION_TRASH_RESTORED    = 'Trash Restored';
     const ACTION_TRASH_PURGED      = 'Trash Purged';
     const ACTION_BULK_RESTORED     = 'Bulk Restored';
     const ACTION_BULK_PURGED       = 'Bulk Purged';
 
-    // ── Import ────────────────────────────────────────────────────────────────
+    // Import 
     const ACTION_IMPORT            = 'Import';
 
-    // ── Settings ──────────────────────────────────────────────────────────────
+    //Settings 
     const ACTION_SETTINGS_UPDATED  = 'Settings Updated';
 
-    // ── Moderation ────────────────────────────────────────────────────────────
+    //Moderation 
     const ACTION_APPROVED          = 'approved';
     const ACTION_REJECTED          = 'rejected';
     const ACTION_REVERTED          = 'reverted';
 
-    // ── Statuses ──────────────────────────────────────────────────────────────
+    // Statuses
     const STATUS_SUCCESS           = 'Success';
     const STATUS_WARNING           = 'Warning';
     const STATUS_FAILED            = 'Failed';
@@ -113,14 +113,7 @@ class AuditLog extends Model
         };
     }
 
-    /**
-     * Quick log from a controller with a Request object.
-     * Used by other parts of the app (non-moderation).
-     *
-     * Example:
-     *   AuditLog::record($request, AuditLog::ACTION_LOGIN, 'Successful login from Chrome/Windows');
-     *   AuditLog::record($request, AuditLog::ACTION_LOGIN_FAILED, 'Invalid credentials', AuditLog::STATUS_CRITICAL);
-     */
+
     public static function record(
         Request $request,
         string  $action,
@@ -143,10 +136,6 @@ class AuditLog extends Model
 
     /**
      * Log a moderation action (approve / reject).
-     * Used by MediaModerationController::log()
-     *
-     * Example:
-     *   AuditLog::moderation('photo', $photo->id, AuditLog::ACTION_APPROVED, $admin, 'Looks good');
      */
     public static function moderation(
         string  $type,
@@ -172,10 +161,6 @@ class AuditLog extends Model
 
     /**
      * Log a revert action.
-     * Used by MediaModerationController::logRevert()
-     *
-     * Example:
-     *   AuditLog::revert('photo', $photo->id, 'approved', 'pending', $admin, 'Wrong photo');
      */
     public static function revert(
         string  $type,

@@ -10,17 +10,9 @@ use Illuminate\Foundation\Events\Dispatchable;
 use Illuminate\Queue\SerializesModels;
 
 /**
- * PhotoFacesAnalyzed
- * ─────────────────────────────────────────────────────────────
  * Fired by AnalyzePhotoFaces job when Rekognition completes.
  * Broadcasts on a public 'photos' channel so the React frontend
  * can update photo cards in real-time without a page refresh.
- *
- * Frontend (Laravel Echo + Pusher/Soketi):
- *   window.Echo.channel('photos')
- *     .listen('PhotoFacesAnalyzed', ({ photo_id, face_count, matches }) => {
- *       // update your local state for that photo card
- *     });
  */
 class PhotoFacesAnalyzed implements ShouldBroadcast
 {

@@ -10,24 +10,6 @@ use App\Services\Storage\CloudinaryService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
-/**
- * TranscriptController
- * ─────────────────────────────────────────────────────────────
- * GET    /api/transcripts                          → index
- * POST   /api/transcripts                          → store
- * GET    /api/transcripts/{id}                     → show
- * DELETE /api/transcripts/{id}                     → destroy
- * GET    /api/transcripts/{id}/subtitles           → subtitles
- * POST   /api/transcripts/{id}/notes               → regenerateNotes
- *
- * Filter params for index:
- *   ?graduation_photo_id=  → transcripts for a specific video (new)
- *   ?album_id=             → transcripts for an album (legacy fallback)
- *   ?q=                    → full-text search
- *   ?lang=                 → language filter
- *   ?status=               → status filter
- *   ?source=               → source filter
- */
 class TranscriptController extends Controller
 {
     public function __construct(
@@ -35,7 +17,7 @@ class TranscriptController extends Controller
         private readonly CloudinaryService    $cloudinary,
     ) {}
 
-    // ── List ──────────────────────────────────────────────────────────────
+    // List
 
     public function index(Request $request): JsonResponse
     {
@@ -43,17 +25,17 @@ class TranscriptController extends Controller
 
         $query = Transcript::visibleTo($userId)->latest();
 
-        // ── NEW: filter by specific graduation video ──────────────────────
+        // filter by specific graduation video 
         if ($photoId = $request->query('graduation_photo_id')) {
             $query->byPhoto((int) $photoId);
         }
 
-        // ── LEGACY: filter by album (for old transcripts without photo id) ─
+        // filter by album
         elseif ($albumId = $request->query('album_id')) {
             $query->byAlbum((int) $albumId);
         }
 
-        // ── Other filters ─────────────────────────────────────────────────
+        // Other filters 
         if ($search = $request->query('q')) {
             $query->where(function ($q) use ($search) {
                 $q->where('title',            'like', "%{$search}%")
@@ -69,7 +51,7 @@ class TranscriptController extends Controller
         return response()->json($query->paginate(10));
     }
 
-    // ── Manual upload ─────────────────────────────────────────────────────
+    // Manual upload
 
     public function store(Request $request): JsonResponse
     {
@@ -105,7 +87,7 @@ class TranscriptController extends Controller
         return response()->json($transcript, 201);
     }
 
-    // ── Show ──────────────────────────────────────────────────────────────
+    // Show 
 
     public function show(int $id, Request $request): JsonResponse
     {
@@ -116,7 +98,7 @@ class TranscriptController extends Controller
         return response()->json($transcript);
     }
 
-    // ── Delete ────────────────────────────────────────────────────────────
+    //Delete 
 
     public function destroy(int $id, Request $request): JsonResponse
     {
@@ -139,7 +121,7 @@ class TranscriptController extends Controller
         return response()->json(['deleted' => true]);
     }
 
-    // ── Subtitles ─────────────────────────────────────────────────────────
+    // Subtitles 
 
     public function subtitles(int $id, Request $request): \Symfony\Component\HttpFoundation\Response
     {
@@ -160,7 +142,7 @@ class TranscriptController extends Controller
             ->header('Content-Disposition', "attachment; filename=\"{$filename}\"");
     }
 
-    // ── Regenerate notes ──────────────────────────────────────────────────
+    // Regenerate notes 
 
     public function regenerateNotes(int $id, Request $request): JsonResponse
     {

@@ -15,14 +15,18 @@ const MENU_ITEMS = [
   { icon: 'fa-trash',    iconCls: 'text-red-500',     bg: 'bg-red-50',     label: 'Delete Post',             sub: 'Permanently remove this post', view: 'confirm_delete' },
 ];
 
-export default function PostContextMenu({ post, position, onClose, onDelete, onUpdated }) {
+const uniqueById = (users = []) => Array.from(
+  new Map(users.filter(Boolean).map(user => [String(user.id), user])).values()
+);
+
+export default function PostContextMenu({ post, onClose, onDelete, onUpdated }) {
   const { user: authUser } = useAuth();
   const sheetRef = useRef(null);
 
   const [view,        setView]        = useState('menu');
   const [caption,     setCaption]     = useState(post?.caption    ?? '');
   const [visibility,  setVisibility]  = useState(post?.visibility === 'friends' ? 'batchmates' : (post?.visibility ?? 'public'));
-  const [taggedUsers, setTaggedUsers] = useState(post?.tagged_users ?? []);
+  const [taggedUsers, setTaggedUsers] = useState(uniqueById(post?.tagged_users ?? []));
   const [saving,      setSaving]      = useState(false);
   const [error,       setError]       = useState(null);
 
@@ -42,7 +46,7 @@ export default function PostContextMenu({ post, position, onClose, onDelete, onU
     setSaving(true); setError(null);
     try {
       const { data } = await profileApi.updatePost(post.id, {
-        caption, visibility, tagged_user_ids: taggedUsers.map(u => u.id),
+        caption, visibility, tagged_user_ids: uniqueById(taggedUsers).map(u => u.id),
       });
       onUpdated?.(data.data ?? data);
       onClose();
@@ -68,7 +72,7 @@ export default function PostContextMenu({ post, position, onClose, onDelete, onU
       {/* Sheet */}
       <div className="fixed inset-0 z-[8001] flex items-center justify-center pointer-events-none">
         <div ref={sheetRef}
-          className="w-[400px] max-w-[92vw] bg-white rounded-2xl overflow-visible shadow-2xl border border-slate-100 pointer-events-auto font-sans"
+          className="w-[640px] min-w-[560px] max-w-[92vw] bg-white rounded-2xl overflow-visible shadow-2xl border border-slate-100 pointer-events-auto font-sans"
           style={{ animation: 'sheetUp 0.22s cubic-bezier(0.34,1.2,0.64,1)' }}
         >
 
@@ -76,21 +80,21 @@ export default function PostContextMenu({ post, position, onClose, onDelete, onU
           {view === 'menu' && (
             <>
               {/* Header */}
-              <div className="bg-gradient-to-r from-[#1d2b4b] to-[#2d4270] px-4 py-3.5 flex items-center gap-3 rounded-t-2xl">
-                <div className="w-11 h-11 rounded-xl overflow-hidden bg-white/10 border border-white/10 shrink-0 flex items-center justify-center">
+              <div className="bg-white px-8 py-7 flex items-center gap-3 rounded-t-2xl border-b border-[#f0f0f0]">
+                <div className="w-11 h-11 rounded-xl overflow-hidden bg-slate-100 border border-slate-100 shrink-0 flex items-center justify-center">
                   {post.ai_metadata?.resource_type === 'video'
                     ? <i className="fas fa-video text-[#fdb813] text-lg" />
                     : <img src={post.file_path} alt="" className="w-full h-full object-cover" />
                   }
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-white text-sm font-bold m-0 leading-none">Post Options</p>
-                  <p className="text-white/50 text-[11px] m-0 mt-1 truncate">
+                  <p className="text-[#1d2b4b] text-lg font-semibold m-0 leading-none">Post Options</p>
+                  <p className="text-slate-400 text-[11px] m-0 mt-1 truncate">
                     {post.caption ? (post.caption.length > 36 ? post.caption.slice(0, 36) + '…' : post.caption) : 'No caption'}
                   </p>
                 </div>
                 <button onClick={onClose}
-                  className="w-7 h-7 rounded-lg bg-white/10 hover:bg-white/20 border-none text-white/60 hover:text-white cursor-pointer flex items-center justify-center text-xs transition">
+                  className="w-7 h-7 rounded-lg bg-slate-100 hover:bg-slate-200 border-none text-slate-500 hover:text-[#1d2b4b] cursor-pointer flex items-center justify-center text-xs transition">
                   <i className="fas fa-times" />
                 </button>
               </div>
@@ -99,21 +103,21 @@ export default function PostContextMenu({ post, position, onClose, onDelete, onU
               {MENU_ITEMS.map((item, i, arr) => (
                 <button key={item.label}
                   onClick={() => setView(item.view)}
-                  className={`w-full flex items-center gap-3.5 px-5 py-3.5 bg-white hover:bg-slate-50 transition-colors cursor-pointer border-none text-left
-                    ${i < arr.length - 1 ? 'border-b border-slate-50' : ''}`}>
-                  <div className={`w-9 h-9 rounded-xl ${item.bg} flex items-center justify-center shrink-0`}>
-                    <i className={`fas ${item.icon} ${item.iconCls} text-sm`} />
+                  className={`w-full min-h-16 flex items-center gap-4 px-8 py-3 bg-white hover:bg-slate-50 transition-colors cursor-pointer border-x-0 border-t-0 text-left
+                    ${i < arr.length - 1 ? 'border-b border-[#f0f0f0]' : 'border-b-0'}`}>
+                  <div className={`w-10 h-10 rounded-xl ${item.bg} flex items-center justify-center shrink-0`}>
+                    <i className={`fas ${item.icon} ${item.iconCls} text-xl`} />
                   </div>
                   <div className="flex-1">
-                    <p className="text-sm font-semibold text-[#1d2b4b] m-0">{item.label}</p>
-                    <p className="text-xs text-slate-400 m-0 mt-0.5">{item.sub}</p>
+                    <p className="text-[15px] font-medium text-[#1d2b4b] m-0">{item.label}</p>
+                    <p className="text-[13px] text-slate-400 m-0 mt-0.5">{item.sub}</p>
                   </div>
-                  <i className="fas fa-chevron-right text-slate-200 text-xs" />
+                  <i className="fas fa-chevron-right text-slate-400 text-base" />
                 </button>
               ))}
 
               <button onClick={onClose}
-                className="w-full py-3.5 text-center text-sm font-semibold text-slate-400 bg-white hover:bg-slate-50 transition-colors cursor-pointer border-none border-t border-slate-100 rounded-b-2xl">
+                className="mx-8 mb-7 mt-2 h-12 w-[calc(100%-64px)] text-center text-sm font-semibold text-slate-500 bg-transparent hover:bg-slate-50 transition-colors cursor-pointer border border-slate-200 rounded-xl">
                 Cancel
               </button>
             </>
@@ -123,19 +127,21 @@ export default function PostContextMenu({ post, position, onClose, onDelete, onU
           {view === 'edit' && (
             <>
               <SubHeader title="Edit Post" onBack={back} onAction={saveEdit} actionLabel={saving ? 'Saving…' : 'Save'} saving={saving} />
-              <div className="p-5">
+              <div className="px-8 py-7">
                 <FieldLabel>Caption</FieldLabel>
                 <textarea value={caption} onChange={e => setCaption(e.target.value)} rows={4}
                   placeholder="Write a caption…"
-                  className="w-full px-3 py-2.5 border-2 border-slate-200 focus:border-[#1d2b4b] rounded-xl resize-none text-sm text-[#1d2b4b] outline-none bg-slate-50 font-sans leading-relaxed transition-colors mb-4 box-border"
+                  className="w-full min-h-[140px] p-3 border border-[#e0e0e0] focus:border-[#1d2b4b] rounded-lg resize-y text-[15px] text-[#1d2b4b] outline-none bg-white font-sans leading-relaxed transition-colors mb-6 box-border"
                   style={{ fontFamily: 'inherit' }}
                 />
                 <FieldLabel>Visibility</FieldLabel>
-                <div className="flex gap-2">
-                  {VIS_OPTS.map(opt => (
+                <div className="flex gap-0">
+                  {VIS_OPTS.map((opt, index) => (
                     <button key={opt.value} onClick={() => setVisibility(opt.value)}
-                      className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-[11px] font-bold transition-all cursor-pointer border-2
-                        ${visibility === opt.value ? 'border-[#1d2b4b] bg-[#1d2b4b] text-[#fdb813]' : 'border-slate-200 bg-slate-50 text-slate-400 hover:border-slate-300'}`}>
+                      className={`h-11 flex-1 flex items-center justify-center gap-1.5 text-sm font-medium transition-all cursor-pointer border
+                        ${index === 0 ? 'rounded-l-lg' : '-ml-px'}
+                        ${index === VIS_OPTS.length - 1 ? 'rounded-r-lg' : ''}
+                        ${visibility === opt.value ? 'border-[#1d2b4b] bg-[#1d2b4b] text-white' : 'border-[#1d2b4b] bg-white text-[#1d2b4b] hover:bg-slate-50'}`}>
                       <i className={`fas ${opt.icon} text-[10px]`} /> {opt.label}
                     </button>
                   ))}
@@ -149,11 +155,11 @@ export default function PostContextMenu({ post, position, onClose, onDelete, onU
           {view === 'tag' && (
             <>
               <SubHeader title="Tag People" onBack={back} onAction={saveEdit} actionLabel={saving ? 'Saving…' : 'Done'} saving={saving} />
-              <div className="p-5" style={{ minHeight: 260, overflow: 'visible' }}>
+              <div className="px-8 py-7" style={{ minHeight: 260, overflow: 'visible' }}>
                 <TagPeopleSearch
                   tagged={taggedUsers}
-                  onTag={u   => setTaggedUsers(prev => [...prev.filter(x => x.id !== u.id), u])}
-                  onUntag={uid => setTaggedUsers(prev => prev.filter(u => u.id !== uid))}
+                  onTag={u   => setTaggedUsers(prev => prev.some(x => String(x.id) === String(u.id)) ? prev : [...prev, u])}
+                  onUntag={uid => setTaggedUsers(prev => prev.filter(u => String(u.id) !== String(uid)))}
                   excludeId={authUser?.id}
                 />
                 {error && <ErrorMsg msg={error} />}
@@ -164,21 +170,21 @@ export default function PostContextMenu({ post, position, onClose, onDelete, onU
           {/* ── CONFIRM DELETE ── */}
           {view === 'confirm_delete' && (
             <>
-              <div className="px-6 py-7 text-center border-b border-slate-100">
-                <div className="w-14 h-14 rounded-full bg-red-50 flex items-center justify-center mx-auto mb-4">
-                  <i className="fas fa-trash text-red-500 text-xl" />
+              <div className="px-8 py-7 text-center border-b border-[#f0f0f0]">
+                <div className="w-16 h-16 rounded-full bg-[#FEF2F2] flex items-center justify-center mx-auto mb-4">
+                  <i className="fas fa-trash text-[#DC2626] text-2xl" />
                 </div>
-                <h3 className="text-base font-black text-[#1d2b4b] mb-2">Delete this post?</h3>
-                <p className="text-sm text-slate-400 leading-relaxed m-0">
+                <h3 className="text-lg font-semibold text-[#1d2b4b] mb-2">Delete this post?</h3>
+                <p className="mx-auto max-w-[320px] text-sm text-slate-400 leading-[1.6] m-0">
                   This will permanently remove the photo. This action cannot be undone.
                 </p>
               </div>
               <button onClick={confirmDelete}
-                className="w-full py-4 text-red-500 text-sm font-bold bg-white hover:bg-red-50 transition-colors cursor-pointer border-none border-b border-slate-100">
+                className="w-full h-12 text-[#DC2626] text-[15px] font-semibold bg-transparent hover:bg-red-50 transition-colors cursor-pointer border-x-0 border-t border-b border-[#f0f0f0]">
                 Delete Permanently
               </button>
               <button onClick={() => setView('menu')}
-                className="w-full py-4 text-slate-500 text-sm font-medium bg-white hover:bg-slate-50 transition-colors cursor-pointer border-none rounded-b-2xl">
+                className="w-full h-12 text-[#1d2b4b]/70 text-[15px] font-medium bg-transparent hover:bg-slate-50 transition-colors cursor-pointer border-none rounded-b-2xl">
                 Cancel
               </button>
             </>
@@ -192,14 +198,14 @@ export default function PostContextMenu({ post, position, onClose, onDelete, onU
 
 function SubHeader({ title, onBack, onAction, actionLabel, saving }) {
   return (
-    <div className="flex items-center px-5 py-3.5 border-b border-slate-100 bg-slate-50 rounded-t-2xl">
+    <div className="relative flex items-center px-8 py-5 border-b border-slate-100 bg-white rounded-t-2xl">
       <button onClick={onBack}
-        className="flex items-center gap-1.5 text-slate-500 hover:text-[#1d2b4b] text-sm font-semibold transition-colors cursor-pointer border-none bg-transparent p-0">
+        className="flex items-center gap-1.5 text-slate-500 hover:text-[#1d2b4b] text-[15px] font-medium transition-colors cursor-pointer border-none bg-transparent p-0">
         <i className="fas fa-arrow-left text-xs" /> Back
       </button>
-      <span className="text-sm font-black text-[#1d2b4b] mx-auto">{title}</span>
+      <span className="absolute left-1/2 -translate-x-1/2 text-lg font-semibold text-[#1d2b4b]">{title}</span>
       <button onClick={onAction} disabled={saving}
-        className="text-[#fdb813] text-sm font-bold border-none bg-transparent cursor-pointer p-0 disabled:opacity-50">
+        className="ml-auto text-[#F5A623] text-[15px] font-semibold border-none bg-transparent cursor-pointer p-0 disabled:opacity-50">
         {actionLabel}
       </button>
     </div>
@@ -207,7 +213,7 @@ function SubHeader({ title, onBack, onAction, actionLabel, saving }) {
 }
 
 function FieldLabel({ children }) {
-  return <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 m-0">{children}</p>;
+  return <p className="text-[11px] font-semibold text-[#F5A623] uppercase tracking-[0.8px] mb-2 m-0">{children}</p>;
 }
 
 function ErrorMsg({ msg }) {

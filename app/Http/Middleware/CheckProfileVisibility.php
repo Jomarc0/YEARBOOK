@@ -15,7 +15,7 @@ class CheckProfileVisibility
             return $next($request);
         }
 
-        $profile = User::find($profileId);
+        $profile = User::with(['section', 'studentRecord'])->find($profileId);
         if (! $profile) {
             return $next($request);
         }
@@ -30,6 +30,7 @@ class CheckProfileVisibility
             return response()->json([
                 'message'    => 'This profile is private.',
                 'visibility' => 'private',
+                'student'    => $this->publicProfilePayload($profile),
             ], 403);
         }
 
@@ -37,6 +38,7 @@ class CheckProfileVisibility
             return response()->json([
                 'message'    => 'Login required to view this profile.',
                 'visibility' => 'batchmates',
+                'student'    => $this->publicProfilePayload($profile),
             ], 401);
         }
 
@@ -44,6 +46,7 @@ class CheckProfileVisibility
             return response()->json([
                 'message'    => 'This profile is visible to batchmates only.',
                 'visibility' => 'batchmates',
+                'student'    => $this->publicProfilePayload($profile),
             ], 403);
         }
 
@@ -69,5 +72,27 @@ class CheckProfileVisibility
     private function isBatchmatesOnly(User $profile): bool
     {
         return in_array($profile->profile_visibility, ['batchmates', 'alumni_only'], true);
+    }
+
+    private function publicProfilePayload(User $profile): array
+    {
+        $record = $profile->studentRecord;
+
+        return [
+            'id' => $profile->id,
+            'name' => $profile->name,
+            'first_name' => $profile->first_name,
+            'last_name' => $profile->last_name,
+            'profile_picture' => $profile->profile_picture,
+            'photo' => $record?->photo,
+            'course' => $profile->course ?: $record?->course,
+            'course_short' => $profile->course_short,
+            'section' => [
+                'name' => $profile->section?->name ?: $record?->section,
+                'batch_year' => $profile->section?->batch_year,
+            ],
+            'graduation_year' => $profile->graduation_year ?: $profile->batch ?: $record?->graduation_year,
+            'batch' => $profile->batch,
+        ];
     }
 }

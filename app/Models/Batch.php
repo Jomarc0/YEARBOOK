@@ -29,8 +29,7 @@ class Batch extends Model
         ];
     }
 
-    // ── Relationships ──────────────────────────────────────────────────────
-
+    // Relationships 
     public function sections(): HasMany
     {
         return $this->hasMany(Section::class);
@@ -41,15 +40,14 @@ class Batch extends Model
         return $this->hasMany(Student::class);
     }
 
-    // ── Accessors ─────────────────────────────────────────────────────────
+    // Accessors
 
     public function getYearAttribute(): int
     {
         return $this->graduation_year;
     }
 
-    // ── Scopes ────────────────────────────────────────────────────────────
-
+    // Scopes 
     public function scopeByYear($query, int $year)
     {
         return $query->where('graduation_year', $year);

@@ -71,6 +71,8 @@ export default function FilterDropdown({ label, options, value, onChange, icon =
                 );
               }}
               style={styles.optionList}
+              contentContainerStyle={styles.optionListContent}
+              showsVerticalScrollIndicator={false}
             />
           </View>
         </View>
@@ -106,7 +108,8 @@ const styles = StyleSheet.create({
   sheetHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 },
   sheetTitle: { color: colors.navy, fontSize: 18, fontWeight: '900' },
   closeButton: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center', backgroundColor: '#f1f5f9' },
-  optionList: { marginTop: 4 },
+  optionList: { marginTop: 4, maxHeight: 430 },
+  optionListContent: { paddingBottom: 8 },
   option: { minHeight: 52, borderRadius: 14, flexDirection: 'row', alignItems: 'center', gap: 11, paddingHorizontal: 12, marginBottom: 7, backgroundColor: '#f8fafc', borderWidth: 1, borderColor: '#edf2f7' },
   optionActive: { backgroundColor: colors.navy, borderColor: colors.navy },
   optionIcon: { width: 30, height: 30, borderRadius: 9, alignItems: 'center', justifyContent: 'center', backgroundColor: '#ffffff' },

@@ -76,7 +76,7 @@ export default function VoiceRecorder({ onSave, maxSeconds = 300 }) {
           return s + 1;
         });
       }, 1000);
-    } catch (err) {
+    } catch {
       alert('Microphone access denied. Please allow microphone access and try again.');
     }
   };

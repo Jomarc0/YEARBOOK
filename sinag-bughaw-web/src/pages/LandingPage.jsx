@@ -11,9 +11,9 @@ const NAV_LINKS = [
 ];
 
 const STATS = [
-  { icon: 'fas fa-user-graduate', value: '12,500+', label: 'Graduates',  color: 'bg-indigo-50 text-[#3f51b5]' },
-  { icon: 'fas fa-book-open',     value: '35+',     label: 'Programs',   color: 'bg-amber-50  text-amber-600'  },
-  { icon: 'fas fa-images',        value: '50k+',    label: 'Photos',     color: 'bg-emerald-50 text-emerald-600' },
+  { icon: 'fas fa-user-graduate', value: '12,500+', label: 'Graduates' },
+  { icon: 'fas fa-book-open',     value: '35+',     label: 'Programs'  },
+  { icon: 'fas fa-images',        value: '50k+',    label: 'Photos'    },
 ];
 
 const EXPLORE = [
@@ -53,9 +53,14 @@ const FEATURES = [
 export default function LandingPage() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [scrolled,   setScrolled]   = useState(false);
+  const [hideScroll, setHideScroll] = useState(false);
 
   useEffect(() => {
-    const onScroll = () => setScrolled(window.scrollY > 20);
+    const onScroll = () => {
+      setScrolled(window.scrollY > 80);
+      setHideScroll(window.scrollY > 100);
+    };
+    onScroll();
     window.addEventListener('scroll', onScroll, { passive: true });
     return () => window.removeEventListener('scroll', onScroll);
   }, []);
@@ -64,8 +69,8 @@ export default function LandingPage() {
     <div className="min-h-screen flex flex-col bg-white text-[#1d2b4b] antialiased">
 
       {/* ── Navbar ──────────────────────────────────────────────────────────── */}
-      <nav className={`fixed top-0 left-0 w-full z-50 transition-all duration-300 ${
-        scrolled ? 'bg-[#1d2b4b]/95 backdrop-blur-md shadow-lg' : 'bg-transparent'
+      <nav className={`fixed top-0 left-0 w-full z-50 transition-[background] duration-300 ease-in-out ${
+        scrolled ? 'bg-[#1B2A4A] shadow-md' : 'bg-transparent'
       }`}>
         <div className="max-w-7xl mx-auto px-5 sm:px-8 flex items-center justify-between h-16 sm:h-18">
 
@@ -177,25 +182,27 @@ export default function LandingPage() {
               to="/register"
               className="inline-flex items-center gap-2.5 border-2 border-white/30 text-white font-semibold text-sm px-8 py-4 rounded-xl no-underline hover:bg-white/10 hover:border-white/50 transition-all"
             >
-              Join the Community
+              Join Free
               <i className="fas fa-arrow-right text-xs" />
             </Link>
           </div>
         </div>
 
         {/* Scroll indicator */}
-        <div className="absolute bottom-8 left-1/2 -translate-x-1/2 flex flex-col items-center gap-1.5 text-white/40 animate-bounce">
-          <span className="text-[10px] uppercase tracking-widest font-semibold">Scroll</span>
-          <i className="fas fa-chevron-down text-xs" />
-        </div>
+        {!hideScroll && (
+          <div className="absolute bottom-8 left-1/2 -translate-x-1/2 flex flex-col items-center gap-1.5 text-white/80">
+            <span className="text-[10px] uppercase tracking-widest font-semibold">Scroll</span>
+            <i className="fas fa-chevron-down text-xs animate-bounce" />
+          </div>
+        )}
       </section>
 
       {/* ── Stats ───────────────────────────────────────────────────────────── */}
       <section className="max-w-5xl mx-auto px-5 sm:px-8 w-full -mt-8 relative z-20">
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          {STATS.map(({ icon, value, label, color }) => (
+          {STATS.map(({ icon, value, label }) => (
             <div key={label} className="bg-white rounded-2xl px-6 py-6 flex items-center gap-4 shadow-xl shadow-slate-200/80 border border-slate-100">
-              <div className={`w-14 h-14 rounded-xl flex items-center justify-center text-xl shrink-0 ${color}`}>
+              <div className="w-14 h-14 rounded-xl flex items-center justify-center text-xl shrink-0 bg-amber-400/15 text-[#F5A623]">
                 <i className={icon} />
               </div>
               <div>
@@ -234,7 +241,7 @@ export default function LandingPage() {
                 </span>
 
                 {/* Bottom content */}
-                <div className="absolute bottom-0 left-0 w-full p-7 bg-gradient-to-t from-black/90 via-black/50 to-transparent text-white">
+                <div className="absolute bottom-0 left-0 w-full p-7 bg-[linear-gradient(to_top,rgba(0,0,0,0.85)_0%,rgba(0,0,0,0.3)_60%,rgba(0,0,0,0.1)_100%)] text-white">
                   <h3 className="text-xl font-black mb-2 group-hover:text-[#fdb813] transition-colors">{title}</h3>
                   <p className="text-sm text-white/75 leading-relaxed mb-4">{desc}</p>
                   <span className="inline-flex items-center gap-1.5 text-xs font-bold text-[#fdb813] group-hover:gap-3 transition-all">

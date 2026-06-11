@@ -46,7 +46,7 @@ export const mediaApi = {
   },
 
   deletePhoto: (photoId) => client.delete(`/media/photo/${photoId}`),
-  bandwidth:   ()        => client.get('/media/bandwidth'),
+  bandwidth:   ()        => client.get('/profile/storage-usage'),
 };
 
 export const faceApi = {

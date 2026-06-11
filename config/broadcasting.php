@@ -3,18 +3,15 @@
 return [
 
     /*
-    |--------------------------------------------------------------------------
-    | Default Broadcaster
-    |--------------------------------------------------------------------------
-    | Supported: "reverb", "pusher", "ably", "redis", "log", "null"
+
+    Default Broadcaster
+    Supported: "reverb", "pusher", "ably", "redis", "log", "null"
     */
 
     'default' => env('BROADCAST_DRIVER', 'reverb'),
 
-    /*
-    |--------------------------------------------------------------------------
-    | Broadcast Connections
-    |--------------------------------------------------------------------------
+    /*---------------
+    Broadcast Connections
     */
 
     'connections' => [

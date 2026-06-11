@@ -10,6 +10,8 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { downloadYearbookPdf, yearbookApi } from '../../../api/yearbook.api';
 
+const TOC_ENTRIES_PER_PAGE = 7;
+
 export function useYearbook(batchId, scope = {}) {
   const [state, setState] = useState({
     loading:       true,
@@ -45,7 +47,7 @@ export function useYearbook(batchId, scope = {}) {
         yearbookApi.getBookmarks(batchId),
       ]);
 
-      // Backend response shape: { meta: {...}, pages: [...] }
+      // Backend response shape: { meta: {...}, toc: [...], pages: [...] }
       const serverMeta  = pagesRes.data?.meta  ?? {};
       const pages       = pagesRes.data?.pages ?? [];
 
@@ -58,18 +60,34 @@ export function useYearbook(batchId, scope = {}) {
 
       const bookmarks = bookmarksRes.data ?? [];
 
-      // Build TOC from the page manifest returned by the server
-      const toc = buildTOC(pages);
+      const serverToc = pagesRes.data?.toc;
+      const tocFromPages = pages.find((page) => page?.type === 'toc' && Array.isArray(page?.toc))?.toc;
+      const toc = Array.isArray(serverToc) && serverToc.length
+        ? serverToc
+        : Array.isArray(tocFromPages) && tocFromPages.length
+          ? tocFromPages
+          : buildTOC(pages);
 
-      // Patch TOC pages (index 2 & 3) with the real toc data
-      if (pages[2]?.type === 'toc') pages[2].toc = toc;
-      if (pages[3]?.type === 'toc') pages[3].toc = toc;
+      const firstTocIndex = pages.findIndex((page) => page?.type === 'toc');
+      const pagesWithToc = pages.map((page, index) => {
+        if (page?.type !== 'toc') return page;
+
+        const tocOffset = firstTocIndex >= 0
+          ? Math.max(0, index - firstTocIndex) * TOC_ENTRIES_PER_PAGE
+          : 0;
+
+        return {
+          ...page,
+          toc,
+          tocStart: Number.isFinite(page.tocStart) ? page.tocStart : tocOffset,
+        };
+      });
 
       setState({
         loading:       false,
         error:         null,
         meta,
-        pages,
+        pages:         pagesWithToc,
         toc,
         bookmarks,
         searchResults: null,
@@ -182,6 +200,7 @@ function tocEntry(page, idx) {
     'cover':          { label: 'Cover',                          icon: 'book'      },
     'dedication':     null,
     'toc':            { label: 'Contents',                       icon: 'list'      },
+    'course-header':  { label: page.course?.name ?? 'Course',     icon: 'book'      },
     'section-header': { label: sectionLabel(page.section),       icon: 'users'     },
     'student-grid':   null,
     'student-profile': null,

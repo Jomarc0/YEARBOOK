@@ -7,17 +7,13 @@ namespace App\Http\Requests\Yearbook;
 use Illuminate\Foundation\Http\FormRequest;
 
 /**
- * UploadMediaRequest
- *
  * Validates single and bulk media uploads.
- * Tier-specific size limits are enforced inside CloudinaryService;
- * these rules provide baseline HTTP-level validation only.
  */
 class UploadMediaRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return true; // Gate/Policy authorization handled at route or controller level
+        return true; 
     }
 
     /**
@@ -26,11 +22,11 @@ class UploadMediaRequest extends FormRequest
     public function rules(): array
     {
         return [
-            // ── Single upload ────────────────────────────────────────────────
+            // Single upload
             'file'          => ['sometimes', 'file', 'max:102400'],  // 100 MB HTTP cap
             'folder'        => ['sometimes', 'string', 'max:100', 'alpha_dash'],
 
-            // ── Bulk upload ──────────────────────────────────────────────────
+            //  Bulk upload
             'files'         => ['sometimes', 'array', 'min:1', 'max:50'],
             'files.*'       => ['file', 'max:102400'],
             'bulk_folder'   => ['sometimes', 'string', 'max:100', 'alpha_dash'],

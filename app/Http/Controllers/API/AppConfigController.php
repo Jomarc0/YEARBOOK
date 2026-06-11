@@ -10,7 +10,6 @@ class AppConfigController extends Controller
 {
     /**
      * GET /api/app-config
-     * Public, read-only platform settings for the student web app.
      */
     public function show(): JsonResponse
     {

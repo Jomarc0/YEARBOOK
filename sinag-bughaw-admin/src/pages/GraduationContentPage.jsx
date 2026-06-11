@@ -42,7 +42,7 @@ const T = {
 const CONTENT_TYPES = [
   { key: "photos",      label: "Photos",       icon: "PHO", accept: "image/*",              multiple: true },
   { key: "videos",      label: "Videos",       icon: "VID", accept: "video/*",              multiple: true },
-  { key: "program",     label: "Program",      icon: "PDF", accept: ".pdf",                 multiple: true },
+  { key: "program",     label: "Program",      icon: "PRG", accept: ".pdf,image/*",         multiple: true },
   { key: "invitations", label: "Invitations",  icon: "INV", accept: ".pdf,image/*",         multiple: true },
   { key: "songs",       label: "Grad Song",    icon: "AUD", accept: "audio/*,video/*",      multiple: true },
   { key: "mass",        label: "Mass",         icon: "MAS", accept: "video/*",              multiple: true },
@@ -295,7 +295,7 @@ function FileThumb({ photo, idx, onLightbox }) {
 // ═════════════════════════════════════════════════════════════════════════════
 // ALBUM DETAIL MODAL
 // ═════════════════════════════════════════════════════════════════════════════
-function AlbumDetailModal({ open, albumId, album: albumProp, contentType, isAdmin, onClose, onAddFiles, onRefresh, toast }) {
+function AlbumDetailModal({ open, albumId, album: albumProp, contentType, isAdmin, onClose, onAddFiles, onRefresh: _onRefresh, toast }) {
   const [photos,        setPhotos]        = useState([]);
   const [albumData,     setAlbumData]     = useState(null);
   const [loading,       setLoading]       = useState(false);

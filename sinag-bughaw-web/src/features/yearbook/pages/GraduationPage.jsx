@@ -1,22 +1,27 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import Navbar from '@/components/layout/Navbar';
 import Footer from '@/components/layout/Footer';
 import { graduationApi } from '@/api/yearbook.api';
 import { galleryApi } from '@/api/gallery.api';
 import FaceSearchButton from '@/components/ui/FaceSearchButton';
-import { imageUrl, avatarUrl } from '@/utils/imageUrl';
 
 const TABS = [
-  { key: 'photos',     label: 'Photos',        icon: 'fa-images' },
+  { key: 'photos',     label: 'Graduation',    icon: 'fa-graduation-cap' },
   { key: 'videos',     label: 'Videos',        icon: 'fa-film' },
+  { key: 'mass',       label: 'Baccalaureate', icon: 'fa-church' },
   { key: 'program',    label: 'Program',       icon: 'fa-file-pdf' },
   { key: 'invitation', label: 'Invitation',    icon: 'fa-envelope-open-text' },
   { key: 'song',       label: 'Grad Song',     icon: 'fa-music' },
-  { key: 'mass',       label: 'Baccalaureate', icon: 'fa-church' },
 ];
 
 const VALID_TABS = TABS.map(t => t.key);
+const isImageMedia = (url = '') => /\.(jpg|jpeg|png|webp|gif)(\?|$)/i.test(String(url));
+const primaryProgramMedia = (album) => album.media_url
+  || album.mediaFiles?.[0]?.file_path
+  || album.media_files?.[0]?.file_path
+  || album.photos?.[0]?.file_path
+  || '';
 
 // ─── Album Card ───────────────────────────────────────────────────────────────
 function AlbumCard({ album }) {
@@ -96,13 +101,25 @@ function VideoCard({ album, badge }) {
 
 // ─── Program Card ─────────────────────────────────────────────────────────────
 function ProgramCard({ album }) {
+  const mediaUrl = primaryProgramMedia(album);
+  const imageProgram = isImageMedia(mediaUrl);
+  const openProgram = () => {
+    if (mediaUrl) window.open(mediaUrl, '_blank', 'noopener,noreferrer');
+  };
+
   return (
     <div className="rounded-3xl bg-white p-6 flex gap-5 items-start"
       style={{ boxShadow: '0 4px 20px rgba(29,43,75,0.07)', border: '1px solid rgba(0,0,0,0.04)' }}>
-      <div className="flex-shrink-0 w-14 h-14 rounded-2xl flex items-center justify-center"
-        style={{ background: 'rgba(253,184,19,0.12)' }}>
-        <i className="fas fa-file-pdf text-2xl" style={{ color: '#fdb813' }} />
-      </div>
+      {imageProgram ? (
+        <div className="flex-shrink-0 w-20 h-20 rounded-2xl overflow-hidden" style={{ background: '#1d2b4b' }}>
+          <img src={mediaUrl} alt={album.title} className="w-full h-full object-cover" />
+        </div>
+      ) : (
+        <div className="flex-shrink-0 w-14 h-14 rounded-2xl flex items-center justify-center"
+          style={{ background: 'rgba(253,184,19,0.12)' }}>
+          <i className="fas fa-file-pdf text-2xl" style={{ color: '#fdb813' }} />
+        </div>
+      )}
       <div className="flex-1 min-w-0">
         <h3 className="font-extrabold text-base mb-1" style={{ color: '#1d2b4b' }}>{album.title}</h3>
         {album.description && <p className="text-sm mb-3" style={{ color: '#64748b' }}>{album.description}</p>}
@@ -113,12 +130,12 @@ function ProgramCard({ album }) {
           </p>
         )}
         <div className="flex gap-3 flex-wrap">
-          <a href={album.media_url} target="_blank" rel="noreferrer"
+          <button type="button" onClick={openProgram}
             className="inline-flex items-center gap-2 text-sm font-bold text-white no-underline px-4 py-2 rounded-xl"
-            style={{ background: '#1d2b4b' }}>
+            style={{ background: '#1d2b4b', border: 0, cursor: 'pointer', fontFamily: 'inherit' }}>
             <i className="fas fa-eye" /> View Program
-          </a>
-          <a href={album.media_url} download
+          </button>
+          <a href={mediaUrl} download
             className="inline-flex items-center gap-2 text-sm font-bold no-underline px-4 py-2 rounded-xl"
             style={{ background: 'rgba(253,184,19,0.15)', color: '#1d2b4b' }}>
             <i className="fas fa-download" /> Download
@@ -130,7 +147,7 @@ function ProgramCard({ album }) {
 }
 
 // ─── Invitation Card ──────────────────────────────────────────────────────────
-function InvitationCard({ album }) {
+function InvitationCard({ album, onView }) {
   return (
     <div className="rounded-3xl overflow-hidden bg-white transition-all duration-300"
       style={{ boxShadow: '0 4px 20px rgba(29,43,75,0.07)', border: '1px solid rgba(0,0,0,0.04)' }}
@@ -138,6 +155,7 @@ function InvitationCard({ album }) {
       onMouseLeave={e => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = '0 4px 20px rgba(29,43,75,0.07)'; }}>
       <div className="flex items-center justify-center"
         style={{ height: '240px', background: 'linear-gradient(135deg,#1d2b4b,#2a3d66)', overflow: 'hidden' }}>
+        {/* WARNING before launch: replace any stock invitation asset that says "COLLEGE NAME" or "Lorem ipsum" with the real NU Lipa graduation invitation. */}
         {album.media_url?.match(/\.(jpg|jpeg|png|webp)$/i)
           ? <img src={album.media_url} alt={album.title} className="w-full h-full object-cover" />
           : <div className="flex flex-col items-center gap-3">
@@ -156,11 +174,11 @@ function InvitationCard({ album }) {
           </p>
         )}
         <div className="flex gap-3">
-          <a href={album.media_url} target="_blank" rel="noreferrer"
+          <button type="button" onClick={() => onView(album)}
             className="inline-flex items-center gap-2 text-sm font-bold text-white no-underline px-4 py-2 rounded-xl"
-            style={{ background: '#1d2b4b' }}>
+            style={{ background: '#1d2b4b', border: 0, cursor: 'pointer', fontFamily: 'inherit' }}>
             <i className="fas fa-eye" /> View
-          </a>
+          </button>
           <a href={album.media_url} download
             className="inline-flex items-center gap-2 text-sm font-bold no-underline px-4 py-2 rounded-xl"
             style={{ background: 'rgba(253,184,19,0.15)', color: '#1d2b4b' }}>
@@ -173,6 +191,45 @@ function InvitationCard({ album }) {
 }
 
 // ─── Song Card ────────────────────────────────────────────────────────────────
+function InvitationLightbox({ album, onClose }) {
+  if (!album) return null;
+
+  return (
+    <div
+      className="fixed inset-0 z-[1000] flex items-center justify-center bg-slate-900/35 px-4 py-8 backdrop-blur-sm"
+      role="dialog"
+      aria-modal="true"
+      onClick={onClose}
+    >
+      <div className="relative flex max-h-full w-full max-w-5xl flex-col items-center rounded-3xl border border-slate-200 bg-white p-4 shadow-2xl sm:p-5" onClick={e => e.stopPropagation()}>
+        <button
+          type="button"
+          aria-label="Close invitation viewer"
+          onClick={onClose}
+          className="absolute -right-3 -top-3 z-10 flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 shadow-lg transition hover:bg-slate-50 hover:text-[#1d2b4b]"
+        >
+          <i className="fas fa-xmark" />
+        </button>
+        <img
+          src={album.media_url}
+          alt={album.title}
+          className="block max-h-[76vh] max-w-full rounded-2xl bg-slate-50 object-contain"
+        />
+        <div className="flex w-full flex-col items-center gap-3 px-1 pt-4 text-center sm:flex-row sm:justify-between sm:text-left">
+          <h3 className="m-0 text-base font-extrabold text-[#1d2b4b]">{album.title}</h3>
+          <a
+            href={album.media_url}
+            download
+            className="inline-flex items-center gap-2 rounded-xl bg-[#fdb813] px-4 py-2 text-sm font-bold text-[#1d2b4b] no-underline"
+          >
+            <i className="fas fa-download" /> Download
+          </a>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function SongCard({ album }) {
   const mediaRef               = useRef(null);
   const [playing,  setPlaying] = useState(false);
@@ -278,7 +335,8 @@ export default function GraduationPage() {
   const [data,      setData]      = useState([]);
   const [loading,   setLoading]   = useState(true);
   const [searching, setSearching] = useState(false);
-  const [matches,   setMatches]   = useState([]);
+  const [invitationViewer, setInvitationViewer] = useState(null);
+  const [,          setMatches]   = useState([]);
 
   const loadData = (tab = activeTab) => {
     setLoading(true);
@@ -310,33 +368,30 @@ export default function GraduationPage() {
     }
   };
 
-  const primaryTabs   = TABS.slice(0, 3);
-  const secondaryTabs = TABS.slice(3);
-
   return (
     <div className="min-h-screen flex flex-col" style={{ background: '#f8fafc', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
       <Navbar />
 
       {/* Hero */}
       <header className="text-white text-center"
-        style={{ background: 'linear-gradient(135deg,#1d2b4b 0%,#2a3d66 100%)', padding: '80px 8% 130px', borderRadius: '0 0 60px 60px' }}>
-        <p className="text-xs font-bold uppercase tracking-widest mb-3 opacity-60">Class Milestones</p>
-        <h1 className="font-extrabold mb-4" style={{ fontSize: '3rem', letterSpacing: '-2px' }}>
+        style={{ background: 'linear-gradient(135deg,#1d2b4b 0%,#2a3d66 100%)', minHeight: '150px', padding: '20px 8% 54px', borderRadius: '0 0 24px 24px' }}>
+        <p className="text-[10px] font-bold uppercase tracking-widest mb-1.5 opacity-60">Class Milestones</p>
+        <h1 className="font-extrabold mb-1.5" style={{ fontSize: '2rem', letterSpacing: '-0.5px' }}>
           Graduation <span style={{ color: '#fdb813' }}>Hub</span>
         </h1>
-        <p className="font-light mx-auto opacity-80 mb-6" style={{ fontSize: '1rem', maxWidth: '540px' }}>
+        <p className="font-light mx-auto opacity-80 mb-3" style={{ fontSize: '0.86rem', maxWidth: '540px' }}>
           Photos, videos, programs, ceremonies, and memories — all in one place.
         </p>
 
         {/* Face search bar */}
-        <div className="max-w-[600px] mx-auto mb-6">
+        <div className="max-w-[600px] mx-auto">
           <div className="relative">
             <i className="fas fa-search absolute left-[18px] top-1/2 -translate-y-1/2 text-[#fdb813] text-[15px] z-[1] pointer-events-none" />
             <input
               type="text" readOnly
               onClick={() => document.querySelector('#grad-face-search-hidden')?.click()}
               placeholder={searching ? 'Searching…' : 'Click the camera icon to search by face…'}
-              className="w-full h-[52px] pl-[50px] pr-14 border border-white/15 rounded-[14px] outline-none
+              className="w-full h-10 pl-[50px] pr-14 border border-white/15 rounded-[14px] outline-none
                          bg-white/10 backdrop-blur-xl text-white text-sm font-medium cursor-pointer
                          focus:bg-white/[0.18] focus:border-[#fdb813]/60 transition-all placeholder-white/50 box-border"
             />
@@ -354,33 +409,22 @@ export default function GraduationPage() {
       </header>
 
       {/* Tabs */}
-      <div className="mx-auto px-5" style={{ maxWidth: '1000px', width: '100%', marginTop: '-55px' }}>
-        <div className="bg-white flex gap-2 p-2 rounded-2xl mb-2"
-          style={{ boxShadow: '0 18px 36px rgba(29,43,75,0.1)' }}>
-          {primaryTabs.map(tab => (
+      <div className="mx-auto px-5" style={{ maxWidth: '1000px', width: '100%', marginTop: '-30px' }}>
+        <div className="bg-white flex flex-nowrap gap-2 overflow-x-auto p-2 rounded-2xl"
+          style={{ boxShadow: '0 18px 36px rgba(29,43,75,0.1)', scrollbarWidth: 'thin' }}>
+          {TABS.map(tab => (
             <button key={tab.key} onClick={() => setActiveTab(tab.key)}
-              className="flex-1 flex items-center justify-center gap-2 font-bold text-sm border-none cursor-pointer transition-all rounded-xl py-3"
+              className="shrink-0 flex min-w-[132px] items-center justify-center gap-2 font-bold text-sm border-none cursor-pointer transition-all rounded-xl px-4 py-2.5"
               style={{ background: activeTab === tab.key ? '#1d2b4b' : 'transparent', color: activeTab === tab.key ? 'white' : '#94a3b8' }}>
               <i className={`fas ${tab.icon}`} style={{ color: activeTab === tab.key ? '#fdb813' : 'inherit', fontSize: '13px' }} />
-              <span className="hidden sm:inline">{tab.label}</span>
-            </button>
-          ))}
-        </div>
-        <div className="bg-white flex gap-2 p-2 rounded-2xl"
-          style={{ boxShadow: '0 8px 24px rgba(29,43,75,0.07)' }}>
-          {secondaryTabs.map(tab => (
-            <button key={tab.key} onClick={() => setActiveTab(tab.key)}
-              className="flex-1 flex items-center justify-center gap-2 font-bold text-sm border-none cursor-pointer transition-all rounded-xl py-2.5"
-              style={{ background: activeTab === tab.key ? '#1d2b4b' : 'transparent', color: activeTab === tab.key ? 'white' : '#94a3b8' }}>
-              <i className={`fas ${tab.icon}`} style={{ color: activeTab === tab.key ? '#fdb813' : 'inherit', fontSize: '13px' }} />
-              <span className="hidden sm:inline text-xs">{tab.label}</span>
+              <span className="whitespace-nowrap">{tab.label}</span>
             </button>
           ))}
         </div>
       </div>
 
       {/* Content */}
-      <main style={{ maxWidth: '1000px', margin: '0 auto', padding: '32px 20px 100px', width: '100%' }}>
+      <main className="min-h-[calc(100vh-160px)]" style={{ maxWidth: '1000px', margin: '0 auto', padding: '26px 20px 100px', width: '100%' }}>
         <h2 className="font-extrabold text-lg mb-6" style={{ color: '#1d2b4b' }}>
           {TABS.find(t => t.key === activeTab)?.label}
         </h2>
@@ -410,7 +454,7 @@ export default function GraduationPage() {
             )}
             {activeTab === 'invitation' && (
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(280px,1fr))', gap: '24px' }}>
-                {data.map(a => <InvitationCard key={a.id} album={a} />)}
+                {data.map(a => <InvitationCard key={a.id} album={a} onView={setInvitationViewer} />)}
               </div>
             )}
             {activeTab === 'song' && (
@@ -427,6 +471,7 @@ export default function GraduationPage() {
         )}
       </main>
 
+      <InvitationLightbox album={invitationViewer} onClose={() => setInvitationViewer(null)} />
       <Footer />
     </div>
   );

@@ -18,7 +18,7 @@ class YearbookGeneratorService
         protected CloudinaryService $cloudinary,
     ) {}
 
-    // ── Flipbook Page Data ────────────────────────────────────────────────────
+    // Flipbook Page Data
 
     public function buildPageData(Yearbook $yearbook, Batch $batch): array
     {
@@ -31,8 +31,7 @@ class YearbookGeneratorService
             'students' => $this->mapStudents($students->take(4)),
         ];
 
-        // ✅ FIX: Albums have no yearbook_id FK — query by type directly
-        // Uses Album::graduation() scope from your actual Album model
+
         $albums = Album::graduation()
             ->with('photos')
             ->latest('event_date')
@@ -41,7 +40,6 @@ class YearbookGeneratorService
         foreach ($albums as $album) {
             $pages[] = [
                 'type'    => 'photos',
-                // ✅ FIX: field is 'title' not 'name'
                 'caption' => $album->title,
                 'photos'  => $album->photos->take(3)->map(fn ($p) => [
                     'url'   => $p->cloudinary_url ?? $p->file_path,
@@ -64,7 +62,7 @@ class YearbookGeneratorService
         return $pages;
     }
 
-    // ── PDF Generation ────────────────────────────────────────────────────────
+    // PDF Generation
 
     public function generatePdf(Yearbook $yearbook, Batch $batch): string
     {
@@ -92,7 +90,7 @@ class YearbookGeneratorService
         return $path;
     }
 
-    // ── Photo Upload ──────────────────────────────────────────────────────────
+    // Photo Upload 
 
     public function uploadPhoto(
         Yearbook     $yearbook,
@@ -127,7 +125,7 @@ class YearbookGeneratorService
         return $photo;
     }
 
-    // ── Helpers ───────────────────────────────────────────────────────────────
+    // Helpers 
 
     protected function mapStudents(Collection $students): array
     {

@@ -7,9 +7,7 @@ use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
 
 /**
- * RequireSuperAdmin — applied ONLY on top of AdminOnly.
- * AdminOnly already guarantees the user is an active Admin.
- * This just checks the role.
+ * RequireSuperAdmin applied ONLY on top of AdminOnly.
  */
 class RequireSuperAdmin
 {

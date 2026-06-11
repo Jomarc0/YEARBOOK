@@ -32,18 +32,29 @@ class SendPushNotification implements ShouldQueue
         $user = User::find($this->userId);
         if (! $user) return;
 
-        DatabaseNotification::create([
-            'id' => (string) Str::uuid(),
-            'type' => $this->type,
-            'notifiable_type' => User::class,
-            'notifiable_id' => $this->userId,
-            'data' => array_merge($this->data, [
+        $isDuplicateAnnouncement = ($this->data['type'] ?? $this->type) === 'announcement'
+            && isset($this->data['id'])
+            && DatabaseNotification::query()
+                ->where('type', 'announcement')
+                ->where('notifiable_type', User::class)
+                ->where('notifiable_id', $this->userId)
+                ->where('data->id', (string) $this->data['id'])
+                ->exists();
+
+        if (! $isDuplicateAnnouncement) {
+            DatabaseNotification::create([
+                'id' => (string) Str::uuid(),
                 'type' => $this->type,
-                'title' => $this->title,
-                'body' => $this->body,
-            ]),
-            'read_at' => null,
-        ]);
+                'notifiable_type' => User::class,
+                'notifiable_id' => $this->userId,
+                'data' => array_merge($this->data, [
+                    'type' => $this->type,
+                    'title' => $this->title,
+                    'body' => $this->body,
+                ]),
+                'read_at' => null,
+            ]);
+        }
 
         if ($user->fcm_token) {
             try {

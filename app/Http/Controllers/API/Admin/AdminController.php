@@ -51,7 +51,7 @@ class AdminController extends Controller
             'ai_processed_today'   => 0,
         ];
 
-        // ── Enrollment by Year ────────────────────────────────────────────────
+        // Enrollment by Year
         $enrollmentByYear = DB::table('users')
             ->join('students', 'users.student_record_id', '=', 'students.id')
             ->where('users.role', self::ROLE_STUDENT)
@@ -61,7 +61,7 @@ class AdminController extends Controller
             ->orderBy('students.graduation_year')
             ->get();
 
-        // ── Recent Activity ───────────────────────────────────────────────────
+        // Recent Activity 
         $recentActivity = DB::table('audit_logs')
             ->orderByDesc('logged_at')
             ->limit(self::LIMIT_RECENT_ACTIVITY)
@@ -74,7 +74,7 @@ class AdminController extends Controller
                 'time'    => Carbon::parse($log->logged_at)->diffForHumans(),
             ]);
 
-        // ── Recent Uploads ────────────────────────────────────────────────────
+        // Recent Uploads
         $recentUploads = DB::table('photos')
             ->join('users', 'photos.user_id', '=', 'users.id')
             ->selectRaw("
@@ -95,7 +95,7 @@ class AdminController extends Controller
                 'time'     => Carbon::parse($u->created_at)->diffForHumans(),
             ]);
 
-    // ── Trending Alumni ───────────────────────────────────────────────────
+    //Trending Alumni
     $trendingAlumni = DB::table('profile_views')
         ->join('users', 'profile_views.viewed_user_id', '=', 'users.id')
         ->leftJoin('students', 'users.student_record_id', '=', 'students.id')
@@ -112,7 +112,7 @@ class AdminController extends Controller
         ->limit(self::LIMIT_TRENDING_ALUMNI)
         ->get();
 
-        // ── Engagement ────────────────────────────────────────────────────────
+        // Engagement
         $engagementWindowStart = now()->subDays(self::ENGAGEMENT_WINDOW_DAYS);
 
         $engagement = [

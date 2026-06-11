@@ -6,6 +6,7 @@ import { studentsApi } from '@/api/student.api';
 import { faceApi } from '@/api/gallery.api';
 import { useAuth } from '@/features/auth/hooks/useAuth';
 import FaceSearchButton from '@/components/ui/FaceSearchButton';
+import FilterTabStrip from '@/components/ui/FilterTabStrip';
 import { imageUrl, avatarUrl } from '@/utils/imageUrl';
 import { COURSE_FILTERS, getCourseShort } from '@/utils/courseShort';
 
@@ -25,6 +26,7 @@ const usableFaceMatches = (matches = []) => {
     .map(m => ({
       ...m,
       user_id: faceUserId(m),
+      similarity: Number(m?.similarity ?? m?.confidence ?? 0),
       student_record_id: m?.student_record_id ?? m?.student_id ?? null,
     }))
     .filter(m => m.user_id);
@@ -38,6 +40,12 @@ const usableFaceMatches = (matches = []) => {
 
 const getInitials = (name = '') =>
   name.trim().split(/\s+/).map(w => w[0]?.toUpperCase() || '').slice(0, 2).join('');
+
+const isUsableStudentPhoto = (photo) => {
+  if (!photo) return false;
+  const src = String(photo).toLowerCase();
+  return !['default', 'avatar', 'placeholder', 'cartoon'].some(token => src.includes(token));
+};
 
 // ─── AutocompleteDropdown ─────────────────────────────────────────────────────
 function AutocompleteDropdown({ suggestions, onSelect, visible }) {
@@ -112,12 +120,15 @@ function FaceMatchBanner({ matches, onClear }) {
 function StudentCard({ student, index, isMatched, matchData }) {
   const [imgError, setImgError] = useState(false);
   const batchYear   = student.batch_year || new Date().getFullYear();
-  const hasPhoto    = !!student.profile_picture && !imgError;
-  const courseShort = student.course_short || getCourseShort(student.course);
+  const hasPhoto    = isUsableStudentPhoto(student.profile_picture ?? student.photo_url ?? student.photo) && !imgError;
+  const photoSrc    = student.profile_picture ?? student.photo_url ?? student.photo;
+  const rawCourse = String(student.course || '').trim();
+  const hasCourse = rawCourse && rawCourse.toLowerCase() !== 'no program listed';
+  const courseShort = hasCourse ? (student.course_short || getCourseShort(student.course)) : '';
 
   return (
     <Link
-      to={`/profile/${student.id}`}
+      to={`/students/${student.user_id ?? student.id}`}
       className="group bg-white rounded-3xl overflow-hidden shadow-sm no-underline block
                  hover:-translate-y-2 hover:shadow-xl transition-all duration-300"
       style={{
@@ -131,7 +142,7 @@ function StudentCard({ student, index, isMatched, matchData }) {
       <div className="h-60 relative overflow-hidden bg-[#1d2b4b]">
         {hasPhoto ? (
           <img
-            src={imageUrl(student.profile_picture)}
+            src={imageUrl(photoSrc)}
             alt={student.name}
             className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
             onError={() => setImgError(true)}
@@ -149,7 +160,7 @@ function StudentCard({ student, index, isMatched, matchData }) {
         </div>
 
         {/* Face match badge */}
-        {false && (
+        {isMatched && matchData && (
           <div className="absolute top-3 left-3 z-10 flex items-center gap-1.5 bg-[#fdb813] text-[#1d2b4b]
                           font-black text-[10px] px-2.5 py-1.5 rounded-xl">
             <i className="fas fa-camera text-[9px]" />
@@ -169,9 +180,11 @@ function StudentCard({ student, index, isMatched, matchData }) {
       {/* Info */}
       <div className="p-4 text-center">
         <h4 className="text-sm font-black text-[#1d2b4b] mb-2 leading-tight capitalize">{student.name}</h4>
-        <span className="inline-block bg-indigo-50 text-[#3f51b5] text-[10px] font-black uppercase tracking-wider px-3 py-1 rounded-xl">
-          {courseShort}
-        </span>
+        {hasCourse && (
+          <span className="inline-block bg-indigo-50 text-[#3f51b5] text-[10px] font-black uppercase tracking-wider px-3 py-1 rounded-xl">
+            {courseShort}
+          </span>
+        )}
       </div>
     </Link>
   );
@@ -224,7 +237,7 @@ export default function DirectoryPage() {
     } finally {
       setLoading(false);
     }
-  }, []); // eslint-disable-line
+  }, []);
 
   const fetchSuggestions = useCallback(async (q) => {
     if (q.length < 2) { setSuggestions([]); return; }
@@ -241,9 +254,9 @@ export default function DirectoryPage() {
     } finally {
       setSuggestLoading(false);
     }
-  }, [user?.id]);
+  }, [user]);
 
-  useEffect(() => { fetchStudents(); }, []); // eslint-disable-line
+  useEffect(() => { fetchStudents(); }, []);
 
   // ── Handlers ─────────────────────────────────────────────────────────────
   const clearFaceResults = () => { setFaceMatches([]); setMatchedIds(new Set()); };
@@ -313,7 +326,7 @@ export default function DirectoryPage() {
 
       {/* ── Hero / Search Header ── */}
       <header
-        className="relative px-5 sm:px-[8%] py-10 sm:py-12 text-center text-white rounded-b-[28px] shadow-lg overflow-hidden"
+        className="relative min-h-[140px] px-5 sm:px-[8%] py-8 text-center text-white rounded-b-[28px] shadow-lg overflow-hidden"
         style={{ background: "linear-gradient(135deg,rgba(29,43,75,0.95),rgba(63,81,181,0.88)), url('/images/NU-building.jpg') center/cover no-repeat" }}
       >
         {/* Dot pattern */}
@@ -365,21 +378,21 @@ export default function DirectoryPage() {
               </div>
             </div>
 
+            <FaceMatchBanner matches={faceMatches} onClear={() => { clearFaceResults(); setQuery(''); fetchStudents('', 'All Programs', 1); }} />
           </div>
         </div>
       </header>
 
       {/* ── Course filters ── */}
-      <div className="flex flex-wrap justify-center gap-2 px-4 sm:px-[8%] pt-8 pb-2">
-        {COURSE_FILTERS.map(({ label, value }) => (
-          <button key={value} onClick={() => handleFilter(value)}
-            className={`px-4 py-2 rounded-2xl text-sm font-bold border-none cursor-pointer transition-all duration-200 shadow-sm
-              ${course === value
-                ? 'bg-[#3f51b5] text-white scale-105 shadow-indigo-200/60'
-                : 'bg-white text-[#1d2b4b] hover:-translate-y-0.5 hover:shadow-md'}`}>
-            {label}
-          </button>
-        ))}
+      <div className="px-4 sm:px-[8%] pt-8 pb-2">
+        <div className="mx-auto max-w-[1180px]">
+          <FilterTabStrip
+            ariaLabel="Filter students by program"
+            activeValue={course}
+            onChange={handleFilter}
+            tabs={COURSE_FILTERS}
+          />
+        </div>
       </div>
 
       {/* ── Result count ── */}

@@ -31,7 +31,8 @@ export default function TagPeopleSearch({ tagged = [], onTag, onUntag, excludeId
     return () => document.removeEventListener('mousedown', h);
   }, []);
 
-  const isTagged = id => tagged.some(u => u.id === id);
+  const uniqueTagged = Array.from(new Map(tagged.filter(Boolean).map(user => [String(user.id), user])).values());
+  const isTagged = id => uniqueTagged.some(u => String(u.id) === String(id));
 
   const getAvatar = user =>
     user.profile_picture ||
@@ -41,16 +42,16 @@ export default function TagPeopleSearch({ tagged = [], onTag, onUntag, excludeId
     <div ref={wrapperRef} className="relative mt-3">
 
       {/* Tagged chips */}
-      {tagged.length > 0 && (
-        <div className="flex flex-wrap gap-1.5 mb-3">
-          {tagged.map(user => (
+      {uniqueTagged.length > 0 && (
+        <div className="flex flex-wrap gap-2 mb-4">
+          {uniqueTagged.map(user => (
             <div key={user.id}
-              className="flex items-center gap-1.5 bg-indigo-50 border border-indigo-100 rounded-full pl-1 pr-3 py-1">
+              className="flex h-9 items-center gap-2 bg-indigo-50 border border-indigo-100 rounded-full pl-1 pr-3">
               <img src={getAvatar(user)} alt={user.name}
-                className="w-5 h-5 rounded-full object-cover" />
-              <span className="text-xs font-semibold text-[#1d2b4b]">{user.name}</span>
+                className="w-7 h-7 rounded-full object-cover" />
+              <span className="text-sm font-medium text-[#1d2b4b]">{user.name}</span>
               <button onClick={() => onUntag(user.id)}
-                className="text-slate-400 hover:text-red-500 text-[10px] transition bg-transparent border-none cursor-pointer p-0 leading-none ml-0.5">
+                className="text-slate-400 hover:text-red-500 text-sm transition bg-transparent border-none cursor-pointer p-0 leading-none ml-0.5">
                 <i className="fas fa-times" />
               </button>
             </div>
@@ -59,18 +60,21 @@ export default function TagPeopleSearch({ tagged = [], onTag, onUntag, excludeId
       )}
 
       {/* Search input */}
-      <div className="flex items-center gap-2 border-2 border-slate-200 focus-within:border-[#3f51b5] rounded-xl px-3 py-2.5 bg-slate-50 transition-colors">
+      <div className="flex h-11 items-center gap-2 border border-[#e0e0e0] focus-within:border-[#3f51b5] rounded-lg px-4 bg-white transition-colors">
         <i className="fas fa-user-tag text-slate-400 text-xs" aria-hidden="true" />
         <input
           value={query}
           onChange={e => setQuery(e.target.value)}
           onFocus={() => results.length && setOpen(true)}
-          placeholder="Search classmates to tag…"
+          placeholder="Search classmates to tag..."
           className="flex-1 border-none bg-transparent text-sm text-[#1d2b4b] outline-none placeholder-slate-400"
           style={{ fontFamily: 'inherit' }}
         />
         {loading && <i className="fas fa-spinner animate-spin text-slate-400 text-xs" />}
       </div>
+      {open && !loading && query.trim() && results.length === 0 && (
+        <p className="mt-4 text-center text-[13px] text-slate-400">No classmates found</p>
+      )}
 
       {/* Dropdown */}
       {open && results.length > 0 && (

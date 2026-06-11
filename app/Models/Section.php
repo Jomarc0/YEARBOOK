@@ -22,7 +22,7 @@ class Section extends Model
         'description',
     ];
 
-    // ── Casts ─────────────────────────────────────────────────────────────
+    // Casts
 
     protected function casts(): array
     {
@@ -31,7 +31,7 @@ class Section extends Model
         ];
     }
 
-    // ── Relationships ──────────────────────────────────────────────────────
+    // Relationships 
 
     public function students(): HasMany
     {

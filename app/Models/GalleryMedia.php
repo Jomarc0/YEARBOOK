@@ -6,21 +6,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
-/**
- * App\Models\GalleryMedia
- *
- * One physical file attached to a Gallery item.
- *
- * @property int         $id
- * @property int         $gallery_id
- * @property string      $file_path
- * @property string|null $public_id      Cloudinary / S3 key
- * @property string      $resource_type  image | video | raw
- * @property int         $bytes
- * @property int|null    $width
- * @property int|null    $height
- * @property int         $sort_order
- */
+
 class GalleryMedia extends Model
 {
     use HasFactory;
@@ -45,14 +31,14 @@ class GalleryMedia extends Model
         'sort_order' => 'integer',
     ];
 
-    // ─── Relationships ────────────────────────────────────────────────────────
+    // Relationships
 
     public function gallery(): BelongsTo
     {
         return $this->belongsTo(Gallery::class);
     }
 
-    // ─── Helpers ──────────────────────────────────────────────────────────────
+    // Helpers 
 
     public function isImage(): bool
     {

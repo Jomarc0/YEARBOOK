@@ -1,7 +1,7 @@
 import { DarkImageLayer, EditorialPage, GoldFrame, PageNumber } from '../editorial/EditorialPrimitives';
 import { YEARBOOK_ASSETS } from '../../theme/yearbookTheme';
 
-const PER_PAGE = 8;
+const PER_PAGE = 7;
 
 export default function TOCPage({ page, onNavigate }) {
   const { toc = [], side, tocStart } = page;

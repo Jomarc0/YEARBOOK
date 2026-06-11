@@ -1,5 +1,5 @@
-import { useState, useEffect, useRef } from 'react';
-import { Link, useNavigate } from 'react-router-dom';          // ← added useNavigate
+import { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { batchApi } from '@/api/batch.api';
 import { faceApi } from '@/api/gallery.api';
 import FaceSearchButton from '@/components/ui/FaceSearchButton';
@@ -7,9 +7,6 @@ import Navbar from '@/components/layout/Navbar';
 import Footer from '@/components/layout/Footer';
 import { storageUrl } from '@/api/client';
 
-const TABS = [
-  { key: 'batches',  label: 'Batches',  icon: 'fa-graduation-cap' },
-];
 
 function usableFaceMatches(matches = []) {
   const normalized = matches
@@ -69,67 +66,17 @@ function looseCourseMatches(value, filter) {
   return meaningfulWords.length > 0 && meaningfulWords.every(word => a.includes(word));
 }
 
-// ── NEW: Generate Yearbook Button ─────────────────────────────────────────────
-/**
- * Standalone button used inside every batch card.
- * Navigates to /yearbook/:batchId  (YearbookHomePage → FlipbookViewerPage).
- * batchId  — the DB primary key of the Batch record
- * batchYear — shown in the label so users know exactly which yearbook opens
- */
-function GenerateYearbookButton({ batchId, batchYear, department, course }) {
-  const navigate = useNavigate();
-  const [hovered, setHovered] = useState(false);
-  const scopeLabel = course || department || batchYear;
-
-  return (
-    <button
-      onClick={(e) => {
-        e.preventDefault();          // stop Link parent from firing
-        e.stopPropagation();
-        const params = new URLSearchParams();
-        if (department) params.set('department', department);
-        if (course) params.set('course', course);
-        navigate(`/yearbook/${batchId}/view${params.toString() ? `?${params.toString()}` : ''}`);
-      }}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-      title={`Generate ${scopeLabel} Yearbook`}
-      style={{
-        display:        'inline-flex',
-        alignItems:     'center',
-        gap:            6,
-        marginTop:      8,
-        padding:        '8px 16px',
-        borderRadius:   10,
-        border:         'none',
-        cursor:         'pointer',
-        fontSize:       '0.72rem',
-        fontWeight:     800,
-        letterSpacing:  '0.02em',
-        whiteSpace:     'nowrap',
-        transition:     'all 0.2s ease',
-        background:     hovered ? '#fdb813' : '#1d2b4b',
-        color:          hovered ? '#1d2b4b' : '#fdb813',
-        boxShadow:      hovered
-          ? '0 6px 20px rgba(253,184,19,0.35)'
-          : '0 3px 10px rgba(29,43,75,0.18)',
-        transform:      hovered ? 'translateY(-1px)' : 'none',
-      }}
-    >
-      {/* Book icon */}
-      <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
-        stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"
-        strokeLinejoin="round" aria-hidden="true">
-        <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>
-        <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
-      </svg>
-      Generate Yearbook - {scopeLabel}
-    </button>
-  );
+function uniqueDepartmentsFromBatches(groupedBatches) {
+  return Array.from(new Set(
+    Object.entries(groupedBatches ?? {}).flatMap(([groupName, groupBatches]) => [
+      groupName,
+      ...(groupBatches ?? []).map(batch => batch.department),
+    ])
+      .map(dept => String(dept ?? '').trim())
+      .filter(Boolean)
+  )).sort((a, b) => a.localeCompare(b));
 }
-
 export default function SectionsPage() {
-  const [activeTab,    setActiveTab]    = useState('batches');
   const [courseFilter, setCourseFilter] = useState(null);
   const [departmentFilter, setDepartmentFilter] = useState(null);
   const [batches,      setBatches]      = useState({});
@@ -146,8 +93,9 @@ export default function SectionsPage() {
     setBatchLoading(true);
     batchApi.all()
       .then(({ data }) => {
-        setBatches(data.data ?? {});
-        setDepartments(data.departments ?? []);
+        const nextBatches = data.data ?? {};
+        setBatches(nextBatches);
+        setDepartments(data.departments?.length ? data.departments : uniqueDepartmentsFromBatches(nextBatches));
       })
       .finally(() => setBatchLoading(false));
   }, [departments.length]);
@@ -177,12 +125,6 @@ export default function SectionsPage() {
     } finally {
       setFaceSearching(false);
     }
-  };
-
-  const clearFaceSearch = () => {
-    setMatchedIds(new Set());
-    setIsFaceMode(false);
-    setQuery('');
   };
 
   const departmentOptions = departments.length ? departments : Object.keys(batches ?? {});
@@ -243,21 +185,15 @@ export default function SectionsPage() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col"
-      style={{ background: '#f8fafc', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+    <div className="min-h-screen flex flex-col bg-slate-50 font-[Plus_Jakarta_Sans,sans-serif]">
       <Navbar />
 
       {/* ── Hero ─────────────────────────────────────────────────────────── */}
-      <header className="text-white text-center"
-        style={{
-          background:   'linear-gradient(135deg, #1d2b4b 0%, #3f51b5 100%)',
-          padding:      '42px 8% 64px',
-          borderRadius: '0 0 28px 28px',
-        }}>
+      <header className="min-h-[140px] rounded-b-[28px] bg-gradient-to-br from-[#1d2b4b] to-[#2a3d66] px-[8%] py-8 text-center text-white">
         <h1 className="font-extrabold mb-2 text-3xl sm:text-4xl">
-          Academic <span style={{ color: '#fdb813' }}>Batches</span>
+          Academic <span className="text-[#fdb813]">Batches</span>
         </h1>
-        <p className="font-light opacity-80" style={{ fontSize: '1rem' }}>
+        <p className="text-base font-light opacity-80">
           Browse batches by department, course, section, and students.
         </p>
 
@@ -321,28 +257,14 @@ export default function SectionsPage() {
             Filter by department
           </span>
         </div>
-        <div className="flex items-center flex-wrap gap-2">
+        <div className="flex flex-nowrap items-center gap-2 overflow-x-auto pb-2 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           <button onClick={() => { setDepartmentFilter(null); setCourseFilter(null); }}
-            className="font-bold text-xs px-4 py-2 rounded-xl transition-all"
-            style={{
-              background:  departmentFilter === null ? '#1d2b4b' : 'white',
-              color:       departmentFilter === null ? 'white'   : '#64748b',
-              border:      '1.5px solid',
-              borderColor: departmentFilter === null ? '#1d2b4b' : '#e2e8f0',
-              cursor:      'pointer',
-            }}>
+            className={`sticky left-0 z-10 shrink-0 rounded-xl border-[1.5px] px-4 py-2 text-xs font-bold transition-all ${departmentFilter === null ? 'border-[#1d2b4b] bg-[#1d2b4b] text-white' : 'border-slate-200 bg-white text-slate-500'}`}>
             All Departments
           </button>
           {departmentOptions.map(dept => (
             <button key={dept} onClick={() => { setDepartmentFilter(dept); setCourseFilter(null); }}
-              className="font-bold text-xs px-4 py-2 rounded-xl transition-all"
-              style={{
-                background:  departmentFilter === dept ? '#1d2b4b' : 'white',
-                color:       departmentFilter === dept ? 'white'   : '#64748b',
-                border:      '1.5px solid',
-                borderColor: departmentFilter === dept ? '#1d2b4b' : '#e2e8f0',
-                cursor:      'pointer',
-              }}>
+              className={`shrink-0 rounded-xl border-[1.5px] px-4 py-2 text-xs font-bold transition-all ${departmentFilter === dept ? 'border-[#1d2b4b] bg-[#1d2b4b] text-white' : 'border-slate-200 bg-white text-slate-500'}`}>
               {dept}
             </button>
           ))}
@@ -359,28 +281,14 @@ export default function SectionsPage() {
                 Courses in {departmentFilter}
               </span>
             </div>
-            <div className="flex items-center flex-wrap gap-2">
+            <div className="flex flex-nowrap items-center gap-2 overflow-x-auto pb-2 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
               <button onClick={() => setCourseFilter(null)}
-                className="font-bold text-xs px-4 py-2 rounded-xl transition-all"
-                style={{
-                  background:  courseFilter === null ? '#3f51b5' : 'white',
-                  color:       courseFilter === null ? 'white'   : '#64748b',
-                  border:      '1.5px solid',
-                  borderColor: courseFilter === null ? '#3f51b5' : '#e2e8f0',
-                  cursor:      'pointer',
-                }}>
+                className={`sticky left-0 z-10 shrink-0 rounded-xl border-[1.5px] px-4 py-2 text-xs font-bold transition-all ${courseFilter === null ? 'border-[#3f51b5] bg-[#3f51b5] text-white' : 'border-slate-200 bg-white text-slate-500'}`}>
                 All Courses
               </button>
               {coursesForDepartment(departmentFilter).map(course => (
                 <button key={course} onClick={() => setCourseFilter(course)}
-                  className="font-bold text-xs px-4 py-2 rounded-xl transition-all"
-                  style={{
-                    background:  courseFilter === course ? '#3f51b5' : 'white',
-                    color:       courseFilter === course ? 'white'   : '#64748b',
-                    border:      '1.5px solid',
-                    borderColor: courseFilter === course ? '#3f51b5' : '#e2e8f0',
-                    cursor:      'pointer',
-                  }}>
+                  className={`shrink-0 rounded-xl border-[1.5px] px-4 py-2 text-xs font-bold transition-all ${courseFilter === course ? 'border-[#3f51b5] bg-[#3f51b5] text-white' : 'border-slate-200 bg-white text-slate-500'}`}>
                   {course}
                 </button>
               ))}
@@ -390,7 +298,7 @@ export default function SectionsPage() {
       </div>
 
       {/* ── Main Content ─────────────────────────────────────────────────── */}
-      <main style={{ padding: '20px 8% 80px' }}>
+      <main className="flex-1 px-[8%] pb-20 pt-5">
         {(query.trim() || isFaceMode) && (
           <section className="mb-8">
             <div className="flex items-center justify-between mb-4">
@@ -441,124 +349,8 @@ export default function SectionsPage() {
           </section>
         )}
 
-        {/* SECTIONS TAB — unchanged */}
-        {activeTab === 'sections' && (
-          loading ? (
-            <p className="text-center py-20 text-slate-400">
-              <i className="fas fa-spinner fa-spin mr-2" /> Loading sections…
-            </p>
-          ) : error ? (
-            <p className="text-center py-16 text-red-400">{error}</p>
-          ) : filteredSections.length === 0 ? (
-            <div className="text-center py-20 text-slate-400">
-              <i className="fas fa-folder-open text-5xl mb-4 block opacity-20" />
-              <p>No sections found for this filter.</p>
-              {isFaceMode && (
-                <button onClick={clearFaceSearch}
-                  className="mt-3 text-xs font-bold px-4 py-2 rounded-xl"
-                  style={{ background: '#f1f5f9', color: '#64748b', border: 'none', cursor: 'pointer' }}>
-                  Clear face search
-                </button>
-              )}
-            </div>
-          ) : (
-            <div style={{
-              display:             'grid',
-              gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
-              gap:                 '24px',
-            }}>
-              {filteredSections.map(sec => {
-                const hasFaceMatch = isFaceMode && sec.students?.some(st => matchedIds.has(studentUserId(st)));
-                return (
-                  <Link key={sec.id} to={`/sections/${sec.id}`}
-                    className="no-underline block bg-white transition-all"
-                    style={{
-                      borderRadius: '20px', padding: '32px',
-                      boxShadow: hasFaceMatch ? '0 20px 50px rgba(253,184,19,0.2)' : '0 4px 20px rgba(0,0,0,0.03)',
-                      border:  hasFaceMatch ? '2px solid #fdb813' : '1px solid #e2e8f0',
-                      color:   'inherit', position: 'relative',
-                    }}
-                    onMouseEnter={e => {
-                      e.currentTarget.style.transform   = 'translateY(-8px)';
-                      e.currentTarget.style.borderColor = hasFaceMatch ? '#fdb813' : '#3f51b5';
-                      e.currentTarget.style.boxShadow   = hasFaceMatch ? '0 30px 60px rgba(253,184,19,0.25)' : '0 20px 40px rgba(63,81,181,0.1)';
-                    }}
-                    onMouseLeave={e => {
-                      e.currentTarget.style.transform   = 'none';
-                      e.currentTarget.style.borderColor = hasFaceMatch ? '#fdb813' : '#e2e8f0';
-                      e.currentTarget.style.boxShadow   = hasFaceMatch ? '0 20px 50px rgba(253,184,19,0.2)' : '0 4px 20px rgba(0,0,0,0.03)';
-                    }}>
-                    {hasFaceMatch && (
-                      <div style={{
-                        position: 'absolute', top: 14, right: 14,
-                        background: '#fdb813', color: '#1d2b4b',
-                        fontSize: '0.62rem', fontWeight: 700,
-                        padding: '3px 9px', borderRadius: '20px',
-                        display: 'flex', alignItems: 'center', gap: 4,
-                      }}>
-                        <i className="fas fa-check" /> Face Match
-                      </div>
-                    )}
-                    <div className="flex items-center justify-between mb-4">
-                      <div className="w-11 h-11 rounded-xl flex items-center justify-center"
-                        style={{ background: '#eef2ff', color: '#3f51b5' }}>
-                        <i className="fas fa-layer-group" />
-                      </div>
-                      {sec.batch?.graduation_year && (
-                        <span className="text-xs font-bold px-3 py-1 rounded-lg"
-                          style={{ background: '#f8fafc', color: '#64748b' }}>
-                          {sec.batch.graduation_year}
-                        </span>
-                      )}
-                    </div>
-                    <h3 className="font-extrabold text-xl mb-1" style={{ color: '#1d2b4b' }}>
-                      Section {sec.name}
-                    </h3>
-                    {sec.course && (
-                      <p className="text-xs font-semibold mb-3" style={{ color: '#3f51b5' }}>
-                        {sec.course.split(' ').filter(w => w[0] === w[0]?.toUpperCase() && w.length > 2).slice(0, 3).join(' ')}
-                      </p>
-                    )}
-                    {sec.batch?.name && (
-                      <p className="text-xs mb-3" style={{ color: '#94a3b8' }}>{sec.batch.name}</p>
-                    )}
-                    <div className="flex items-center justify-between">
-                      <p className="font-semibold text-sm m-0" style={{ color: '#64748b' }}>
-                        <i className="fas fa-users mr-2" style={{ color: '#fdb813' }} />
-                        {sec.students_count ?? 0} students
-                      </p>
-                      {sec.students?.length > 0 && (
-                        <div className="flex" style={{ gap: '-8px' }}>
-                          {sec.students.slice(0, 4).map(s => (
-                            <img key={s.id}
-                              src={storageUrl(s.profile_picture ?? s.photo ?? s.photo_url)
-                                || `https://ui-avatars.com/api/?name=${encodeURIComponent(`${s.first_name ?? ''} ${s.last_name ?? ''}`.trim() || s.name || 'Student')}&background=1d2b4b&color=fff&size=40`}
-                              alt={`${s.first_name ?? ''} ${s.last_name ?? ''}`.trim() || s.name}
-                              title={`${s.first_name ?? ''} ${s.last_name ?? ''}`.trim() || s.name}
-                              className="rounded-full"
-                              style={{
-                                width: '30px', height: '30px', objectFit: 'cover', marginLeft: '-8px',
-                                border: matchedIds.has(studentUserId(s)) ? '2px solid #fdb813' : '2px solid white',
-                              }} />
-                          ))}
-                          {sec.students_count > 4 && (
-                            <div className="rounded-full flex items-center justify-center text-xs font-bold"
-                              style={{ width: '30px', height: '30px', marginLeft: '-8px', background: '#f1f5f9', color: '#64748b', border: '2px solid white' }}>
-                              +{sec.students_count - 4}
-                            </div>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  </Link>
-                );
-              })}
-            </div>
-          )
-        )}
-
         {/* ── BATCHES TAB — Generate Yearbook button added to each card ───── */}
-        {activeTab === 'batches' && (
+        {
           batchLoading ? (
             <p className="text-center py-20 text-slate-400">
               <i className="fas fa-spinner fa-spin mr-2" /> Loading batches…
@@ -594,68 +386,38 @@ export default function SectionsPage() {
                       .filter(batch => !courseFilter || (batch.sections ?? []).some(section => looseCourseMatches(section.course, courseFilter)))
                       .filter(batchMatchesSearch)
                       .map(batch => (
-                      <div key={batch.id} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-lg hover:shadow-[#1d2b4b]/10">
+                      <div key={batch.id} className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-lg hover:shadow-[#1d2b4b]/10">
+                        <div className="bg-gradient-to-br from-[#1d2b4b] via-[#253968] to-[#fdb813] px-5 py-6 text-white">
+                          <p className="m-0 text-[10px] font-black uppercase tracking-widest text-[#fdb813]">{dept}</p>
+                          <h4 className="m-0 mt-2 text-2xl font-black leading-tight">Batch {batch.graduation_year}</h4>
+                          <p className="m-0 mt-1 text-sm font-semibold text-white/75">
+                            {batch.students_count ?? 0} student{Number(batch.students_count ?? 0) === 1 ? '' : 's'}
+                          </p>
+                        </div>
 
-                        {/* Batch header */}
-                        <div className="flex items-start justify-between mb-3">
-                          <div>
+                        <div className="p-5">
+                          <div className="mb-3">
                             <h4 className="font-extrabold text-lg m-0" style={{ color: '#1d2b4b' }}>
                               {batch.name}
                             </h4>
-                            <p className="text-xs font-bold mt-1 m-0" style={{ color: '#3f51b5' }}>
-                              {batch.course_code}
-                            </p>
+                            {batch.course_code && (
+                              <p className="text-xs font-bold mt-1 m-0" style={{ color: '#3f51b5' }}>
+                                {batch.course_code}
+                              </p>
+                            )}
                           </div>
-                          <span className="font-black text-2xl" style={{ color: '#fdb813' }}>
-                            {batch.graduation_year}
-                          </span>
-                        </div>
 
-                        {/* Meta */}
-                        <p className="text-sm font-semibold m-0 mb-2" style={{ color: '#64748b' }}>
-                          <i className="fas fa-users mr-2" />{batch.students_count ?? 0} students
-                        </p>
-                        {batch.sections?.length > 0 && (
-                          <div className="rounded-xl border border-slate-100 bg-slate-50 px-3 py-2">
-                            <p className="m-0 text-xs font-bold text-slate-500">
-                              <i className="fas fa-layer-group mr-1.5 text-[#fdb813]" />
-                              {batch.sections.length} section{batch.sections.length !== 1 ? 's' : ''}
-                            </p>
-                            <div className="mt-2 flex flex-wrap gap-1.5">
-                              {batch.sections.slice(0, 3).map(s => (
-                                <span key={s.id ?? s.name} className="rounded-full bg-white px-2 py-1 text-[10px] font-bold text-slate-500 ring-1 ring-slate-200">
-                                  {s.name}
-                                </span>
-                              ))}
-                              {batch.sections.length > 3 && (
-                                <span className="rounded-full bg-[#1d2b4b] px-2 py-1 text-[10px] font-bold text-white">
-                                  +{batch.sections.length - 3} more
-                                </span>
-                              )}
-                            </div>
+                          <p className="text-sm font-semibold m-0 mb-2" style={{ color: '#64748b' }}>
+                            <i className="fas fa-users mr-2" />{batch.students_count ?? 0} students
+                          </p>
+
+                          <div className="mt-4 border-t border-slate-100 pt-4">
+                            <Link
+                              to={`/batchmates?year=${batch.graduation_year}&department=${encodeURIComponent(dept)}${courseFilter ? `&course=${encodeURIComponent(courseFilter)}` : ''}`}
+                              className="inline-flex w-full items-center justify-center rounded-xl bg-[#fdb813] px-4 py-2.5 text-sm font-black text-[#1d2b4b] no-underline transition hover:bg-amber-400">
+                              View Batchmates
+                            </Link>
                           </div>
-                        )}
-
-                        {/* ── Action buttons row ─────────────────────────── */}
-                        <div
-                          className="flex flex-wrap items-center gap-2"
-                          style={{ marginTop: 16, paddingTop: 14, borderTop: '1px solid #f1f5f9' }}
-                        >
-                          {/* Existing: View Batchmates */}
-                          <Link
-                            to={`/batchmates?year=${batch.graduation_year}&department=${encodeURIComponent(dept)}${courseFilter ? `&course=${encodeURIComponent(courseFilter)}` : ''}`}
-                            className="inline-block text-xs font-bold no-underline px-4 py-2 rounded-lg transition-all"
-                            style={{ background: '#eef2ff', color: '#3f51b5' }}>
-                            View Batchmates →
-                          </Link>
-
-                          {/* ── NEW: Generate Yearbook ────────────────────── */}
-                          <GenerateYearbookButton
-                            batchId={batch.id}
-                            batchYear={batch.graduation_year}
-                            department={departmentFilter ? dept : null}
-                            course={courseFilter}
-                          />
                         </div>
                       </div>
                     ))}
@@ -664,7 +426,7 @@ export default function SectionsPage() {
               ))}
             </div>
           )
-        )}
+        }
       </main>
 
       <Footer />

@@ -9,10 +9,10 @@ const fmt = (bytes) => {
 };
 
 const TIER_CFG = {
-  free:             { label: 'Free Plan',        color: '#94a3b8' },
-  standard:         { label: 'Standard',         color: '#3b82f6' },
-  premium_standard: { label: 'Premium Standard', color: '#3b82f6' },
-  premium:          { label: 'Premium HD',       color: '#8b5cf6' },
+  free:             { label: 'Free Plan' },
+  standard:         { label: 'Standard' },
+  premium_standard: { label: 'Premium Standard' },
+  premium:          { label: 'Premium HD' },
 };
 
 /**
@@ -29,52 +29,40 @@ export default function StorageUsageBar({ usedBytes = 0, limitBytes = 524288000,
   const cfg  = TIER_CFG[tier] ?? TIER_CFG.free;
   const warn = pct >= 80;
   const full = pct >= 100;
-  const bar  = full ? '#ef4444' : warn ? '#f59e0b' : '#1d2b4b';
+  const barClass = full ? 'bg-red-500' : warn ? 'bg-amber-500' : 'bg-[#fdb813]';
 
   return (
-    <div
-      className="bg-white rounded-2xl p-5"
-      style={{ boxShadow: '0 4px 20px rgba(29,43,75,0.07)', border: '1px solid rgba(0,0,0,0.04)' }}
-    >
+    <div className="rounded-2xl border border-black/[0.04] bg-white p-5 shadow-[0_4px_20px_rgba(29,43,75,0.07)]">
       {/* Top row */}
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
-          <i className="fas fa-database text-sm" style={{ color: cfg.color }} />
-          <span className="font-bold text-sm" style={{ color: '#1d2b4b' }}>
+          <i className="fas fa-database text-sm text-[#fdb813]" />
+          <span className="font-bold text-sm text-[#1d2b4b]">
             Cloud Storage
           </span>
-          <span
-            className="text-xs font-bold px-2.5 py-0.5 rounded-full"
-            style={{ background: 'rgba(29,43,75,0.07)', color: '#1d2b4b' }}
-          >
+          <span className="rounded-full bg-[#1d2b4b]/[0.07] px-2.5 py-0.5 text-xs font-bold text-[#1d2b4b]">
             {cfg.label}
           </span>
         </div>
-        <span
-          className="text-sm font-bold"
-          style={{ color: full ? '#ef4444' : warn ? '#f59e0b' : '#64748b' }}
-        >
+        <span className={`text-sm font-bold ${full ? 'text-red-500' : warn ? 'text-amber-500' : 'text-slate-500'}`}>
           {pct.toFixed(1)}%
         </span>
       </div>
 
       {/* Bar */}
-      <div
-        className="w-full rounded-full overflow-hidden mb-2"
-        style={{ height: '8px', background: '#f1f5f9' }}
-      >
+      <div className="mb-2 h-1.5 w-full overflow-hidden rounded-full bg-slate-200">
         <div
-          className="h-full rounded-full transition-all duration-500"
-          style={{ width: `${pct}%`, background: bar }}
+          className={`h-full rounded-full transition-all duration-500 ${barClass}`}
+          style={{ width: `${pct}%` }}
         />
       </div>
 
       {/* Bottom row */}
       <div className="flex items-center justify-between">
-        <span className="text-xs" style={{ color: '#94a3b8' }}>
+        <span className="text-xs text-slate-400">
           {fmt(usedBytes)} used of {fmt(limitBytes)}
         </span>
-        <span className="text-xs" style={{ color: '#94a3b8' }}>
+        <span className="text-xs text-slate-400">
           {fmt(limitBytes - usedBytes)} free
         </span>
       </div>

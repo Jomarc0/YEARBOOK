@@ -76,7 +76,7 @@ export default function Sidebar({ onLogout }) {
           const isSuperGroup = group.label === "Super Admin";
           return (
             <div key={group.label}>
-              <p className={`mb-1.5 px-2 text-[10px] font-black uppercase tracking-[0.18em] ${isSuperGroup ? "text-violet-300" : "text-blue-200/55"}`}>
+              <p className="mb-1.5 px-2 text-xs font-black tracking-wide text-slate-500">
                 {group.label}
               </p>
               <div className="grid gap-1">
@@ -110,7 +110,7 @@ export default function Sidebar({ onLogout }) {
       <button
         type="button"
         onClick={onLogout}
-        className="mt-4 flex h-11 items-center gap-3 border-t border-white/10 px-2 pt-4 text-left text-sm font-extrabold text-rose-300 transition hover:text-rose-100"
+        className="mt-4 flex h-11 items-center gap-3 border-t border-white/10 px-2 pt-4 text-left text-sm font-extrabold text-slate-400 transition hover:text-slate-200"
       >
         <Icon name="logout" className="h-4 w-4" />
         Sign Out

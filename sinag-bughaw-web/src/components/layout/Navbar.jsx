@@ -87,15 +87,12 @@ const NAV_LINKS = [
 
 const BASE_DROP_ITEMS = [
   { icon: 'fa-user',      color: 'text-indigo-400', label: 'View Profile', toFn: (u) => `/profile/${u?.id}` },
-  { icon: 'fa-chart-bar', color: 'text-sky-400',    label: 'Analytics',   toFn: ()   => '/analytics'       },
   { icon: 'fa-cog',       color: 'text-slate-400',  label: 'Settings',    toFn: ()   => '/settings'        },
 ];
 
 // Premium dropdown item varies by tier
 const getPremiumDropItem = (tier) => {
-  if (tier === 'premium') return {
-    icon: 'fa-crown', color: 'text-amber-400', label: 'Premium Active', toFn: () => '/premium',
-  };
+  if (tier === 'premium') return null;
   if (tier === 'standard') return {
     icon: 'fa-star', color: 'text-indigo-400', label: 'Upgrade to Premium', toFn: () => '/premium',
   };
@@ -124,7 +121,7 @@ export default function Navbar() {
   const dropItems = [
     ...BASE_DROP_ITEMS,
     ...(isOn('enable_premium_subscription') ? [getPremiumDropItem(userTier)] : []),
-  ];
+  ].filter(Boolean);
 
   const avatarSrc =
     storageUrl(user?.profile_picture) ||
@@ -247,26 +244,26 @@ export default function Navbar() {
 
                 {/* User info header with tier badge */}
                 <div className="px-4 py-3.5 border-b border-slate-100 bg-slate-50">
-                  <div className="flex items-center justify-between gap-2 mb-0.5">
-                    <p className="text-[13px] font-bold text-[#1d2b4b] m-0 truncate">{user?.name}</p>
-                    {/* Tier chip in dropdown header */}
-                    {userTier === 'premium' && (
-                      <span className="inline-flex items-center gap-1 bg-amber-50 text-amber-700 border border-amber-100 text-[9px] font-black px-1.5 py-0.5 rounded leading-none shrink-0">
-                        <i className="fas fa-crown text-[7px]" /> PREMIUM
-                      </span>
-                    )}
-                    {userTier === 'standard' && (
-                      <span className="inline-flex items-center gap-1 bg-indigo-50 text-indigo-600 border border-indigo-100 text-[9px] font-bold px-1.5 py-0.5 rounded leading-none shrink-0">
-                        <i className="fas fa-star text-[7px]" /> STANDARD
-                      </span>
-                    )}
-                    {userTier === 'free' && (
-                      <span className="inline-flex items-center gap-1 bg-slate-100 text-slate-400 text-[9px] font-semibold px-1.5 py-0.5 rounded leading-none shrink-0">
-                        FREE
-                      </span>
-                    )}
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl overflow-hidden bg-[#fdb813] flex items-center justify-center shrink-0 border border-[#fdb813]/40">
+                      {user?.profile_picture ? (
+                        <img src={avatarSrc} alt={user?.name} className="w-full h-full object-cover block" />
+                      ) : (
+                        <span className="text-[13px] font-black text-[#1d2b4b]">{initials}</span>
+                      )}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-1.5 mb-0.5">
+                        <p className="text-[13px] font-bold text-[#1d2b4b] m-0 truncate">{user?.name}</p>
+                        {userTier === 'premium' && (
+                          <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-amber-50 text-amber-600 border border-amber-100 shrink-0">
+                            <i className="fas fa-crown text-[9px]" aria-hidden="true" />
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-[11px] text-slate-400 m-0 truncate">{user?.email}</p>
+                    </div>
                   </div>
-                  <p className="text-[11px] text-slate-400 m-0">{user?.email}</p>
                 </div>
 
                 {/* Menu items */}

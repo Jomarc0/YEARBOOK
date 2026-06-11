@@ -19,9 +19,6 @@ class GalleryController extends Controller
 {
     public function __construct(private readonly FaceRecognition $faceRecognition) {}
 
-    // ─────────────────────────────────────────────────────────────────────────
-    // GET /api/gallery?type=general|graduation&category=...
-    // ─────────────────────────────────────────────────────────────────────────
     public function index(Request $request): JsonResponse
     {
         $type     = $request->query('type', 'general');
@@ -53,13 +50,7 @@ class GalleryController extends Controller
         ]);
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
     // GET /api/gallery/{id}
-    //
-    // Returns one album with approved Gallery items under the key "photos".
-    // Each photo has a flat "file_path" hoisted from its first GalleryMedia row
-    // so the React frontend can do storageUrl(photo.file_path) directly.
-    // ─────────────────────────────────────────────────────────────────────────
     public function show(int $id): JsonResponse
     {
         $userId = Auth::id();
@@ -107,9 +98,9 @@ class GalleryController extends Controller
         ])->findOrFail($id);
 
         // Hoist the first media file_path onto each photo so the frontend
-        // can access photo.file_path directly instead of photo.media[0].file_path
         $album->photos->each(function ($photo) {
             $media = $photo->media->first();
+            $photo->media_id = $media?->id;
             $photo->file_path = $media?->file_path;
             $photo->resource_type = $media?->resource_type ?? ($photo->ai_metadata['resource_type'] ?? 'image');
             $photo->file_type = $photo->resource_type;
@@ -124,9 +115,7 @@ class GalleryController extends Controller
         ]);
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
     // POST /api/gallery/face-search
-    // ─────────────────────────────────────────────────────────────────────────
     public function faceSearch(Request $request): JsonResponse
     {
         $request->validate(['face_image' => 'required|image|max:5120']);
@@ -278,8 +267,10 @@ class GalleryController extends Controller
             }
         }
 
-        if ($type !== 'graduation' && collect($photos)->isEmpty()) {
-            $photos = $this->exactGalleryMediaMatches($request);
+        if (collect($photos)->isEmpty()) {
+            $photos = $type === 'graduation'
+                ? $this->exactGraduationPhotoMatches($request, $category)
+                : $this->exactGalleryMediaMatches($request);
 
             if (collect($photos)->isNotEmpty()) {
                 $result['status'] = 'matched';
@@ -293,9 +284,7 @@ class GalleryController extends Controller
         ]);
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
     // DELETE /api/gallery/media/{mediaId}
-    // ─────────────────────────────────────────────────────────────────────────
     private function exactGalleryMediaMatches(Request $request)
     {
         $file = $request->file('face_image');
@@ -351,6 +340,46 @@ class GalleryController extends Controller
             ->values();
     }
 
+    private function exactGraduationPhotoMatches(Request $request, ?string $category)
+    {
+        $file = $request->file('face_image');
+        $path = $file?->getRealPath();
+
+        if (! $path || ! is_readable($path)) {
+            return collect();
+        }
+
+        $uploadedBytes = file_get_contents($path);
+        if ($uploadedBytes === false || $uploadedBytes === '') {
+            return collect();
+        }
+
+        $uploadedHash = md5($uploadedBytes);
+
+        return GraduationPhoto::query()
+            ->where('resource_type', 'image')
+            ->whereHas('album', function ($q) use ($category) {
+                $q->published();
+                if ($category) {
+                    $q->ofCategory($category);
+                }
+            })
+            ->with(['album:id,title,event_date,category'])
+            ->latest()
+            ->limit(200)
+            ->get()
+            ->filter(fn ($photo) => $this->remoteHashMatches($photo->file_path, $uploadedHash))
+            ->map(function ($photo) {
+                $photo->similarity = 100;
+                $photo->album_id = $photo->graduation_album_id;
+                $photo->photo_id = $photo->id;
+                $photo->graduation_photo_id = $photo->id;
+                $photo->match_source = 'exact_file';
+                return $photo;
+            })
+            ->values();
+    }
+
     private function remoteHashMatches(?string $url, string $hash): bool
     {
         if (! $url) {
@@ -381,9 +410,7 @@ class GalleryController extends Controller
         return response()->json(['success' => true]);
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
     // GET /api/gallery/albums
-    // ─────────────────────────────────────────────────────────────────────────
     public function listAlbums(Request $request): JsonResponse
     {
         $type     = $request->query('type', 'general');
@@ -407,9 +434,7 @@ class GalleryController extends Controller
         ]);
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
     // POST /api/gallery/albums
-    // ─────────────────────────────────────────────────────────────────────────
     public function storeAlbum(Request $request): JsonResponse
     {
         $user = $request->user();

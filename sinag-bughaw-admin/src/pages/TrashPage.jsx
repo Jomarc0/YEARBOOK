@@ -132,7 +132,7 @@ function Pagination({ meta, onPage }) {
 }
 
 // ─── Type sidebar tab ─────────────────────────────────────────────────────────
-function TypeTab({ slug, icon, label, count, active, onClick }) {
+function TypeTab({ slug, label, count, active, onClick }) {
   const iconName = slug === "faculty" ? "faculty" : slug === "student" ? "student" : slug === "user" ? "user" : "trash";
 
   return (
@@ -163,6 +163,23 @@ function TypeTab({ slug, icon, label, count, active, onClick }) {
 // ─── Single trash item card ───────────────────────────────────────────────────
 function TrashCard({ item, selected, onSelect, onRestore, onForce, busy }) {
   const isBusy = busy === `${item.type}-${item.id}`;
+  const mediaType = String(item.media_type || "").toLowerCase();
+  const canRenderImage = item.thumbnail && (!mediaType || mediaType === "image" || mediaType === "record");
+  const canRenderVideo = item.thumbnail && mediaType === "video";
+  const previewIcon = item.type === "faculty"
+    ? "faculty"
+    : item.type === "student"
+    ? "student"
+    : item.type === "user"
+    ? "user"
+    : "trash";
+  const previewLabel = mediaType === "video"
+    ? "Video"
+    : mediaType === "audio"
+    ? "Audio"
+    : item.type === "voice_note"
+    ? "Voice Note"
+    : item.label;
 
   return (
     <div style={{
@@ -178,13 +195,28 @@ function TrashCard({ item, selected, onSelect, onRestore, onForce, busy }) {
     }}>
       {/* Thumbnail */}
       <div style={{ height: 100, background:"linear-gradient(135deg,#1a2540,#4254c5)", position:"relative", flexShrink:0 }}>
-        {item.thumbnail
-          ? <img src={item.thumbnail} alt={item.title}
-              style={{ width:"100%", height:"100%", objectFit:"cover" }} />
-          : <div style={{ height:"100%", display:"flex", alignItems:"center", justifyContent:"center", color:"rgba(255,255,255,.72)" }}>
-              <Icon name={item.type === "faculty" ? "faculty" : item.type === "student" ? "student" : item.type === "user" ? "user" : "trash"} className="h-9 w-9" />
-            </div>
-        }
+        {canRenderImage && (
+          <img
+            src={item.thumbnail}
+            alt={item.title}
+            style={{ width:"100%", height:"100%", objectFit:"cover" }}
+            onError={(e) => { e.currentTarget.style.display = "none"; }}
+          />
+        )}
+        {canRenderVideo && (
+          <video
+            src={item.thumbnail}
+            muted
+            preload="metadata"
+            style={{ width:"100%", height:"100%", objectFit:"cover", display:"block" }}
+          />
+        )}
+        {!canRenderImage && !canRenderVideo && (
+          <div style={{ height:"100%", display:"flex", flexDirection:"column", gap:6, alignItems:"center", justifyContent:"center", color:"rgba(255,255,255,.72)" }}>
+            <Icon name={previewIcon} className="h-9 w-9" />
+            <span style={{ fontSize:"0.7rem", fontWeight:800, letterSpacing:".08em", textTransform:"uppercase" }}>{previewLabel}</span>
+          </div>
+        )}
         {/* Checkbox */}
         <div style={{ position:"absolute", top:8, left:8 }}
           onClick={e => { e.stopPropagation(); onSelect(item); }}>

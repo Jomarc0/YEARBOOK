@@ -19,7 +19,6 @@ export function useWebSocket(channelName, events = {}) {
       window.Echo.leave(channelName);
       setConnected(false);
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [channelName]);
 
   return { connected, channel: channelRef.current };

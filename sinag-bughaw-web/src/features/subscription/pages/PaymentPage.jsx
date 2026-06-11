@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
 import { paymentsApi } from '@/api/payment.api';
-import { useAuth } from '@/features/auth/hooks/useAuth';
 import Navbar from '@/components/layout/Navbar';
 import Footer from '@/components/layout/Footer';
 
@@ -15,6 +14,7 @@ const TIERS = {
       'Access digital gallery',
       'Direct messaging',
       'Basic yearbook viewing',
+      'Yearbook PDF download',
       'Section & faculty directory',
     ],
     plans: {
@@ -29,7 +29,7 @@ const TIERS = {
     icon:     'fa-crown',
     features: [
       'Everything in Standard',
-      'PDF certificate & profile downloads',
+      'Priority yearbook PDF downloads',
       'Priority AI face search',
       'Extended cloud storage',
       'Exclusive premium badge',
@@ -43,7 +43,6 @@ const TIERS = {
 };
 
 export default function PaymentPage() {
-  const { user }              = useAuth();
   const [activeTier, setTier] = useState('standard');
   const [plan,       setPlan] = useState('standard_monthly');
   const [status,  setStatus]  = useState(null);
@@ -53,7 +52,16 @@ export default function PaymentPage() {
 
   useEffect(() => {
     paymentsApi.subscriptionStatus()
-      .then(({ data }) => setStatus(data))
+      .then(({ data }) => {
+        setStatus(data);
+        if (data?.is_premium) {
+          setTier('premium');
+          setPlan('premium_monthly');
+        } else if (data?.is_standard) {
+          setTier('standard');
+          setPlan('standard_monthly');
+        }
+      })
       .finally(()      => setLoading(false));
   }, []);
 
@@ -189,7 +197,14 @@ export default function PaymentPage() {
                   }}>
                   <div className="flex justify-between items-start">
                     <div>
-                      <div className="font-extrabold text-base" style={{ color: '#1d2b4b' }}>{p.label}</div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="font-extrabold text-base" style={{ color: '#1d2b4b' }}>{p.label}</span>
+                        {isAlreadyOn && (
+                          <span className="rounded-full border border-[#fdb813]/60 bg-[#fdb813]/15 px-2 py-1 text-[10px] font-black text-[#1d2b4b]">
+                            Current plan
+                          </span>
+                        )}
+                      </div>
                       <div className="text-sm mt-1" style={{ color: '#64748b' }}>
                         <span className="font-black text-2xl" style={{ color: plan === key ? tier.color : '#1d2b4b' }}>{p.price}</span>
                         {p.period}

@@ -16,7 +16,7 @@ return [
         'region' => env('AWS_DEFAULT_REGION', 'us-east-1'),
     ],
 
-    // ── AWS Rekognition ───────────────────────────────────────────────────────
+    // AWS Rekognition 
     'rekognition' => [
         'key'        => env('AWS_ACCESS_KEY_ID'),
         'secret'     => env('AWS_SECRET_ACCESS_KEY'),
@@ -36,13 +36,18 @@ return [
         'credentials' => env('FIREBASE_CREDENTIALS', storage_path('app/firebase-service-account.json')),
     ],
 
-    // ── Google OAuth (Socialite) ──────────────────────────────────────────────
+    // Google OAuth (Socialite)
     'google' => [
         'client_id'     => env('GOOGLE_CLIENT_ID'),
         'client_secret' => env('GOOGLE_CLIENT_SECRET'),
         'redirect'      => env('GOOGLE_REDIRECT_URI'),
     ],
 
+    'google_mobile' => [
+        'client_id'     => env('GOOGLE_CLIENT_ID'),
+        'client_secret' => env('GOOGLE_CLIENT_SECRET'),
+        'redirect'      => env('GOOGLE_MOBILE_REDIRECT_URI'),
+    ],
     'paymongo' => [
         'secret_key'     => env('PAYMONGO_SECRET_KEY'),
         'webhook_secret' => env('PAYMONGO_WEBHOOK_SECRET'),

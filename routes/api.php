@@ -47,9 +47,7 @@ use App\Http\Controllers\API\Alumni\AlumniTrackerController;
 use App\Http\Controllers\API\AppConfigController;
 use Illuminate\Support\Facades\Route;
 
-// =========================================================================
 // PUBLIC ROUTES
-// =========================================================================
 
 Route::get('/app-config', [AppConfigController::class, 'show']);
 
@@ -69,7 +67,7 @@ Route::get('/announcements',        [AnnouncementController::class, 'index']);
 Route::get('/analytics/top-viewed', [AnalyticsController::class,   'topViewed']);
 Route::post('/analytics/record-view/{userId}', [AnalyticsController::class, 'recordView']);
 
-// ── Faculty (public — no login required) ──────────────────────────────────
+//  Faculty (public — no login required) 
 Route::prefix('faculty')->group(function () {
     Route::get('/',              [FacultyController::class, 'index']);
     Route::get('/by-department', [FacultyController::class, 'byDepartment']);
@@ -82,29 +80,28 @@ Route::get('/yearbook/export/mobile-pdf/{batchId}', [YearbookPdfController::clas
     ->middleware(['throttle:60,1', 'content.security', 'feature:enable_yearbook_pdf_download'])
     ->name('yearbook.export.mobile-pdf');
 
-// =========================================================================
 // PROTECTED ROUTES  (auth:sanctum + throttle 120 req/min)
-// =========================================================================
+
 
 Route::middleware(['auth:sanctum', 'throttle:120,1'])->group(function () {
 
-    // ── Auth ──────────────────────────────────────────────────────────────────
+    // Auth 
     Route::prefix('auth')->group(function () {
         Route::post('/logout', [AuthController::class, 'logout']);
         Route::get('/me',      [AuthController::class, 'me']);
     });
 
-    // ── Consent ───────────────────────────────────────────────────────────────
+    // Consent 
     Route::prefix('consent')->group(function () {
         Route::post('/accept', [ConsentController::class, 'accept']);
         Route::get('/status',  [ConsentController::class, 'status']);
     });
 
-    // ── Feed ──────────────────────────────────────────────────────────────────
+    // Feed 
     Route::get('/feed', [FeedController::class, 'index']);
     Route::post('/feed/{photo}/view', [FeedController::class, 'recordView']);
 
-    // ── Profile ───────────────────────────────────────────────────────────────
+    // Profile 
     Route::prefix('profile')->group(function () {
         Route::post('/visibility',  [ProfileSettingsController::class, 'updateVisibility']);
         Route::post('/motto',       [ProfileSettingsController::class, 'updateMotto']);
@@ -120,7 +117,7 @@ Route::middleware(['auth:sanctum', 'throttle:120,1'])->group(function () {
         Route::delete('/posts/{photoId}', [ProfileController::class, 'deletePost']);
     });
 
-    // ── Students ──────────────────────────────────────────────────────────────
+    //  Students
     Route::prefix('students')->group(function () {
         Route::get('/', [StudentController::class, 'index']);
 
@@ -144,20 +141,20 @@ Route::middleware(['auth:sanctum', 'throttle:120,1'])->group(function () {
         Route::post('/{id}/view', [ProfileSettingsController::class, 'trackView']);
     });
 
-    // ── Sections ──────────────────────────────────────────────────────────────
+    // Sections 
     Route::prefix('sections')->group(function () {
         Route::get('/',     [SectionController::class, 'index']);
         Route::get('/{id}', [SectionController::class, 'show']);
     });
 
-    // ── Batches ───────────────────────────────────────────────────────────────
+    // Batches 
     Route::prefix('batches')->group(function () {
         Route::get('/',                 [BatchController::class, 'index']);
         Route::get('/{batch}',          [BatchController::class, 'show']);
         Route::get('/{batch}/students', [BatchController::class, 'students']);
     });
 
-    // ── Discovery ─────────────────────────────────────────────────────────────
+    //  Discovery
     Route::get('/batchmates', [BatchController::class, 'batchmates']);
 
     Route::prefix('discover')->group(function () {
@@ -168,7 +165,7 @@ Route::middleware(['auth:sanctum', 'throttle:120,1'])->group(function () {
         Route::get('/students/{id}',           [DiscoveryStudentController::class, 'show']);
     });
 
-    // ── Gallery ───────────────────────────────────────────────────────────────
+    // Gallery
     Route::middleware('content.security')->prefix('gallery')->group(function () {
         Route::get('/',                   [GalleryController::class, 'index']);
         Route::get('/albums',             [GalleryController::class, 'listAlbums']);
@@ -178,7 +175,7 @@ Route::middleware(['auth:sanctum', 'throttle:120,1'])->group(function () {
         Route::get('/{id}',               [GalleryController::class, 'show']);
     });
 
-    // ── Search ────────────────────────────────────────────────────────────────
+    // Search 
     Route::get('/search', [SearchController::class, 'search']);
 
     Route::prefix('search/students')->middleware('feature:enable_student_directory_search')->group(function () {
@@ -187,7 +184,7 @@ Route::middleware(['auth:sanctum', 'throttle:120,1'])->group(function () {
         Route::get('/',        [SearchController::class, 'students']);
     });
 
-    // ── Face Recognition ──────────────────────────────────────────────────────
+    // Face Recognition 
     Route::prefix('face')->group(function () {
         Route::post('/sync',                    [FaceRecognitionController::class, 'syncStudents']);
         Route::post('/search',                  [FaceRecognitionController::class, 'search']);
@@ -197,7 +194,7 @@ Route::middleware(['auth:sanctum', 'throttle:120,1'])->group(function () {
         Route::get('/students/{userId}/photos',  [FaceRecognitionController::class, 'studentPhotos']);
     });
 
-    // ── Messages ──────────────────────────────────────────────────────────────
+    // Messages 
     Route::prefix('messages')->group(function () {
         Route::get('/conversations', [MessageController::class, 'conversations']);
         Route::get('/unread-count',  [MessageController::class, 'unreadCount']);
@@ -208,13 +205,13 @@ Route::middleware(['auth:sanctum', 'throttle:120,1'])->group(function () {
         Route::patch('/{id}/read',   [MessageController::class, 'markRead']);
     });
 
-    // ── Presence ──────────────────────────────────────────────────────────────
+    // Presence 
     Route::prefix('presence')->group(function () {
         Route::post('/',     [PresenceController::class, 'update']);
         Route::post('/bulk', [PresenceController::class, 'bulk']);
     });
 
-    // ── Voice Notes ───────────────────────────────────────────────────────────
+    // Voice Notes 
     Route::prefix('voice-notes')->group(function () {
         Route::get('/inbox',            [VoiceNoteController::class, 'inbox']);
         Route::get('/outbox',           [VoiceNoteController::class, 'outbox']);
@@ -223,7 +220,7 @@ Route::middleware(['auth:sanctum', 'throttle:120,1'])->group(function () {
         Route::delete('/{id}',          [VoiceNoteController::class, 'destroy']);
     });
 
-    // ── Admin: Voice Note Moderation ──────────────────────────────────────────
+    // ─Admin: Voice Note Moderation 
     Route::middleware('can:admin')->prefix('admin/voice-notes')->group(function () {
         Route::get('/',              [VoiceNoteAdminController::class, 'index']);
         Route::get('/stats',         [VoiceNoteAdminController::class, 'stats']);
@@ -231,7 +228,7 @@ Route::middleware(['auth:sanctum', 'throttle:120,1'])->group(function () {
         Route::post('/{id}/reject',  [VoiceNoteAdminController::class, 'reject']);
     });
 
-    // ── Graduation ────────────────────────────────────────────────────────────
+    // Graduation 
     Route::middleware('content.security')->prefix('graduation')->group(function () {
         Route::get('/',                   [GraduationController::class, 'index']);
         Route::get('/album',              [GraduationController::class, 'index']);
@@ -246,14 +243,14 @@ Route::middleware(['auth:sanctum', 'throttle:120,1'])->group(function () {
         Route::delete('/{id}',            [GraduationController::class, 'destroy'])->where('id', '[0-9]+');
     });
 
-    // ── Media ─────────────────────────────────────────────────────────────────
+    // Media 
     Route::middleware('content.security')->prefix('media')->group(function () {
         Route::post('/bulk-upload',  [MediaController::class, 'bulkUpload']);
         Route::post('/upload-video', [MediaController::class, 'uploadVideo']);
         Route::delete('/photo/{id}', [MediaController::class, 'deletePhoto']);
     });
 
-    // ── Yearbook ──────────────────────────────────────────────────────────────
+    // Yearbook 
     Route::prefix('yearbook')->group(function () {
         Route::get('/flipbook', [YearbookController::class, 'flipbookData'])
             ->middleware('feature:enable_flipbook_viewer');
@@ -266,7 +263,7 @@ Route::middleware(['auth:sanctum', 'throttle:120,1'])->group(function () {
             ->name('yearbook.alumni-from-page');
     });
 
-    // ── Yearbooks (batch-scoped) ──────────────────────────────────────────────
+    // Yearbooks (batch-scoped)
     Route::middleware('content.security')->prefix('yearbooks')->group(function () {
         Route::get('{batch}', [YearbookController::class, 'show'])
             ->name('yearbooks.show');
@@ -280,12 +277,15 @@ Route::middleware(['auth:sanctum', 'throttle:120,1'])->group(function () {
         Route::post('{batch}/photos',             [YearbookController::class, 'uploadPhoto'])
             ->middleware('throttle:20,1')
             ->name('yearbooks.photos.upload');
+        Route::post('{batch}/generate',           [YearbookController::class, 'generate'])
+            ->middleware(['throttle:20,1', 'feature:enable_flipbook_viewer'])
+            ->name('yearbooks.generate');
     });
 
     Route::get('galleries/{gallery}', [GalleryController::class, 'show'])
         ->name('galleries.show');
 
-    // ── Payments ──────────────────────────────────────────────────────────────
+    // Payments 
     Route::prefix('payments')->group(function () {
         Route::post('/create-intent', [PaymentController::class, 'createIntent'])
             ->middleware('feature:enable_premium_subscription');
@@ -295,7 +295,7 @@ Route::middleware(['auth:sanctum', 'throttle:120,1'])->group(function () {
         Route::get('/status',         [PaymentController::class, 'subscriptionStatus']);
     });
 
-    // ── Notifications ─────────────────────────────────────────────────────────
+    // Notifications 
     Route::prefix('notifications')->group(function () {
         Route::get('/',                [NotificationController::class, 'index']);
         Route::post('/register-token', [NotificationController::class, 'registerToken']);
@@ -303,13 +303,13 @@ Route::middleware(['auth:sanctum', 'throttle:120,1'])->group(function () {
         Route::post('/{id}/read',      [NotificationController::class, 'markRead']);
     });
 
-    // ── Announcements ─────────────────────────────────────────────────────────
+    // Announcements 
     Route::get('/announcements/recipients/count', [AdminAnnouncementController::class, 'recipientCount']);
     Route::post('/announcements', [AdminAnnouncementController::class, 'store']);
     Route::put('/announcements/{announcement}', [AdminAnnouncementController::class, 'update']);
     Route::delete('/announcements/{announcement}', [AdminAnnouncementController::class, 'destroy']);
 
-    // ── Analytics ─────────────────────────────────────────────────────────────
+    // Analytics
     Route::prefix('analytics')->group(function () {
         Route::get('/summary',        [AnalyticsController::class, 'summary']);
         Route::get('/trending',       [AnalyticsController::class, 'trending']);
@@ -320,13 +320,14 @@ Route::middleware(['auth:sanctum', 'throttle:120,1'])->group(function () {
         Route::post('/record-content-view', [AnalyticsController::class, 'recordContentView']);
     });
 
-    // ── Memory Digest ─────────────────────────────────────────────────────────
+    // Memory Digest 
+    Route::get('/dashboard/memory-digest', [MemoryController::class, 'digest']);
     Route::prefix('memories')->group(function () {
         Route::get('/digest',      [MemoryController::class, 'digest']);
         Route::get('/on-this-day', [MemoryController::class, 'onThisDay']);
     });
 
-    // ── Alumni Tracker ────────────────────────────────────────────────────────
+    // Alumni Tracker
     Route::prefix('alumni')->group(function () {
         Route::get('/me',                 [AlumniTrackerController::class, 'me']);
         Route::post('/career',            [AlumniTrackerController::class, 'updateCareer']);
@@ -355,32 +356,30 @@ Route::middleware(['auth:sanctum', 'throttle:120,1'])->group(function () {
         Route::post('/{id}/notes',    [TranscriptController::class, 'regenerateNotes']);
     });
 
-    // =========================================================================
     // PREMIUM-ONLY ROUTES
-    // =========================================================================
     Route::middleware('premium')->group(function () {
 
         Route::get('/yearbook/certificate', [YearbookController::class, 'exportCertificate']);
 
-        // ✅ Bumped from throttle:5,1 → throttle:60,1 for development
+    });
+
+    // STANDARD/PREMIUM YEARBOOK PDF DOWNLOADS
+    Route::middleware('standard')->group(function () {
+
+        // Bumped from throttle:5,1 → throttle:60,1 for development
         Route::get('/yearbook/export/pdf/{batchId}', [YearbookPdfController::class, 'export'])
             ->middleware(['throttle:60,1', 'content.security', 'feature:enable_yearbook_pdf_download'])
             ->name('yearbook.export.pdf');
 
         Route::get('yearbooks/{batch}/download', [YearbookController::class, 'download'])
-            ->middleware(['throttle:5,1', 'content.security', 'feature:enable_yearbook_pdf_download,publish_yearbook'])
+            ->middleware(['throttle:5,1', 'content.security', 'feature:enable_yearbook_pdf_download'])
             ->name('yearbooks.download');
-
-        Route::post('yearbooks/{batch}/generate', [YearbookController::class, 'generate'])
-            ->middleware('can:admin')
-            ->name('yearbooks.generate');
 
     });
 });
 
-// =========================================================================
 // ADMIN ROUTES — Admin model + admin-token, fully separate from user auth
-// =========================================================================
+
 
 Route::prefix('admin')->group(function () {
     Route::post('/login', [AdminAuthController::class, 'login']);
@@ -390,40 +389,41 @@ Route::middleware(['auth:sanctum', 'admin.only'])
     ->prefix('admin')
     ->group(function () {
 
-    // ── Auth ──────────────────────────────────────────────────────────────────
+    // Auth
     Route::post('/logout', [AdminAuthController::class, 'logout']);
     Route::get('/me',      [AdminAuthController::class, 'me']);
 
-    // ── Dashboard ─────────────────────────────────────────────────────────────
+    // Dashboard
     Route::get('/dashboard', [AdminController::class, 'dashboard']);
 
-    // ── Students ──────────────────────────────────────────────────────────────
+    // Students
     Route::get('/students',         [StudentController::class, 'index']);
     Route::get('/students/{id}',    [StudentController::class, 'show']);
     Route::delete('/students/{id}', [AdminController::class,   'deleteStudent']);
 
-    // ── Faculty CRUD ──────────────────────────────────────────────────────────
+    // Faculty CRUD
     Route::get('/faculty',         [FacultyAdminController::class, 'index']);
     Route::post('/faculty',        [FacultyAdminController::class, 'store']);
+    Route::post('/faculty/import-csv', [FacultyAdminController::class, 'importCsv']);
     Route::put('/faculty/{id}',    [FacultyAdminController::class, 'update']);
     Route::delete('/faculty/{id}', [FacultyAdminController::class, 'destroy']);
 
-    // ── Gallery & Media ───────────────────────────────────────────────────────
+    // Gallery & Media 
     Route::get('/gallery',             [GalleryController::class, 'index']);
     Route::post('/gallery',            [GalleryController::class, 'store']);
     Route::delete('/gallery/{id}',     [GalleryController::class, 'destroy']);
     Route::delete('/media/photo/{id}', [MediaController::class,   'deletePhoto']);
 
-    // ── Batches & Sections ────────────────────────────────────────────────────
+    // Batches & Sections
     Route::get('/batches',         [BatchController::class,   'index']);
     Route::get('/batches/{batch}', [BatchController::class,   'show']);
     Route::get('/sections',        [SectionController::class, 'index']);
 
-    // ── Analytics ─────────────────────────────────────────────────────────────
+    // Analytics 
     Route::get('/analytics/summary',  [AnalyticsController::class, 'summary']);
     Route::get('/analytics/trending', [AnalyticsController::class, 'trending']);
 
-    // ── User Management ───────────────────────────────────────────────────────
+    // User Management
     Route::prefix('users')->group(function () {
         Route::get('/',                       [UserManagementController::class, 'index']);
         Route::get('/{user}',                 [UserManagementController::class, 'show']);
@@ -435,7 +435,7 @@ Route::middleware(['auth:sanctum', 'admin.only'])
         Route::delete('/{user}',              [UserManagementController::class, 'destroy']);
     });
 
-    // ── Moderation ────────────────────────────────────────────────────────────
+    // Moderation 
     Route::prefix('moderation')->group(function () {
 
         Route::get('queue',  [MediaModerationController::class, 'queue']);
@@ -453,6 +453,7 @@ Route::middleware(['auth:sanctum', 'admin.only'])
         Route::post('photo/{id}/approve', [MediaModerationController::class, 'approvePhoto']);
         Route::post('photo/{id}/reject',  [MediaModerationController::class, 'rejectPhoto']);
         Route::post('photo/{id}/revert',  [MediaModerationController::class, 'revertPhoto']);
+        Route::post('photo/{id}/flag-avatar', [MediaModerationController::class, 'flagAvatar']);
 
         Route::get( '{type}/{id}',         [MediaModerationController::class, 'show']);
         Route::post('{type}/{id}/approve', [MediaModerationController::class, 'approveItem']);
@@ -460,13 +461,13 @@ Route::middleware(['auth:sanctum', 'admin.only'])
         Route::post('{type}/{id}/revert',  [MediaModerationController::class, 'revertItem']);
     });
 
-    // ── Voice Notes Moderation ────────────────────────────────────────────────
+    // Voice Notes Moderation 
     Route::get('/voice-notes',               [VoiceNoteAdminController::class, 'index']);
     Route::get('/voice-notes/stats',         [VoiceNoteAdminController::class, 'stats']);
     Route::post('/voice-notes/{id}/approve', [VoiceNoteAdminController::class, 'approve']);
     Route::post('/voice-notes/{id}/reject',  [VoiceNoteAdminController::class, 'reject']);
 
-    // ── Batches ───────────────────────────────────────────────────────────────
+    // Batches 
     Route::prefix('batches')->group(function () {
         Route::get('/',           [BatchSectionController::class, 'batchIndex']);
         Route::get('/{batch}',    [BatchSectionController::class, 'batchShow']);
@@ -478,7 +479,7 @@ Route::middleware(['auth:sanctum', 'admin.only'])
         Route::get('/{batch}/departments/{department}/courses', [BatchSectionController::class, 'batchDepartmentCourses']);
     });
 
-    // ── Sections ──────────────────────────────────────────────────────────────
+    // Sections 
     Route::prefix('sections')->group(function () {
         Route::get('/',             [BatchSectionController::class, 'sectionIndex']);
         Route::get('/{section}',    [BatchSectionController::class, 'sectionShow']);
@@ -493,7 +494,7 @@ Route::middleware(['auth:sanctum', 'admin.only'])
         Route::delete('/{section}/students/{student}', [AdminStudentController::class, 'destroy']);
     });
 
-    // ── Media Library ─────────────────────────────────────────────────────────
+    //Media Library 
     Route::prefix('media')->group(function () {
         Route::get('/stats', [MediaModerationController::class, 'mediaStats']);
 
@@ -517,7 +518,7 @@ Route::middleware(['auth:sanctum', 'admin.only'])
         Route::delete('/tagged-photos/{id}', [MediaModerationController::class, 'destroyTaggedPhoto']);
     });
 
-    // ── Graduation Content ────────────────────────────────────────────────────
+    // Graduation Content 
     Route::prefix('graduation/content')->group(function () {
         $gc = GraduationContentController::class;
 
@@ -544,21 +545,21 @@ Route::middleware(['auth:sanctum', 'admin.only'])
         Route::post('/{album}/archive', [$gc, 'archiveContent']);
     });
 
-    // ── Graduation Albums ─────────────────────────────────────────────────────
+    // Graduation Albums 
     Route::prefix('graduation/albums')->group(function () {
         $gc = GraduationContentController::class;
         Route::post('/',               [$gc, 'createAlbum']);
         Route::post('/{album}/upload', [$gc, 'uploadToAlbum']);
     });
 
-    // ── Privacy & Consent ─────────────────────────────────────────────────────
+    // Privacy & Consent 
     Route::prefix('privacy')->group(function () {
         Route::get('/stats',      [PrivacyConsentController::class, 'stats']);
         Route::get('/consents',   [PrivacyConsentController::class, 'consents']);
         Route::get('/audit-logs', [PrivacyConsentController::class, 'auditLogs']);
     });
 
-    // ── Subscriptions ─────────────────────────────────────────────────────────
+    // Subscriptions
     Route::prefix('subscriptions')->group(function () {
         Route::get('/stats',                   [SubscriptionController::class, 'stats']);
         Route::get('/',                        [SubscriptionController::class, 'index']);
@@ -566,7 +567,7 @@ Route::middleware(['auth:sanctum', 'admin.only'])
         Route::patch('/{subscription}/cancel', [SubscriptionController::class, 'cancel']);
     });
 
-    // ── Analytics & Engagement ────────────────────────────────────────────────
+    // Analytics & Engagement 
     Route::prefix('analytics')->group(function () {
         Route::get('/overview',     [AnalyticsAdminController::class, 'overview']);
         Route::get('/views-trend',  [AnalyticsAdminController::class, 'viewsTrend']);
@@ -576,7 +577,7 @@ Route::middleware(['auth:sanctum', 'admin.only'])
         Route::get('/presence',     [AnalyticsAdminController::class, 'presence']);
     });
 
-    // ── Trash ─────────────────────────────────────────────────────────────────
+    // Trash 
     Route::prefix('trash')->group(function () {
         Route::get('/',              [TrashController::class, 'index']);
         Route::get('/counts',        [TrashController::class, 'counts']);
@@ -586,7 +587,7 @@ Route::middleware(['auth:sanctum', 'admin.only'])
         Route::delete('/{type}/{id}',       [TrashController::class, 'forceDelete']);
     });
 
-    // ── Settings ──────────────────────────────────────────────────────────────
+    // Settings 
     Route::prefix('settings')->group(function () {
         Route::get('/',                    [SettingsController::class, 'index']);
         Route::post('/',                   [SettingsController::class, 'save']);
@@ -596,9 +597,8 @@ Route::middleware(['auth:sanctum', 'admin.only'])
     });
 });
 
-// =========================================================================
+
 // SUPER ADMIN ROUTES
-// =========================================================================
 
 Route::middleware(['auth:sanctum', 'admin.only', 'require.super_admin'])
     ->prefix('admin')

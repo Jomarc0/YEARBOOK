@@ -1,12 +1,12 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Animated, FlatList, PanResponder, RefreshControl, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { FontAwesome } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
-import { getAppConfig, getErrorMessage, getNotifications, markAllNotificationsRead, markNotificationRead, unwrap } from '../lib/api';
-import { colors, shadows } from '../components/webTheme';
+import { getAppConfig, getErrorMessage, getNotifications, markAllNotificationsRead, markNotificationRead, unwrap } from '../../lib/api';
+import { colors, shadows } from '../../components/webTheme';
 
 const notificationId = (item: any) => item?.id || item?.notification_id;
 const notificationTitle = (item: any) => item?.title || item?.data?.title || item?.type || 'Notification';
@@ -38,6 +38,7 @@ const targetFromActionUrl = (actionUrl?: string) => {
       pathname: '/yearbook',
       params: {
         batchId: yearbookMatch[1],
+        view: '1',
         ...(pageMatch?.[1] ? { pageIndex: pageMatch[1] } : {}),
       },
     };
@@ -88,7 +89,8 @@ const notificationTarget = (item: any, subscriptionEnabled = true, yearbookEnabl
     return { pathname: '/payment', params: plan ? { plan: String(plan) } : undefined };
   }
 
-  if (type === 'memory_reminder' || type === 'announcement') return actionTarget || '/home';
+  if (type === 'announcement') return actionTarget || '/announcements';
+  if (type === 'memory_reminder') return actionTarget || '/home';
   if (type.includes('yearbook')) {
     if (!yearbookEnabled) return null;
     const batchId = firstValue(data, ['batch_id', 'batchId']);
@@ -97,6 +99,7 @@ const notificationTarget = (item: any, subscriptionEnabled = true, yearbookEnabl
       pathname: '/yearbook',
       params: {
         ...(batchId ? { batchId: String(batchId) } : {}),
+        ...(batchId ? { view: '1' } : {}),
         ...(pageIndex !== null ? { pageIndex: String(pageIndex) } : {}),
       },
     };
@@ -121,6 +124,7 @@ const formatDate = (value?: string) => {
 
 export default function NotificationsScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const [notifications, setNotifications] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -128,7 +132,7 @@ export default function NotificationsScreen() {
   const [appConfig, setAppConfig] = useState<any>(null);
   const features = appConfig?.features || {};
   const subscriptionEnabled = features.enable_premium_subscription !== false;
-  const yearbookEnabled = features.enable_flipbook_viewer !== false && features.publish_yearbook !== false;
+  const yearbookEnabled = features.enable_flipbook_viewer !== false;
 
   const loadNotifications = useCallback(async () => {
     try {
@@ -170,14 +174,40 @@ export default function NotificationsScreen() {
   };
 
   const unreadCount = notifications.filter(isUnread).length;
+  const visibleNotifications = useMemo(() => {
+    const dayMs = 24 * 60 * 60 * 1000;
+    const grouped = new Map<string, any>();
+    notifications
+      .slice()
+      .sort((a, b) => new Date(notificationDate(b) || 0).getTime() - new Date(notificationDate(a) || 0).getTime())
+      .forEach((item) => {
+        const type = notificationType(item);
+        const body = notificationBody(item).trim().toLowerCase();
+        const created = new Date(notificationDate(item) || 0).getTime();
+        const isSubscription = type.includes('subscription') || notificationTitle(item).toLowerCase().includes('subscription activated');
+        if (!isSubscription || !body || !created) {
+          grouped.set(String(notificationId(item) || `${type}-${created}-${grouped.size}`), item);
+          return;
+        }
+        const key = `${type}:${body}`;
+        const existing = grouped.get(key);
+        const existingDate = existing ? new Date(notificationDate(existing) || 0).getTime() : 0;
+        if (existing && Math.abs(existingDate - created) <= dayMs) {
+          grouped.set(key, { ...existing, _duplicateCount: Number(existing._duplicateCount || 1) + 1 });
+          return;
+        }
+        grouped.set(key, { ...item, _duplicateCount: 1 });
+      });
+    return Array.from(grouped.values());
+  }, [notifications]);
   const sectionedNotifications = useMemo(() => {
     const start = new Date();
     start.setHours(0, 0, 0, 0);
-    const today = notifications.filter((item) => {
+    const today = visibleNotifications.filter((item) => {
       const date = new Date(notificationDate(item) || 0);
       return date >= start;
     });
-    const earlier = notifications.filter((item) => {
+    const earlier = visibleNotifications.filter((item) => {
       const date = new Date(notificationDate(item) || 0);
       return date < start;
     });
@@ -185,7 +215,7 @@ export default function NotificationsScreen() {
       ...(today.length ? [{ _section: 'Today' }, ...today] : []),
       ...(earlier.length ? [{ _section: 'Earlier' }, ...earlier] : []),
     ];
-  }, [notifications]);
+  }, [visibleNotifications]);
 
   const dismissOne = (item: any) => {
     const id = notificationId(item);
@@ -193,7 +223,7 @@ export default function NotificationsScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.container} edges={['left', 'right']}>
+    <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
       <StatusBar style="dark" />
       <View style={styles.header}>
         <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
@@ -236,7 +266,7 @@ export default function NotificationsScreen() {
           </View>
         )}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); loadNotifications(); }} />}
-        contentContainerStyle={styles.content}
+        contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 108 }]}
       />
     </SafeAreaView>
   );
@@ -275,7 +305,10 @@ function NotificationRow({ item, onOpen, onDismiss, subscriptionEnabled, yearboo
               {unread ? <View style={styles.dot} /> : null}
             </View>
             <Text style={styles.cardBody} numberOfLines={3}>{notificationBody(item)}</Text>
-            {!!notificationDate(item) && <Text style={styles.cardDate}>{formatDate(notificationDate(item))}</Text>}
+            <View style={styles.cardFoot}>
+              {!!notificationDate(item) && <Text style={styles.cardDate}>{formatDate(notificationDate(item))}</Text>}
+              {item?._duplicateCount > 1 ? <Text style={styles.duplicateText}>· {item._duplicateCount}</Text> : null}
+            </View>
           </View>
           {notificationTarget(item, subscriptionEnabled, yearbookEnabled) ? <FontAwesome name="chevron-right" size={13} color="#cbd5e1" /> : null}
         </TouchableOpacity>
@@ -286,14 +319,14 @@ function NotificationRow({ item, onOpen, onDismiss, subscriptionEnabled, yearboo
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F0F2F8' },
-  header: { flexDirection: 'row', alignItems: 'center', gap: 14, paddingHorizontal: 18, paddingTop: 18, paddingBottom: 14 },
+  header: { flexDirection: 'row', alignItems: 'center', gap: 14, paddingHorizontal: 18, paddingTop: 8, paddingBottom: 14 },
   backButton: { width: 42, height: 42, borderRadius: 14, backgroundColor: '#ffffff', borderWidth: 1, borderColor: colors.border, alignItems: 'center', justifyContent: 'center' },
   kicker: { color: colors.gold, fontSize: 11, fontWeight: '900', letterSpacing: 1.1, textTransform: 'uppercase' },
   title: { color: colors.navy, fontSize: 27, fontWeight: '900', marginTop: 2 },
   readButton: { minHeight: 36, justifyContent: 'center' },
   readButtonText: { color: '#1A2547', fontSize: 12, fontWeight: '900' },
   readButtonDisabled: { color: '#cbd5e1' },
-  content: { paddingHorizontal: 18, paddingBottom: 110 },
+  content: { paddingHorizontal: 18 },
   sectionLabel: { color: '#6B7280', fontSize: 12, fontWeight: '900', textTransform: 'uppercase', marginTop: 14, marginBottom: 8 },
   swipeShell: { position: 'relative' },
   deleteBehind: { position: 'absolute', right: 0, top: 0, bottom: 10, width: 86, borderRadius: 12, backgroundColor: colors.danger, alignItems: 'center', justifyContent: 'center' },
@@ -305,7 +338,9 @@ const styles = StyleSheet.create({
   cardTitle: { color: colors.navy, fontSize: 14, fontWeight: '900', flex: 1 },
   dot: { width: 8, height: 8, borderRadius: 4, backgroundColor: colors.gold },
   cardBody: { color: colors.muted, fontSize: 12, lineHeight: 18, marginTop: 4 },
-  cardDate: { color: '#94a3b8', fontSize: 11, fontWeight: '800', marginTop: 9 },
+  cardFoot: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 9 },
+  cardDate: { color: '#94a3b8', fontSize: 11, fontWeight: '800' },
+  duplicateText: { color: colors.gold, fontSize: 11, fontWeight: '900' },
   dismissButton: { width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
   empty: { minHeight: 520, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 24 },
   emptyIcon: { width: 74, height: 74, borderRadius: 37, backgroundColor: '#ffffff', alignItems: 'center', justifyContent: 'center' },

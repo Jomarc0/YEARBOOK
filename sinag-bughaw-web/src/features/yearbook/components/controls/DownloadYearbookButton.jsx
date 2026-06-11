@@ -23,8 +23,8 @@ export default function DownloadYearbookButton({ batchId, pdfReady: initialPdfRe
     } catch (err) {
       setPhase('error');
       const status = err?.response?.status;
-      if (status === 403) {
-        setErrorMsg('Premium subscription required.');
+      if (status === 402 || status === 403) {
+        setErrorMsg('Standard or Premium subscription required.');
       } else if (status === 404) {
         setErrorMsg('Yearbook PDF endpoint was not found.');
       } else {

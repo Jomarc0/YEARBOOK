@@ -169,6 +169,7 @@ function useFaceSearch() {
 
 // ── FaceResultBanner ───────────────────────────────────────────────────────────
 
+// eslint-disable-next-line no-unused-vars
 function FaceResultBanner({ matches, onClear }) {
   if (!matches.length) return null;
   return (
@@ -408,7 +409,7 @@ function SearchInput({ value, onChange, placeholder, hasMatch, children }) {
 
 // ── ResultCount ────────────────────────────────────────────────────────────────
 
-function ResultCount({ matchedSize, displayedLength, total, hasQuery, resultsLength, isPremium, suffix = '' }) {
+function ResultCount({ matchedSize, total, hasQuery, resultsLength, isPremium, suffix = '' }) {
   if (matchedSize > 0) {
     return null;
   }

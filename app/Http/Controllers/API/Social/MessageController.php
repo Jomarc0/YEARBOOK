@@ -10,13 +10,16 @@ use App\Jobs\SendPushNotification;
 use App\Models\Message;
 use App\Models\User;
 use App\Models\UserNotification;
+use App\Services\Storage\CloudinaryService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 
 class MessageController extends Controller
 {
-    // ── Conversations list ────────────────────────────────────────────────────
+    public function __construct(private readonly CloudinaryService $cloudinary) {}
+
+    // Conversations list
 
     public function conversations(Request $request): JsonResponse
     {
@@ -55,6 +58,8 @@ class MessageController extends Controller
                 return [
                     'id'           => $message->id,
                     'body'         => $message->body,
+                    'image_path'   => $message->image_path,
+                    'image_url'    => $message->image_url,
                     'is_read'      => $message->is_read,
                     'sender_id'    => $message->sender_id,
                     'receiver_id'  => $message->receiver_id,
@@ -74,7 +79,7 @@ class MessageController extends Controller
         return response()->json($conversations);
     }
 
-    // ── Unread badge count ────────────────────────────────────────────────────
+    // Unread badge count 
 
     public function unreadCount(Request $request): JsonResponse
     {
@@ -82,7 +87,7 @@ class MessageController extends Controller
         return response()->json(['unread_count' => $count]);
     }
 
-    // ── Thread ────────────────────────────────────────────────────────────────
+    // Thread 
 
     public function participant(Request $request, int $userId): JsonResponse
     {
@@ -118,36 +123,66 @@ class MessageController extends Controller
         return response()->json($messages);
     }
 
-    // ── Send ──────────────────────────────────────────────────────────────────
+    // Send
 
     public function send(Request $request): JsonResponse
     {
         $request->validate([
             'receiver_id' => 'required|exists:users,id',
-            'body'        => 'required|string|max:5000',
+            'body'        => 'nullable|required_without:image|string|max:5000',
+            'image'       => 'nullable|image|max:5120',
         ]);
+
+        $imagePath = null;
+        if ($request->hasFile('image')) {
+            try {
+                $result = $this->cloudinary->uploadPhoto(
+                    file: $request->file('image'),
+                    userId: $request->user()->id,
+                    folder: 'messages',
+                    options: [
+                        'skip_mime_check' => true,
+                        'skip_size_check' => true,
+                    ],
+                );
+                $imagePath = $result['secure_url'] ?? null;
+
+                if (! $imagePath) {
+                    throw new \RuntimeException('Cloud upload returned no secure URL.');
+                }
+            } catch (\Throwable $e) {
+                Log::warning('Message image cloud upload failed: ' . $e->getMessage());
+
+                return response()->json([
+                    'message' => 'Image upload failed. Please try again.',
+                ], 422);
+            }
+        }
+        $body = trim((string) $request->input('body', ''));
+        $preview = $body !== '' ? $body : 'Sent an image';
 
         $message = Message::create([
             'sender_id'   => $request->user()->id,
             'receiver_id' => $request->receiver_id,
-            'body'        => $request->body,
+            'body'        => $body,
+            'image_path'  => $imagePath,
         ]);
 
-        // ── Broadcast (realtime) ──────────────────────────────────────────────
+        // Broadcast (realtime)
         try {
             broadcast(new MessageSent($message))->toOthers();
         } catch (\Throwable $e) {
             Log::warning('MessageSent broadcast failed: ' . $e->getMessage());
         }
 
-        // ── Push notification ─────────────────────────────────────────────────
+        // Push notification 
         try {
             $senderName = $this->displayName($request->user());
 
             SendPushNotification::dispatch(
                 $request->receiver_id,
                 $senderName,
-                $request->body,
+                $preview,
                 [
                     'type' => 'chat',
                     'sender_id' => (string) $request->user()->id,
@@ -163,7 +198,7 @@ class MessageController extends Controller
             Log::warning('Push notification failed: ' . $e->getMessage());
         }
 
-        // ── Email notification ────────────────────────────────────────────────
+        //Email notification 
         try {
             $receiver = User::find($request->receiver_id);
             if ($receiver?->email) {
@@ -171,7 +206,7 @@ class MessageController extends Controller
                     email:          $receiver->email,
                     name:           $receiver->name ?? $receiver->email,
                     senderName:     $this->displayName($request->user()),
-                    messagePreview: $request->body,
+                    messagePreview: $preview,
                 );
             }
         } catch (\Throwable $e) {
@@ -181,7 +216,7 @@ class MessageController extends Controller
         return response()->json($message->load('sender:id,name,first_name,last_name,profile_picture,student_record_id'), 201);
     }
 
-    // ── Mark read ─────────────────────────────────────────────────────────────
+    // Mark read 
 
     public function markRead(Request $request, int $id): JsonResponse
     {
@@ -195,7 +230,7 @@ class MessageController extends Controller
         return response()->json(['message' => 'Marked as read.']);
     }
 
-    // ── Typing indicator ──────────────────────────────────────────────────────
+    // Typing indicator 
 
     public function typing(Request $request): JsonResponse
     {

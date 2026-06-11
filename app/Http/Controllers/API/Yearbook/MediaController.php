@@ -27,14 +27,16 @@ class MediaController extends Controller
         private readonly StorageServiceInterface $storage
     ) {}
 
-    // =========================================================================
-
     /**
      * POST /api/media/bulk-upload
      */
     public function bulkUpload(BulkUploadRequest $request): JsonResponse
     {
         if ($response = $this->requireSubscribed()) {
+            return $response;
+        }
+
+        if ($response = $this->pendingImageUploadResponse()) {
             return $response;
         }
 
@@ -52,7 +54,7 @@ class MediaController extends Controller
 
             $savedGalleries = $uploaded->map(function ($result) use ($album) {
 
-                // 1️⃣ Create the Gallery (logical item) row
+                // 1️ Create the Gallery 
                 $gallery = Gallery::create([
                     'album_id'    => $album->id,
                     'user_id'     => Auth::id(),
@@ -67,7 +69,7 @@ class MediaController extends Controller
                     ],
                 ]);
 
-                // 2️⃣ Create the GalleryMedia (physical file) row
+                // 2 Create the GalleryMedia 
                 GalleryMedia::create([
                     'gallery_id'    => $gallery->id,
                     'file_path'     => $result['secure_url'],
@@ -102,8 +104,6 @@ class MediaController extends Controller
         }
     }
 
-    // =========================================================================
-
     /**
      * POST /api/media/upload-video
      */
@@ -122,7 +122,7 @@ class MediaController extends Controller
                 folder: "albums/{$album->id}/videos",
             );
 
-            // 1️⃣ Create the Gallery (logical item) row
+            // 1️ Create the Gallery 
             $gallery = Gallery::create([
                 'album_id'    => $album->id,
                 'user_id'     => Auth::id(),
@@ -136,7 +136,7 @@ class MediaController extends Controller
                 ],
             ]);
 
-            // 2️⃣ Create the GalleryMedia (physical file) row
+            // 2 Create the GalleryMedia 
             GalleryMedia::create([
                 'gallery_id'    => $gallery->id,
                 'file_path'     => $result['secure_url'],
@@ -161,14 +161,7 @@ class MediaController extends Controller
         }
     }
 
-    // =========================================================================
-
-    /**
-     * DELETE /api/media/photo/{id}
-     *
-     * Deletes a GalleryMedia row (and its parent Gallery if it has no
-     * remaining media files) plus the physical file from storage.
-     */
+     //DELETE /api/media/photo/{id}
     public function deletePhoto(int $id): JsonResponse
     {
         // Try GalleryMedia first (new architecture)
@@ -240,8 +233,6 @@ class MediaController extends Controller
         }
     }
 
-    // =========================================================================
-
     /**
      * GET /api/profile/storage-usage
      */
@@ -286,9 +277,7 @@ class MediaController extends Controller
         ]);
     }
 
-    // =========================================================================
     // Response helpers
-    // =========================================================================
 
     private function requireSubscribed(): ?JsonResponse
     {
@@ -303,6 +292,29 @@ class MediaController extends Controller
         }
 
         return null;
+    }
+
+    private function pendingImageUploadResponse(): ?JsonResponse
+    {
+        $pending = Gallery::query()
+            ->where('user_id', Auth::id())
+            ->where('status', 'pending')
+            ->whereHas('media', fn ($media) => $media->where('resource_type', 'image'))
+            ->latest()
+            ->first();
+
+        if (! $pending) {
+            return null;
+        }
+
+        return $this->error(
+            message: 'You already uploaded an image that is waiting for admin approval. We will notify you by email and in-app notification once it is approved.',
+            errors: [
+                'code' => 'PENDING_IMAGE_APPROVAL',
+                'gallery_id' => $pending->id,
+            ],
+            status: 422
+        );
     }
 
     private function success(string $message = 'OK', mixed $data = [], int $status = 200): JsonResponse

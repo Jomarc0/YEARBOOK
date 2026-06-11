@@ -27,7 +27,7 @@ class VoiceNote extends Model
         'reviewed_at' => 'datetime',
     ];
 
-    // ── Relationships ──────────────────────────────────────────────────────────
+    // Relationships 
 
     public function sender(): BelongsTo
     {

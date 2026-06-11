@@ -17,17 +17,7 @@ use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 use Throwable;
 
-/**
- * CloudinaryService
- *
- * Subscription-aware Cloudinary storage integration.
- *
- * Upload type strategy:
- *   - folder = 'profile'  → type: 'upload'  (public, directly loadable in <img>)
- *   - all others          → type: 'upload'  (public by default for yearbook content)
- *
- * If you ever need private/paid assets, pass ['type' => 'authenticated'] in $options.
- */
+
 class CloudinaryService implements StorageServiceInterface
 {
     private Cloudinary $cloudinary;
@@ -37,9 +27,7 @@ class CloudinaryService implements StorageServiceInterface
     private const STORAGE_CACHE_TTL   = 300;
     private const BANDWIDTH_CACHE_TTL = 600;
 
-    // -------------------------------------------------------------------------
     // Constructor
-    // -------------------------------------------------------------------------
 
     public function __construct()
     {
@@ -59,18 +47,10 @@ class CloudinaryService implements StorageServiceInterface
         $this->adminApi   = new AdminApi();
     }
 
-    // -------------------------------------------------------------------------
-    // uploadPhoto()
-    // -------------------------------------------------------------------------
 
+    // uploadPhoto()
     /**
      * Upload any file (image, video, audio, PDF) to Cloudinary.
-     *
-     * Supported $options keys:
-     *   skip_mime_check (bool)  — bypass tier mime-type restriction
-     *   skip_size_check (bool)  — bypass tier file-size restriction
-     *   skip_quota_check (bool) — bypass per-user storage quota check
-     *   type (string)           — Cloudinary delivery type, default 'upload'
      */
     public function uploadPhoto(
         UploadedFile $file,
@@ -100,7 +80,6 @@ class CloudinaryService implements StorageServiceInterface
             'skip_quota_check',
         ]));
 
-        // ── FIX: only include 'transformation' when it's actually an array ──
         $transformation = $this->resolveTransformations($file, $tierConfig);
 
         $baseOptions = [
@@ -152,9 +131,7 @@ class CloudinaryService implements StorageServiceInterface
         }
     }
 
-    // -------------------------------------------------------------------------
     // uploadBulk()
-    // -------------------------------------------------------------------------
 
     public function uploadBulk(
         array  $files,
@@ -198,9 +175,7 @@ class CloudinaryService implements StorageServiceInterface
         return $results;
     }
 
-    // -------------------------------------------------------------------------
     // deletePhoto()
-    // -------------------------------------------------------------------------
 
     public function deletePhoto(string $publicId, string $resourceType = 'image'): array
     {
@@ -238,19 +213,15 @@ class CloudinaryService implements StorageServiceInterface
         }
     }
 
-    // -------------------------------------------------------------------------
+
     // delete()  — generic delete used by VoiceNoteController and others
-    // -------------------------------------------------------------------------
 
     public function delete(string $publicId, string $resourceType = 'video'): array
     {
         return $this->deletePhoto($publicId, $resourceType);
     }
 
-    // -------------------------------------------------------------------------
     // generateSignedUrl()
-    // -------------------------------------------------------------------------
-
     public function generateSignedUrl(
         string $publicId,
         int    $ttl             = 0,
@@ -292,9 +263,7 @@ class CloudinaryService implements StorageServiceInterface
         }
     }
 
-    // -------------------------------------------------------------------------
     // getBandwidthUsage()
-    // -------------------------------------------------------------------------
 
     public function getBandwidthUsage(): array
     {
@@ -324,9 +293,7 @@ class CloudinaryService implements StorageServiceInterface
         });
     }
 
-    // -------------------------------------------------------------------------
     // getUserStorageUsed()
-    // -------------------------------------------------------------------------
 
     public function getUserStorageUsed(int $userId): int
     {
@@ -355,17 +322,11 @@ class CloudinaryService implements StorageServiceInterface
         });
     }
 
-    // -------------------------------------------------------------------------
+
     // uploadAudio()
-    // -------------------------------------------------------------------------
 
     /**
      * Upload an audio file to Cloudinary.
-     *
-     * Used by two distinct features — the folder and tags differ per context:
-     *   $context = 'voice_notes'  → yearbook/voice-notes folder, moderation tags
-     *   $context = 'transcripts'  → transcripts folder, Groq pipeline tags
-     *
      * Cloudinary requires resource_type = 'video' for all audio files.
      * The 25 MB cap matches the Groq free-tier transcription limit.
      */
@@ -397,7 +358,7 @@ class CloudinaryService implements StorageServiceInterface
 
         $uploadOptions = [
             'folder'          => $folder,
-            'resource_type'   => 'video',   // Cloudinary uses 'video' for audio files
+            'resource_type'   => 'video',   
             'type'            => 'upload',
             'use_filename'    => false,
             'unique_filename' => true,
@@ -433,9 +394,9 @@ class CloudinaryService implements StorageServiceInterface
         }
     }
 
-    // =========================================================================
+
     // PRIVATE HELPERS
-    // =========================================================================
+
 
     private function resolveUserTier(int $userId): string
     {

@@ -60,6 +60,24 @@ function statusBadge(user) {
   return <Badge label="Unverified" tone="amber" />;
 }
 
+function hasName(user) {
+  return Boolean(`${user.first_name ?? ""}${user.last_name ?? ""}`.trim());
+}
+
+function hasStudentRecord(user) {
+  return Boolean(user.student_id || user.course || user.batch || user.graduation_year);
+}
+
+function statusBadges(user) {
+  const incomplete = !hasStudentRecord(user);
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {statusBadge(user)}
+      {incomplete && <Badge label="Incomplete" tone="default" />}
+    </div>
+  );
+}
+
 function Avatar({ user, size = 36 }) {
   const initials = [user.first_name?.[0], user.last_name?.[0]].filter(Boolean).join("").toUpperCase() || "?";
   if (user.profile_picture || user.avatar) {
@@ -150,7 +168,10 @@ function ConfirmModal({ open, title, message, confirmLabel, confirmColor, onConf
 }
 
 function UserModal({ user, onClose, onSaved, toast }) {
-  const [form, setForm] = useState({ role: user.role ?? "student", profile_visibility: user.profile_visibility ?? "public" });
+  const initialVisibility = user.profile_visibility === "alumni_only"
+    ? "batchmates"
+    : (user.profile_visibility ?? "public");
+  const [form, setForm] = useState({ role: user.role ?? "student", profile_visibility: initialVisibility });
   const [saving, setSaving] = useState(false);
 
   const set = (k, v) => setForm((p) => ({ ...p, [k]: v }));
@@ -222,7 +243,7 @@ function UserModal({ user, onClose, onSaved, toast }) {
               className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-200"
             >
               <option value="public">Public</option>
-              <option value="alumni_only">Alumni Only</option>
+              <option value="batchmates">Batchmates Only</option>
               <option value="private">Private</option>
             </select>
           </Field>
@@ -345,6 +366,7 @@ export default function UsersPage() {
   const [search, setSearch] = useState("");
   const [roleFilter, setRoleFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
+  const [verifiedOnly, setVerifiedOnly] = useState(false);
 
   const [editUser, setEditUser] = useState(null);
   const [confirm, setConfirm] = useState(null);
@@ -402,11 +424,12 @@ export default function UsersPage() {
     setActLoading(true);
     const { type, user } = confirm;
     try {
-      if (type === "suspend")    await api.patch(`/admin/users/${user.id}/suspend`);
-      if (type === "unsuspend")  await api.patch(`/admin/users/${user.id}/unsuspend`);
-      if (type === "verify")     await api.patch(`/admin/users/${user.id}/verify`);
-      if (type === "resetpw")    await api.post(`/admin/users/${user.id}/reset-password`);
-      if (type === "delete")     await api.delete(`/admin/users/${user.id}`);
+      let response = null;
+      if (type === "suspend")    response = await api.patch(`/admin/users/${user.id}/suspend`);
+      if (type === "unsuspend")  response = await api.patch(`/admin/users/${user.id}/unsuspend`);
+      if (type === "verify")     response = await api.patch(`/admin/users/${user.id}/verify`);
+      if (type === "resetpw")    response = await api.post(`/admin/users/${user.id}/reset-password`);
+      if (type === "delete")     response = await api.delete(`/admin/users/${user.id}`);
 
       const msgs = {
         suspend: "User suspended.",
@@ -416,8 +439,11 @@ export default function UsersPage() {
         delete: "User deleted.",
       };
       toast(msgs[type]);
+      if (response?.data?.data && type !== "delete") {
+        setUsers(prev => prev.map(item => item.id === user.id ? { ...item, ...response.data.data } : item));
+      }
       setConfirm(null);
-      fetchUsers(page);
+      fetchUsers(page, search, roleFilter, statusFilter);
     } catch {
       toast("Action failed. Please try again.", "error");
     } finally {
@@ -432,6 +458,10 @@ export default function UsersPage() {
     resetpw: { title: "Reset Password", message: (u) => `Send a password reset email to ${u.email}?`, label: "Send Reset", color: "primary" },
     delete: { title: "Delete User", message: (u) => `Permanently delete ${u.first_name} ${u.last_name}? This cannot be undone.`, label: "Delete", color: "danger" },
   };
+
+  const displayedUsers = verifiedOnly
+    ? users.filter((u) => Boolean(u.email_verified))
+    : users;
 
   return (
     <>
@@ -476,6 +506,29 @@ export default function UsersPage() {
           )}
         </div>
 
+        <div className="mb-3 flex justify-end">
+          <div className="inline-flex rounded-xl border border-slate-200 bg-white p-1 shadow-sm">
+            {[
+              { label: "Show all", value: false },
+              { label: "Verified only", value: true },
+            ].map((option) => (
+              <button
+                key={option.label}
+                type="button"
+                onClick={() => setVerifiedOnly(option.value)}
+                className={cx(
+                  "rounded-lg px-3.5 py-2 text-sm font-bold transition",
+                  verifiedOnly === option.value
+                    ? "bg-indigo-600 text-white shadow-sm"
+                    : "text-slate-500 hover:bg-slate-50 hover:text-slate-800",
+                )}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
         <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
           <div className="overflow-x-auto">
             <table className="w-full table-auto border-collapse">
@@ -499,7 +552,7 @@ export default function UsersPage() {
                         ))}
                       </tr>
                     ))
-                  : users.length === 0
+                  : displayedUsers.length === 0
                     ? (
                         <tr>
                           <td colSpan={7} className="px-6 py-12 text-center text-sm text-slate-500">
@@ -507,12 +560,19 @@ export default function UsersPage() {
                           </td>
                         </tr>
                       )
-                    : users.map((u, i) => (
+                    : displayedUsers.map((u, i) => {
+                        const userHasName = hasName(u);
+                        const userIncomplete = !hasStudentRecord(u);
+                        const userMuted = !u.email_verified || userIncomplete;
+                        const primaryName = userHasName ? `${u.first_name ?? ""} ${u.last_name ?? ""}`.trim() : u.email;
+
+                        return (
                         <tr
                           key={u.id}
                           className={cx(
                             "border-b border-slate-200 transition-colors hover:bg-indigo-50/40",
                             i % 2 === 0 ? "bg-white" : "bg-slate-50/40",
+                            userMuted && "[&>td:not(:last-child)]:opacity-60",
                           )}
                         >
                           <td className="px-4 py-3.5 text-sm text-slate-800">
@@ -520,9 +580,11 @@ export default function UsersPage() {
                               <Avatar user={u} />
                               <div className="min-w-0">
                                 <div className="max-w-[240px] truncate text-sm font-bold text-slate-800">
-                                  {u.first_name} {u.last_name}
+                                  {primaryName}
                                 </div>
-                                <div className="max-w-[260px] truncate text-xs text-slate-500">{u.email}</div>
+                                <div className={cx("max-w-[260px] truncate text-xs", userHasName ? "text-slate-500" : "italic text-slate-400")}>
+                                  {userHasName ? u.email : "(No name on record)"}
+                                </div>
                               </div>
                             </div>
                           </td>
@@ -536,7 +598,7 @@ export default function UsersPage() {
                             <div className="text-xs text-slate-500">{u.batch ? `Batch ${u.batch}` : ""} {u.graduation_year ? `· ${u.graduation_year}` : ""}</div>
                           </td>
                           <td className="px-4 py-3.5 text-sm text-slate-800">{roleBadge(u.role)}</td>
-                          <td className="px-4 py-3.5 text-sm text-slate-800">{statusBadge(u)}</td>
+                          <td className="px-4 py-3.5 text-sm text-slate-800">{statusBadges(u)}</td>
                           <td className="px-4 py-3.5 text-xs text-slate-500">
                             {u.created_at ? new Date(u.created_at).toLocaleDateString("en-PH", { year: "numeric", month: "short", day: "numeric" }) : "—"}
                           </td>
@@ -552,7 +614,8 @@ export default function UsersPage() {
                             />
                           </td>
                         </tr>
-                      ))
+                        );
+                      })
                 }
               </tbody>
             </table>

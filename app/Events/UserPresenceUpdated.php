@@ -19,11 +19,6 @@ class UserPresenceUpdated implements ShouldBroadcast
         public readonly string $lastSeenAt,
     ) {}
 
-    /**
-     * Broadcast on a public presence channel so ALL authenticated users
-     * can track who is online. The channel is presence-based so Laravel
-     * Reverb manages the member list automatically.
-     */
     public function broadcastOn(): array
     {
         return [new PresenceChannel('online-users')];

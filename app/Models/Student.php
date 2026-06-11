@@ -13,30 +13,30 @@ class Student extends Model
     use HasFactory, SoftDeletes;
 
     protected $fillable = [
-        // ── Identity ──────────────────────────────────────────────────────
+        // Identity 
         'first_name',
         'last_name',
         'middle_name',
         'student_no',
         'email',
 
-        // ── Photo ─────────────────────────────────────────────────────────
+        // Photo
         'photo',
         'photo_public_id',
 
-        // ── Personal ──────────────────────────────────────────────────────
+        // Personal 
         'birthday',
         'hometown',
         'nickname',
 
-        // ── Academic ──────────────────────────────────────────────────────
+        // Academic 
         'course',
         'graduation_year',
         'honors',
         'organizations',
         'achievements',
 
-        // ── Yearbook content ──────────────────────────────────────────────
+        // Yearbook content
         'motto',
         'student_quote',
         'fondest_memory',
@@ -46,13 +46,13 @@ class Student extends Model
         'message_to_parents',
         'most_likely_to',
 
-        // ── Social links ──────────────────────────────────────────────────
+        // Social links
         'facebook_url',
         'instagram_url',
         'linkedin_url',
         'github_url',
 
-        // ── Relations ─────────────────────────────────────────────────────
+        //Relations 
         'section_id',
         'batch_id',
     ];
@@ -63,8 +63,7 @@ class Student extends Model
     {
         return $this->photo ?: null;
     }
-
-    // ── Relationships ──────────────────────────────────────────────────────
+    // Relationships 
 
     public function section(): BelongsTo
     {
@@ -78,14 +77,13 @@ class Student extends Model
 
     /**
      * The registered user account linked to this student record.
-     * Null = student has not registered yet.
      */
     public function userAccount(): HasOne
     {
         return $this->hasOne(User::class, 'student_record_id');
     }
 
-    // ── Helpers ────────────────────────────────────────────────────────────
+    // Helpers 
 
     /**
      * Whether a user has registered and linked to this student record.

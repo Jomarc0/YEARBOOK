@@ -7,7 +7,6 @@ import { storageUrl } from '@/api/client';
 import { useAuth } from '@/features/auth/hooks/useAuth';
 import Navbar from '@/components/layout/Navbar';
 import Footer from '@/components/layout/Footer';
-import PremiumBadge from '@/features/subscription/components/PremiumBadge';
 import StudentPhotosSection from '../components/StudentPhotosSection';
 import ProfileUploadModal from '../components/ProfileUploadModal';
 import PostContextMenu from '../components/PostContextMenu';
@@ -20,6 +19,24 @@ import { getCourseShort } from '@/utils/courseShort';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 const isGraduate = (student) => !!student?.graduation_year;
+const isMeaningfulText = (value, minLength = 10) => {
+  const text = String(value || '').replace(/\s+/g, ' ').trim();
+  const compact = text.replace(/[^a-z0-9]/gi, '').toLowerCase();
+  if (text.length < minLength || compact.length < minLength) return false;
+  if (/^(test|asdf|qwerty|sample|lorem|abc|haha)+$/i.test(compact)) return false;
+  if (/^(.)\1{2,}$/.test(compact)) return false;
+  return true;
+};
+const postMediaItems = (post) => {
+  if (Array.isArray(post?.media) && post.media.length) return post.media;
+  return post?.file_path || post?.url || post?.path ? [post] : [];
+};
+const shouldShowProfilePost = (post) => {
+  const status = String(post?.status || post?.moderation_status || post?.approval_status || '').toLowerCase();
+  if (['pending', 'rejected', 'unapproved', 'hidden', 'flagged'].includes(status)) return false;
+  if (post?.is_approved === false || post?.approved === false || post?.is_public === false) return false;
+  return postMediaItems(post).length > 0 || isMeaningfulText(post?.caption || post?.body || post?.message, 3);
+};
 
 const getTier = (u) => {
   if (!u) return 'free';
@@ -33,6 +50,7 @@ const TIER_CONFIG = {
   standard: { label: 'Standard', icon: 'fa-bolt',   cls: 'bg-indigo-50 text-indigo-700 border border-indigo-200' },
   free:     { label: 'Free',     icon: 'fa-user',   cls: 'bg-slate-100 text-slate-500 border border-slate-200'   },
 };
+const PROFILE_TABS = new Set(['posts', 'tagged', 'academic', 'achievements', 'voicenotes']);
 
 // ── Sub-components ────────────────────────────────────────────────────────────
 function TabCard({ icon, label, action, children }) {
@@ -219,7 +237,13 @@ export default function ProfilePage() {
   const [bio,               setBio]               = useState('');
   const [editing,           setEditing]           = useState(false);
   const [toast,             setToast]             = useState(null);
-  const [activeTab,         setActiveTab]         = useState('posts');
+  const postParam = searchParams.get('post');
+  const tabParam = searchParams.get('tab');
+  const noteParam = searchParams.get('note');
+  const [activeTab,         setActiveTab]         = useState(() => {
+    if (postParam) return 'posts';
+    return PROFILE_TABS.has(tabParam) ? tabParam : 'posts';
+  });
   const [showUpload,        setShowUpload]        = useState(false);
   const [showShare,         setShowShare]         = useState(false);
   const [showMsg,           setShowMsg]           = useState(false);
@@ -238,9 +262,10 @@ export default function ProfilePage() {
   const [achieveLoading,  setAchieveLoading]  = useState(false);
 
   const fileRef = useRef();
-  const isOwn   = authUser?.id === parseInt(id);
-  const postParam = searchParams.get('post');
+  const profileId = id ?? authUser?.id;
+  const isOwn   = Boolean(authUser?.id && String(authUser.id) === String(profileId));
   const openedPostRef = useRef(null);
+  const openedVoiceNoteRef = useRef(null);
   const userTier   = getTier(authUser);
   const isPremium  = userTier === 'premium' || userTier === 'standard';
   const isFree     = isOwn && premiumBilling && !isPremium;
@@ -260,20 +285,25 @@ export default function ProfilePage() {
 
   // ── Load student profile ──────────────────────────────────────────────────
   useEffect(() => {
+    if (!profileId) return;
     setLoading(true);
-    studentsApi.show(id)
+    studentsApi.show(profileId)
       .then(({ data }) => { setStudent(data); setBio(data.bio ?? ''); })
       .finally(() => setLoading(false));
-  }, [id]);
+  }, [profileId]);
 
-  useEffect(() => { if (activeTab === 'posts')        loadPosts();        }, [activeTab, id]);
-  useEffect(() => { if (activeTab === 'voicenotes')   loadVoiceNotes();   }, [activeTab, id]);
-  useEffect(() => { if (activeTab === 'achievements') loadAchievements(); }, [activeTab, id]);
-  useEffect(() => { if (activeTab === 'academic')     loadAcademic();     }, [activeTab, id]);
+  useEffect(() => { if (activeTab === 'posts')        loadPosts();        }, [activeTab, profileId]);
+  useEffect(() => { if (activeTab === 'voicenotes')   loadVoiceNotes();   }, [activeTab, profileId]);
+  useEffect(() => { if (activeTab === 'achievements') loadAchievements(); }, [activeTab, profileId]);
+  useEffect(() => { if (activeTab === 'academic')     loadAcademic();     }, [activeTab, profileId]);
 
   useEffect(() => {
     if (postParam) setActiveTab('posts');
   }, [postParam]);
+
+  useEffect(() => {
+    if (!postParam && PROFILE_TABS.has(tabParam)) setActiveTab(tabParam);
+  }, [postParam, tabParam]);
 
   useEffect(() => {
     if (!postParam || postsLoading || !posts.length || openedPostRef.current === postParam) return;
@@ -285,36 +315,48 @@ export default function ProfilePage() {
     setLightbox({ post, idx: 0 });
   }, [postParam, posts, postsLoading]);
 
+  useEffect(() => {
+    if (!noteParam || voiceNotesLoading || !voiceNotes.length || openedVoiceNoteRef.current === noteParam) return;
+
+    const note = voiceNotes.find((item) => String(item.id) === String(noteParam));
+    if (!note) return;
+
+    openedVoiceNoteRef.current = noteParam;
+    document.getElementById(`voice-note-${noteParam}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }, [noteParam, voiceNotes, voiceNotesLoading]);
+
   useEffect(() => () => {
     if (photoDraft?.isObjectUrl && photoDraft?.previewUrl) URL.revokeObjectURL(photoDraft.previewUrl);
   }, [photoDraft?.isObjectUrl, photoDraft?.previewUrl]);
 
   const loadPosts = () => {
+    if (!profileId) return;
     setPostsLoading(true);
-    profileApi.getPosts(id)
-      .then(({ data }) => setPosts(data.data?.data ?? data.data ?? []))
+    profileApi.getPosts(profileId)
+      .then(({ data }) => setPosts((data.data?.data ?? data.data ?? []).filter(shouldShowProfilePost)))
       .catch(() => {})
       .finally(() => setPostsLoading(false));
   };
 
   const loadVoiceNotes = () => {
+    if (!profileId) return;
     setVoiceNotesLoading(true);
-    const req = isOwn ? voiceNotesApi.inbox() : voiceNotesApi.forProfile(id);
+    const req = isOwn ? voiceNotesApi.inbox() : voiceNotesApi.forProfile(profileId);
     req.then(({ data }) => setVoiceNotes(Array.isArray(data) ? data : []))
        .catch(() => setVoiceNotes([]))
        .finally(() => setVoiceNotesLoading(false));
   };
 
   const loadAchievements = () => {
-    if (!id) return;
+    if (!profileId) return;
     setAchieveLoading(true);
-    studentsApi.getAchievements(id)
+    studentsApi.getAchievements(profileId)
       .then(res => {
         const data = res.data?.data ?? res.data ?? [];
         if (Array.isArray(data) && data.length) {
           setAchievements(data.map(a => {
             let meta = {};
-            try { meta = JSON.parse(a.type || '{}'); } catch {}
+            try { meta = JSON.parse(a.type || '{}'); } catch { /* keep default achievement metadata */ }
             return { id: a.id, t: a.title, s: a.subtitle ?? '', icon: meta.icon ?? 'fa-star', color: meta.color ?? '#fdb813' };
           }));
         } else {
@@ -326,9 +368,9 @@ export default function ProfilePage() {
   };
 
   const loadAcademic = () => {
-    if (!id) return;
+    if (!profileId) return;
     setAcademicLoading(true);
-    studentsApi.show(id)
+    studentsApi.show(profileId)
       .then(({ data }) => {
         setAcademicData({
           student_id:      data.student_id      ?? null,
@@ -357,6 +399,10 @@ export default function ProfilePage() {
   };
 
   const saveBio = async () => {
+    if (bio.trim() && !isMeaningfulText(bio, 10)) {
+      showToast('Please enter a meaningful bio.', 'error');
+      return;
+    }
     try {
       await studentsApi.updateBio(bio);
       setStudent(prev => ({ ...prev, bio }));
@@ -455,6 +501,35 @@ export default function ProfilePage() {
       return { file: null, previewUrl: avatar, isObjectUrl: false, zoom: 1, x: 0, y: 0, aspect: 1 };
     });
   };
+
+  const openAcademicTab = () => {
+    setActiveTab('academic');
+    requestAnimationFrame(() => {
+      document.getElementById('profile-tabs')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+  };
+
+  const openStudentIdEditor = () => navigate('/settings');
+
+  const hasProgram = !!student.course && courseShort !== 'N/A';
+  const hasStudentId = !!student.student_id && student.student_id !== 'N/A';
+  const statItems = [
+    { value: posts.length, label: 'Posts' },
+    { value: student.profile_views ?? 0, label: 'Views' },
+    {
+      value: hasProgram ? courseShort : 'Add \u2192',
+      label: 'Program',
+      onClick: openAcademicTab,
+      empty: !hasProgram,
+    },
+    {
+      value: hasStudentId ? student.student_id : 'Add \u2192',
+      label: 'ID',
+      onClick: isOwn ? openStudentIdEditor : null,
+      empty: !hasStudentId,
+    },
+    { value: student.graduation_year ?? student.batch ?? '2026', label: 'Batch' },
+  ];
 
   return (
     <div className="min-h-screen bg-[#f4f7fe] flex flex-col font-sans">
@@ -592,7 +667,6 @@ export default function ProfilePage() {
             {/* Name + badges */}
             <div className="flex flex-wrap items-center gap-2 mb-1">
               <h1 className="text-xl font-black text-[#1d2b4b] m-0 leading-none">{student.name}</h1>
-              {student.is_premium && isOn('premium_badge_display') && <PremiumBadge size="sm" />}
               {graduate && (
                 <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full tracking-wide flex items-center gap-1">
                   <i className="fas fa-graduation-cap text-[8px]" /> GRADUATE {student.graduation_year}
@@ -616,15 +690,16 @@ export default function ProfilePage() {
 
             {/* Stats row */}
             <div className="flex gap-6 flex-wrap mb-4 pb-4 border-b border-slate-100">
-              {[
-                { value: posts.length,                label: 'Posts'   },
-                { value: student.profile_views ?? 0,  label: 'Views'   },
-                { value: courseShort,                  label: 'Program' },
-                { value: student.student_id ?? 'N/A', label: 'ID'      },
-                { value: student.graduation_year ?? student.batch ?? '2026', label: 'Batch' },
-              ].map(s => (
+              {statItems.map(s => (
                 <div key={s.label} className="text-center">
-                  <p className="text-base font-black text-[#1d2b4b] m-0 leading-none">{s.value}</p>
+                  <button
+                    type="button"
+                    onClick={s.onClick}
+                    disabled={!s.onClick}
+                    className={`block border-0 bg-transparent p-0 text-base font-black leading-none ${s.onClick ? 'cursor-pointer hover:text-[#fdb813]' : 'cursor-default'} ${s.empty ? 'text-[#fdb813]' : 'text-[#1d2b4b]'}`}
+                  >
+                    {s.value}
+                  </button>
                   <p className="text-[10px] text-slate-400 font-medium mt-1 m-0">{s.label}</p>
                 </div>
               ))}
@@ -691,7 +766,7 @@ export default function ProfilePage() {
         </div>
 
         {/* ── TABS ── */}
-        <div className="bg-white rounded-2xl mb-3 shadow-sm border border-slate-100 flex overflow-hidden">
+        <div id="profile-tabs" className="bg-white rounded-2xl mb-3 shadow-sm border border-slate-100 flex overflow-hidden scroll-mt-24">
           {TABS.map((tab, i) => (
             <button key={tab.key}
               onClick={() => setActiveTab(tab.key)}
@@ -789,7 +864,7 @@ export default function ProfilePage() {
         {/* ── TAGGED TAB ── */}
         {activeTab === 'tagged' && (
           <TabCard icon="fas fa-tag" label="Tagged Photos">
-            <StudentPhotosSection userId={parseInt(id)} compact />
+            <StudentPhotosSection userId={Number(profileId)} compact />
           </TabCard>
         )}
 
@@ -1039,9 +1114,12 @@ export default function ProfilePage() {
               </div>
             ) : (
               <div className="flex flex-col gap-3">
-                {voiceNotes.map(note => (
+                {voiceNotes.map(note => {
+                  const isTargetNote = noteParam && String(note.id) === String(noteParam);
+                  return (
                   <div key={note.id}
-                    className="flex items-center gap-3 p-4 bg-slate-50 border border-slate-100 rounded-xl hover:shadow-sm transition-shadow">
+                    id={`voice-note-${note.id}`}
+                    className={`flex items-center gap-3 p-4 rounded-xl transition-shadow ${isTargetNote ? 'bg-amber-50 border border-amber-300 shadow-md shadow-amber-100' : 'bg-slate-50 border border-slate-100 hover:shadow-sm'}`}>
                     <img
                       src={note.sender?.profile_picture || `https://ui-avatars.com/api/?name=${encodeURIComponent(note.sender?.name ?? 'S')}&background=1d2b4b&color=fdb813&bold=true&size=80`}
                       alt={note.sender?.name}
@@ -1073,7 +1151,8 @@ export default function ProfilePage() {
                       </span>
                     )}
                   </div>
-                ))}
+                );
+                })}
               </div>
             )}
           </TabCard>

@@ -4,17 +4,18 @@ namespace App\Http\Controllers\API\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Jobs\Notification\SendAnnouncementEmail;
-use App\Jobs\SendPushNotification;
 use App\Models\Announcement;
 use App\Models\Student;
 use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Notifications\DatabaseNotification;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Str;
 
 class AnnouncementController extends Controller
 {
-    // ── GET /api/announcements ─────────────────────────────────────────────────
+    //  GET /api/announcements 
 
     public function index(): JsonResponse
     {
@@ -25,7 +26,7 @@ class AnnouncementController extends Controller
         return response()->json($announcements);
     }
 
-    // ── GET /api/announcements/recipients/count ────────────────────────────────
+    // GET /api/announcements/recipients/count 
 
     public function recipientCount(): JsonResponse
     {
@@ -34,14 +35,14 @@ class AnnouncementController extends Controller
         return response()->json(['count' => $count]);
     }
 
-    // ── POST /api/announcements ────────────────────────────────────────────────
+    // POST /api/announcements
 
     public function store(Request $request): JsonResponse
     {
         $validated = $request->validate([
             'title'        => 'required|string|max:255',
             'body'         => 'required|string',
-            'type'         => 'nullable|in:event,reminder,urgent,information',
+            'type'         => 'nullable|in:graduation,event,reminder,urgent,information',
             'send_push'    => 'boolean',
             'send_email'   => 'boolean',
             'action_url'   => 'nullable|url|max:2048',
@@ -51,7 +52,7 @@ class AnnouncementController extends Controller
         $announcement = Announcement::create([
             'title'      => $validated['title'],
             'body'       => $validated['body'],
-            'type'       => $validated['type']      ?? 'information',
+            'type'       => $validated['type']      ?? $this->fallbackType($validated['title'], $validated['body']),
             'send_push'  => $validated['send_push'] ?? true,
             'created_by' => $request->user()->id,
         ]);
@@ -76,27 +77,17 @@ class AnnouncementController extends Controller
             });
         }
 
-        if ($sendPush) {
-            User::select('id', 'fcm_token')
-                ->chunkById(100, function ($users) use ($announcement) {
-                    foreach ($users as $user) {
-                        SendPushNotification::dispatch(
-                            $user->id,
-                            $announcement->title,
-                            $announcement->body,
-                            ['type' => 'announcement', 'id' => (string) $announcement->id],
-                            'announcement',
-                        );
-                    }
-                });
-        }
+        $pushNotificationCount = $sendPush
+            ? $this->createInAppAnnouncementNotifications($announcement, $validated)
+            : 0;
 
         return response()->json([
             'message'            => $sendEmail
-                ? 'Announcement published. Email notifications were queued.'
-                : 'Announcement published.',
+                ? 'Announcement published. Email notifications were queued and push notifications are visible.'
+                : 'Announcement published. Push notifications are visible.',
             'announcement'       => $announcement->load('creator:id,name'),
             'email_queued_count' => $emailQueued,
+            'push_notification_count' => $pushNotificationCount,
         ], 201);
     }
 
@@ -105,24 +96,38 @@ class AnnouncementController extends Controller
         $validated = $request->validate([
             'title'        => 'required|string|max:255',
             'body'         => 'required|string',
-            'type'         => 'nullable|in:event,reminder,urgent,information',
+            'type'         => 'nullable|in:graduation,event,reminder,urgent,information',
             'send_push'    => 'boolean',
         ]);
 
         $announcement->update([
             'title'     => $validated['title'],
             'body'      => $validated['body'],
-            'type'      => $validated['type'] ?? $announcement->type,
+            'type'      => $validated['type'] ?? $this->fallbackType($validated['title'], $validated['body'], $announcement->type),
             'send_push' => $validated['send_push'] ?? $announcement->send_push,
         ]);
 
+        $pushNotificationCount = $announcement->send_push
+            ? $this->createInAppAnnouncementNotifications($announcement->fresh(), $validated)
+            : 0;
+
         return response()->json([
-            'message'      => 'Announcement updated.',
+            'message'      => $pushNotificationCount > 0
+                ? 'Announcement updated. Missing push notifications were created.'
+                : 'Announcement updated.',
             'announcement' => $announcement->fresh()->load('creator:id,name'),
+            'push_notification_count' => $pushNotificationCount,
         ]);
     }
 
-    // ── DELETE /api/announcements/{id} ─────────────────────────────────────────
+    private function fallbackType(string $title, string $body, string $fallback = 'information'): string
+    {
+        return preg_match('/\b(graduation|commencement|baccalaureate)\b/i', "{$title} {$body}")
+            ? 'graduation'
+            : $fallback;
+    }
+
+    // DELETE /api/announcements/{id} 
 
     public function destroy(Announcement $announcement): JsonResponse
     {
@@ -152,5 +157,45 @@ class AnnouncementController extends Controller
             ->filter(fn (array $recipient) => filter_var($recipient['email'], FILTER_VALIDATE_EMAIL))
             ->unique('email')
             ->values();
+    }
+
+    private function createInAppAnnouncementNotifications(Announcement $announcement, array $payload = []): int
+    {
+        $created = 0;
+
+        User::select('id')->chunkById(100, function ($users) use ($announcement, $payload, &$created) {
+            foreach ($users as $user) {
+                $exists = DatabaseNotification::query()
+                    ->where('notifiable_type', User::class)
+                    ->where('notifiable_id', $user->id)
+                    ->where('type', 'announcement')
+                    ->where('data->id', (string) $announcement->id)
+                    ->exists();
+
+                if ($exists) {
+                    continue;
+                }
+
+                DatabaseNotification::create([
+                    'id' => (string) Str::uuid(),
+                    'type' => 'announcement',
+                    'notifiable_type' => User::class,
+                    'notifiable_id' => $user->id,
+                    'data' => [
+                        'type' => 'announcement',
+                        'id' => (string) $announcement->id,
+                        'title' => $announcement->title,
+                        'body' => $announcement->body,
+                        'action_url' => $payload['action_url'] ?? '/announcements',
+                        'action_label' => $payload['action_label'] ?? 'View Announcement',
+                    ],
+                    'read_at' => null,
+                ]);
+
+                $created++;
+            }
+        });
+
+        return $created;
     }
 }

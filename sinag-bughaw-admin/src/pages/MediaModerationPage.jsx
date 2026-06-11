@@ -17,7 +17,7 @@
  *   Media Library album drill-down — open any album and see all its photos
  */
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import api from "../services/api";
 
 // ─── Design Tokens ────────────────────────────────────────────────────────────
@@ -87,6 +87,11 @@ function Badge({ label, color, bg }) {
       {label}
     </span>
   );
+}
+
+function visibilityLabel(value) {
+  const key = String(value || "public").toLowerCase();
+  return key === "friends" ? "batchmates" : key;
 }
 
 function mediaKind(item = {}) {
@@ -263,7 +268,105 @@ function ConfirmModal({ open, title, message, onConfirm, onCancel, loading }) {
   );
 }
 
+function OverflowMenu({ actions = [], align = "right" }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+
+  useEffect(() => {
+    const handler = e => {
+      if (ref.current && !ref.current.contains(e.target)) setOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  return (
+    <div ref={ref} style={{ position: "relative", display: "inline-flex" }} onClick={e => e.stopPropagation()}>
+      <button
+        type="button"
+        onClick={() => setOpen(v => !v)}
+        aria-label="More actions"
+        style={{ width: 32, height: 32, borderRadius: 9, border: `1px solid ${T.border}`, background: T.surface, color: T.muted, cursor: "pointer", fontWeight: 900, fontSize: "1.1rem", lineHeight: 1 }}
+      >
+        ...
+      </button>
+      {open && (
+        <div style={{ position: "absolute", top: 36, [align]: 0, zIndex: 80, minWidth: 150, background: T.surface, border: `1px solid ${T.border}`, borderRadius: 12, boxShadow: T.shadowMd, padding: 6 }}>
+          {actions.map(action => (
+            <button
+              key={action.label}
+              type="button"
+              onClick={() => { setOpen(false); action.onClick?.(); }}
+              disabled={action.disabled}
+              onMouseEnter={e => { e.currentTarget.style.background = "#f8fafc"; }}
+              onMouseLeave={e => { e.currentTarget.style.background = "transparent"; }}
+              style={{ width: "100%", border: "none", background: "transparent", color: action.destructive ? T.danger : T.text, textAlign: "left", padding: "9px 10px", borderRadius: 8, fontSize: "0.82rem", fontWeight: 700, cursor: action.disabled ? "not-allowed" : "pointer", opacity: action.disabled ? 0.55 : 1, fontFamily: "inherit" }}
+            >
+              {action.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ModerationDecisionButtons({ onReject, onApprove, disabled }) {
+  return (
+    <div style={{ display: "flex", gap: 6 }}>
+      <button
+        type="button"
+        onClick={onReject}
+        disabled={disabled}
+        style={{ padding: "6px 12px", borderRadius: 8, border: `1px solid ${T.danger}`, background: "transparent", color: T.danger, fontSize: "0.75rem", fontWeight: 800, cursor: disabled ? "not-allowed" : "pointer", fontFamily: "inherit" }}
+      >
+        Reject
+      </button>
+      <button
+        type="button"
+        onClick={onApprove}
+        disabled={disabled}
+        style={{ padding: "6px 12px", borderRadius: 8, border: "none", background: T.success, color: "#fff", fontSize: "0.75rem", fontWeight: 800, cursor: disabled ? "not-allowed" : "pointer", fontFamily: "inherit" }}
+      >
+        Approve
+      </button>
+    </div>
+  );
+}
+
 // ─── Reject Modal ─────────────────────────────────────────────────────────────
+function ApproveConfirmModal({ open, target, onConfirm, onCancel, loading }) {
+  if (!open) return null;
+  const label = target?.label || "this content";
+  const isBulk = target?.kind === "bulk";
+  const title = isBulk ? "Approve selected content?" : "Approve this content?";
+  const message = isBulk
+    ? `This will publish ${target?.count ?? 0} selected item${target?.count === 1 ? "" : "s"} and make them visible where allowed.`
+    : `This will approve "${label}" and make it visible where allowed.`;
+
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "rgba(15,23,41,.55)", zIndex: 2100, display: "grid", placeItems: "center", padding: 20 }} onClick={onCancel}>
+      <div style={{ background: T.surface, borderRadius: 20, padding: "26px 28px", width: "100%", maxWidth: 420, boxShadow: T.shadowMd, animation: "fadeIn .18s ease" }} onClick={e => e.stopPropagation()}>
+        <div style={{ width: 44, height: 44, borderRadius: 14, background: T.successBg, color: T.success, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 900, fontSize: "1.2rem", marginBottom: 14 }}>
+          ✓
+        </div>
+        <div style={{ fontSize: "1.05rem", fontWeight: 800, color: T.text, marginBottom: 6 }}>{title}</div>
+        <div style={{ fontSize: "0.86rem", color: T.muted, lineHeight: 1.55, marginBottom: 22 }}>{message}</div>
+        <div style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
+          <button onClick={onCancel} disabled={loading}
+            style={{ padding: "9px 20px", borderRadius: 10, border: `1px solid ${T.border}`, background: "none", color: T.muted, fontWeight: 600, cursor: loading ? "not-allowed" : "pointer", fontFamily: "inherit", fontSize: "0.88rem" }}>
+            Cancel
+          </button>
+          <button onClick={onConfirm} disabled={loading}
+            style={{ padding: "9px 20px", borderRadius: 10, border: "none", background: T.success, color: "#fff", fontWeight: 700, cursor: loading ? "not-allowed" : "pointer", opacity: loading ? 0.6 : 1, fontFamily: "inherit", fontSize: "0.88rem" }}>
+            {loading ? "Approving..." : "Yes, approve"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 const REJECT_REASONS = [
   "Inappropriate content",
   "Copyright violation",
@@ -282,7 +385,7 @@ function RejectModal({ open, onConfirm, onCancel, loading, title = "Reject Conte
     <div style={{ position: "fixed", inset: 0, background: "rgba(15,23,41,.6)", zIndex: 2000, display: "grid", placeItems: "center", padding: 20 }} onClick={onCancel}>
       <div style={{ background: T.surface, borderRadius: 20, padding: "26px 28px", width: "100%", maxWidth: 440, boxShadow: T.shadowLg, animation: "fadeIn .18s ease" }} onClick={e => e.stopPropagation()}>
         <div style={{ fontSize: "1.05rem", fontWeight: 800, color: T.text, marginBottom: 6 }}>{title}</div>
-        <div style={{ fontSize: "0.86rem", color: T.muted, marginBottom: 18 }}>Select a reason for rejection.</div>
+        <div style={{ fontSize: "0.86rem", color: T.muted, marginBottom: 18 }}>Select a reason for rejection, or leave it blank.</div>
         <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 18 }}>
           {REJECT_REASONS.map(r => (
             <label key={r} style={{
@@ -302,8 +405,8 @@ function RejectModal({ open, onConfirm, onCancel, loading, title = "Reject Conte
             style={{ padding: "9px 20px", borderRadius: 10, border: `1px solid ${T.border}`, background: "none", color: T.muted, fontWeight: 600, cursor: "pointer", fontFamily: "inherit", fontSize: "0.88rem" }}>
             Cancel
           </button>
-          <button onClick={() => reason && onConfirm(reason)} disabled={loading || !reason}
-            style={{ padding: "9px 20px", borderRadius: 10, border: "none", background: T.danger, color: "#fff", fontWeight: 700, cursor: (!reason || loading) ? "not-allowed" : "pointer", opacity: (!reason || loading) ? 0.6 : 1, fontFamily: "inherit", fontSize: "0.88rem" }}>
+          <button onClick={() => onConfirm(reason)} disabled={loading}
+            style={{ padding: "9px 20px", borderRadius: 10, border: "none", background: T.danger, color: "#fff", fontWeight: 700, cursor: loading ? "not-allowed" : "pointer", opacity: loading ? 0.6 : 1, fontFamily: "inherit", fontSize: "0.88rem" }}>
             {loading ? "Rejecting…" : "Reject"}
           </button>
         </div>
@@ -611,7 +714,7 @@ function AlbumFormModal({ open, album, onSave, onCancel, loading }) {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 // ─── Album Drill-Down Panel (Moderation) ──────────────────────────────────────
-function AlbumDrillPanel({ album, onClose, onApproveAlbum, onRejectAlbum, onApprovePhoto, onRejectPhoto, onRevertPhoto, onHistoryPhoto, loading }) {
+function AlbumDrillPanel({ album, onClose, onApproveAlbum, onRejectAlbum, onApprovePhoto, onRejectPhoto, onRevertPhoto, onHistoryPhoto, onFlagAvatar, loading }) {
   const [lightbox,    setLightbox]    = useState(null);
   const [lightboxIdx, setLightboxIdx] = useState(0);
 
@@ -649,12 +752,12 @@ function AlbumDrillPanel({ album, onClose, onApproveAlbum, onRejectAlbum, onAppr
             {isPending && (
               <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
                 <button onClick={() => onRejectAlbum(album)}
-                  style={{ padding: "8px 14px", borderRadius: 10, border: "none", background: T.dangerBg, color: T.danger, fontWeight: 700, fontSize: "0.82rem", cursor: "pointer", fontFamily: "inherit" }}>
-                  ✕ Reject All
+                  style={{ padding: "8px 14px", borderRadius: 10, border: `1px solid ${T.danger}`, background: "transparent", color: T.danger, fontWeight: 700, fontSize: "0.82rem", cursor: "pointer", fontFamily: "inherit" }}>
+                  Reject All
                 </button>
                 <button onClick={() => onApproveAlbum(album)} disabled={loading}
-                  style={{ padding: "8px 14px", borderRadius: 10, border: "none", background: T.primary, color: "#fff", fontWeight: 700, fontSize: "0.82rem", cursor: loading ? "not-allowed" : "pointer", opacity: loading ? 0.7 : 1, fontFamily: "inherit" }}>
-                  ✓ Approve All
+                  style={{ padding: "8px 14px", borderRadius: 10, border: "none", background: T.success, color: "#fff", fontWeight: 700, fontSize: "0.82rem", cursor: loading ? "not-allowed" : "pointer", opacity: loading ? 0.7 : 1, fontFamily: "inherit" }}>
+                  Approve All
                 </button>
               </div>
             )}
@@ -690,10 +793,14 @@ function AlbumDrillPanel({ album, onClose, onApproveAlbum, onRejectAlbum, onAppr
                         {statusBadge(photo.status)}
                         {photo.status === "pending" ? (
                           <div style={{ display: "flex", gap: 5 }}>
-                            <button onClick={() => onRejectPhoto(photo)}
-                              style={{ padding: "4px 9px", borderRadius: 7, border: "none", background: T.dangerBg, color: T.danger, fontSize: "0.72rem", fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>✕</button>
-                            <button onClick={() => onApprovePhoto(photo)}
-                              style={{ padding: "4px 9px", borderRadius: 7, border: "none", background: T.successBg, color: T.success, fontSize: "0.72rem", fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>✓</button>
+                            {photo.is_profile_post && (
+                              <button onClick={() => onFlagAvatar(photo)}
+                                style={{ padding: "4px 9px", borderRadius: 7, border: "none", background: T.warningBg, color: T.warning, fontSize: "0.72rem", fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>Flag Avatar</button>
+                            )}
+                            <ModerationDecisionButtons
+                              onReject={() => onRejectPhoto(photo)}
+                              onApprove={() => onApprovePhoto(photo)}
+                            />
                           </div>
                         ) : (
                           <RevertButton item={photo} onRevert={onRevertPhoto} onHistory={onHistoryPhoto} size="sm" />
@@ -730,10 +837,14 @@ function AlbumDrillPanel({ album, onClose, onApproveAlbum, onRejectAlbum, onAppr
               <div style={{ display: "flex", gap: 8, flexShrink: 0, alignItems: "center" }}>
                 {lightbox.status === "pending" ? (
                   <>
-                    <button onClick={() => { onRejectPhoto(lightbox); closeLightbox(); }}
-                      style={{ padding: "6px 14px", borderRadius: 8, border: "none", background: "rgba(239,68,68,.2)", color: "#fca5a5", fontWeight: 700, fontSize: "0.8rem", cursor: "pointer", fontFamily: "inherit" }}>✕ Reject</button>
-                    <button onClick={() => { onApprovePhoto(lightbox); closeLightbox(); }}
-                      style={{ padding: "6px 14px", borderRadius: 8, border: "none", background: T.primary, color: "#fff", fontWeight: 700, fontSize: "0.8rem", cursor: "pointer", fontFamily: "inherit" }}>✓ Approve</button>
+                    {lightbox.is_profile_post && (
+                      <button onClick={() => { onFlagAvatar(lightbox); closeLightbox(); }}
+                        style={{ padding: "6px 14px", borderRadius: 8, border: "none", background: T.warningBg, color: T.warning, fontWeight: 700, fontSize: "0.8rem", cursor: "pointer", fontFamily: "inherit" }}>Flag Avatar</button>
+                    )}
+                    <ModerationDecisionButtons
+                      onReject={() => { onRejectPhoto(lightbox); closeLightbox(); }}
+                      onApprove={() => { onApprovePhoto(lightbox); closeLightbox(); }}
+                    />
                   </>
                 ) : (
                   <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
@@ -759,6 +870,7 @@ function AlbumDrillPanel({ album, onClose, onApproveAlbum, onRejectAlbum, onAppr
 function ModerationAlbumCard({ album, selected, onSelect, onOpen, onApprove, onReject, onRevert, onHistory }) {
   const photos    = album.photos ?? [];
   const isPending = album.status === "pending";
+  const isGraduationPending = isPending && /graduation/i.test(`${album.title ?? ""} ${album.category ?? ""} ${album.type ?? ""}`);
   const thumbs    = photos.slice(0, 4);
   const extra     = photos.length - 4;
 
@@ -804,10 +916,17 @@ function ModerationAlbumCard({ album, selected, onSelect, onOpen, onApprove, onR
         <div style={{ fontSize: "0.75rem", color: T.muted, marginBottom: 10 }}>{album.uploader} · {album.created_at_human}</div>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 6 }}>
           {statusBadge(album.status)}
+          {isGraduationPending && (
+            <div style={{ flexBasis: "100%", background: T.warningBg, color: T.warning, fontSize: "0.72rem", fontWeight: 800, padding: "6px 8px", borderRadius: 8 }}>
+              Graduation upload pending review - do not publish without approval.
+            </div>
+          )}
           {isPending ? (
             <div style={{ display: "flex", gap: 6 }} onClick={e => e.stopPropagation()}>
-              <button onClick={() => onReject(album)} style={{ padding: "5px 10px", borderRadius: 8, border: "none", background: T.dangerBg, color: T.danger, fontSize: "0.75rem", fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>✕</button>
-              <button onClick={() => onApprove(album)} style={{ padding: "5px 10px", borderRadius: 8, border: "none", background: T.successBg, color: T.success, fontSize: "0.75rem", fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>✓</button>
+              <ModerationDecisionButtons
+                onReject={() => onReject(album)}
+                onApprove={() => onApprove(album)}
+              />
             </div>
           ) : (
             <div onClick={e => e.stopPropagation()}>
@@ -825,6 +944,7 @@ function ModerationContentCard({ item, type, selected, onSelect, onPreview, onAp
   const isAudio   = type === "voice";
   const isPending = !item.status || item.status === "pending";
   const mediaSrc  = item.url ?? item.file_path ?? item.video_url ?? null;
+  const isGraduationPending = isPending && item.source === "graduation";
 
   return (
     <div style={{ background: T.surface, border: `2px solid ${selected ? T.primary : T.border}`, borderRadius: 16, overflow: "hidden", boxShadow: T.shadow, transition: "all .15s", position: "relative", transform: selected ? "scale(1.01)" : "scale(1)" }}>
@@ -850,10 +970,17 @@ function ModerationContentCard({ item, type, selected, onSelect, onPreview, onAp
         <div style={{ fontSize: "0.75rem", color: T.muted, marginBottom: 10 }}>{item.uploader ?? item.user_name ?? "Unknown"} · {item.created_at_human ?? ""}</div>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 6 }}>
           {statusBadge(item.status ?? "pending")}
+          {isGraduationPending && (
+            <div style={{ flexBasis: "100%", background: T.warningBg, color: T.warning, fontSize: "0.72rem", fontWeight: 800, padding: "6px 8px", borderRadius: 8 }}>
+              Graduation upload pending review - do not publish without approval.
+            </div>
+          )}
           {isPending ? (
             <div style={{ display: "flex", gap: 6 }}>
-              <button onClick={() => onReject(item)} style={{ padding: "5px 10px", borderRadius: 8, border: "none", background: T.dangerBg, color: T.danger, fontSize: "0.75rem", fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>✕</button>
-              <button onClick={() => onApprove(item)} style={{ padding: "5px 10px", borderRadius: 8, border: "none", background: T.successBg, color: T.success, fontSize: "0.75rem", fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>✓</button>
+              <ModerationDecisionButtons
+                onReject={() => onReject(item)}
+                onApprove={() => onApprove(item)}
+              />
             </div>
           ) : (
             <RevertButton item={item} onRevert={onRevert} onHistory={onHistory} size="sm" />
@@ -934,14 +1061,11 @@ function GenericPreviewModal({ item, type, onClose, onApprove, onReject, onRever
           </button>
           {isPending ? (
             <>
-              <button onClick={() => onReject(item)} disabled={loading}
-                style={{ padding: "9px 20px", borderRadius: 10, border: "none", background: T.dangerBg, color: T.danger, fontWeight: 700, cursor: loading ? "not-allowed" : "pointer", opacity: loading ? 0.6 : 1, fontFamily: "inherit", fontSize: "0.88rem" }}>
-                ✕ Reject
-              </button>
-              <button onClick={() => onApprove(item)} disabled={loading}
-                style={{ padding: "9px 20px", borderRadius: 10, border: "none", background: T.primary, color: "#fff", fontWeight: 700, cursor: loading ? "not-allowed" : "pointer", opacity: loading ? 0.6 : 1, fontFamily: "inherit", fontSize: "0.88rem" }}>
-                ✓ Approve
-              </button>
+              <ModerationDecisionButtons
+                onReject={() => onReject(item)}
+                onApprove={() => onApprove(item)}
+                disabled={loading}
+              />
             </>
           ) : (
             <button onClick={() => { onClose(); onRevert(item); }} disabled={loading}
@@ -979,6 +1103,7 @@ function ModerationMode({ toast }) {
   const [openAlbum,     setOpenAlbum]     = useState(null);
   const [preview,       setPreview]       = useState(null);
   const [rejectTarget,  setRejectTarget]  = useState(null);
+  const [approveTarget, setApproveTarget] = useState(null);
   const [revertTarget,  setRevertTarget]  = useState(null);
   const [historyTarget, setHistoryTarget] = useState(null);
 
@@ -1005,6 +1130,14 @@ function ModerationMode({ toast }) {
   const toggleSelect = id => setSelected(p => p.includes(id) ? p.filter(x => x !== id) : [...p, id]);
   const selectAll    = () => setSelected(items.filter(i => !i.status || i.status === "pending").map(i => i.id));
   const clearSelect  = () => setSelected([]);
+
+  const requestApproveAlbum = album => setApproveTarget({ kind: "album", payload: album, label: album?.title || "this album" });
+  const requestApprovePhoto = photo => setApproveTarget({ kind: "photo", payload: photo, label: photo?.caption || photo?.filename || "this photo" });
+  const requestApproveItem = item => setApproveTarget({ kind: "item", payload: item, label: item?.filename || item?.title || "this content" });
+  const requestBulkApprove = () => {
+    if (!selected.length) return;
+    setApproveTarget({ kind: "bulk", payload: null, count: selected.length, label: `${selected.length} selected items` });
+  };
 
   const doApproveAlbum = async album => {
     setActLoading(true);
@@ -1047,6 +1180,17 @@ function ModerationMode({ toast }) {
       setOpenAlbum(prev => prev ? { ...prev, photos: prev.photos.map(p => p.id === photo.id ? { ...p, status: "rejected", rejection_reason: reason } : p) } : null);
       setRejectTarget(null); fetchCounts();
     } catch { toast("Reject failed.", "error"); }
+    finally { setActLoading(false); }
+  };
+
+  const doFlagAvatar = async photo => {
+    setActLoading(true);
+    try {
+      await api.post(`/admin/moderation/photo/${photo.id}/flag-avatar`);
+      toast("Avatar flagged and reset to the default placeholder.", "info");
+      setOpenAlbum(prev => prev ? { ...prev, photos: prev.photos.map(p => p.id === photo.id ? { ...p, status: "pending" } : p) } : null);
+      fetchCounts();
+    } catch { toast("Flag avatar failed.", "error"); }
     finally { setActLoading(false); }
   };
 
@@ -1114,6 +1258,18 @@ function ModerationMode({ toast }) {
     finally { setActLoading(false); }
   };
 
+  const handleApproveConfirm = async () => {
+    const target = approveTarget;
+    if (!target) return;
+
+    if (target.kind === "album") await doApproveAlbum(target.payload);
+    if (target.kind === "photo") await doApprovePhoto(target.payload);
+    if (target.kind === "item") await doApproveItem(target.payload);
+    if (target.kind === "bulk") await doBulkApprove();
+
+    setApproveTarget(null);
+  };
+
   const openPreview = useCallback(async item => {
     const hasSrc = item.url || item.file_path || item.audio_url || item.video_url;
     if (hasSrc) { setPreview(item); return; }
@@ -1170,8 +1326,8 @@ function ModerationMode({ toast }) {
           <div style={{ display: "flex", gap: 8, alignItems: "center", animation: "fadeIn .15s ease" }}>
             <span style={{ fontSize: "0.84rem", fontWeight: 600, color: T.muted }}>{selected.length} selected</span>
             <button onClick={clearSelect} style={{ padding: "6px 12px", borderRadius: 8, border: `1px solid ${T.border}`, background: "none", color: T.muted, fontSize: "0.82rem", cursor: "pointer", fontFamily: "inherit" }}>Clear</button>
-            <button onClick={doBulkApprove} disabled={actLoading} style={{ padding: "6px 14px", borderRadius: 8, border: "none", background: T.successBg, color: T.success, fontWeight: 700, fontSize: "0.82rem", cursor: "pointer", fontFamily: "inherit" }}>✓ Approve All</button>
-            <button onClick={() => setRejectTarget({ kind: "bulk", payload: null })} disabled={actLoading} style={{ padding: "6px 14px", borderRadius: 8, border: "none", background: T.dangerBg, color: T.danger, fontWeight: 700, fontSize: "0.82rem", cursor: "pointer", fontFamily: "inherit" }}>✕ Reject All</button>
+            <button onClick={requestBulkApprove} disabled={actLoading} style={{ padding: "6px 14px", borderRadius: 8, border: "none", background: T.success, color: "#fff", fontWeight: 700, fontSize: "0.82rem", cursor: "pointer", fontFamily: "inherit" }}>Approve All</button>
+            <button onClick={() => setRejectTarget({ kind: "bulk", payload: null })} disabled={actLoading} style={{ padding: "6px 14px", borderRadius: 8, border: `1px solid ${T.danger}`, background: "transparent", color: T.danger, fontWeight: 700, fontSize: "0.82rem", cursor: "pointer", fontFamily: "inherit" }}>Reject All</button>
           </div>
         )}
         {statusFilter === "pending" && items.length > 0 && selected.length === 0 && (
@@ -1205,7 +1361,7 @@ function ModerationMode({ toast }) {
                 selected={selected.includes(item.id)}
                 onSelect={toggleSelect}
                 onOpen={setOpenAlbum}
-                onApprove={doApproveAlbum}
+                onApprove={requestApproveAlbum}
                 onReject={album => setRejectTarget({ kind: "album", payload: album })}
                 onRevert={album => setRevertTarget({ item: album, type: "album" })}
                 onHistory={album => setHistoryTarget({ item: album, type: "photo" })}
@@ -1216,7 +1372,7 @@ function ModerationMode({ toast }) {
                 selected={selected.includes(item.id)}
                 onSelect={toggleSelect}
                 onPreview={openPreview}
-                onApprove={doApproveItem}
+                onApprove={requestApproveItem}
                 onReject={item => setRejectTarget({ kind: "item", payload: item })}
                 onRevert={item => setRevertTarget({ item, type: "item" })}
                 onHistory={item => setHistoryTarget({ item, type: activeTab })}
@@ -1231,19 +1387,20 @@ function ModerationMode({ toast }) {
       <AlbumDrillPanel
         album={openAlbum}
         onClose={() => setOpenAlbum(null)}
-        onApproveAlbum={doApproveAlbum}
+        onApproveAlbum={requestApproveAlbum}
         onRejectAlbum={album => setRejectTarget({ kind: "album", payload: album })}
-        onApprovePhoto={doApprovePhoto}
+        onApprovePhoto={requestApprovePhoto}
         onRejectPhoto={photo => setRejectTarget({ kind: "photo", payload: photo })}
         onRevertPhoto={photo => setRevertTarget({ item: photo, type: "photo" })}
         onHistoryPhoto={photo => setHistoryTarget({ item: photo, type: "photo" })}
+        onFlagAvatar={doFlagAvatar}
         loading={actLoading}
       />
 
       <GenericPreviewModal
         item={preview} type={activeTab}
         onClose={() => setPreview(null)}
-        onApprove={doApproveItem}
+        onApprove={requestApproveItem}
         onReject={item => { setPreview(null); setRejectTarget({ kind: "item", payload: item }); }}
         onRevert={item => setRevertTarget({ item, type: "item" })}
         onHistory={item => setHistoryTarget({ item, type: activeTab })}
@@ -1255,6 +1412,14 @@ function ModerationMode({ toast }) {
         title={rejectModalTitle}
         onConfirm={handleRejectConfirm}
         onCancel={() => setRejectTarget(null)}
+        loading={actLoading}
+      />
+
+      <ApproveConfirmModal
+        open={!!approveTarget}
+        target={approveTarget}
+        onConfirm={handleApproveConfirm}
+        onCancel={() => setApproveTarget(null)}
         loading={actLoading}
       />
 
@@ -1362,7 +1527,7 @@ function LibraryAlbumDrillPanel({ album, onClose, toast }) {
   const visOptions = [
     { value: "all",     label: "All"     },
     { value: "public",  label: "Public"  },
-    { value: "friends", label: "Friends" },
+    { value: "friends", label: "Batchmates" },
     { value: "private", label: "Private" },
   ];
 
@@ -1435,7 +1600,7 @@ function LibraryAlbumDrillPanel({ album, onClose, toast }) {
                         }
                         {/* Visibility badge */}
                         <div style={{ position: "absolute", top: 6, left: 6 }}>
-                          <Badge label={photo.visibility ?? "public"} color={vc.color} bg={vc.bg} />
+                          <Badge label={visibilityLabel(photo.visibility)} color={vc.color} bg={vc.bg} />
                         </div>
                         {/* Status badge (only if not public/approved) */}
                         {photo.status && photo.status !== "approved" && (
@@ -1464,11 +1629,11 @@ function LibraryAlbumDrillPanel({ album, onClose, toast }) {
                         <div style={{ fontSize: "0.75rem", color: T.muted, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 }}>
                           {photo.caption || <span style={{ fontStyle: "italic" }}>No caption</span>}
                         </div>
-                        <button
-                          onClick={e => { e.stopPropagation(); setDeleteTarget(photo); }}
-                          title="Delete photo"
-                          style={{ width: 28, height: 28, borderRadius: 7, border: "none", background: T.dangerBg, color: T.danger, fontSize: "0.8rem", cursor: "pointer", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" }}
-                        ><Icon name="trash" className="h-3.5 w-3.5" /></button>
+                        <OverflowMenu
+                          actions={[
+                            { label: "Delete photo", destructive: true, onClick: () => setDeleteTarget(photo) },
+                          ]}
+                        />
                       </div>
 
                       {/* Uploader info */}
@@ -1529,10 +1694,11 @@ function LibraryAlbumDrillPanel({ album, onClose, toast }) {
               </div>
               <div style={{ display: "flex", gap: 8, alignItems: "center", flexShrink: 0 }}>
                 {statusBadge(lightbox.status ?? "approved")}
-                <button
-                  onClick={() => { setDeleteTarget(lightbox); setLightbox(null); }}
-                  style={{ padding: "6px 14px", borderRadius: 9, border: "none", background: "rgba(239,68,68,.25)", color: "#fca5a5", fontWeight: 700, fontSize: "0.8rem", cursor: "pointer", fontFamily: "inherit" }}
-                ><Icon name="trash" className="h-4 w-4" /> Delete</button>
+                <OverflowMenu
+                  actions={[
+                    { label: "Delete photo", destructive: true, onClick: () => { setDeleteTarget(lightbox); setLightbox(null); } },
+                  ]}
+                />
               </div>
             </div>
             {photos.length > 1 && (
@@ -1669,19 +1835,22 @@ function LibraryAlbumsTab({ toast }) {
                 </div>
                 <div style={{ padding: "12px 14px" }}>
                   <div style={{ fontWeight: 700, fontSize: "0.9rem", color: T.text, marginBottom: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{album.title}</div>
-                  <div style={{ fontSize: "0.75rem", color: T.muted, marginBottom: 10 }}>
-                    {album.category ?? "—"} · {album.event_date ?? "No date"}
-                  </div>
+                  {(album.category || album.event_date) && (
+                    <div style={{ fontSize: "0.75rem", color: T.muted, marginBottom: 10 }}>
+                      {[album.category, album.event_date].filter(Boolean).join(" · ")}
+                    </div>
+                  )}
                   {/* ✅ Stop propagation so Edit/Delete don't open the panel */}
                   <div style={{ display: "flex", gap: 6 }} onClick={e => e.stopPropagation()}>
                     <button
                       onClick={() => { setEditTarget(album); setAlbumModal(true); }}
                       style={{ flex: 1, padding: "6px", borderRadius: 8, border: `1px solid ${T.border}`, background: "none", color: T.muted, fontSize: "0.78rem", fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}
                     >✏ Edit</button>
-                    <button
-                      onClick={() => setDeleteTarget(album)}
-                      style={{ flex: 1, padding: "6px", borderRadius: 8, border: "none", background: T.dangerBg, color: T.danger, fontSize: "0.78rem", fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}
-                    ><Icon name="trash" className="h-4 w-4" /> Delete</button>
+                    <OverflowMenu
+                      actions={[
+                        { label: "Delete album", destructive: true, onClick: () => setDeleteTarget(album) },
+                      ]}
+                    />
                   </div>
                 </div>
               </div>
@@ -1750,7 +1919,7 @@ function LibraryPhotosTab({ toast }) {
   };
 
   const visColor   = { public: { color: T.success, bg: T.successBg }, friends: { color: T.primary, bg: "#edf2ff" }, private: { color: T.muted, bg: T.border } };
-  const visOptions = [{ value: "all", label: "All" }, { value: "public", label: "Public" }, { value: "friends", label: "Friends" }, { value: "private", label: "Private" }];
+  const visOptions = [{ value: "all", label: "All" }, { value: "public", label: "Public" }, { value: "friends", label: "Batchmates" }, { value: "private", label: "Private" }];
 
   return (
     <>
@@ -1767,10 +1936,13 @@ function LibraryPhotosTab({ toast }) {
             return (
               <div key={photo.id} style={{ position: "relative", borderRadius: 12, overflow: "hidden", background: "#0f1729", border: `1px solid ${T.border}`, cursor: "pointer" }} onClick={() => setPreview(photo)}>
                 <img src={photo.file_path} alt={photo.caption} style={{ width: "100%", height: 180, objectFit: "cover", display: "block" }} onError={e => e.target.style.display = "none"} />
-                <div style={{ position: "absolute", top: 6, left: 6 }}><Badge label={photo.visibility ?? "public"} color={vc.color} bg={vc.bg} /></div>
+                <div style={{ position: "absolute", top: 6, left: 6 }}><Badge label={visibilityLabel(photo.visibility)} color={vc.color} bg={vc.bg} /></div>
                 <div style={{ position: "absolute", top: 6, right: 6 }}>
-                  <button onClick={e => { e.stopPropagation(); setDeleteTarget(photo); }}
-                    style={{ width: 28, height: 28, borderRadius: 8, border: "none", background: "rgba(239,68,68,.9)", color: "#fff", fontSize: "0.8rem", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}><Icon name="trash" className="h-3.5 w-3.5" /></button>
+                  <OverflowMenu
+                    actions={[
+                      { label: "Delete photo", destructive: true, onClick: () => setDeleteTarget(photo) },
+                    ]}
+                  />
                 </div>
                 {photo.caption && (
                   <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, background: "linear-gradient(transparent, rgba(0,0,0,.7))", padding: "16px 8px 6px", fontSize: "0.72rem", color: "#fff", fontWeight: 600 }}>{photo.caption}</div>
@@ -1789,8 +1961,11 @@ function LibraryPhotosTab({ toast }) {
             <img src={preview.file_path} alt={preview.caption} style={{ width: "100%", borderRadius: 16, maxHeight: "75vh", objectFit: "contain" }} />
             <div style={{ marginTop: 14, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               <div style={{ color: "#fff", fontSize: "0.88rem" }}>{preview.caption ?? "No caption"} · <span style={{ color: "#ffffff88" }}>{preview.uploader}</span></div>
-              <button onClick={() => { setPreview(null); setDeleteTarget(preview); }}
-                style={{ padding: "7px 16px", borderRadius: 10, border: "none", background: T.dangerBg, color: T.danger, fontWeight: 700, fontSize: "0.82rem", cursor: "pointer", fontFamily: "inherit", display: "inline-flex", alignItems: "center", gap: 6 }}><Icon name="trash" className="h-4 w-4" /> Delete</button>
+              <OverflowMenu
+                actions={[
+                  { label: "Delete photo", destructive: true, onClick: () => { setPreview(null); setDeleteTarget(preview); } },
+                ]}
+              />
             </div>
           </div>
         </div>
@@ -1827,7 +2002,12 @@ function LibraryVideosTab({ toast }) {
 
   const handleDelete = async () => {
     setActLoading(true);
-    try { await api.delete(`/admin/media/videos/${deleteTarget.id}`); toast("Video deleted."); setDeleteTarget(null); load(page, sourceFilter); }
+    try {
+      await api.delete(`/admin/media/videos/${deleteTarget.id}`, { params: { source: deleteTarget.source } });
+      toast("Video deleted.");
+      setDeleteTarget(null);
+      load(page, sourceFilter);
+    }
     catch { toast("Delete failed.", "error"); }
     finally { setActLoading(false); }
   };
@@ -1859,7 +2039,13 @@ function LibraryVideosTab({ toast }) {
               <div style={{ padding: "12px 14px" }}>
                 <div style={{ fontSize: "0.82rem", fontWeight: 700, color: T.text, marginBottom: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{video.filename ?? "Untitled"}</div>
                 <div style={{ fontSize: "0.74rem", color: T.muted, marginBottom: 10 }}>{video.uploader ?? "Unknown"}{video.width && video.height ? ` · ${video.width}×${video.height}` : ""}</div>
-                <button onClick={() => setDeleteTarget(video)} style={{ width: "100%", padding: "6px", borderRadius: 8, border: "none", background: T.dangerBg, color: T.danger, fontSize: "0.78rem", fontWeight: 600, cursor: "pointer", fontFamily: "inherit", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6 }}><Icon name="trash" className="h-4 w-4" /> Delete</button>
+                <div style={{ display: "flex", justifyContent: "flex-end" }}>
+                  <OverflowMenu
+                    actions={[
+                      { label: "Delete video", destructive: true, onClick: () => setDeleteTarget(video) },
+                    ]}
+                  />
+                </div>
               </div>
             </div>
           ))}
@@ -1878,8 +2064,11 @@ function LibraryVideosTab({ toast }) {
                 <div style={{ color: "#ffffff88", fontSize: "0.78rem", marginTop: 2 }}>{preview.uploader ?? "Unknown"} · {preview.source === "graduation" ? "🎓 Graduation" : "📱 Post"}</div>
               </div>
               <div style={{ display: "flex", gap: 8 }}>
-                <button onClick={() => { setPreview(null); setDeleteTarget(preview); }}
-                  style={{ padding: "7px 16px", borderRadius: 10, border: "none", background: T.dangerBg, color: T.danger, fontWeight: 700, fontSize: "0.82rem", cursor: "pointer", fontFamily: "inherit", display: "inline-flex", alignItems: "center", gap: 6 }}><Icon name="trash" className="h-4 w-4" /> Delete</button>
+                <OverflowMenu
+                  actions={[
+                    { label: "Delete video", destructive: true, onClick: () => { setPreview(null); setDeleteTarget(preview); } },
+                  ]}
+                />
                 <button onClick={() => setPreview(null)}
                   style={{ padding: "7px 16px", borderRadius: 10, border: "none", background: "rgba(255,255,255,.15)", color: "#fff", fontWeight: 700, fontSize: "0.82rem", cursor: "pointer", fontFamily: "inherit" }}>Close</button>
               </div>
@@ -1958,8 +2147,11 @@ function LibraryVoiceNotesTab({ toast }) {
                 </div>
                 {vn.audio_url && <audio src={vn.audio_url} controls style={{ height: 32 }} />}
                 <Badge label={vn.status ?? "pending"} color={sc.color} bg={sc.bg} />
-                <button onClick={() => setDeleteTarget(vn)}
-                  style={{ width: 32, height: 32, borderRadius: 8, border: "none", background: T.dangerBg, color: T.danger, fontSize: "0.9rem", cursor: "pointer", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" }}><Icon name="trash" className="h-4 w-4" /></button>
+                <OverflowMenu
+                  actions={[
+                    { label: "Delete voice note", destructive: true, onClick: () => setDeleteTarget(vn) },
+                  ]}
+                />
               </div>
             );
           })}

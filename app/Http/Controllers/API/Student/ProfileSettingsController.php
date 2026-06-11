@@ -28,7 +28,7 @@ class ProfileSettingsController extends Controller
         ]);
     }
 
-    // ── Update visibility ─────────────────────────────────────────────────────
+    // Update visibility 
     public function updateVisibility(Request $request): JsonResponse
     {
         $request->validate([
@@ -42,7 +42,7 @@ class ProfileSettingsController extends Controller
         return response()->json(['message' => 'Visibility updated.']);
     }
 
-    // ── Update motto ──────────────────────────────────────────────────────────
+    // Update motto 
     public function updateMotto(Request $request): JsonResponse
     {
         $request->validate(['motto' => 'nullable|string|max:255']);
@@ -60,7 +60,7 @@ class ProfileSettingsController extends Controller
         return response()->json(['message' => 'Motto updated.']);
     }
 
-    // ── Update academic info ──────────────────────────────────────────────────
+    // Update academic info 
     public function updateAcademic(Request $request): JsonResponse
     {
         $validated = $request->validate([
@@ -106,7 +106,7 @@ class ProfileSettingsController extends Controller
         ]);
     }
 
-    // ── Update achievements ───────────────────────────────────────────────────
+    // Update achievements 
     // Expects: { achievements: [{ id, title, subtitle, type: '{"icon":"fa-star","color":"#fdb813"}' }] }
     public function updateAchievements(Request $request): JsonResponse
     {
@@ -126,7 +126,6 @@ class ProfileSettingsController extends Controller
 
             if ($itemId && is_numeric($itemId)) {
                 // Check the record actually belongs to this user
-                // (guards against fake DEFAULT_ACHIEVEMENTS ids like 1, 2, 3)
                 $existing = $user->achievements()->where('id', (int) $itemId)->first();
 
                 if ($existing) {
@@ -158,9 +157,7 @@ class ProfileSettingsController extends Controller
         return response()->json(['success' => true, 'message' => 'Achievements updated.']);
     }
 
-    // ── Get achievements for a user ───────────────────────────────────────────
-    // GET /students/{id}/achievements  (handled by StudentController::achievements)
-    // This method kept for reference — routing goes to StudentController
+    //Get achievements for a user 
     public function getAchievements(Request $request): JsonResponse
     {
         $user = $request->user();
@@ -172,7 +169,7 @@ class ProfileSettingsController extends Controller
         return response()->json(['data' => $achievements]);
     }
 
-    // ── Track profile view ────────────────────────────────────────────────────
+    // Track profile view 
     public function trackView(Request $request, int $id): JsonResponse
     {
         $profile = User::findOrFail($id);
@@ -199,7 +196,7 @@ class ProfileSettingsController extends Controller
         return response()->json(['tracked' => true]);
     }
 
-    // ── Top viewed profiles ───────────────────────────────────────────────────
+    // Top viewed profiles 
     public function topViewed(): JsonResponse
     {
         $students = User::withCount('profileViews')

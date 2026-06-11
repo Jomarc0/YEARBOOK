@@ -24,14 +24,15 @@ class ProfileController extends Controller
         private readonly StorageServiceInterface $storage
     ) {}
 
-    // =========================================================================
-    // GET /api/students/{id}/posts
-    // =========================================================================
 
+    // GET /api/students/{id}/posts
     public function getPosts(Request $request, int $id): JsonResponse
     {
         $isOwner      = Auth::id() === $id;
         $isSubscribed = $request->attributes->get('viewer_is_subscribed', false);
+        $viewer       = Auth::user();
+        $profileOwner = User::with('studentRecord')->findOrFail($id);
+        $isBatchmate  = $viewer instanceof User && $this->areBatchmates($viewer, $profileOwner);
 
         if (! $isOwner && ! $isSubscribed) {
             return response()->json([
@@ -43,12 +44,18 @@ class ProfileController extends Controller
 
         $photos = Photo::where('user_id', $id)
             ->where('is_profile_post', true)
-            ->when(! $isOwner, fn ($q) => $q->where('visibility', 'public'))
+            ->when(! $isOwner, fn ($q) => $q->where(function ($visibility) use ($isBatchmate) {
+                $visibility->where('visibility', 'public');
+
+                if ($isBatchmate) {
+                    $visibility->orWhere('visibility', 'friends');
+                }
+            }))
             ->with([
                 'user:id,name',
-                'user.studentRecord:id,course,photo',         // FIX: added 'photo' for profile_picture accessor fallback
+                'user.studentRecord:id,course,photo',         
                 'taggedStudents:id,name',
-                'taggedStudents.studentRecord:id,course,photo', // FIX: added 'photo' for profile_picture accessor fallback
+                'taggedStudents.studentRecord:id,course,photo', 
                 'media',
             ])
             ->latest()
@@ -63,9 +70,7 @@ class ProfileController extends Controller
         ]);
     }
 
-    // =========================================================================
     // POST /api/profile/upload
-    // =========================================================================
 
     public function uploadMedia(Request $request): JsonResponse
     {
@@ -140,7 +145,7 @@ class ProfileController extends Controller
                 ['type' => 'profile', 'event_date' => now()->toDateString()]
             );
 
-            // ── Create ONE Photo record for all files ──────────────────────
+            // Create ONE Photo record for all files 
             $photo = Photo::create([
                 'album_id'        => $album->id,
                 'user_id'         => $user->id,
@@ -196,7 +201,7 @@ class ProfileController extends Controller
                 }
             }
 
-            // ── Tag people ─────────────────────────────────────────────────
+            // Tag people 
             if ($request->filled('tagged_user_ids')) {
                 $this->tagUsersAndNotify(
                     $photo,
@@ -205,7 +210,6 @@ class ProfileController extends Controller
                 );
             }
 
-            // FIX: load studentRecord so profile_picture accessor has its fallback data
             $photo->load([
                 'media',
                 'taggedStudents:id,name',
@@ -242,10 +246,8 @@ class ProfileController extends Controller
         }
     }
 
-    // =========================================================================
+    
     // GET /api/profile/posts/{photoId}
-    // =========================================================================
-
     public function getPost(int $photoId): JsonResponse
     {
         $photo = Photo::where('id', $photoId)
@@ -253,7 +255,7 @@ class ProfileController extends Controller
             ->with([
                 'media',
                 'taggedStudents:id,name',
-                'taggedStudents.studentRecord:id,photo', // FIX: photo needed for accessor fallback
+                'taggedStudents.studentRecord:id,photo', 
             ])
             ->firstOrFail();
 
@@ -263,10 +265,7 @@ class ProfileController extends Controller
         ]);
     }
 
-    // =========================================================================
     // PATCH /api/profile/posts/{photoId}
-    // =========================================================================
-
     public function updatePost(Request $request, int $photoId): JsonResponse
     {
         $photo = Photo::where('id', $photoId)
@@ -296,7 +295,6 @@ class ProfileController extends Controller
             $this->tagUsersAndNotify($photo, $newIds, Auth::user(), $addedIds);
         }
 
-        // FIX: load studentRecord so profile_picture accessor has its fallback data
         $photo->load([
             'media',
             'taggedStudents:id,name',
@@ -310,10 +308,7 @@ class ProfileController extends Controller
         ]);
     }
 
-    // =========================================================================
     // GET /api/profile/storage-usage
-    // =========================================================================
-
     public function storageUsage(): JsonResponse
     {
         $user = Auth::user();
@@ -356,10 +351,7 @@ class ProfileController extends Controller
         ]);
     }
 
-    // =========================================================================
     // DELETE /api/profile/posts/{photoId}
-    // =========================================================================
-
     public function deletePost(int $photoId): JsonResponse
     {
         $photo = Photo::where('id', $photoId)
@@ -392,10 +384,7 @@ class ProfileController extends Controller
         return response()->json(['success' => true, 'message' => 'Post deleted.']);
     }
 
-    // =========================================================================
     // PRIVATE HELPERS
-    // =========================================================================
-
     private function formatPost(Photo $photo): array
     {
         $media = $photo->relationLoaded('media') ? $photo->media : $photo->media()->get();
@@ -467,7 +456,8 @@ class ProfileController extends Controller
                 $taggedUser = User::find($userId);
                 if ($taggedUser) {
                     try {
-                        PhotoTaggedNotification::dispatchFor($taggedUser, $tagger, $photoUrl);
+                        $actionUrl = rtrim(config('app.frontend_url'), '/') . '/profile/' . $photo->user_id . '?post=' . $photo->id;
+                        PhotoTaggedNotification::dispatchFor($taggedUser, $tagger, $photoUrl, $actionUrl, $photo->id, $photo->user_id);
                     } catch (\Throwable) {}
                 }
             }
@@ -482,5 +472,30 @@ class ProfileController extends Controller
     private function displayVisibility(?string $visibility): string
     {
         return $visibility === 'friends' ? 'batchmates' : ($visibility ?: 'public');
+    }
+
+    private function areBatchmates(User $viewer, User $profileOwner): bool
+    {
+        $viewer->loadMissing('studentRecord');
+        $profileOwner->loadMissing('studentRecord');
+
+        $viewerYear = $viewer->graduation_year;
+        $ownerYear  = $profileOwner->graduation_year;
+
+        if (! $viewerYear || ! $ownerYear || (int) $viewerYear !== (int) $ownerYear) {
+            return false;
+        }
+
+        $viewerSection = $viewer->section_id ?: $viewer->studentRecord?->section_id;
+        $ownerSection  = $profileOwner->section_id ?: $profileOwner->studentRecord?->section_id;
+
+        if ($viewerSection && $ownerSection && (int) $viewerSection === (int) $ownerSection) {
+            return true;
+        }
+
+        $viewerCourse = trim((string) $viewer->course);
+        $ownerCourse  = trim((string) $profileOwner->course);
+
+        return $viewerCourse !== '' && $ownerCourse !== '' && strcasecmp($viewerCourse, $ownerCourse) === 0;
     }
 }

@@ -32,8 +32,6 @@ class EngagementAnalyticsService
 
     public function batchmateStats(User $user): array
     {
-        // FIX: course/profile_picture are accessors — load via Eloquent with
-        // studentRecord so the accessors resolve correctly. No raw column list.
         $topProfiles = User::where('batch_id', $user->batch_id)
             ->where('role', 'student')
             ->where('profile_visibility', 'public')
@@ -45,8 +43,8 @@ class EngagementAnalyticsService
             ->map(fn($u) => [
                 'id'              => $u->id,
                 'name'            => $u->name,
-                'profile_picture' => $u->profile_picture, // accessor resolves correctly
-                'course'          => $u->course,           // accessor → studentRecord.course
+                'profile_picture' => $u->profile_picture, 
+                'course'          => $u->course,           
                 'views'           => $u->profile_views,
             ]);
 
@@ -58,7 +56,6 @@ class EngagementAnalyticsService
 
     public function topViewed(int $limit = 10): array
     {
-        // FIX: course/batch/graduation_year are accessors, not real columns.
         // Use Eloquent + eager-load studentRecord so accessors work.
         return User::where('role', 'student')
             ->where('profile_visibility', 'public')
@@ -69,10 +66,10 @@ class EngagementAnalyticsService
             ->map(fn($u) => [
                 'id'              => $u->id,
                 'name'            => $u->name,
-                'profile_picture' => $u->profile_picture,  // accessor
-                'course'          => $u->course,            // accessor → studentRecord.course
-                'batch'           => $u->batch,             // accessor → studentRecord.graduation_year
-                'graduation_year' => $u->graduation_year,   // accessor → studentRecord.graduation_year
+                'profile_picture' => $u->profile_picture,  
+                'course'          => $u->course,            
+                'batch'           => $u->batch,             
+                'graduation_year' => $u->graduation_year,   
                 'views'           => $u->profile_views,
             ])
             ->toArray();
@@ -80,7 +77,6 @@ class EngagementAnalyticsService
 
     public function trending(int $limit = 10): array
     {
-        // FIX: course/batch/graduation_year/profile_picture don't exist on users table.
         // Join students table (via student_record_id) to get the real columns,
         // and use users.profile_picture which now exists after the migration.
         return DB::table('profile_views')
@@ -114,7 +110,7 @@ class EngagementAnalyticsService
             ->toArray();
     }
 
-    // ── Core record logic ─────────────────────────────────────────────────────
+    // Core record logic 
     public function recordView(int $viewedUserId, ?int $viewerUserId, string $ipAddress): void
     {
         if ($viewerUserId && $viewerUserId === $viewedUserId) {

@@ -27,7 +27,6 @@ class PhotoPolicy
         }
 
         // Fallback: photo belongs to an album owned by this user
-        // (covers legacy photos where user_id was not stamped)
         if ($photo->album && $photo->album->user_id === $user->id) {
             return true;
         }

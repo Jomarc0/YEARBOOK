@@ -7,7 +7,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import * as Linking from 'expo-linking';
 import * as WebBrowser from 'expo-web-browser';
 import * as Haptics from 'expo-haptics';
-import { createPaymentIntent, getAppConfig, getErrorMessage, getPaymentHistory, getSubscriptionStatus, unwrap } from '../../lib/api';
+import { confirmPayment, createPaymentIntent, getAppConfig, getErrorMessage, getPaymentHistory, getSubscriptionStatus, unwrap } from '../../lib/api';
 import { colors, shadows } from '../../components/webTheme';
 
 const PLANS: any = {
@@ -17,7 +17,7 @@ const PLANS: any = {
     monthly: { key: 'standard_monthly', price: 'PHP 99', period: 'month' },
     yearly: { key: 'standard_yearly', price: 'PHP 799', period: 'year', savings: 'Save 33%' },
     summary: 'Core access for browsing and connecting.',
-    features: ['Student profiles', 'Gallery access', 'Messaging'],
+    features: ['Browse all student profiles', 'Access digital gallery', 'Direct messaging', 'Basic yearbook viewing', 'Yearbook PDF download', 'Section and faculty directory'],
     accent: colors.indigo,
     soft: colors.softIndigo,
   },
@@ -27,7 +27,7 @@ const PLANS: any = {
     monthly: { key: 'premium_monthly', price: 'PHP 199', period: 'month' },
     yearly: { key: 'premium_yearly', price: 'PHP 1,499', period: 'year', savings: 'Save 37%' },
     summary: 'Full yearbook tools and priority features.',
-    features: ['Everything in Standard', 'Priority face search', 'Premium badge'],
+    features: ['Everything in Standard', 'Priority yearbook PDF downloads', 'Priority AI face search', 'Extended cloud storage', 'Exclusive premium badge', 'Early access to new features'],
     accent: colors.gold,
     soft: colors.softGold,
   },
@@ -49,6 +49,7 @@ export default function PaymentScreen() {
   const selectedTier = PLANS[tierKey];
   const selectedPlan = selectedTier[billing];
   const subscriptionEnabled = appConfig?.features?.enable_premium_subscription !== false;
+  const activeTierKey = status?.is_premium ? 'premium' : status?.is_standard ? 'standard' : '';
   const alreadyOnTier = tierKey === 'premium'
     ? status?.is_premium
     : Boolean(status?.is_standard && !status?.is_premium);
@@ -77,6 +78,11 @@ export default function PaymentScreen() {
   useEffect(() => {
     loadStatus();
   }, [loadStatus]);
+
+  useEffect(() => {
+    if (params.plan || !activeTierKey) return;
+    setTierKey(activeTierKey as 'standard' | 'premium');
+  }, [activeTierKey, params.plan]);
 
   useEffect(() => {
     const plan = String(params.plan || '').toLowerCase();
@@ -115,14 +121,18 @@ export default function PaymentScreen() {
         cancel_url: cancelUrl,
       });
       const checkoutUrl = payload?.checkout_url;
+      const sessionId = payload?.session_id;
 
       if (!checkoutUrl) throw new Error('No checkout URL returned by the server.');
 
       const result = await WebBrowser.openAuthSessionAsync(checkoutUrl, Linking.createURL('/payment'));
+      if (sessionId && result.type === 'success' && result.url?.includes('/payment/success')) {
+        await confirmPayment(sessionId).catch(() => null);
+      }
       const nextStatus = await loadStatus();
 
       if (result.type === 'success' && result.url?.includes('/payment/success')) {
-        router.push({ pathname: '/payment/success', params: { tier: nextStatus?.tier || tierKey } } as any);
+        router.push({ pathname: '/payment/success', params: { tier: nextStatus?.tier || tierKey, session_id: sessionId } } as any);
       } else if (result.type === 'success' && result.url?.includes('/payment/cancel')) {
         router.push({ pathname: '/payment/cancel', params: { plan: selectedPlan.key } } as any);
       } else if (nextStatus?.is_active) {
@@ -174,8 +184,8 @@ export default function PaymentScreen() {
             <FontAwesome name="chevron-left" size={15} color={colors.navy} />
           </TouchableOpacity>
           <View style={{ flex: 1 }}>
-            <Text style={styles.kicker}>Premium Access</Text>
-            <Text style={styles.title}>Choose a plan</Text>
+            <Text style={styles.kicker}>Top Up Access</Text>
+            <Text style={styles.title}>Choose your plan</Text>
           </View>
         </View>
 
@@ -186,7 +196,7 @@ export default function PaymentScreen() {
           <View style={{ flex: 1 }}>
             <Text style={styles.statusTitle}>{activeLabel}</Text>
             <Text style={styles.statusMeta}>
-              {status?.expires_at ? `Expires ${new Date(status.expires_at).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' })}` : 'Upgrade anytime when you need more features.'}
+              {status?.expires_at ? `Expires ${new Date(status.expires_at).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' })}` : 'Buy Standard or Premium anytime when you need more features.'}
             </Text>
           </View>
         </View>
@@ -211,6 +221,7 @@ export default function PaymentScreen() {
         <View style={styles.planList}>
           {Object.entries(PLANS).map(([key, plan]: any) => {
             const active = tierKey === key;
+            const current = activeTierKey === key;
             const price = plan[billing];
             return (
               <TouchableOpacity
@@ -224,7 +235,10 @@ export default function PaymentScreen() {
                     <FontAwesome name={plan.icon} size={15} color={active ? colors.gold : colors.muted} />
                   </View>
                   <View style={{ flex: 1 }}>
-                    <Text style={styles.planName}>{plan.label}</Text>
+                    <View style={styles.planNameRow}>
+                      <Text style={styles.planName}>{plan.label}</Text>
+                      {current ? <Text style={styles.currentPlanBadge}>Current plan</Text> : null}
+                    </View>
                     <Text style={styles.planSummary}>{plan.summary}</Text>
                   </View>
                   <View style={[styles.radio, active && { borderColor: plan.accent, backgroundColor: plan.accent }]}>
@@ -324,7 +338,9 @@ const styles = StyleSheet.create({
   planCard: { borderRadius: 20, borderWidth: 2, borderColor: colors.border, backgroundColor: '#ffffff', padding: 16 },
   planTop: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   planIcon: { width: 42, height: 42, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
+  planNameRow: { flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
   planName: { color: colors.navy, fontSize: 18, fontWeight: '900' },
+  currentPlanBadge: { borderRadius: 999, backgroundColor: '#fff7e6', borderWidth: 1, borderColor: 'rgba(253,184,19,0.65)', color: colors.navy, fontSize: 10, fontWeight: '900', paddingHorizontal: 8, paddingVertical: 4 },
   planSummary: { color: colors.muted, fontSize: 12, marginTop: 3 },
   radio: { width: 24, height: 24, borderRadius: 12, borderWidth: 2, borderColor: colors.border, alignItems: 'center', justifyContent: 'center' },
   priceRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 5, marginTop: 16 },

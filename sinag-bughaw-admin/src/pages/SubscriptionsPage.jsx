@@ -147,7 +147,7 @@ function SubDetailModal({ sub, onClose, onCancel, loading }) {
   const fields = [
     ["Plan",        sub.plan ?? "—"],
     ["Status",      sub.status ?? "—"],
-    ["Amount paid", `\u20b1${(parseFloat(sub.amount_paid) / 100).toLocaleString("en-PH", { minimumFractionDigits: 2 })}`],
+    ["Amount paid", fmtMoney(sub.amount_paid == null ? null : sub.amount_paid / 100)],
     ["Started",     fmt(sub.created_at)],
     ["Expires",     fmt(sub.expires_at)],
   ];

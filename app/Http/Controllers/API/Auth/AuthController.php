@@ -23,7 +23,7 @@ use Illuminate\Support\Facades\RateLimiter;
 
 class AuthController extends Controller
 {
-    // ── Register ───────────────────────────────────────────────────────────
+    // Register ─
 
     public function register(Request $request)
     {
@@ -36,8 +36,6 @@ class AuthController extends Controller
             'last_name'        => 'required|string|max:255',
             'email'            => 'required|email|unique:users',
             'password'         => 'required|min:8|confirmed',
-            // student_id here is the student NUMBER string (e.g. "2021-00123")
-            // used only for lookup — not stored in users anymore
             'student_id'       => 'required|string|max:255|unique:users,student_id',
             'course'           => 'required|string|max:255',
             'graduation_year'  => 'required|integer|min:1990|max:2100',
@@ -45,7 +43,7 @@ class AuthController extends Controller
             'consent_accepted' => 'required|accepted',
         ]);
 
-        // ── Try to find a matching student record ──────────────────────────
+        // Try to find a matching student record 
         // Match on student_no + first_name + last_name (case-insensitive)
         $studentRecord = $this->findMatchingStudentRecord($request);
 
@@ -55,7 +53,7 @@ class AuthController extends Controller
             ]);
         }
 
-        // ── Create user — lean, no yearbook data copied ────────────────────
+        // Create user — lean, no yearbook data copied 
         $course = $studentRecord?->course ?: $request->course;
         $graduationYear = $studentRecord?->graduation_year ?: (int) $request->graduation_year;
         $batch = (string) ($studentRecord?->graduation_year ?: ($request->batch ?: $request->graduation_year));
@@ -85,7 +83,7 @@ class AuthController extends Controller
             'consent_accepted'  => true,
         ]);
 
-        // ── Consent log ───────────────────────────────────────────────────
+        // Consent log
         if ($studentRecord && filled($studentRecord->photo)) {
             ProcessFaceIndexing::dispatch($user->fresh()->load('studentRecord'));
         }
@@ -113,7 +111,7 @@ class AuthController extends Controller
         ], 201);
     }
 
-    // ── Login ──────────────────────────────────────────────────────────────
+    // Login 
 
     public function login(Request $request)
     {
@@ -163,7 +161,7 @@ class AuthController extends Controller
         ]);
     }
 
-    // ── Student lookup (called by RegisterPage before submit) ──────────────
+    // Student lookup 
     // Checks if name + student_no match a student record.
     // Returns safe preview data only — no sensitive fields.
 
@@ -217,7 +215,7 @@ class AuthController extends Controller
         ]);
     }
 
-    // ── OTP ────────────────────────────────────────────────────────────────
+    //OTP 
 
     private function findMatchingStudentRecord(Request $request): ?Student
     {
@@ -333,7 +331,7 @@ class AuthController extends Controller
         return response()->json(['message' => 'Email verified successfully.']);
     }
 
-    // ── Forgot Password ────────────────────────────────────────────────────
+    // Forgot Password
 
     public function forgotPassword(Request $request)
     {
@@ -424,7 +422,7 @@ class AuthController extends Controller
         return response()->json(['message' => 'Password reset successfully.']);
     }
 
-    // ── Misc ───────────────────────────────────────────────────────────────
+    // Misc
 
     public function logout(Request $request)
     {

@@ -27,7 +27,7 @@ class TrashController extends Controller
 {
     use AuditsAdminActions;
 
-    // ── Type registry ─────────────────────────────────────────────────────────
+    // Type registry 
 
     private function registry(): array
     {
@@ -327,9 +327,11 @@ class TrashController extends Controller
             $titleCol    = $cfg['title_col'];
             $subtitleCol = $cfg['subtitle_col'];
 
-            $title = $type === 'student'
-                ? trim("{$m->first_name} {$m->last_name}")
-                : ($m->{$titleCol} ?? "#{$m->id}");
+            $title = match ($type) {
+                'student', 'user' => trim("{$m->first_name} {$m->last_name}"),
+                'tagged_photo' => ($m->{$titleCol} ?? null) ?: "Tagged photo #{$m->id}",
+                default => ($m->{$titleCol} ?? "#{$m->id}"),
+            };
 
             return [
                 'id'          => $m->id,
@@ -337,10 +339,11 @@ class TrashController extends Controller
                 'label'       => $cfg['label'],
                 'icon'        => $cfg['icon'],
                 'title'       => $title ?: "#{$m->id}",
-                'subtitle'    => $subtitleCol ? ($m->{$subtitleCol} ?? null) : null,
+                'subtitle'    => $this->resolveSubtitle($m, $type, $subtitleCol),
                 'deleted_at'  => $m->deleted_at?->toISOString(),
                 'deleted_ago' => $m->deleted_at?->diffForHumans(),
-                'thumbnail'   => $this->resolveThumbnail($m, $type),
+                'thumbnail'   => $thumbnail = $this->safeResolveThumbnail($m, $type),
+                'media_type'  => $this->resolveMediaType($m, $type, $thumbnail),
             ];
         });
 
@@ -359,15 +362,106 @@ class TrashController extends Controller
     private function resolveThumbnail(mixed $model, string $type): ?string
     {
         return match ($type) {
-            'yearbook'         => $model->cover_image    ?? null,
+            'yearbook'         => $this->maybeUrl($model->cover_image ?? null),
             'faculty'          => $this->resolveCloudinaryUrl($model->image ?? null),
-            'graduation_album' => $model->media_url       ?? null,
-            'album'            => $model->cover_image     ?? null,
+            'graduation_album' => $this->maybeUrl($model->cover_photo_url ?? $model->media_url ?? null),
+            'album'            => $this->maybeUrl($model->cover_photo_url ?? $model->cover_image ?? $model->media_url ?? null),
             'photo'            => $this->maybeUrl($model->file_path ?? null),
             'post_media'       => $this->maybeUrl($model->file_path ?? null),
-            'student'          => $model->photo           ?? null,
+            'student'          => $this->maybeUrl($model->photo ?? null) ?? $this->resolveCloudinaryUrl($model->photo_public_id ?? null),
+            'user'             => $this->maybeUrl($model->profile_picture ?? $model->avatar ?? null)
+                ?? $this->resolveCloudinaryUrl($model->profile_picture_public_id ?? null),
+            'tagged_photo'     => $this->resolveTaggedPhotoThumbnail($model),
+            'voice_note'       => null,
             default            => null,
         };
+    }
+
+    private function resolveSubtitle(mixed $model, string $type, ?string $subtitleCol): ?string
+    {
+        if ($type === 'student') {
+            return trim(implode(' ', array_filter([$model->student_no ?? null, $model->course ?? null]))) ?: null;
+        }
+
+        if ($type === 'user') {
+            return $model->email ?? $model->role ?? null;
+        }
+
+        if ($type === 'post_media') {
+            return trim(implode(' · ', array_filter([$model->resource_type ?? null, $model->status ?? null]))) ?: null;
+        }
+
+        if ($type === 'tagged_photo') {
+            return trim(implode(' · ', array_filter([$model->source ?? null, $model->status ?? null]))) ?: null;
+        }
+
+        if ($type === 'voice_note') {
+            return trim(implode(' · ', array_filter([$model->status ?? null, $model->duration_seconds ? "{$model->duration_seconds}s" : null]))) ?: null;
+        }
+
+        return $subtitleCol ? ($model->{$subtitleCol} ?? null) : null;
+    }
+
+    private function resolveMediaType(mixed $model, string $type, ?string $thumbnail = null): string
+    {
+        if (in_array($type, ['faculty', 'student', 'user', 'photo', 'tagged_photo'], true)) {
+            return 'image';
+        }
+
+        if ($type === 'voice_note') {
+            return 'audio';
+        }
+
+        $resourceType = $model->resource_type ?? null;
+        if ($resourceType) {
+            return (string) $resourceType;
+        }
+
+        $url = (string) ($thumbnail ?? '');
+        return match (true) {
+            preg_match('/\.(mp4|mov|webm|avi|mkv)(\?|$)/i', $url) === 1 => 'video',
+            preg_match('/\.(mp3|wav|m4a|ogg|flac)(\?|$)/i', $url) === 1 => 'audio',
+            preg_match('/\.(jpg|jpeg|png|webp|gif)(\?|$)/i', $url) === 1 => 'image',
+            default => 'record',
+        };
+    }
+
+    private function resolveTaggedPhotoThumbnail(TaggedPhoto $tag): ?string
+    {
+        if ($tag->photo_path) {
+            return $this->maybeUrl($tag->photo_path);
+        }
+
+        if ($tag->photo_id) {
+            $photo = Photo::query()->withTrashed()->find($tag->photo_id);
+            if ($photo?->file_path) {
+                return $this->maybeUrl($photo->file_path);
+            }
+        }
+
+        if ($tag->graduation_photo_id) {
+            $photo = \App\Models\GraduationPhoto::query()->withTrashed()->find($tag->graduation_photo_id);
+            if ($photo?->file_path) {
+                return $this->maybeUrl($photo->file_path);
+            }
+        }
+
+        return null;
+    }
+
+    private function safeResolveThumbnail(mixed $model, string $type): ?string
+    {
+        try {
+            return $this->resolveThumbnail($model, $type);
+        } catch (Throwable $e) {
+            Log::warning('[TrashController] thumbnail resolve failed', [
+                'type' => $type,
+                'id' => $model->id ?? null,
+                'error' => $e->getMessage(),
+            ]);
+
+            return null;
+        }
     }
 
     private function maybeUrl(?string $path): ?string

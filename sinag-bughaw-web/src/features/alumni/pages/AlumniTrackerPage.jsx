@@ -1,12 +1,48 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import Navbar from '@/components/layout/Navbar';
 import Footer from '@/components/layout/Footer';
 import { useAlumniList, useYearbookDeepLink } from '../hooks/useAlumniTracker';
+import { faceApi } from '@/api/gallery.api';
+import FaceSearchButton from '@/components/ui/FaceSearchButton';
 import { imageUrl, avatarUrl } from '@/utils/imageUrl';
 
 const GOLD = '#fdb813';
 const NAVY = '#1d2b4b';
+
+function normalizeText(value) {
+  return String(value ?? '').trim().toLowerCase();
+}
+
+function alumniMatchIds(alumni) {
+  return [
+    alumni?.id,
+    alumni?.user_id,
+    alumni?.account_user_id,
+    alumni?.student_id,
+    alumni?.student?.id,
+    alumni?.student?.user_id,
+  ].map((id) => Number(id)).filter((id) => Number.isFinite(id) && id > 0);
+}
+
+function faceMatchIds(match) {
+  return [
+    match?.account_user_id,
+    match?.user_id,
+    match?.student_user_id,
+    match?.student_record_id,
+    match?.student_id,
+    match?.id,
+  ].map((id) => Number(id)).filter((id) => Number.isFinite(id) && id > 0);
+}
+
+function usableFaceMatches(matches = []) {
+  const normalized = matches
+    .map((match) => ({ ...match, match_ids: faceMatchIds(match) }))
+    .filter((match) => match.match_ids.length);
+
+  return Array.from(new Map(normalized.map((match) => [match.match_ids[0], match])).values());
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Alumni Card
@@ -191,7 +227,7 @@ function AlumniCard({ alumni }) {
 // Filter Bar
 // ─────────────────────────────────────────────────────────────────────────────
 
-function FilterBar({ filters, onFilter, batches = [] }) {
+function FilterBar({ filters, onFilter, batches = [], onFaceFile, faceSearching = false }) {
   const FIELDS = ['Engineering', 'Business', 'Education', 'Health Sciences', 'Technology', 'Arts', 'Law', 'Other'];
 
   return (
@@ -206,11 +242,11 @@ function FilterBar({ filters, onFilter, batches = [] }) {
         <input
           type="text"
           placeholder="Search alumni…"
-          defaultValue={filters.q ?? ''}
+          value={filters.q ?? ''}
           onChange={e => onFilter('q', e.target.value)}
           style={{
             width: '100%', height: 44,
-            padding: '0 16px 0 42px',
+            padding: '0 52px 0 42px',
             border: '1.5px solid #e2e8f0', borderRadius: 12,
             fontSize: '0.82rem', color: NAVY,
             outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box',
@@ -218,6 +254,7 @@ function FilterBar({ filters, onFilter, batches = [] }) {
           onFocus={e => e.target.style.borderColor = '#3f51b5'}
           onBlur={e  => e.target.style.borderColor = '#e2e8f0'}
         />
+        <FaceSearchButton onFile={onFaceFile} loading={faceSearching} />
       </div>
 
       {/* Batch */}
@@ -258,6 +295,70 @@ export default function AlumniTrackerPage() {
     useAlumniList({ batch_id: batchFromYearbook ?? undefined });
 
   const [batches, setBatches] = useState([]);
+  const [faceSearching, setFaceSearching] = useState(false);
+  const [faceMatches, setFaceMatches] = useState([]);
+  const [matchedIds, setMatchedIds] = useState(new Set());
+
+  const clearFace = () => {
+    setFaceMatches([]);
+    setMatchedIds(new Set());
+  };
+
+  const handleFilter = (key, value) => {
+    clearFace();
+    applyFilter(key, value);
+  };
+
+  const handleClearFilters = () => {
+    clearFace();
+    clearFilters();
+  };
+
+  const handleFaceFile = async (file) => {
+    setFaceSearching(true);
+    setFaceMatches([]);
+    setMatchedIds(new Set());
+    try {
+      const formData = new FormData();
+      formData.append('face_image', file);
+      const { data } = await faceApi.search(formData);
+      const matches = usableFaceMatches(data?.matches ?? data?.data?.matches ?? []);
+      if (!matches.length) {
+        alert('No matching alumni found. Use a clear front-facing photo.');
+        return;
+      }
+      setFaceMatches(matches);
+      setMatchedIds(new Set(matches.flatMap((match) => match.match_ids)));
+    } catch (requestError) {
+      alert(requestError?.response?.data?.message || 'Face search failed. Please try again.');
+    } finally {
+      setFaceSearching(false);
+    }
+  };
+
+  const visibleAlumni = useMemo(() => {
+    const query = normalizeText(filters.q);
+    const field = normalizeText(filters.field);
+
+    return list.filter((alumni) => {
+      const searchable = [
+        alumni?.name,
+        alumni?.full_name,
+        alumni?.email,
+        alumni?.section,
+        alumni?.course,
+        alumni?.batch_year,
+        alumni?.career?.job_title,
+        alumni?.career?.company,
+        alumni?.career?.location,
+        alumni?.career?.field,
+      ].map(normalizeText).join(' ');
+      const textMatch = !query || searchable.includes(query);
+      const fieldMatch = !field || normalizeText(alumni?.career?.field).includes(field);
+      const faceMatch = matchedIds.size === 0 || alumniMatchIds(alumni).some((id) => matchedIds.has(id));
+      return textMatch && fieldMatch && faceMatch;
+    });
+  }, [filters.field, filters.q, list, matchedIds]);
 
   useEffect(() => {
     import('@/api/yearbook.api').then(({ yearbookApi }) => {
@@ -290,12 +391,13 @@ export default function AlumniTrackerPage() {
       {/* Hero */}
       <header style={{
         background: `linear-gradient(135deg, ${NAVY} 0%, #2a3d66 100%)`,
-        padding: '80px 8% 90px', textAlign: 'center', color: '#fff',
-        borderRadius: '0 0 60px 60px', position: 'relative', overflow: 'hidden',
+        minHeight: 140,
+        padding: '32px 8%', textAlign: 'center', color: '#fff',
+        borderRadius: '0 0 28px 28px', position: 'relative', overflow: 'hidden',
       }}>
-        {[300, 200].map((size, i) => (
+        {[180, 120].map((size, i) => (
           <div key={i} aria-hidden="true" style={{
-            position: 'absolute', top: i === 0 ? -80 : -40,
+            position: 'absolute', top: i === 0 ? -80 : -36,
             right: i === 0 ? '8%' : '20%',
             width: size, height: size, borderRadius: '50%',
             border: `1px solid rgba(253,184,19,${i === 0 ? 0.07 : 0.04})`,
@@ -303,45 +405,45 @@ export default function AlumniTrackerPage() {
           }} />
         ))}
 
-        <p style={{ fontSize: '0.7rem', fontWeight: 700, letterSpacing: '0.2em', textTransform: 'uppercase', color: 'rgba(253,184,19,0.6)', marginBottom: 14 }}>
+        <p style={{ fontSize: '0.68rem', fontWeight: 700, letterSpacing: '0.18em', textTransform: 'uppercase', color: 'rgba(253,184,19,0.6)', marginBottom: 8 }}>
           National University Lipa
         </p>
 
-        <div style={{ width: 68, height: 68, border: `1.5px solid ${GOLD}`, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: GOLD, margin: '0 auto 18px' }}>
-          <i className="fas fa-users-line" style={{ fontSize: 24 }} />
+        <div style={{ width: 42, height: 42, border: `1.5px solid ${GOLD}`, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: GOLD, margin: '0 auto 10px' }}>
+          <i className="fas fa-users-line" style={{ fontSize: 16 }} />
         </div>
 
-        <h1 style={{ fontSize: '2.8rem', fontWeight: 800, letterSpacing: '-1.5px', margin: '0 0 12px' }}>
+        <h1 style={{ fontSize: '2rem', fontWeight: 800, letterSpacing: '-0.5px', margin: '0 0 8px' }}>
           Alumni <span style={{ color: GOLD }}>Tracker</span>
         </h1>
 
-        <p style={{ fontSize: '0.95rem', fontWeight: 300, color: 'rgba(255,255,255,0.65)', maxWidth: 480, margin: '0 auto 28px', lineHeight: 1.7 }}>
+        <p style={{ fontSize: '0.84rem', fontWeight: 300, color: 'rgba(255,255,255,0.65)', maxWidth: 520, margin: '0 auto 14px', lineHeight: 1.55 }}>
           See where your batchmates are now — careers, locations, and their
           chapter in the <strong style={{ fontWeight: 700, color: 'rgba(255,255,255,0.85)' }}>NU Lipa Yearbook</strong>.
         </p>
 
         {/* Stats */}
         <div style={{
-          display: 'inline-flex', gap: 32,
+          display: 'inline-flex', gap: 20,
           background: 'rgba(255,255,255,0.06)', backdropFilter: 'blur(10px)',
           border: '1px solid rgba(255,255,255,0.1)',
-          borderRadius: 20, padding: '16px 32px',
+          borderRadius: 14, padding: '9px 18px',
         }}>
           {[
             { icon: 'fa-user-graduate', label: 'Alumni',         value: meta.total || '—' },
             { icon: 'fa-link',          label: 'Yearbook Links', value: 'Connected'       },
           ].map(({ icon, label, value }) => (
             <div key={label} style={{ textAlign: 'center' }}>
-              <i className={`fas ${icon}`} style={{ color: GOLD, fontSize: 16, display: 'block', marginBottom: 6 }} />
-              <div style={{ fontSize: '1.3rem', fontWeight: 800 }}>{value}</div>
-              <div style={{ fontSize: '0.65rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'rgba(255,255,255,0.5)', marginTop: 2 }}>{label}</div>
+              <i className={`fas ${icon}`} style={{ color: GOLD, fontSize: 12, display: 'block', marginBottom: 3 }} />
+              <div style={{ fontSize: '1rem', fontWeight: 800 }}>{value}</div>
+              <div style={{ fontSize: '0.58rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'rgba(255,255,255,0.5)', marginTop: 1 }}>{label}</div>
             </div>
           ))}
         </div>
 
         {/* Back to Yearbook deep-link */}
         {batchFromYearbook && (
-          <div style={{ marginTop: 24 }}>
+          <div style={{ marginTop: 12 }}>
             <Link
               to={`/yearbook/${batchFromYearbook}/view`}
               style={{
@@ -365,16 +467,43 @@ export default function AlumniTrackerPage() {
       <main style={{ flex: 1, padding: '40px 8% 80px' }}>
 
         <div style={{ marginBottom: 32 }}>
-          <FilterBar filters={filters} onFilter={applyFilter} batches={batches} />
+          <FilterBar
+            filters={filters}
+            onFilter={handleFilter}
+            batches={batches}
+            onFaceFile={handleFaceFile}
+            faceSearching={faceSearching}
+          />
         </div>
+
+        {faceMatches.length > 0 && (
+          <div style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            gap: 12, flexWrap: 'wrap', marginBottom: 18,
+            background: 'rgba(253,184,19,0.1)', border: '1px solid rgba(253,184,19,0.32)',
+            borderRadius: 16, padding: '12px 16px', color: '#92590e',
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 9, fontSize: 13, fontWeight: 800 }}>
+              <i className="fas fa-camera" style={{ color: GOLD }} />
+              {faceMatches.length} face match{faceMatches.length > 1 ? 'es' : ''} found - showing matched alumni only
+            </div>
+            <button
+              type="button"
+              onClick={clearFace}
+              style={{ border: '1px solid rgba(253,184,19,0.45)', background: 'transparent', borderRadius: 9, color: '#92590e', fontSize: 12, fontWeight: 800, padding: '6px 10px', cursor: 'pointer' }}
+            >
+              <i className="fas fa-times" /> Clear Face
+            </button>
+          </div>
+        )}
 
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
           <h2 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 800, color: NAVY }}>
-            {loading ? 'Loading…' : `${meta.total} Alumni`}
+            {loading ? 'Loading…' : `${visibleAlumni.length} Alumni`}
           </h2>
-          {Object.keys(filters).length > 0 && (
+          {(Object.values(filters).some(Boolean) || faceMatches.length > 0) && (
             <button
-              onClick={clearFilters}
+              onClick={handleClearFilters}
               style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#fff', border: '1.5px solid #e2e8f0', borderRadius: 10, padding: '7px 14px', fontSize: '0.75rem', fontWeight: 700, color: '#64748b', cursor: 'pointer' }}
             >
               <i className="fas fa-times" /> Clear Filters
@@ -395,20 +524,20 @@ export default function AlumniTrackerPage() {
           </div>
         )}
 
-        {!loading && !error && list.length === 0 && (
+        {!loading && !error && visibleAlumni.length === 0 && (
           <div style={{ textAlign: 'center', padding: '80px 20px', background: '#fff', borderRadius: 24, boxShadow: '0 2px 16px rgba(29,43,75,0.06)' }}>
             <i className="fas fa-users-slash" style={{ fontSize: 48, color: '#e2e8f0', display: 'block', marginBottom: 16 }} />
             <h3 style={{ fontSize: 18, fontWeight: 800, color: NAVY, margin: '0 0 8px' }}>No Alumni Found</h3>
-            <p style={{ fontSize: 13, color: '#94a3b8', margin: '0 0 20px' }}>Try adjusting your filters.</p>
-            <button onClick={clearFilters} style={{ display: 'inline-flex', alignItems: 'center', gap: 7, background: NAVY, color: '#fff', border: 'none', padding: '10px 22px', borderRadius: 14, fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
+            <p style={{ fontSize: 13, color: '#94a3b8', margin: '0 0 20px' }}>{faceMatches.length ? 'No alumni matched this face in the current list.' : 'Try adjusting your filters.'}</p>
+            <button onClick={handleClearFilters} style={{ display: 'inline-flex', alignItems: 'center', gap: 7, background: NAVY, color: '#fff', border: 'none', padding: '10px 22px', borderRadius: 14, fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
               <i className="fas fa-rotate-left" /> Clear Filters
             </button>
           </div>
         )}
 
-        {!loading && list.length > 0 && (
+        {!loading && visibleAlumni.length > 0 && (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 24 }}>
-            {list.map((alumni, i) => (
+            {visibleAlumni.map((alumni, i) => (
               <div
                 key={alumni.id}
                 className="alumni-card-anim"
@@ -427,7 +556,7 @@ export default function AlumniTrackerPage() {
             {Array.from({ length: meta.last_page }, (_, i) => i + 1).map(page => (
               <button
                 key={page}
-                onClick={() => applyFilter('page', page)}
+                onClick={() => handleFilter('page', page)}
                 style={{
                   width: 38, height: 38, borderRadius: 10,
                   border: 'none', cursor: 'pointer',
@@ -449,3 +578,4 @@ export default function AlumniTrackerPage() {
     </div>
   );
 }
+

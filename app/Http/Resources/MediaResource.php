@@ -8,8 +8,6 @@ use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
 /**
- * MediaResource
- *
  * Transforms a Cloudinary upload response array into a standardised API payload.
  *
  * Used for both single uploads and each item inside a bulk upload collection.

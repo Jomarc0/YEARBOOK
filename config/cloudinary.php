@@ -5,10 +5,8 @@ declare(strict_types=1);
 return [
 
     /*
-    |--------------------------------------------------------------------------
-    | Cloudinary Credentials
-    |--------------------------------------------------------------------------
-    | Pulled exclusively from environment variables. Never hardcode these.
+    Cloudinary Credentials
+    Pulled exclusively from environment variables. Never hardcode these.
     */
 
     'cloud_name' => env('CLOUDINARY_CLOUD_NAME'),
@@ -17,23 +15,19 @@ return [
     'url'        => env('CLOUDINARY_URL'),
 
     /*
-    |--------------------------------------------------------------------------
-    | Signed URL TTL (seconds)
-    |--------------------------------------------------------------------------
+    Signed URL TTL (seconds)
     */
 
     'signed_url_ttl' => env('CLOUDINARY_SIGNED_URL_TTL', 3600),
 
     /*
-    |--------------------------------------------------------------------------
-    | Subscription Storage Tiers
-    |--------------------------------------------------------------------------
-    | storage_limit_bytes  — max cumulative storage per user
-    | max_file_size_bytes  — max single file size
-    | max_video_size_bytes — max single video size
-    | hd_enabled           — whether HD (original quality) uploads are allowed
-    | bulk_upload_limit    — max files per bulk upload request
-    | allowed_mime_types   — accepted MIME types for this tier
+    Subscription Storage Tiers
+    storage_limit_bytes  — max cumulative storage per user
+    max_file_size_bytes  — max single file size
+    max_video_size_bytes — max single video size
+    hd_enabled           — whether HD (original quality) uploads are allowed
+    bulk_upload_limit    — max files per bulk upload request
+    allowed_mime_types   — accepted MIME types for this tier
     */
 
     'tiers' => [

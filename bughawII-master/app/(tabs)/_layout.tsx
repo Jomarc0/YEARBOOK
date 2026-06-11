@@ -38,7 +38,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="sections"
         options={{
-          title: 'Sections',
+          title: 'Batch',
           href: null,
         }}
       />
@@ -46,6 +46,7 @@ export default function TabLayout() {
         name="discovery"
         options={{
           title: 'Discover',
+          href: null,
         }}
       />
       <Tabs.Screen
@@ -59,6 +60,30 @@ export default function TabLayout() {
         name="profile"
         options={{
           title: 'More',
+        }}
+      />
+      <Tabs.Screen
+        name="student/[id]"
+        options={{
+          href: null,
+        }}
+      />
+      <Tabs.Screen
+        name="messages"
+        options={{
+          href: null,
+        }}
+      />
+      <Tabs.Screen
+        name="notifications"
+        options={{
+          href: null,
+        }}
+      />
+      <Tabs.Screen
+        name="yearbook"
+        options={{
+          href: null,
         }}
       />
     </Tabs>

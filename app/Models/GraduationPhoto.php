@@ -28,8 +28,7 @@ class GraduationPhoto extends Model implements AnalyzablePhoto
         'sort_order'  => 'integer',
     ];
 
-    // ── Relationships ──────────────────────────────────────────────────────
-
+    // Relationships 
     public function album(): BelongsTo
     {
         return $this->belongsTo(GraduationAlbum::class, 'graduation_album_id');
@@ -44,8 +43,7 @@ class GraduationPhoto extends Model implements AnalyzablePhoto
         return $this->hasMany(TaggedPhoto::class, 'graduation_photo_id');
     }
 
-    // ── Scopes ─────────────────────────────────────────────────────────────
-
+    //  Scopes 
     public function scopeImages(Builder $query): Builder
     {
         return $query->where('resource_type', 'image');
@@ -66,7 +64,7 @@ class GraduationPhoto extends Model implements AnalyzablePhoto
         return $query->where('resource_type', 'raw');
     }
 
-    // ── Accessors / Helpers ────────────────────────────────────────────────
+    // Accessors / Helpers 
 
     public function getFileTypeAttribute(): string
     {

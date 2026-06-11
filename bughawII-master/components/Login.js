@@ -8,18 +8,28 @@ import { Stack, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { FontAwesome } from '@expo/vector-icons';
 import { Image } from 'expo-image';
-import { acceptConsent, fetchCurrentUser, forgotPassword, getAppConfig, getConsentStatus, getErrorMessage, login, resetPassword, saveToken, sendOtp, STORAGE_BASE_URL, unwrap, verifyOtp, verifyResetOtp } from '../lib/api';
+import { acceptConsent, AUTH_BASE_URL, fetchCurrentUser, forgotPassword, getAppConfig, getConsentStatus, getErrorMessage, login, resetPassword, saveToken, sendOtp, unwrap, verifyOtp, verifyResetOtp } from '../lib/api';
+
+WebBrowser.maybeCompleteAuthSession();
 
 const emptyOtp = ['', '', '', '', '', ''];
+const maskEmail = (value = '') => {
+  const [local = '', domain = ''] = String(value).trim().split('@');
+  if (!local || !domain) return value;
+  return `${local[0]}${'*'.repeat(Math.max(4, local.length - 1))}@${domain}`;
+};
 
 export default function Login() {
   const router = useRouter();
-  const otpRefs = useRef([]);
+  const otpInputRef = useRef(null);
   const [step, setStep] = useState('form');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [resetToken, setResetToken] = useState('');
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [otp, setOtp] = useState(emptyOtp);
   const [loading, setLoading] = useState(false);
   const [showConsent, setShowConsent] = useState(false);
@@ -30,6 +40,8 @@ export default function Login() {
   const yearbookName = appConfig?.yearbook_name || 'Sinag-Bughaw Digital Yearbook';
   const brandName = (yearbookName.replace(/\s*Digital Yearbook/i, '') || 'Sinag-Bughaw').toUpperCase();
   const schoolName = appConfig?.school_name || 'NU Lipa';
+  const otpCode = otp.join('');
+  const isOtpStep = step === 'otp' || step === 'resetOtp';
 
   useEffect(() => {
     let active = true;
@@ -65,7 +77,7 @@ export default function Login() {
       setStep('otp');
       setResendSeconds(45);
       setOtp(emptyOtp);
-      setTimeout(() => otpRefs.current[0]?.focus?.(), 150);
+      setTimeout(() => otpInputRef.current?.focus?.(), 150);
     } catch (error) {
       Alert.alert('Login failed', getErrorMessage(error, 'Please check your credentials.'));
     } finally {
@@ -76,8 +88,8 @@ export default function Login() {
   const handleGoogleLogin = async () => {
     try {
       setLoading(true);
-      const redirectUri = Linking.createURL('/sso/callback');
-      const authUrl = `${STORAGE_BASE_URL}/auth/google/redirect?client=mobile&redirect_uri=${encodeURIComponent(redirectUri)}`;
+      const redirectUri = 'capstoneapp://sso/callback';
+      const authUrl = `${AUTH_BASE_URL}/auth/google/redirect?client=mobile&redirect_uri=${encodeURIComponent(redirectUri)}`;
       const result = await WebBrowser.openAuthSessionAsync(authUrl, redirectUri);
 
       if (result.type !== 'success' || !result.url) return;
@@ -106,16 +118,13 @@ export default function Login() {
     }
   };
 
-  const handleOtpChange = (index, value) => {
-    if (!/^\d?$/.test(value)) return;
-    const next = [...otp];
-    next[index] = value;
-    setOtp(next);
-    if (value && index < 5) otpRefs.current[index + 1]?.focus?.();
+  const handleOtpChange = (value) => {
+    const digits = value.replace(/\D/g, '').slice(0, emptyOtp.length);
+    setOtp(emptyOtp.map((_, index) => digits[index] || ''));
   };
 
   const handleVerifyOtp = async () => {
-    const code = otp.join('');
+    const code = otpCode;
     if (code.length !== 6) {
       Alert.alert('Incomplete code', 'Please enter all 6 OTP digits.');
       return;
@@ -134,7 +143,7 @@ export default function Login() {
       }
     } catch (error) {
       setOtp(emptyOtp);
-      otpRefs.current[0]?.focus?.();
+      otpInputRef.current?.focus?.();
       Alert.alert('Verification failed', getErrorMessage(error, 'Invalid or expired OTP.'));
     } finally {
       setLoading(false);
@@ -183,9 +192,10 @@ export default function Login() {
       setLoading(true);
       await forgotPassword(email.trim());
       setOtp(emptyOtp);
+      setResetToken('');
       setStep('resetOtp');
       setResendSeconds(45);
-      setTimeout(() => otpRefs.current[0]?.focus?.(), 150);
+      setTimeout(() => otpInputRef.current?.focus?.(), 150);
       Alert.alert('Reset code sent', 'Check your email for the reset OTP.');
     } catch (error) {
       Alert.alert('Reset failed', getErrorMessage(error, 'Unable to send reset OTP.'));
@@ -195,7 +205,7 @@ export default function Login() {
   };
 
   const verifyPasswordResetOtp = async () => {
-    const code = otp.join('');
+    const code = otpCode;
     if (code.length !== 6) {
       Alert.alert('Incomplete code', 'Please enter all 6 OTP digits.');
       return;
@@ -203,13 +213,18 @@ export default function Login() {
 
     try {
       setLoading(true);
-      await verifyResetOtp(email.trim(), code);
+      const response = await verifyResetOtp(email.trim(), code);
+      const token = response?.reset_token || response?.data?.reset_token || '';
+      if (!token) {
+        throw new Error('Reset token was not returned. Please request a new code.');
+      }
+      setResetToken(token);
       setStep('resetPassword');
       setNewPassword('');
       setConfirmPassword('');
     } catch (error) {
       setOtp(emptyOtp);
-      otpRefs.current[0]?.focus?.();
+      otpInputRef.current?.focus?.();
       Alert.alert('Verification failed', getErrorMessage(error, 'Invalid or expired reset OTP.'));
     } finally {
       setLoading(false);
@@ -217,7 +232,6 @@ export default function Login() {
   };
 
   const submitPasswordReset = async () => {
-    const code = otp.join('');
     if (!newPassword || !confirmPassword) {
       Alert.alert('Missing fields', 'Enter and confirm your new password.');
       return;
@@ -231,13 +245,14 @@ export default function Login() {
       setLoading(true);
       await resetPassword({
         email: email.trim(),
-        otp: code,
+        reset_token: resetToken,
         password: newPassword,
         password_confirmation: confirmPassword,
       });
       setStep('form');
       setPassword('');
       setOtp(emptyOtp);
+      setResetToken('');
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       Alert.alert('Password updated', 'You can now sign in with your new password.');
     } catch (error) {
@@ -252,23 +267,39 @@ export default function Login() {
       <Stack.Screen options={{ headerShown: false, title: 'Login' }} />
       <StatusBar style="dark" />
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.flex}>
-        <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-          <View style={styles.header}>
-            <View style={styles.iconContainer}>
-              <Image source={require('../assets/images/nuicon.svg')} style={styles.logoMark} contentFit="contain" />
+        <ScrollView contentContainerStyle={[styles.scrollContent, isOtpStep && styles.otpScrollContent]} showsVerticalScrollIndicator={false}>
+          {isOtpStep ? (
+            <TouchableOpacity style={styles.otpBackButton} onPress={() => setStep('form')} activeOpacity={0.82}>
+              <View style={styles.otpBackCircle}>
+                <FontAwesome name="chevron-left" size={12} color="#1B2A4A" />
+              </View>
+              <Text style={styles.otpBackText}>Back</Text>
+            </TouchableOpacity>
+          ) : null}
+
+          <View style={[styles.header, isOtpStep && styles.otpHeader]}>
+            <View style={[styles.iconContainer, isOtpStep && styles.otpIconContainer]}>
+              {isOtpStep ? (
+                <FontAwesome name="envelope-open-o" size={20} color="#F5A623" />
+              ) : (
+                <Image source={require('../assets/images/nuicon.svg')} style={styles.logoMark} contentFit="contain" />
+              )}
             </View>
-            <Text style={styles.title}>{showConsent ? 'Privacy Agreement' : step === 'otp' || step === 'resetOtp' ? 'Check Your Email' : step === 'resetPassword' ? 'Create New Password' : 'Welcome Back'}</Text>
-            <Text style={styles.subtitle}>
-              {showConsent
-                ? 'Review and accept the privacy notice to continue.'
-                : step === 'otp'
-                  ? `Enter the 6-digit code sent to ${email}.`
-                  : step === 'resetOtp'
-                    ? `Enter the reset code sent to ${email}.`
-                    : step === 'resetPassword'
-                      ? `Choose a new password for your ${brandName} account.`
-                  : `Sign in to your ${brandName} account.`}
-            </Text>
+            <Text style={[styles.title, isOtpStep && styles.otpTitle]}>{showConsent ? 'Privacy Agreement' : isOtpStep ? 'Check Your Email' : step === 'resetPassword' ? 'Create New Password' : 'Welcome Back'}</Text>
+            {isOtpStep ? (
+              <View style={styles.otpSubtitleWrap}>
+                <Text style={styles.otpSubtitle}>{step === 'resetOtp' ? 'We sent a password reset code to:' : 'We sent a 6-digit verification code to:'}</Text>
+                <Text style={styles.otpMaskedEmail}>{maskEmail(email)}</Text>
+              </View>
+            ) : (
+              <Text style={styles.subtitle}>
+                {showConsent
+                  ? 'Review and accept the privacy notice to continue.'
+                  : step === 'resetPassword'
+                    ? `Choose a new password for your ${brandName} account.`
+                    : `Sign in to your ${brandName} account.`}
+              </Text>
+            )}
           </View>
 
           {showConsent ? (
@@ -328,7 +359,15 @@ export default function Login() {
                 <Text style={styles.label}>NEW PASSWORD</Text>
                 <View style={styles.inputWrapper}>
                   <FontAwesome name="key" size={18} color="#8E8E93" style={styles.inputIcon} />
-                  <TextInput style={styles.input} placeholder="New password" value={newPassword} onChangeText={setNewPassword} secureTextEntry placeholderTextColor="#C7C7CC" />
+                  <TextInput style={styles.input} placeholder="New password" value={newPassword} onChangeText={setNewPassword} secureTextEntry={!showNewPassword} placeholderTextColor="#C7C7CC" />
+                  <TouchableOpacity
+                    style={styles.passwordEyeButton}
+                    onPress={() => setShowNewPassword((visible) => !visible)}
+                    accessibilityRole="button"
+                    accessibilityLabel={showNewPassword ? 'Hide new password' : 'Show new password'}
+                  >
+                    <FontAwesome name={showNewPassword ? 'eye-slash' : 'eye'} size={18} color="#8E8E93" />
+                  </TouchableOpacity>
                 </View>
               </View>
 
@@ -336,7 +375,15 @@ export default function Login() {
                 <Text style={styles.label}>CONFIRM PASSWORD</Text>
                 <View style={styles.inputWrapper}>
                   <FontAwesome name="lock" size={18} color="#8E8E93" style={styles.inputIcon} />
-                  <TextInput style={styles.input} placeholder="Confirm new password" value={confirmPassword} onChangeText={setConfirmPassword} secureTextEntry placeholderTextColor="#C7C7CC" />
+                  <TextInput style={styles.input} placeholder="Confirm new password" value={confirmPassword} onChangeText={setConfirmPassword} secureTextEntry={!showConfirmPassword} placeholderTextColor="#C7C7CC" />
+                  <TouchableOpacity
+                    style={styles.passwordEyeButton}
+                    onPress={() => setShowConfirmPassword((visible) => !visible)}
+                    accessibilityRole="button"
+                    accessibilityLabel={showConfirmPassword ? 'Hide confirm password' : 'Show confirm password'}
+                  >
+                    <FontAwesome name={showConfirmPassword ? 'eye-slash' : 'eye'} size={18} color="#8E8E93" />
+                  </TouchableOpacity>
                 </View>
               </View>
 
@@ -349,31 +396,43 @@ export default function Login() {
               </TouchableOpacity>
             </View>
           ) : (
-            <View style={styles.formCard}>
-              <View style={styles.otpRow}>
-                {otp.map((digit, index) => (
-                  <TextInput
-                    key={index}
-                    ref={(el) => { otpRefs.current[index] = el; }}
-                    style={[styles.otpInput, digit ? styles.otpInputFilled : null]}
-                    value={digit}
-                    onChangeText={(value) => handleOtpChange(index, value)}
-                    keyboardType="number-pad"
-                    maxLength={1}
-                  />
-                ))}
-              </View>
-
-              <TouchableOpacity style={styles.button} onPress={step === 'resetOtp' ? verifyPasswordResetOtp : handleVerifyOtp} disabled={loading}>
-                <Text style={styles.buttonText}>{loading ? 'Verifying...' : step === 'resetOtp' ? 'Verify Reset Code' : 'Verify and Sign In'}</Text>
+            <View style={[styles.formCard, styles.otpFormCard]}>
+              <Text style={styles.otpSectionLabel}>Enter Verification Code</Text>
+              <TouchableOpacity style={styles.otpRow} activeOpacity={0.9} onPress={() => otpInputRef.current?.focus?.()}>
+                <TextInput
+                  ref={otpInputRef}
+                  style={styles.otpHiddenInput}
+                  value={otpCode}
+                  onChangeText={handleOtpChange}
+                  keyboardType="number-pad"
+                  textContentType="oneTimeCode"
+                  autoComplete="sms-otp"
+                  maxLength={6}
+                  selectTextOnFocus
+                  caretHidden={false}
+                />
+                {emptyOtp.map((_, index) => {
+                  const digit = otp[index];
+                  const active = otpCode.length === index || (index === emptyOtp.length - 1 && otpCode.length === emptyOtp.length);
+                  return (
+                    <View key={index} style={[styles.otpBox, digit ? styles.otpInputFilled : null, active ? styles.otpBoxActive : null]}>
+                      <Text style={styles.otpDigit}>{digit}</Text>
+                    </View>
+                  );
+                })}
               </TouchableOpacity>
 
-              <TouchableOpacity style={[styles.secondaryButton, resendSeconds > 0 && styles.secondaryButtonDisabled]} onPress={step === 'resetOtp' ? startPasswordReset : handleResend} disabled={loading || resendSeconds > 0}>
-                <Text style={styles.secondaryButtonText}>{resendSeconds > 0 ? `Resend in 0:${String(resendSeconds).padStart(2, '0')}` : 'Resend Code'}</Text>
+              <TouchableOpacity style={[styles.button, styles.otpVerifyButton]} onPress={step === 'resetOtp' ? verifyPasswordResetOtp : handleVerifyOtp} disabled={loading}>
+                <Text style={[styles.buttonText, styles.otpVerifyButtonText]}>{loading ? 'Verifying...' : step === 'resetOtp' ? 'Verify Reset Code' : 'Verify & Sign In  ✓'}</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity style={[styles.otpResendCard, resendSeconds > 0 && styles.secondaryButtonDisabled]} onPress={step === 'resetOtp' ? startPasswordReset : handleResend} disabled={loading || resendSeconds > 0}>
+                <Text style={styles.otpResendMuted}>Didn&apos;t receive the code?</Text>
+                <Text style={styles.secondaryButtonText}>{resendSeconds > 0 ? `Resend available in ${resendSeconds}s` : 'Resend Code'}</Text>
               </TouchableOpacity>
 
               <TouchableOpacity style={styles.textButton} onPress={() => setStep('form')}>
-                <Text style={styles.footerLink}>Back to login</Text>
+                <Text style={styles.otpWrongEmail}>Wrong email? <Text style={styles.footerLink}>Go back</Text></Text>
               </TouchableOpacity>
             </View>
           )}
@@ -396,21 +455,35 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f4f7fe' },
   flex: { flex: 1 },
   scrollContent: { flexGrow: 1, paddingHorizontal: 24, paddingTop: 42, paddingBottom: 40 },
+  otpScrollContent: { minHeight: '100%', justifyContent: 'flex-start', paddingTop: 118, paddingBottom: 56 },
   header: { alignItems: 'center', marginBottom: 24 },
+  otpHeader: { alignItems: 'flex-start', width: '100%', maxWidth: 360, alignSelf: 'center', marginBottom: 22 },
   brandKicker: { color: '#fdb813', backgroundColor: '#1d2b4b', overflow: 'hidden', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 999, fontSize: 11, fontWeight: '900', letterSpacing: 1, marginBottom: 18 },
   iconContainer: { width: 78, height: 78, backgroundColor: '#eef2ff', borderRadius: 14, justifyContent: 'center', alignItems: 'center', marginBottom: 18, borderWidth: 1, borderColor: '#e2e8f0' },
+  otpIconContainer: { width: 44, height: 44, backgroundColor: '#1B2A4A', borderColor: '#1B2A4A', borderRadius: 13, marginBottom: 18, shadowColor: '#0f172a', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.12, shadowRadius: 16, elevation: 3 },
   logoMark: { width: 48, height: 48 },
   title: { fontSize: 28, fontWeight: '900', color: '#1d2b4b', marginBottom: 8, textAlign: 'center' },
+  otpTitle: { fontSize: 26, color: '#1B2A4A', textAlign: 'left', marginBottom: 8, letterSpacing: -0.2 },
   subtitle: { fontSize: 15, color: '#8E8E93', textAlign: 'center', lineHeight: 22 },
+  otpSubtitleWrap: { gap: 4 },
+  otpSubtitle: { color: '#8E9AB6', fontSize: 13, lineHeight: 18 },
+  otpMaskedEmail: { color: '#2746B8', fontSize: 13, fontWeight: '900' },
+  otpBackButton: { position: 'absolute', left: 24, top: 28, flexDirection: 'row', alignItems: 'center', gap: 8, zIndex: 5 },
+  otpBackCircle: { width: 32, height: 32, borderRadius: 16, backgroundColor: '#FFFFFF', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#e2e8f0' },
+  otpBackText: { color: '#8E9AB6', fontSize: 13, fontWeight: '700' },
   form: { flex: 1 },
   formCard: { backgroundColor: '#FFFFFF', borderRadius: 16, padding: 18, borderWidth: 1, borderColor: '#e2e8f0', shadowColor: '#0f172a', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.08, shadowRadius: 18, elevation: 4 },
+  otpFormCard: { width: '100%', maxWidth: 360, alignSelf: 'center', padding: 0, borderWidth: 0, backgroundColor: 'transparent', shadowOpacity: 0, elevation: 0 },
   inputGroup: { marginBottom: 22 },
   label: { fontSize: 12, fontWeight: '700', color: '#8E8E93', marginBottom: 8, letterSpacing: 0.5 },
   inputWrapper: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#f8fafc', borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 16, minHeight: 58, paddingHorizontal: 16 },
   inputIcon: { marginRight: 12 },
   input: { flex: 1, fontSize: 16, color: '#1C1C1E' },
+  passwordEyeButton: { width: 38, height: 38, borderRadius: 19, alignItems: 'center', justifyContent: 'center', marginLeft: 8 },
   button: { minHeight: 58, backgroundColor: '#1d2b4b', borderRadius: 16, justifyContent: 'center', alignItems: 'center', marginTop: 10 },
   buttonText: { fontSize: 16, fontWeight: '900', color: '#FFFFFF' },
+  otpVerifyButton: { backgroundColor: '#F5A623', borderRadius: 14, minHeight: 52, marginTop: 2, shadowColor: '#F5A623', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.2, shadowRadius: 18, elevation: 3 },
+  otpVerifyButtonText: { color: '#1B2A4A', fontSize: 14, fontWeight: '800' },
   secondaryButton: { minHeight: 54, backgroundColor: '#FFFFFF', borderRadius: 16, justifyContent: 'center', alignItems: 'center', marginTop: 12, borderWidth: 1, borderColor: '#1d2b4b' },
   secondaryButtonDisabled: { opacity: 0.5 },
   secondaryButtonText: { color: '#1d2b4b', fontWeight: 'bold' },
@@ -423,9 +496,16 @@ const styles = StyleSheet.create({
   footer: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginTop: 34 },
   footerText: { fontSize: 14, color: '#8E8E93', marginRight: 4 },
   footerLink: { fontSize: 14, fontWeight: 'bold', color: '#1d2b4b' },
-  otpRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 24 },
-  otpInput: { width: 46, height: 54, backgroundColor: '#FFFFFF', borderWidth: 2, borderColor: '#E5E7EB', borderRadius: 14, textAlign: 'center', fontSize: 20, fontWeight: 'bold', color: '#1C1C1E' },
-  otpInputFilled: { borderColor: '#1d2b4b', backgroundColor: '#eef2ff' },
+  otpSectionLabel: { textAlign: 'center', color: '#64748b', fontSize: 10, fontWeight: '900', textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 12 },
+  otpRow: { flexDirection: 'row', justifyContent: 'space-between', gap: 6, marginBottom: 22, position: 'relative' },
+  otpHiddenInput: { position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, opacity: 0.02, color: 'transparent' },
+  otpBox: { width: 40, height: 46, backgroundColor: '#FFFFFF', borderWidth: 1.5, borderColor: '#F5A623', borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+  otpBoxActive: { borderColor: '#F5A623', shadowColor: '#F5A623', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.28, shadowRadius: 5, elevation: 2 },
+  otpDigit: { fontSize: 17, fontWeight: '900', color: '#1B2A4A' },
+  otpInputFilled: { borderColor: '#F5A623', backgroundColor: '#FFFFFF' },
+  otpResendCard: { minHeight: 66, backgroundColor: '#FFFFFF', borderRadius: 14, justifyContent: 'center', alignItems: 'center', marginTop: 18, borderWidth: 1, borderColor: '#e7ecf5' },
+  otpResendMuted: { color: '#8E9AB6', fontSize: 12, marginBottom: 6 },
+  otpWrongEmail: { color: '#8E9AB6', fontSize: 12 },
   consentCard: { backgroundColor: '#FFFFFF', borderRadius: 14, padding: 20, borderWidth: 1, borderColor: '#E5E7EB' },
   consentTitle: { color: '#1d2b4b', fontSize: 17, fontWeight: 'bold', marginBottom: 10 },
   consentText: { color: '#4A4A4A', fontSize: 14, lineHeight: 22 },

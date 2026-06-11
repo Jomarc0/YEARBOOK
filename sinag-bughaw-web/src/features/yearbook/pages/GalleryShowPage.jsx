@@ -20,7 +20,6 @@ import ProtectedImage from '@/components/ui/ProtectedImage';
 import { ContentOwnershipBanner } from '@/components/ui/CopyrightLabel';
 import { useContentProtection } from '@/utils/contentProtection';
 import FaceSearchButton from '@/components/ui/FaceSearchButton';
-import { imageUrl, avatarUrl } from '@/utils/imageUrl';
 import { recordContentView } from '@/api/analytics.api';
 
 // ─── Sub-components (unchanged) ───────────────────────────────────────────────
@@ -260,7 +259,6 @@ export default function GalleryShowPage() {
   const [deleting,   setDeleting]   = useState(null);
   const [deleteErr,  setDeleteErr]  = useState('');
   const [searching,  setSearching]  = useState(false);
-  const [matches,    setMatches]    = useState([]);
 
   const fetchingRef = useRef(new Set());
   const masonryRef  = useContentProtection();
@@ -281,7 +279,9 @@ export default function GalleryShowPage() {
       .finally(() => setLoading(false));
   }, [id]);
 
-  useEffect(() => { loadAlbum(); }, [loadAlbum]);
+  useEffect(() => {
+    queueMicrotask(loadAlbum);
+  }, [loadAlbum]);
 
   useEffect(() => {
     if (!album?.id) return;
@@ -292,7 +292,7 @@ export default function GalleryShowPage() {
       category: 'gallery',
       url: `/gallery/${album.id}`,
     }).catch(() => {});
-  }, [album?.id]);
+  }, [album?.id, album?.title]);
 
   const uploadHook = useMediaUpload(id ? parseInt(id) : null, tier, () => {
     setShowUpload(false);
@@ -312,7 +312,9 @@ export default function GalleryShowPage() {
           tags:       data.tags       ?? [],
         },
       }));
-    } catch {}
+    } catch {
+      // Face tags are optional metadata; the gallery should still render.
+    }
     finally { fetchingRef.current.delete(photoId); }
   }, []);
 
@@ -345,13 +347,20 @@ export default function GalleryShowPage() {
     });
   }, [album, loadTags]);
 
-  const handleDelete = async (photoId, e) => {
+  const handleDelete = async (photo, e) => {
     e.stopPropagation();
+    const deleteId = photo?.media_id ?? photo?.media?.[0]?.id ?? photo?.id;
+    const photoId = photo?.id;
+    if (!deleteId) {
+      setDeleteErr('This media item has no deleteable id.');
+      setTimeout(() => setDeleteErr(''), 4000);
+      return;
+    }
     if (!window.confirm('Delete this media permanently?')) return;
     setDeleting(photoId);
     setDeleteErr('');
     try {
-      await mediaApi.deletePhoto(photoId);
+      await mediaApi.deletePhoto(deleteId);
       setAlbum(prev => ({ ...prev, photos: prev.photos.filter(p => p.id !== photoId) }));
       if (lightbox?.id === photoId) setLightbox(null);
     } catch (err) {
@@ -365,13 +374,11 @@ export default function GalleryShowPage() {
 
   const handleFaceFile = async (file) => {
     setSearching(true);
-    setMatches([]);
     try {
       const fd = new FormData();
       fd.append('face_image', file);
       const { data } = await galleryApi.faceSearch(fd);
       const found = data.photos ?? [];
-      setMatches(found);
       if (!found.length) alert('No matching photos found.');
     } catch (err) {
       alert(err?.response?.data?.message || 'Face search failed.');
@@ -507,7 +514,7 @@ export default function GalleryShowPage() {
 
       <main ref={masonryRef} className="px-[8%] pt-7 pb-20 flex-1">
         {photos.length > 0 ? (
-          <div className="grid grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-4">
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
             {photos.map(photo => {
               const td         = tagCache[photo.id];
               const src        = storageUrl(photo.file_path);
@@ -523,7 +530,7 @@ export default function GalleryShowPage() {
                                ${isDeleting ? 'opacity-50' : ''}`}
                   onClick={() => setLightbox(photo)}
                 >
-                  <div className="relative w-full pt-[75%] bg-slate-100 overflow-hidden">
+                  <div className="relative aspect-square w-full bg-slate-100 overflow-hidden">
                     {src && (
                       <div className="absolute inset-0">
                         {isVideoItem(photo) ? (
@@ -562,7 +569,7 @@ export default function GalleryShowPage() {
                                    opacity-0 group-hover:opacity-100
                                    hover:bg-red-500 hover:text-white bg-white/92
                                    ${isDeleting ? 'cursor-not-allowed bg-red-500/80 text-white opacity-100' : ''}`}
-                      onClick={e => handleDelete(photo.id, e)}
+                      onClick={e => handleDelete(photo, e)}
                       disabled={isDeleting}
                       title="Delete media"
                     >

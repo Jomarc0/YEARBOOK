@@ -9,23 +9,10 @@ use App\Models\VoiceNote;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
-/**
- * ReportsController
- *
- * Single controller for all report-related endpoints.
- * The auditLogs() method in AdminController has been REMOVED
- * to avoid duplication — route it here instead:
- *
- *   Route::get('/admin/audit-logs', [ReportsController::class, 'auditLogs']);
- *   Route::prefix('admin/reports')->group(function () {
- *       Route::get('stats',       [ReportsController::class, 'stats']);
- *       Route::get('audit-logs',  [ReportsController::class, 'auditLogs']);
- *       Route::get('upload-logs', [ReportsController::class, 'uploadLogs']);
- *   });
- */
+
 class ReportsController extends Controller
 {
-    // ─── GET /api/admin/reports/stats ─────────────────────────────────────────
+    // GET /api/admin/reports/stats 
 
     public function stats(): JsonResponse
     {
@@ -38,15 +25,7 @@ class ReportsController extends Controller
         ]);
     }
 
-    // ─── GET /api/admin/reports/audit-logs ───────────────────────────────────
-    // Also aliased as GET /api/admin/audit-logs (replaces AdminController::auditLogs)
-    //
-    // Query params:
-    //   search   — matches user_name, action, details
-    //   action   — exact action string
-    //   status   — Success | Failed | Warning  (case-insensitive)
-    //   page     — page number (default 1)
-    //   per_page — records per page (default 15)
+    // GET /api/admin/reports/audit-logs
 
     public function auditLogs(Request $request): JsonResponse
     {
@@ -64,8 +43,6 @@ class ReportsController extends Controller
             $query->where('action', $action);
         }
 
-        // Case-insensitive status filter — supports both "all" (from old AuditLogsPage)
-        // and empty string (from ReportsPage) as "no filter"
         if ($status = $request->get('status') and strtolower($status) !== 'all') {
             $query->whereRaw('LOWER(status) = ?', [strtolower($status)]);
         }
@@ -75,15 +52,7 @@ class ReportsController extends Controller
         );
     }
 
-    // ─── GET /api/admin/reports/upload-logs ──────────────────────────────────
-    // Merges Photo + VoiceNote into one sorted feed with manual pagination.
-    //
-    // Query params:
-    //   type     — photo | voice
-    //   search   — matches filename / uploader name
-    //   page     — page number (default 1)
-    //   per_page — records per page (default 15)
-
+    // GET /api/admin/reports/upload-logs
     public function uploadLogs(Request $request): JsonResponse
     {
         $type    = $request->get('type', '');
@@ -94,7 +63,7 @@ class ReportsController extends Controller
         $photos = collect();
         $voices = collect();
 
-        // ── Photos ────────────────────────────────────────────────────────────
+        // Photos 
         if (! $type || $type === 'photo') {
             $photos = Photo::with('user:id,first_name,last_name')
                 ->when($search, fn ($q) =>
@@ -119,7 +88,7 @@ class ReportsController extends Controller
                 ]);
         }
 
-        // ── Voice Notes ───────────────────────────────────────────────────────
+        // Voice Notes 
         if (! $type || $type === 'voice') {
             $voices = VoiceNote::with('sender:id,first_name,last_name')
                 ->when($search, fn ($q) =>
@@ -144,7 +113,7 @@ class ReportsController extends Controller
                 ]);
         }
 
-        // ── Merge, sort, paginate in memory ───────────────────────────────────
+        // Merge, sort, paginate in memory
         $merged   = $photos->merge($voices)->sortByDesc('created_at')->values();
         $total    = $merged->count();
         $lastPage = (int) ceil($total / $perPage);
@@ -162,9 +131,7 @@ class ReportsController extends Controller
         ]);
     }
 
-    // ─── GET /api/admin/reports/login-history ────────────────────────────────
-    // Kept as a dedicated endpoint for future login-specific reporting.
-
+    // GET /api/admin/reports/login-history 
     public function loginHistory(Request $request): JsonResponse
     {
         $query = AuditLog::where('action', 'login')

@@ -37,7 +37,7 @@ export default function SSOCallbackPage() {
     };
 
     run();
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []);
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-[#f8fafc] font-sans px-4">
@@ -78,7 +78,6 @@ export default function SSOCallbackPage() {
           {STATUS_STEPS.map(({ key, label }, i) => {
             const isDone    = i < stepIndex;
             const isActive  = i === stepIndex;
-            const isPending = i > stepIndex;
             return (
               <div key={key} className={`flex items-center gap-3 rounded-xl px-4 py-2.5 transition-all
                 ${isActive ? 'bg-indigo-50 border border-indigo-100' : 'bg-transparent'}`}>

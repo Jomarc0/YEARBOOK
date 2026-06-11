@@ -18,12 +18,12 @@ return Application::configure(basePath: dirname(__DIR__))
     )
     ->withMiddleware(function (Middleware $middleware) {
 
-        // ── CORS first — before everything including auth ──────────────────
+        // CORS first — before everything including auth 
         $middleware->prepend(HandleCors::class);
 
         $middleware->statefulApi();
 
-        // ── Override the login redirect so API routes never hit route('login')
+        // Override the login redirect so API routes never hit route('login')
         $middleware->redirectUsersTo(function (\Illuminate\Http\Request $request) {
             if ($request->is('api/*') || $request->expectsJson()) {
                 return null; // returns 401 JSON — no redirect
@@ -40,7 +40,6 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
 
         $middleware->alias([
-            // ✅ Wire your custom Authenticate so it's actually used
             'auth'                => \App\Http\Middleware\Authenticate::class,
 
             'premium'             => \App\Http\Middleware\CheckPremium::class,
@@ -56,7 +55,7 @@ return Application::configure(basePath: dirname(__DIR__))
     })
     ->withExceptions(function (Exceptions $exceptions) {
 
-        // ── Catch-all: any unauthenticated API request returns 401 JSON ────
+        // ─Catch-all: any unauthenticated API request returns 401 JSON 
         $exceptions->render(function (
             \Illuminate\Auth\AuthenticationException $e,
             \Illuminate\Http\Request $request
@@ -70,10 +69,10 @@ return Application::configure(basePath: dirname(__DIR__))
     })
     ->withSchedule(function (\Illuminate\Console\Scheduling\Schedule $schedule) {
 
-        // ── Session file garbage collection ────────────────────────────────
+        //Session file garbage collection 
         $schedule->command('session:gc')->daily();
 
-        // ── Memory digest emails ───────────────────────────────────────────
+        // Memory digest emails ─
         $schedule->command('memory:send-digest')->weeklyOn(1, '08:00');
     })
     ->create();

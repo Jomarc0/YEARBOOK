@@ -8,6 +8,7 @@ use App\Models\Faculty;
 use App\Models\Section;
 use App\Models\Subscription;
 use App\Models\User;
+use App\Services\Yearbook\WatermarkService;
 use App\Support\PlatformSettings;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
@@ -17,6 +18,10 @@ use Illuminate\Support\Facades\Storage;
 class YearbookPdfController extends Controller
 {
     private const EXPORT_CACHE_VERSION = 'premium-fit-page-v6';
+
+    public function __construct(private WatermarkService $watermark)
+    {
+    }
 
     public function export(Request $request, int $batchId)
     {
@@ -31,10 +36,7 @@ class YearbookPdfController extends Controller
         $cachePath = $this->yearbookExportCachePath($batchId, $batchYear, $scope);
 
         if (! $request->boolean('refresh') && Storage::exists($cachePath)) {
-            return $this->withCorsHeaders($request, Storage::download($cachePath, $filename, [
-                'Content-Type' => 'application/pdf',
-                'Content-Disposition' => "attachment; filename=\"{$filename}\"",
-            ]));
+            return $this->watermarkedPdfResponse($request, $cachePath, $filename);
         }
 
         $faculties = Faculty::orderBy('name')
@@ -149,19 +151,10 @@ class YearbookPdfController extends Controller
                 'isFontSubsettingEnabled' => true,
             ]);
 
-        if ($request->query('preview') === '1') {
-            return $this->withCorsHeaders($request, $pdf->stream($filename));
-        }
-
         $bytes = $pdf->output();
         Storage::put($cachePath, $bytes);
 
-        $response = response($bytes, 200, [
-            'Content-Type' => 'application/pdf',
-            'Content-Disposition' => "attachment; filename=\"{$filename}\"",
-        ]);
-
-        return $this->withCorsHeaders($request, $response);
+        return $this->watermarkedPdfResponse($request, $cachePath, $filename);
     }
 
     public function mobileExport(Request $request, int $batchId)
@@ -182,14 +175,47 @@ class YearbookPdfController extends Controller
         if (PlatformSettings::bool('enable_premium_subscription')) {
             $subscription = Subscription::where('user_id', $user->id)->latest()->first();
 
-            if (! $subscription?->isPremium()) {
-                abort(402, 'A premium subscription is required to access this feature.');
+            if (! $subscription?->isStandard()) {
+                abort(402, 'A Standard or Premium subscription is required to download the yearbook PDF.');
             }
         }
 
         $request->setUserResolver(fn () => $user);
 
         return $this->export($request, $batchId);
+    }
+
+    private function watermarkedPdfResponse(Request $request, string $sourcePath, string $filename)
+    {
+        $user = $request->user();
+        $watermarkedPath = $this->shouldWatermarkPdf($user)
+            ? $this->watermark->apply(
+                sourcePath: $sourcePath,
+                userName: $user?->name ?: 'Sinag-Bughaw Protected Copy',
+                userId: (int) ($user?->id ?? 0),
+            )
+            : $sourcePath;
+
+        $bytes = Storage::get($watermarkedPath);
+
+        return $this->withCorsHeaders($request, response($bytes, 200, [
+            'Content-Type' => 'application/pdf',
+            'Content-Disposition' => "inline; filename=\"{$filename}\"",
+            'Cache-Control' => 'no-store, no-cache, must-revalidate, max-age=0',
+            'Pragma' => 'no-cache',
+            'Expires' => '0',
+        ]));
+    }
+
+    private function shouldWatermarkPdf(?User $user): bool
+    {
+        if (! $user instanceof User) {
+            return true;
+        }
+
+        $subscription = Subscription::where('user_id', $user->id)->latest()->first();
+
+        return ! $subscription?->isPremium();
     }
 
     public function flipbookData(Request $request, int $batchId)

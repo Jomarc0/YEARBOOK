@@ -16,6 +16,15 @@ const TIER_INFO = [
   { label: 'Premium HD', icon: 'fa-crown', desc: '4K · 20 files · 10 GB', color: 'text-amber-600',  bg: 'bg-amber-50',  border: 'border-amber-200',  highlight: true },
 ];
 
+const isMeaningfulText = (value, minLength = 3) => {
+  const text = String(value || '').replace(/\s+/g, ' ').trim();
+  const compact = text.replace(/[^a-z0-9]/gi, '').toLowerCase();
+  if (text.length < minLength || compact.length < minLength) return false;
+  if (/^(test|asdf|qwerty|sample|lorem|abc|haha)+$/i.test(compact)) return false;
+  if (/^(.)\1{2,}$/.test(compact)) return false;
+  return true;
+};
+
 export default function ProfileUploadModal({ onClose, onSuccess }) {
   const { user: authUser } = useAuth();
 
@@ -77,6 +86,14 @@ export default function ProfileUploadModal({ onClose, onSuccess }) {
 
   const uploadAll = async () => {
     if (!files.length || uploading) return;
+    if (!isMeaningfulText(sharedCaption, 3)) {
+      setErrors(() => {
+        const next = {};
+        files.forEach(f => { next[f.id] = 'Please enter at least 3 meaningful characters before posting.'; });
+        return next;
+      });
+      return;
+    }
     setUploading(true); setErrors({});
     const { profileApi } = await import('@/api/gallery.api');
     const fd = new FormData();

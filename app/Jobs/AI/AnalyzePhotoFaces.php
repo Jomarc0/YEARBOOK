@@ -6,6 +6,7 @@ use App\Contracts\AnalyzablePhoto;
 use App\Contracts\FaceRecognition;
 use App\Models\Gallery;
 use App\Models\GraduationPhoto;
+use App\Models\Photo;
 use App\Models\TaggedPhoto;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -110,10 +111,14 @@ class AnalyzePhotoFaces implements ShouldQueue
             return [$media->file_path, 'gallery_media:' . $media->getKey()];
         }
 
-        $externalImageId = $photo instanceof GraduationPhoto
-            ? 'graduation_photo:' . $photo->getKey()
-            : 'photo:' . $photo->getKey();
+        if ($photo instanceof GraduationPhoto) {
+            return [$photo->file_path, 'graduation_photo:' . $photo->getKey()];
+        }
 
-        return [$photo->getAttribute('file_path'), $externalImageId];
+        if ($photo instanceof Photo) {
+            return [$photo->file_path, 'photo:' . $photo->getKey()];
+        }
+
+        throw new \RuntimeException('Unsupported photo model for face analysis.');
     }
 }

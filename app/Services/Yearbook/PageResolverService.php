@@ -10,11 +10,8 @@ use App\Models\User;
 
 class PageResolverService
 {
-    private const TOC_ENTRIES_PER_PAGE = 8;
+    private const TOC_ENTRIES_PER_PAGE = 7;
 
-    /**
-     * Returns the page index where a student appears in their batch yearbook.
-     */
     public function getPageIndex(
         int $userId,
         int $batchId,
@@ -26,8 +23,16 @@ class PageResolverService
 
         $cursor = $this->preamblePageCount($batchId, $department, $course);
 
+        $currentCourse = null;
+
         foreach ($this->sectionsForBatch($batchId, $department, $course) as $section) {
-            $cursor += 2; // section-header left + right
+            $courseName = $this->courseNameForSection($section);
+            if ($courseName !== $currentCourse) {
+                $cursor++; // course-header
+                $currentCourse = $courseName;
+            }
+
+            $cursor++; // section-header
 
             foreach ($section->students as $student) {
                 if ((int) $student->id === $userId) {
@@ -63,8 +68,16 @@ class PageResolverService
 
         $cursor = $preamble;
 
+        $currentCourse = null;
+
         foreach ($this->sectionsForBatch($batchId, $department, $course) as $section) {
-            $cursor += 2; // section-header spread
+            $courseName = $this->courseNameForSection($section);
+            if ($courseName !== $currentCourse) {
+                $cursor++; // course-header
+                $currentCourse = $courseName;
+            }
+
+            $cursor++; // section-header
 
             foreach ($section->students as $student) {
                 if ($pageIndex === $cursor || $pageIndex === $cursor + 1) {
@@ -99,12 +112,18 @@ class PageResolverService
 
     private function preamblePageCount(int $batchId, ?string $department = null, ?string $course = null): int
     {
-        $sectionCount = Section::where('batch_id', $batchId)
+        $sectionQuery = Section::where('batch_id', $batchId)
             ->when($department, fn ($query) => $query->where('department', $department))
-            ->when($course, fn ($query) => $query->where('course', $course))
+            ->when($course, fn ($query) => $query->where('course', $course));
+
+        $sectionCount = (clone $sectionQuery)->count();
+        $courseCount = (clone $sectionQuery)
+            ->get(['course', 'strand'])
+            ->map(fn ($section) => $this->courseNameForSection($section))
+            ->unique()
             ->count();
 
-        $tocEntries = 11 + $sectionCount;
+        $tocEntries = 11 + $courseCount + $sectionCount;
 
         if (Album::where('batch_id', $batchId)->exists()) {
             $tocEntries++;
@@ -120,5 +139,10 @@ class PageResolverService
         }
 
         return 8 + $tocPageCount;
+    }
+
+    private function courseNameForSection($section): string
+    {
+        return $section->course ?: $section->strand ?: 'Course';
     }
 }

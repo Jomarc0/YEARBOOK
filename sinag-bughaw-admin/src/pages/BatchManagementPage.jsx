@@ -1183,8 +1183,6 @@ function StudentsView({ batch, section, toast }) {
     finally { setImporting(false); e.target.value = ""; }
   };
 
-  const th = { padding: "11px 14px", textAlign: "left", fontSize: "0.73rem", fontWeight: 700, color: C.muted, letterSpacing: ".05em", textTransform: "uppercase", whiteSpace: "nowrap" };
-  const td = { padding: "13px 14px", fontSize: "0.86rem", color: C.text, borderBottom: `1px solid ${C.border}` };
   const withHonors = students.filter(s => s.honors).length;
   const color = colorOf(section.department);
   const bg    = bgOf(section.department);
@@ -1216,7 +1214,7 @@ function StudentsView({ batch, section, toast }) {
         <Btn onClick={() => setModal({})}>+ Add Student</Btn>
       </div>
 
-      <div className="mb-3.5 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-relaxed text-amber-700">
+      <div className="mb-3.5 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs leading-relaxed text-blue-800">
         CSV columns: <strong>first_name, last_name, middle_name, student_no, email, honors</strong> — first row is the header.
       </div>
 

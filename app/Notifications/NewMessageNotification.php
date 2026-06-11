@@ -24,10 +24,6 @@ class NewMessageNotification extends Notification
         return [];
     }
 
-    /**
-     * Usage:
-     *   NewMessageNotification::dispatchFor($recipient, $sender, $messagePreview, $actionUrl);
-     */
     public static function dispatchFor(
         User    $recipient,
         User    $sender,

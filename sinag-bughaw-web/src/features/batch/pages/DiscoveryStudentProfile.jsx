@@ -18,8 +18,15 @@ function getInitials(name = '') {
 
 function safeArray(val) {
   if (!val) return [];
-  if (Array.isArray(val)) return val;
-  try { return JSON.parse(val); } catch { return []; }
+  const values = Array.isArray(val) ? val : (() => {
+    try { return JSON.parse(val); } catch { return []; }
+  })();
+  return values.filter(isMeaningfulValue);
+}
+
+function isMeaningfulValue(value) {
+  const text = String(value ?? '').trim();
+  return text !== '' && text !== '-' && text !== '—' && text !== 'â€”';
 }
 
 function formatDate(str) {
@@ -202,7 +209,6 @@ export default function DiscoveryStudentProfile() {
           <div className="grid grid-cols-2 gap-3">
             <InfoTile icon="fa-hashtag"        label="Student No."  value={student.student_no} />
             <InfoTile icon="fa-user"           label="Full Name"    value={fullName} />
-            <InfoTile icon="fa-envelope"       label="Email"        value={student.email} />
             <InfoTile icon="fa-cake-candles"   label="Birthday"     value={formatDate(student.birthday)} />
             <InfoTile icon="fa-map-pin"        label="Hometown"     value={student.hometown} />
             <InfoTile icon="fa-book"           label="Program"      value={shortCourse} />
@@ -350,7 +356,7 @@ export default function DiscoveryStudentProfile() {
   };
 
   return (
-    <div className="min-h-screen bg-[#f7f1e6] flex flex-col font-sans text-[#071a33]">
+    <div className="min-h-screen bg-[#F0F2F7] flex flex-col font-sans text-[#071a33]">
       <Navbar />
 
       {/* Toast */}
@@ -385,7 +391,7 @@ export default function DiscoveryStudentProfile() {
               <i className="fas fa-arrow-left text-[10px]" /> Back
             </button>
 
-            <div className="absolute bottom-3 left-5 flex flex-wrap items-center gap-1.5">
+            <div className="hidden">
               <span className="text-[10px] font-bold text-white bg-white/10 backdrop-blur-sm
                                border border-white/15 rounded-md px-2 py-0.5 uppercase tracking-widest">
                 NU Lipa
@@ -404,6 +410,28 @@ export default function DiscoveryStudentProfile() {
                   </span>
                 </>
               )}
+            </div>
+            <div className="absolute bottom-3 left-5 flex flex-wrap items-center gap-1.5">
+              {[
+                { key: 'school', text: 'NU Lipa', className: 'text-white bg-white/10 border-white/15 uppercase tracking-widest' },
+                isMeaningfulValue(shortCourse) && {
+                  key: 'course',
+                  text: shortCourse,
+                  className: 'text-white bg-white/10 border-white/15',
+                },
+                student.graduation_year && {
+                  key: 'batch',
+                  text: `Batch '${String(student.graduation_year).slice(-2)}`,
+                  className: 'text-[#fdb813] bg-[#fdb813]/10 border-[#fdb813]/20',
+                },
+              ].filter(Boolean).map((item, index) => (
+                <span key={item.key} className="inline-flex items-center gap-1.5">
+                  {index > 0 && <span className="text-white/40 text-xs">·</span>}
+                  <span className={`text-[10px] font-bold backdrop-blur-sm border rounded-md px-2 py-0.5 ${item.className}`}>
+                    {item.text}
+                  </span>
+                </span>
+              ))}
             </div>
           </div>
 
@@ -472,7 +500,7 @@ export default function DiscoveryStudentProfile() {
                 { value: student.section?.name ?? 'N/A',      label: 'Section' },
                 { value: student.student_no   ?? 'N/A',       label: 'ID'      },
                 { value: honors.length > 0 ? honors[0] : '—', label: 'Honors'  },
-              ].map(s => (
+              ].filter(s => isMeaningfulValue(s.value)).map(s => (
                 <div key={s.label} className="text-center">
                   <p className="text-sm font-black text-[#1d2b4b] m-0 leading-tight break-words max-w-[120px]">{s.value}</p>
                   <p className="text-[10px] text-slate-400 font-medium mt-1 m-0">{s.label}</p>

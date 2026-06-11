@@ -51,7 +51,7 @@ class AnalyticsController extends Controller
         return response()->json($this->analytics->platformEngagement());
     }
 
-    // ── Called by StudentProfileView on every genuine visit ──────────────────
+    //Called by StudentProfileView on every genuine visit 
     public function recordView(Request $request, int $userId): JsonResponse
     {
         $this->analytics->recordView(

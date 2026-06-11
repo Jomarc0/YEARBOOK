@@ -24,7 +24,7 @@ class PhotoObserver
     {
         if (App::runningUnitTests()) return;
 
-        // Skip videos — AWS Rekognition only supports images
+        // Skip videos  AWS Rekognition only supports images
         $resourceType = $photo->ai_metadata['resource_type'] ?? 'image';
         if ($resourceType === 'video') {
             return;

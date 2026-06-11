@@ -1,25 +1,35 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, FlatList, RefreshControl, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, FlatList, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
 import { FontAwesome } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
-import { getAnalyticsSummary, getAppConfig, getErrorMessage, getMyStats, getTopViewed, getTrending, imageUrl, unwrap } from '../../lib/api';
+import { getAnalyticsSummary, getAppConfig, getBatchmateAnalytics, getErrorMessage, getMyStats, getMyStatsTrend, getTopViewed, getTrending, imageUrl, unwrap } from '../../lib/api';
 
 const TABS = [
   { id: 'trending', label: 'Trending', title: 'Trending this week', desc: 'Profiles with the most views in the last 7 days', icon: 'fire', color: '#fb923c' },
   { id: 'top-viewed', label: 'Most Viewed', title: 'Most viewed all-time', desc: 'Alumni with the highest total profile view counts', icon: 'eye', color: '#4f46e5' },
+  { id: 'batchmates', label: 'Batchmates', title: 'Batchmate analytics', desc: 'Compare profile engagement inside your batch and section', icon: 'users', color: '#fdb813' },
   { id: 'my-stats', label: 'My Stats', title: 'Your engagement stats', desc: 'How your profile is performing among your batchmates', icon: 'bar-chart', color: '#10b981' },
 ];
 
 const initials = (name = 'NU') => name.split(' ').filter(Boolean).slice(0, 2).map((part) => part[0]).join('').toUpperCase() || 'NU';
 const personName = (item: any) => item?.name || item?.full_name || item?.student?.name || 'Alumni Profile';
 const personImage = (item: any) => imageUrl(item?.profile_picture || item?.profile_pic || item?.photo || item?.student?.profile_picture);
+const cleanProgram = (value: any) => {
+  const text = String(value || '').trim();
+  return text && text.toLowerCase() !== 'no program listed' ? text : '';
+};
+const isStudentEntity = (item: any) => {
+  const type = String(item?.type || item?.role || item?.entity_type || item?.model_type || '').toLowerCase();
+  if (type && !/(profile|student|alumni|user)/.test(type)) return false;
+  return Boolean(item?.student || item?.student_id || item?.student_record_id || item?.user_id || item?.graduation_year || item?.batch_year || item?.course || item?.program || item?.name);
+};
 const personMeta = (item: any) => {
-  const course = item?.course || item?.program || item?.student?.course;
+  const course = cleanProgram(item?.course || item?.program || item?.student?.course);
   const batch = item?.batch || item?.graduation_year || item?.batch_year || item?.student?.graduation_year;
   if (course && batch) return `${course} · ${batch}`;
-  return course || batch || '.';
+  return course || batch || '';
 };
 
 const listFromPayload = (payload: any) => {
@@ -28,6 +38,8 @@ const listFromPayload = (payload: any) => {
   if (Array.isArray(raw?.data)) return raw.data;
   if (Array.isArray(raw?.profiles)) return raw.profiles;
   if (Array.isArray(raw?.top_profiles)) return raw.top_profiles;
+  if (Array.isArray(raw?.batchmates)) return raw.batchmates;
+  if (Array.isArray(raw?.students)) return raw.students;
   if (Array.isArray(payload?.data)) return payload.data;
   return [];
 };
@@ -70,13 +82,14 @@ function RankBadge({ rank }: { rank: number }) {
 }
 
 function AlumniRow({ item, rank, metric }: { item: any; rank: number; metric: number }) {
+  const meta = personMeta(item);
   return (
     <TouchableOpacity style={styles.alumniRow} activeOpacity={0.86}>
       <RankBadge rank={rank} />
       <Avatar item={item} />
       <View style={styles.personCopy}>
         <Text style={styles.personName} numberOfLines={1}>{personName(item)}</Text>
-        <Text style={styles.personMeta} numberOfLines={1}>{personMeta(item)}</Text>
+        {meta ? <Text style={styles.personMeta} numberOfLines={1}>{meta}</Text> : null}
       </View>
       <View style={styles.metric}>
         <Text style={styles.metricValue}>{metric.toLocaleString()}</Text>
@@ -115,6 +128,8 @@ export default function AnalyticsScreen() {
   const [summary, setSummary] = useState<any>({});
   const [trending, setTrending] = useState<any[]>([]);
   const [topViewed, setTopViewed] = useState<any[]>([]);
+  const [batchmateStats, setBatchmateStats] = useState<any[]>([]);
+  const [statsTrend, setStatsTrend] = useState<any>({});
   const [myStats, setMyStats] = useState<any>({});
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -122,7 +137,7 @@ export default function AnalyticsScreen() {
   const [appConfig, setAppConfig] = useState<any>(null);
 
   const activeTab = useMemo(() => TABS.find((item) => item.id === tab) || TABS[0], [tab]);
-  const activeList = tab === 'top-viewed' ? topViewed : trending;
+  const activeList = (tab === 'top-viewed' ? topViewed : tab === 'batchmates' ? batchmateStats : trending).filter(isStudentEntity);
   const schoolName = appConfig?.school_name || 'National University Lipa';
   const yearbookName = appConfig?.yearbook_name || 'Sinag-Bughaw Digital Yearbook';
 
@@ -131,21 +146,25 @@ export default function AnalyticsScreen() {
       setError('');
       if (!refreshing) setLoading(true);
 
-      const [configResult, summaryResult, trendingResult, topViewedResult, statsResult] = await Promise.allSettled([
+      const [configResult, summaryResult, trendingResult, topViewedResult, batchmateResult, statsResult, trendResult] = await Promise.allSettled([
         getAppConfig(),
         getAnalyticsSummary(),
         getTrending(),
         getTopViewed(10),
+        getBatchmateAnalytics(),
         getMyStats(),
+        getMyStatsTrend(),
       ]);
 
       if (configResult.status === 'fulfilled') setAppConfig(objectFromPayload(configResult.value));
       if (summaryResult.status === 'fulfilled') setSummary(objectFromPayload(summaryResult.value));
       if (trendingResult.status === 'fulfilled') setTrending(listFromPayload(trendingResult.value));
       if (topViewedResult.status === 'fulfilled') setTopViewed(listFromPayload(topViewedResult.value));
+      if (batchmateResult.status === 'fulfilled') setBatchmateStats(listFromPayload(batchmateResult.value));
       if (statsResult.status === 'fulfilled') setMyStats(objectFromPayload(statsResult.value));
+      if (trendResult.status === 'fulfilled') setStatsTrend(objectFromPayload(trendResult.value));
 
-      const failed = [summaryResult, trendingResult, topViewedResult, statsResult].find((result) => result.status === 'rejected') as PromiseRejectedResult | undefined;
+      const failed = [summaryResult, trendingResult, topViewedResult, batchmateResult, statsResult, trendResult].find((result) => result.status === 'rejected') as PromiseRejectedResult | undefined;
       if (failed) setError(getErrorMessage(failed.reason, 'Some analytics could not be loaded.'));
     } catch (requestError: any) {
       setError(getErrorMessage(requestError, 'Unable to load analytics.'));
@@ -162,8 +181,6 @@ export default function AnalyticsScreen() {
   const renderHero = () => (
     <>
       <View style={styles.hero}>
-        <View style={styles.heroOrbOne} />
-        <View style={styles.heroOrbTwo} />
         <View style={styles.breadcrumb}>
           <Text style={styles.breadcrumbMuted}>{yearbookName.replace(/\s*Digital Yearbook/i, '').toUpperCase()}</Text>
           <FontAwesome name="chevron-right" size={9} color="rgba(255,255,255,0.25)" />
@@ -204,16 +221,23 @@ export default function AnalyticsScreen() {
         </View>
       </View>
 
-      <View style={styles.tabs}>
-        {TABS.map((item) => {
-          const active = item.id === tab;
-          return (
-            <TouchableOpacity key={item.id} style={[styles.tabButton, active && styles.tabActive]} onPress={() => setTab(item.id)}>
-              <FontAwesome name={item.icon as any} size={15} color={active ? '#071b3d' : '#60708c'} />
-              <Text style={[styles.tabText, active && styles.tabTextActive]}>{item.label}</Text>
-            </TouchableOpacity>
-          );
-        })}
+      <View style={styles.tabsShell}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabs}>
+          {TABS.map((item) => {
+            const active = item.id === tab;
+            return (
+              <TouchableOpacity
+                key={item.id}
+                style={[styles.tabButton, active && styles.tabActive]}
+                onPress={() => setTab(item.id)}
+                activeOpacity={0.86}
+              >
+                <FontAwesome name={item.icon as any} size={14} color={active ? '#1d2b4b' : '#60708c'} />
+                <Text style={[styles.tabText, active && styles.tabTextActive]} numberOfLines={1}>{item.label}</Text>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
       </View>
 
       <View style={styles.sectionHeader}>
@@ -250,7 +274,7 @@ export default function AnalyticsScreen() {
                   <View style={styles.chartPanel}>
                     <Text style={styles.chartTitle}>Profile views</Text>
                     <View style={styles.bars}>
-                      {(myStats?.trend?.values || myStats?.views_trend || [2, 4, 3, 6, 5, 7, 4]).map((value: number, index: number, values: number[]) => {
+                      {(statsTrend?.values || myStats?.trend?.values || myStats?.views_trend || [2, 4, 3, 6, 5, 7, 4]).map((value: number, index: number, values: number[]) => {
                         const max = Math.max(...values, 1);
                         return <View key={String(index)} style={[styles.bar, { height: Math.max(8, (Number(value || 0) / max) * 78) }]} />;
                       })}
@@ -299,43 +323,42 @@ export default function AnalyticsScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f4f7fb' },
   content: { paddingBottom: 36 },
-  hero: { backgroundColor: '#211a5a', paddingHorizontal: 22, paddingTop: 58, paddingBottom: 30, overflow: 'hidden' },
-  heroOrbOne: { position: 'absolute', top: -90, right: -90, width: 260, height: 260, borderRadius: 130, backgroundColor: 'rgba(79,70,229,0.26)' },
-  heroOrbTwo: { position: 'absolute', bottom: -90, left: -80, width: 210, height: 210, borderRadius: 105, backgroundColor: 'rgba(253,184,19,0.06)' },
+  hero: { backgroundColor: '#1B2A4A', paddingHorizontal: 22, paddingTop: 50, paddingBottom: 24, overflow: 'hidden' },
   breadcrumb: { flexDirection: 'row', gap: 9, alignItems: 'center', marginBottom: 14 },
   breadcrumbMuted: { color: 'rgba(255,255,255,0.42)', fontSize: 11, letterSpacing: 1.4, fontWeight: '900' },
   breadcrumbActive: { color: '#fdb813', fontSize: 11, letterSpacing: 1.4, fontWeight: '900' },
   badge: { alignSelf: 'flex-start', borderRadius: 999, borderWidth: 1, borderColor: 'rgba(253,184,19,0.48)', backgroundColor: 'rgba(253,184,19,0.10)', paddingHorizontal: 13, paddingVertical: 7, marginBottom: 16 },
   badgeText: { color: '#fdb813', fontSize: 10, letterSpacing: 1.6, fontWeight: '900' },
-  heroTitle: { color: '#ffffff', fontSize: 38, fontWeight: '900', lineHeight: 44 },
+  heroTitle: { color: '#ffffff', fontSize: 34, fontWeight: '900', lineHeight: 39 },
   gold: { color: '#fdb813' },
   heroCopy: { color: 'rgba(255,255,255,0.62)', fontSize: 14, lineHeight: 21, marginTop: 10, maxWidth: 330 },
-  summaryRow: { flexDirection: 'row', gap: 10, marginTop: 24 },
-  summaryPill: { flex: 1, minHeight: 66, borderRadius: 14, backgroundColor: 'rgba(255,255,255,0.12)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingHorizontal: 8 },
+  summaryRow: { flexDirection: 'row', gap: 8, marginTop: 20 },
+  summaryPill: { flex: 1, minHeight: 62, borderRadius: 14, backgroundColor: 'rgba(255,255,255,0.12)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingHorizontal: 6 },
   summaryValue: { color: '#ffffff', fontSize: 18, fontWeight: '900', lineHeight: 20 },
   summaryLabel: { color: 'rgba(255,255,255,0.48)', fontSize: 10, marginTop: 3 },
-  tabs: { height: 54, backgroundColor: '#ffffff', borderBottomWidth: 1, borderBottomColor: '#dfe6f2', flexDirection: 'row', paddingHorizontal: 16 },
-  tabButton: { flex: 1, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 7, borderBottomWidth: 2, borderBottomColor: 'transparent' },
-  tabActive: { borderBottomColor: '#071b3d' },
-  tabText: { color: '#60708c', fontSize: 12, fontWeight: '800' },
-  tabTextActive: { color: '#071b3d', fontWeight: '900' },
-  sectionHeader: { paddingHorizontal: 22, paddingTop: 30, paddingBottom: 16 },
+  tabsShell: { backgroundColor: '#ffffff', borderBottomWidth: 1, borderBottomColor: '#dfe6f2' },
+  tabs: { minHeight: 58, paddingHorizontal: 14, paddingVertical: 8, gap: 8 },
+  tabButton: { minWidth: 118, height: 40, borderRadius: 14, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 7, paddingHorizontal: 12, borderWidth: 1, borderColor: '#e5eaf3', backgroundColor: '#ffffff' },
+  tabActive: { borderColor: '#1d2b4b', backgroundColor: '#eef2ff' },
+  tabText: { color: '#60708c', fontSize: 12, fontWeight: '900' },
+  tabTextActive: { color: '#071b3d' },
+  sectionHeader: { paddingHorizontal: 22, paddingTop: 24, paddingBottom: 16 },
   sectionTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 9 },
   sectionTitle: { color: '#071b3d', fontSize: 19, fontWeight: '900' },
   sectionDesc: { color: '#8fa0bf', fontSize: 13, lineHeight: 20, marginTop: 7 },
   warningText: { marginHorizontal: 22, marginBottom: 12, color: '#b45309', backgroundColor: '#fff7ed', borderRadius: 12, padding: 12, fontSize: 12, fontWeight: '700' },
   loading: { marginTop: 34 },
-  alumniRow: { marginHorizontal: 22, marginBottom: 12, minHeight: 74, borderRadius: 15, backgroundColor: '#ffffff', borderWidth: 1, borderColor: '#e8edf5', flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, shadowColor: '#102044', shadowOpacity: 0.05, shadowRadius: 10, shadowOffset: { width: 0, height: 4 }, elevation: 2 },
-  rankWrap: { width: 30, alignItems: 'center', marginRight: 8 },
+  alumniRow: { marginHorizontal: 16, marginBottom: 12, minHeight: 76, borderRadius: 15, backgroundColor: '#ffffff', borderWidth: 1, borderColor: '#e8edf5', flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, shadowColor: '#102044', shadowOpacity: 0.05, shadowRadius: 10, shadowOffset: { width: 0, height: 4 }, elevation: 2 },
+  rankWrap: { width: 28, alignItems: 'center', marginRight: 7 },
   rankBubble: { minWidth: 18, height: 18, borderRadius: 9, alignItems: 'center', justifyContent: 'center', marginTop: -5 },
   rankText: { color: '#ffffff', fontSize: 9, fontWeight: '900' },
   avatar: { borderWidth: 2, borderColor: 'rgba(253,184,19,0.32)', backgroundColor: '#eef2ff' },
   avatarFallback: { borderWidth: 2, borderColor: 'rgba(253,184,19,0.32)', backgroundColor: '#0f172a', alignItems: 'center', justifyContent: 'center' },
   avatarText: { color: '#fdb813', fontWeight: '900' },
-  personCopy: { flex: 1, minWidth: 0, marginLeft: 13 },
+  personCopy: { flex: 1, minWidth: 0, marginLeft: 10 },
   personName: { color: '#020617', fontSize: 14, fontWeight: '900' },
   personMeta: { color: '#8fa0bf', fontSize: 11, marginTop: 4 },
-  metric: { alignItems: 'flex-end', marginLeft: 8 },
+  metric: { width: 54, alignItems: 'flex-end', marginLeft: 6 },
   metricValue: { color: '#020617', fontSize: 15, fontWeight: '900' },
   metricLabel: { color: '#8fa0bf', fontSize: 10, marginTop: 2 },
   statsGrid: { paddingHorizontal: 22, flexDirection: 'row', flexWrap: 'wrap', gap: 12 },

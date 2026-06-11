@@ -25,7 +25,6 @@ class MessageSent implements ShouldBroadcast
 
     /**
      * Broadcast on a PRIVATE channel so only the recipient can receive it.
-     * Channel name: private-chat.{receiverId}
      */
     public function broadcastOn(): array
     {
@@ -46,6 +45,8 @@ class MessageSent implements ShouldBroadcast
             'sender_id'   => $this->message->sender_id,
             'receiver_id' => $this->message->receiver_id,
             'body'        => $this->message->body,
+            'image_path'  => $this->message->image_path,
+            'image_url'   => $this->message->image_url,
             'is_read'     => $this->message->is_read,
             'created_at'  => $this->message->created_at->toISOString(),
             'sender'      => $this->message->sender,

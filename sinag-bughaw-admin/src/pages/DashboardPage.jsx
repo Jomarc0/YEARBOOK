@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import api from "../services/api";
 import {
@@ -44,9 +44,12 @@ const SectionHeading = ({ icon, title, subtitle, action }) => (
 );
 
 // ─── Metric Cards ─────────────────────────────────────────────────────────────
-function MetricCard({ label, value, sub, icon, iconBg, iconColor, subBg, subColor, loading }) {
+function MetricCard({ label, value, rawValue, sub, icon, iconBg, iconColor, subBg, subColor, cardType, loading }) {
+  const isAlertCard = /alert|error/i.test(label ?? "");
+  const isDanger = cardType === "danger" || (isAlertCard && Number(rawValue ?? 0) > 0);
+
   return (
-    <Card className="p-5 flex items-center gap-4">
+    <Card className={cx("p-5 flex items-center gap-4", isDanger && "border-l-4 border-l-red-500 bg-red-50")}>
       <div
         className="grid h-11 w-11 shrink-0 place-items-center rounded-xl text-base"
         style={{ background: iconBg, color: iconColor }}
@@ -80,9 +83,14 @@ function MetricCard({ label, value, sub, icon, iconBg, iconColor, subBg, subColo
 function EnrollmentChart({ data, loading }) {
   const canvasRef = useRef(null);
   const chartRef  = useRef(null);
+  const chartData = useMemo(() => (Array.isArray(data) ? data : []), [data]);
+  const hasData = chartData.some((d) => Number(d.total ?? 0) > 0);
 
   useEffect(() => {
-    if (!data || loading) return;
+    if (!hasData || loading) {
+      if (chartRef.current) { chartRef.current.destroy(); chartRef.current = null; }
+      return;
+    }
 
     const loadChart = () => {
       if (!window.Chart || !canvasRef.current) return;
@@ -91,10 +99,10 @@ function EnrollmentChart({ data, loading }) {
       chartRef.current = new window.Chart(canvasRef.current, {
         type: "bar",
         data: {
-          labels: data.map((d) => d.year),
+          labels: chartData.map((d) => d.year),
           datasets: [{
             label: "Enrolled Students",
-            data: data.map((d) => d.total),
+            data: chartData.map((d) => d.total),
             backgroundColor: "rgba(79,70,229,0.12)",
             borderColor: "#4f46e5",
             borderWidth: 2,
@@ -142,7 +150,7 @@ function EnrollmentChart({ data, loading }) {
     }
 
     return () => { if (chartRef.current) { chartRef.current.destroy(); chartRef.current = null; } };
-  }, [data, loading]);
+  }, [chartData, hasData, loading]);
 
   return (
     <Card className="p-5">
@@ -162,6 +170,14 @@ function EnrollmentChart({ data, loading }) {
       />
       {loading ? (
         <Skeleton className="h-56 w-full rounded-xl" />
+      ) : !hasData ? (
+        <div className="grid h-56 place-items-center rounded-xl border border-dashed border-slate-200 bg-slate-50/70 text-center">
+          <div>
+            <i className="fas fa-chart-column mb-3 text-3xl text-slate-300" aria-hidden="true" />
+            <p className="text-sm font-bold text-slate-700">No enrollment data yet</p>
+            <p className="mt-1 text-xs text-slate-400">Data will appear here once batches are populated.</p>
+          </div>
+        </div>
       ) : (
         <div className="relative h-56">
           <canvas ref={canvasRef} role="img" aria-label="Bar chart showing enrolled students per batch year" />
@@ -195,20 +211,27 @@ function TrendingAlumni({ items, loading }) {
             <p className="text-sm text-slate-400">No trending alumni yet.</p>
           </div>
         ) : (
-          items.map((a, i) => (
+          items.map((a, i) => {
+            const name = a.name?.trim() || "Unknown user";
+            const hasName = Boolean(a.name?.trim());
+            return (
             <div key={a.id ?? i} className="flex items-center gap-3 rounded-xl p-2 transition hover:bg-slate-50">
-              <div className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-indigo-50 text-xs font-bold text-indigo-700 border border-indigo-100">
-                {a.avatar_initials ?? a.name?.slice(0, 2).toUpperCase()}
+              <div className={cx(
+                "grid h-9 w-9 shrink-0 place-items-center rounded-full border text-xs font-bold",
+                hasName ? "border-indigo-100 bg-indigo-50 text-indigo-700" : "border-slate-200 bg-slate-100 text-slate-500",
+              )}>
+                {hasName ? (a.avatar_initials ?? name.slice(0, 2).toUpperCase()) : "?"}
               </div>
               <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-bold text-slate-800">{a.name}</p>
+                <p className="truncate text-sm font-bold text-slate-800">{name}</p>
                 <p className="truncate text-xs text-slate-400">{a.program}</p>
               </div>
               <span className="rounded-full bg-emerald-50 px-2.5 py-0.5 text-[10px] font-bold text-emerald-700 border border-emerald-100 whitespace-nowrap">
                 {fmt(a.views)} views
               </span>
             </div>
-          ))
+            );
+          })
         )}
       </div>
     </Card>
@@ -474,6 +497,8 @@ export default function DashboardPage() {
 
   const metricCards = buildMetricCards(data?.metrics).map((card) => ({
     ...card,
+    rawValue: card.value,
+    cardType: card.metricKey === "system_alerts" && Number(card.value ?? 0) > 0 ? "danger" : card.cardType,
     value: typeof card.value === "number" ? fmt(card.value) : card.value,
     ...(ICON_MAP[card.label] ?? {
       icon: "fa-circle-info",

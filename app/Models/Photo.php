@@ -26,7 +26,7 @@ class Photo extends Model implements AnalyzablePhoto
         'is_profile_post' => 'boolean',
     ];
 
-    // ── Relationships ──────────────────────────────────────────────────────
+    // Relationships
 
     public function album(): BelongsTo
     {

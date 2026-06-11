@@ -7,24 +7,6 @@ use App\Models\Transcript;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
-/**
- * TranscriptionService  (Groq Whisper + Groq LLM)
- * ──────────────────────────────────────────────────────────────
- * Features:
- *   1. transcribe()       → full transcript text + segments
- *   2. generateSubtitles()→ SRT or VTT string from segments
- *   3. generateNotes()    → AI speech notes via Groq LLM
- *
- * Large-file handling:
- *   Groq enforces a 25 MB limit. For video files that exceed this,
- *   ffmpeg extracts a mono 16kHz MP3 audio track (typically ~1MB/min)
- *   before sending to Whisper. ffmpeg must be installed on the server.
- *
- * .env keys:
- *   GROQ_API_KEY=gsk_...
- *   GROQ_WHISPER_MODEL=whisper-large-v3-turbo
- *   GROQ_NOTES_MODEL=llama-3.3-70b-versatile
- */
 class TranscriptionService implements TranscriptionServiceInterface
 {
     private string $apiKey;
@@ -50,7 +32,7 @@ class TranscriptionService implements TranscriptionServiceInterface
         return filled($this->apiKey);
     }
 
-    // ── Feature 1: Transcript generation ─────────────────────────────────
+    // Feature 1: Transcript generation 
 
     public function transcribe(Transcript $transcript): void
     {
@@ -69,7 +51,7 @@ class TranscriptionService implements TranscriptionServiceInterface
                 throw new \RuntimeException('No audio URL found on transcript.');
             }
 
-            // ── Fetch media bytes from Cloudinary ─────────────────────────
+            // Fetch media bytes from Cloudinary 
             $context = stream_context_create([
                 'http' => ['timeout' => 60, 'follow_location' => true],
                 'ssl'  => ['verify_peer' => false, 'verify_peer_name' => false],
@@ -83,19 +65,19 @@ class TranscriptionService implements TranscriptionServiceInterface
 
             $fileSizeBytes = strlen($mediaBytes);
 
-            // ── Write to temp file ────────────────────────────────────────
+            // Write to temp file 
             $ext      = pathinfo(parse_url($audioUrl, PHP_URL_PATH), PATHINFO_EXTENSION) ?: 'mp4';
             $tmpMedia = tempnam(sys_get_temp_dir(), 'groq_media_') . '.' . $ext;
             file_put_contents($tmpMedia, $mediaBytes);
             unset($mediaBytes); // free memory
 
-            // ── Extract audio if file exceeds Groq 25 MB limit ───────────
+            // Extract audio if file exceeds Groq 25 MB limit 
             [$tmpAudio, $audioFilename] = $fileSizeBytes > self::GROQ_LIMIT_BYTES
                 ? $this->extractAudio($tmpMedia)
                 : [$tmpMedia, basename($tmpMedia)];
 
             try {
-                // ── Verify extracted/original file is within limit ────────
+                //Verify extracted/original file is within limit 
                 $audioSize = filesize($tmpAudio);
                 if ($audioSize > self::GROQ_LIMIT_BYTES) {
                     throw new \RuntimeException(
@@ -104,7 +86,7 @@ class TranscriptionService implements TranscriptionServiceInterface
                     );
                 }
 
-                // ── Call Groq Whisper ─────────────────────────────────────
+                // Call Groq Whisper 
                 $response = Http::withToken($this->apiKey)
                     ->timeout(300)
                     ->attach('file', fopen($tmpAudio, 'r'), $audioFilename)
@@ -130,7 +112,7 @@ class TranscriptionService implements TranscriptionServiceInterface
             $segments = $this->normalizeSegments($data['segments'] ?? []);
             $text     = $data['text'] ?? '';
 
-            // ── Generate notes via Groq LLaMA ─────────────────────────────
+            // Generate notes via Groq LLaMA
             $notes = null;
             try {
                 $notes = $this->generateNotes($text, $transcript->title);
@@ -155,7 +137,7 @@ class TranscriptionService implements TranscriptionServiceInterface
         }
     }
 
-    // ── Feature 2: Subtitle generation ───────────────────────────────────
+    // Feature 2: Subtitle generation 
 
     public function generateSubtitles(Transcript $transcript, string $format = 'srt'): string
     {
@@ -171,7 +153,7 @@ class TranscriptionService implements TranscriptionServiceInterface
         };
     }
 
-    // ── Feature 3: Speech notes (AI summary) ─────────────────────────────
+    // Feature 3: Speech notes (AI summary)
 
     public function generateNotes(string $transcriptText, string $title = ''): ?string
     {
@@ -230,16 +212,12 @@ PROMPT;
         return $response->json('choices.0.message.content');
     }
 
-    // ── Private: ffmpeg audio extraction ─────────────────────────────────
+    // Private: ffmpeg audio extraction─
 
     /**
      * Extract a mono 16 kHz MP3 audio track from a video file using ffmpeg.
      * Returns [tmpAudioPath, filename] — caller must unlink tmpAudioPath.
      *
-     * Output bitrate is 64k which gives ~0.5 MB/min — well under Groq's limit
-     * for speeches up to ~50 minutes long.
-     *
-     * @throws \RuntimeException if ffmpeg is not installed or extraction fails
      */
     private function extractAudio(string $videoPath): array
     {
@@ -275,9 +253,6 @@ PROMPT;
 
     /**
      * Locate the ffmpeg binary.
-     * Checks common Linux/Mac paths and falls back to PATH lookup.
-     *
-     * @throws \RuntimeException if ffmpeg cannot be found
      */
     private function findFfmpeg(): string
     {
@@ -305,7 +280,7 @@ PROMPT;
         );
     }
 
-    // ── Private: subtitle converters ──────────────────────────────────────
+    // Private: subtitle converters 
 
     private function toSrt(array $segments): string
     {

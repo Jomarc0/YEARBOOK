@@ -1,12 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import Navbar from '@/components/layout/Navbar';
 import Footer from '@/components/layout/Footer';
 import { transcriptApi } from '@/api/yearbook.api';
 import { galleryApi } from '@/api/gallery.api';
 import { recordContentView } from '@/api/analytics.api';
 import FaceSearchButton from '@/components/ui/FaceSearchButton';
-import { imageUrl, avatarUrl } from '@/utils/imageUrl';
 
 // ─── Status Badge ─────────────────────────────────────────────────────────────
 function StatusBadge({ status }) {
@@ -195,7 +194,6 @@ export default function GraduationSpeechesPage() {
   const [page,          setPage]          = useState(1);
   const [meta,          setMeta]          = useState(null);
   const [faceSearching, setFaceSearching] = useState(false);
-  const [faceMatches,   setFaceMatches]   = useState([]);
 
   const debounceRef = useRef(null);
 
@@ -210,9 +208,9 @@ export default function GraduationSpeechesPage() {
   useEffect(() => {
     fetchTranscripts('', 1);
     return () => clearTimeout(debounceRef.current);
-  }, []); // eslint-disable-line
+  }, []);
 
-  useEffect(() => { fetchTranscripts(search, page); }, [page]); // eslint-disable-line
+  useEffect(() => { fetchTranscripts(search, page); }, [page]);
 
   useEffect(() => {
     if (!selected?.id) return;
@@ -234,13 +232,11 @@ export default function GraduationSpeechesPage() {
 
   const handleFaceFile = async (file) => {
     setFaceSearching(true);
-    setFaceMatches([]);
     try {
       const fd = new FormData();
       fd.append('face_image', file);
       const { data } = await galleryApi.faceSearch(fd);
       const found = data.photos ?? [];
-      setFaceMatches(found);
       if (!found.length) alert('No matching photos found.');
     } catch (err) {
       alert(err?.response?.data?.message || 'Face search failed.');

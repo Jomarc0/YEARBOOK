@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Album;
 use App\Models\Faculty;
 use App\Models\User;
+use App\Services\Student\BatchService;
 use App\Support\PlatformSettings;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -15,7 +16,18 @@ class SearchController extends Controller
     private const PER_PAGE = 20;
     private const SUGGEST_LIMIT = 6;
 
-    // ── Legacy search (kept for backward compatibility) ─────────────────────────
+    private function courseVariants(?string $course, ?string $courseShort = null): array
+    {
+        $values = array_filter([$course, $courseShort], fn ($value) => trim((string) $value) !== '');
+
+        return collect($values)
+            ->flatMap(fn ($value) => BatchService::courseVariantsFor($value))
+            ->unique()
+            ->values()
+            ->all();
+    }
+
+    // Legacy search 
     public function search(Request $request)
     {
         $query  = $request->get('q', '');
@@ -99,7 +111,7 @@ class SearchController extends Controller
         return response()->json(['results' => $results, 'query' => $query]);
     }
 
-    // ── Student search — DB-based with Scout fallback ──────────────────────────
+    // Student search — DB-based with Scout fallback 
     public function students(Request $request): JsonResponse
     {
         if ($denied = PlatformSettings::featureDisabled('enable_student_directory_search', 'Student directory search')) {
@@ -115,7 +127,7 @@ class SearchController extends Controller
 
         // Use Scout only if it's properly configured and a query is present.
         // Otherwise fall back to Eloquent so the endpoint never 500s.
-        if ($query !== '' && $this->scoutAvailable()) {
+        if ($query !== '' && empty($this->courseVariants($course, $courseShort)) && $this->scoutAvailable()) {
             return $this->studentsViaScout(
                 $query, $course, $courseShort, $batchYear, $section, $perPage
             );
@@ -126,7 +138,7 @@ class SearchController extends Controller
         );
     }
 
-    // ── Scout path (only called when Meilisearch is reachable) ─────────────────
+    //  Scout path (only called when Meilisearch is reachable) 
     private function studentsViaScout(
         string  $query,
         ?string $course,
@@ -168,7 +180,7 @@ class SearchController extends Controller
         }
     }
 
-    // ── Eloquent / DB path (always safe) ───────────────────────────────────────
+    // Eloquent / DB path (always safe) 
     private function studentsViaDatabase(
         string  $query,
         ?string $course,
@@ -177,12 +189,13 @@ class SearchController extends Controller
         ?string $section,
         int     $perPage
     ): JsonResponse {
-        $builder = User::with('section')
+        $builder = User::with(['section', 'studentRecord'])
             ->whereIn('role', PlatformSettings::directoryRoles())
             ->when($query !== '', function ($q) use ($query) {
                 $q->where(function ($sub) use ($query) {
                     $sub->where('name', 'like', "%{$query}%")
                         ->orWhere('email', 'like', "%{$query}%")
+                        ->orWhere('course', 'like', "%{$query}%")
                         ->orWhereHas('studentRecord', function ($student) use ($query) {
                             $student->where('student_no', 'like', "%{$query}%")
                                 ->orWhere('course', 'like', "%{$query}%")
@@ -191,8 +204,13 @@ class SearchController extends Controller
                         });
                 });
             })
-            ->when($course,      fn($q) => $q->whereHas('studentRecord', fn($s) => $s->where('course', $course)))
-            ->when($courseShort, fn($q) => $q->whereHas('studentRecord', fn($s) => $s->where('course', array_search($courseShort, User::COURSE_SHORT, true) ?: $courseShort)))
+            ->when($variants = $this->courseVariants($course, $courseShort), fn($q) =>
+                $q->where(function ($courseQuery) use ($variants) {
+                    $courseQuery
+                        ->whereIn('course', $variants)
+                        ->orWhereHas('studentRecord', fn($s) => $s->whereIn('course', $variants));
+                })
+            )
             ->when($batchYear,   fn($q) => $q->whereHas('studentRecord', fn($s) => $s->where('graduation_year', $batchYear)))
             ->when($section,     fn($q) => $q->whereHas('section', fn($s) => $s->where('name', $section)))
             ->orderBy('name');
@@ -212,7 +230,7 @@ class SearchController extends Controller
         ]);
     }
 
-    // ── Suggest ────────────────────────────────────────────────────────────────
+    // Suggest 
     public function suggest(Request $request): JsonResponse
     {
         $query = trim($request->get('q', ''));
@@ -221,7 +239,6 @@ class SearchController extends Controller
             return response()->json(['suggestions' => []]);
         }
 
-        // Prefer Scout if available, otherwise use DB LIKE
         try {
             if ($this->scoutAvailable()) {
                 $results = User::search($query)
@@ -232,7 +249,8 @@ class SearchController extends Controller
                 throw new \RuntimeException('Scout not available');
             }
         } catch (\Throwable) {
-            $results = User::whereIn('role', PlatformSettings::directoryRoles())
+            $results = User::with('studentRecord')
+                ->whereIn('role', PlatformSettings::directoryRoles())
                 ->where(function ($q) use ($query) {
                     $q->where('name', 'like', "%{$query}%")
                       ->orWhere('email', 'like', "%{$query}%")
@@ -243,27 +261,45 @@ class SearchController extends Controller
                 ->get();
         }
 
+        $results->loadMissing('studentRecord');
+
         return response()->json([
             'suggestions' => $results->map(fn(User $u) => [
-                'id'              => $u->id,
-                'name'            => $u->name,
-                'student_id'      => $u->student_id,
-                'course_short'    => $this->shortCourse($u->course),
-                'profile_picture' => $u->profile_picture,
-                'url'             => "/profile/{$u->id}",
+                'id'                => $u->id,
+                'user_id'           => $u->id,
+                'account_user_id'   => $u->id,
+                'student_record_id' => $u->student_record_id,
+                'name'              => $u->name,
+                'student_id'        => $u->student_id,
+                'course'            => $u->studentRecord?->course ?? $u->course,
+                'course_short'      => $this->shortCourse($u->studentRecord?->course ?? $u->course),
+                'graduation_year'   => $u->studentRecord?->graduation_year ?? $u->graduation_year,
+                'profile_picture'   => $u->profile_picture,
+                'url'               => "/students/{$u->id}",
             ]),
         ]);
     }
 
-    // ── Filters ────────────────────────────────────────────────────────────────
+    // Filters 
     public function studentFilters(): JsonResponse
     {
-        $courses = \App\Models\Student::query()
+        $studentCourses = \App\Models\Student::query()
             ->whereNotNull('course')
-            ->select('course')
             ->distinct()
-            ->orderBy('course')
-            ->pluck('course')
+            ->pluck('course');
+
+        $userCourses = User::query()
+            ->whereIn('role', PlatformSettings::directoryRoles())
+            ->whereNotNull('course')
+            ->distinct()
+            ->pluck('course');
+
+        $courses = $studentCourses
+            ->merge($userCourses)
+            ->filter(fn($course) => trim((string) $course) !== '')
+            ->unique()
+            ->sort()
+            ->values()
             ->map(fn($c) => ['label' => $this->shortCourse($c), 'value' => $c]);
 
         $batchYears = \App\Models\Student::query()
@@ -280,19 +316,31 @@ class SearchController extends Controller
         ]);
     }
 
-    // ── Helpers ────────────────────────────────────────────────────────────────
+    // Helpers 
     private function formatStudent(User $user): array
     {
+        $user->loadMissing('studentRecord');
+        $record = $user->studentRecord;
+        $course = $record?->course ?? $user->course;
+        $graduationYear = $record?->graduation_year ?? $user->graduation_year;
+
         return [
-            'id'              => $user->id,
-            'name'            => $user->name,
-            'student_id'      => $user->student_id,
-            'email'           => $user->email,
-            'course'          => $user->course,
-            'course_short'    => $this->shortCourse($user->course),
-            'section'         => $user->section?->name,
-            'batch_year'      => $user->section?->batch_year,
-            'profile_picture' => $user->profile_picture,
+            'id'                => $user->id,
+            'user_id'           => $user->id,
+            'account_user_id'   => $user->id,
+            'student_record_id' => $user->student_record_id,
+            'name'              => $user->name,
+            'student_id'        => $record?->student_no ?? $user->student_id,
+            'student_no'        => $record?->student_no ?? $user->student_id,
+            'email'             => $record?->email ?? $user->email,
+            'course'            => $course,
+            'program'           => $course,
+            'course_short'      => $this->shortCourse($course),
+            'section'           => $user->section?->name ?? $record?->section?->name,
+            'batch_year'        => $graduationYear,
+            'graduation_year'   => $graduationYear,
+            'profile_picture'   => $user->profile_picture,
+            'photo'             => $record?->photo,
         ];
     }
 
@@ -314,7 +362,6 @@ class SearchController extends Controller
             try {
                 /** @var \Meilisearch\Client $client */
                 $client = app(\Laravel\Scout\Engines\MeilisearchEngine::class);
-                // health() throws if the server is unreachable
                 app('meilisearch')->health();
                 return true;
             } catch (\Throwable) {
@@ -322,6 +369,6 @@ class SearchController extends Controller
             }
         }
 
-        return true; // algolia, database driver, etc.
+        return true; 
     }
 }

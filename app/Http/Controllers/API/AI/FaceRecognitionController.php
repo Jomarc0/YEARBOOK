@@ -23,7 +23,7 @@ class FaceRecognitionController extends Controller
         private readonly FaceRecognition $faceRecognition,
     ) {}
 
-    // ── Sync all student profile pictures into Rekognition ────────────────
+    // Sync all student profile pictures into Rekognition 
 
     public function syncStudents(Request $request): JsonResponse
     {
@@ -64,7 +64,7 @@ class FaceRecognitionController extends Controller
         }
     }
 
-    // ── Search for a student by uploaded face photo ───────────────────────
+    // Search for a student by uploaded face photo 
 
     public function search(Request $request): JsonResponse
     {
@@ -236,7 +236,7 @@ class FaceRecognitionController extends Controller
             ], 500);
         }
     }
-    // ── Return face tags for a single photo ───────────────────────────────
+    // Return face tags for a single photo
 
     public function photoTags(int $photo): JsonResponse
     {
@@ -271,7 +271,7 @@ class FaceRecognitionController extends Controller
         ]);
     }
 
-    // ── Admin: queue analysis for a single photo ──────────────────────────
+    // Admin: queue analysis for a single photo 
 
     public function analyzePhoto(Request $request, Photo $photo): JsonResponse
     {
@@ -283,7 +283,7 @@ class FaceRecognitionController extends Controller
         return response()->json(['queued' => true, 'photo_id' => $photo->id]);
     }
 
-    // ── Admin: bulk-queue analysis for every photo in an album ────────────
+    // Admin: bulk-queue analysis for every photo in an album
     // Staggers dispatch 2s apart to respect Rekognition TPS limits.
 
     public function analyzeAlbum(Request $request, int $albumId): JsonResponse
@@ -308,19 +308,19 @@ class FaceRecognitionController extends Controller
         ]);
     }
 
-    // ── All gallery photos a student appears in ───────────────────────────
+    // All gallery photos a student appears in
 
     public function studentPhotos(int $userId): JsonResponse
     {
         $tags = TaggedPhoto::where('user_id', $userId)
             // Include both AI and manual tags
             ->whereIn('source', ['rekognition', 'manual'])
-            // Only show approved tags (manual tags now have status='approved')
+            // Only show approved tags 
             ->where(function ($q) {
                 $q->where('status', 'approved')
                 ->orWhereNull('status'); // keep backward compat for old AI tags
             })
-            // Only tags that have a valid photo_id (manual tags use this)
+            // Only tags that have a valid photo_id 
             ->whereNotNull('photo_id')
             ->with([
                 'photo:id,file_path,caption,album_id,user_id,created_at,ai_metadata',
@@ -377,9 +377,7 @@ class FaceRecognitionController extends Controller
         ]);
     }
 
-    // ── Private ───────────────────────────────────────────────────────────
-
-    /** Uses Sanctum — works with stateless Bearer token auth. */
+    // Private
     private function ensureAdmin(Request $request): void
     {
         if ($request->user()?->role !== 'admin') {

@@ -3,7 +3,7 @@ import Constants from "expo-constants";
 import * as SecureStore from "expo-secure-store";
 import { Platform } from "react-native";
 
-const configuredApiUrl = Constants.expoConfig?.extra?.apiUrl || process.env.EXPO_PUBLIC_API_URL;
+const configuredApiUrl = process.env.EXPO_PUBLIC_API_URL || Constants.expoConfig?.extra?.apiUrl;
 
 const inferApiUrlFromExpoHost = () => {
   const hostUri =
@@ -21,8 +21,10 @@ const inferApiUrlFromExpoHost = () => {
 
 export const API_BASE_URL =
   configuredApiUrl && configuredApiUrl !== "auto"
-    ? configuredApiUrl
+    ? configuredApiUrl.replace(/\/+$/, "")
     : inferApiUrlFromExpoHost();
+
+export const AUTH_BASE_URL = (process.env.EXPO_PUBLIC_AUTH_BASE_URL || API_BASE_URL.replace(/\/api\/?$/, "")).replace(/\/+$/, "");
 
 export const STORAGE_BASE_URL = API_BASE_URL.replace(/\/api\/?$/, "");
 
@@ -114,7 +116,7 @@ export const clearSession = async () => {
   ]);
 };
 
-export const unwrap = (response) => response.data?.data ?? response.data ?? [];
+export const unwrap = (response) => response?.data?.data ?? response?.data ?? response ?? [];
 
 export const paginationMeta = (payload) => ({
   currentPage: payload?.current_page ?? payload?.meta?.current_page ?? 1,
@@ -125,14 +127,29 @@ export const getErrorMessage = (error, fallback = "Something went wrong. Please 
   const errors = error?.response?.data?.errors;
   const firstError = errors && Object.values(errors).flat()[0];
 
+  if (error?.message === "Network Error" || error?.message === "Network request failed") {
+    return `Network Error. Check that your phone can open ${API_BASE_URL}/app-config`;
+  }
+
   return firstError || error?.response?.data?.message || error?.message || fallback;
 };
 
 export const imageUrl = (path) => {
   if (!path) return null;
   if (typeof path !== "string") return path;
-  if (path.startsWith("http://") || path.startsWith("https://") || path.startsWith("data:")) return path;
-  return `${STORAGE_BASE_URL}/storage/${path.replace(/^\/+/, "")}`;
+  if (
+    path.startsWith("http://") ||
+    path.startsWith("https://") ||
+    path.startsWith("data:") ||
+    path.startsWith("file:") ||
+    path.startsWith("content:") ||
+    path.startsWith("asset-library:") ||
+    path.startsWith("ph:") ||
+    path.startsWith("blob:")
+  ) return path;
+  const cleanPath = path.replace(/^\/+/, "");
+  if (cleanPath.startsWith("storage/")) return `${STORAGE_BASE_URL}/${cleanPath}`;
+  return `${STORAGE_BASE_URL}/storage/${cleanPath}`;
 };
 
 export const getAppConfig = async () => {
@@ -421,8 +438,42 @@ export const getGallery = async (params = {}) => {
   return response.data;
 };
 
+export const getGalleryAlbums = async (params = {}) => {
+  const response = await api.get("/gallery/albums", { params });
+  return response.data;
+};
+
+export const createGalleryAlbum = async (payload) => {
+  const response = await api.post("/gallery/albums", payload);
+  return response.data;
+};
+
 export const getGalleryAlbum = async (id) => {
   const response = await api.get(`/gallery/${id}`);
+  return response.data;
+};
+
+export const bulkUploadMedia = async (formData) => {
+  const response = await api.post("/media/bulk-upload", formData, {
+    headers: { "Content-Type": "multipart/form-data" },
+  });
+  return response.data;
+};
+
+export const uploadMediaVideo = async (formData) => {
+  const response = await api.post("/media/upload-video", formData, {
+    headers: { "Content-Type": "multipart/form-data" },
+  });
+  return response.data;
+};
+
+export const deleteGalleryMedia = async (mediaId) => {
+  const response = await api.delete(`/gallery/media/${mediaId}`);
+  return response.data;
+};
+
+export const deleteMediaPhoto = async (photoId) => {
+  const response = await api.delete(`/media/photo/${photoId}`);
   return response.data;
 };
 
@@ -433,6 +484,35 @@ export const getGraduationGallery = async (params = {}) => {
 
 export const getGraduationAlbum = async (id) => {
   const response = await api.get(`/graduation/${id}`);
+  return response.data;
+};
+
+export const getGraduationAlbumPhotos = async (id, params = {}) => {
+  const response = await api.get(`/graduation/${id}/photos`, { params });
+  return response.data;
+};
+
+export const createGraduationAlbum = async (payload) => {
+  const response = await api.post("/graduation/album", payload);
+  return response.data;
+};
+
+export const uploadGraduationPhoto = async (formData) => {
+  const response = await api.post("/graduation/upload-photo", formData, {
+    headers: { "Content-Type": "multipart/form-data" },
+  });
+  return response.data;
+};
+
+export const uploadGraduationVideo = async (formData) => {
+  const response = await api.post("/graduation/upload-video", formData, {
+    headers: { "Content-Type": "multipart/form-data" },
+  });
+  return response.data;
+};
+
+export const deleteGraduationAlbum = async (id) => {
+  const response = await api.delete(`/graduation/${id}`);
   return response.data;
 };
 
@@ -450,6 +530,11 @@ export const searchFace = async (formData) => {
   return response.data;
 };
 
+export const getFaceStudentPhotos = async (userId, page = 1) => {
+  const response = await api.get(`/face/students/${userId}/photos`, { params: { page } });
+  return response.data;
+};
+
 export const getAnnouncements = async () => {
   const response = await api.get("/announcements");
   return response.data;
@@ -460,8 +545,23 @@ export const getFeed = async (params = {}) => {
   return response.data;
 };
 
+export const recordFeedPostView = async (photoId) => {
+  const response = await api.post(`/feed/${photoId}/view`);
+  return response.data;
+};
+
 export const getBatchmates = async (params = {}) => {
   const response = await api.get("/batchmates", { params });
+  return response.data;
+};
+
+export const getMemoryDigest = async (params = {}) => {
+  const response = await api.get("/dashboard/memory-digest", { params });
+  return response.data;
+};
+
+export const getOnThisDayMemories = async (params = {}) => {
+  const response = await api.get("/memories/on-this-day", { params });
   return response.data;
 };
 
@@ -510,6 +610,21 @@ export const getTrending = async () => {
   return response.data;
 };
 
+export const getMyStatsTrend = async (params = {}) => {
+  const response = await api.get("/analytics/my-stats/trend", { params });
+  return response.data;
+};
+
+export const getBatchmateAnalytics = async (params = {}) => {
+  const response = await api.get("/analytics/batchmates", { params });
+  return response.data;
+};
+
+export const recordContentView = async (payload) => {
+  const response = await api.post("/analytics/record-content-view", payload);
+  return response.data;
+};
+
 export const getYearbookBatches = async () => {
   const response = await api.get("/batches");
   return response.data;
@@ -517,6 +632,16 @@ export const getYearbookBatches = async () => {
 
 export const getYearbookPages = async (batchId) => {
   const response = await api.get(`/yearbooks/${batchId}/pages`);
+  return response.data;
+};
+
+export const getYearbookMeta = async (batchId) => {
+  const response = await api.get(`/yearbooks/${batchId}`);
+  return response.data;
+};
+
+export const getYearbookGalleries = async (batchId) => {
+  const response = await api.get(`/yearbooks/${batchId}/galleries`);
   return response.data;
 };
 
@@ -539,9 +664,29 @@ export const addYearbookBookmark = async (payload) => {
   return response.data;
 };
 
+export const removeYearbookBookmark = async (bookmarkId) => {
+  const response = await api.delete(`/yearbook/bookmark/${bookmarkId}`);
+  return response.data;
+};
+
 export const generateYearbook = async (batchId) => {
   const response = await api.post(`/yearbooks/${batchId}/generate`);
   return response.data;
+};
+
+export const getYearbookWebViewerUrl = (batchId, params = {}) => {
+  const apiUrl = new URL(API_BASE_URL);
+  const host = apiUrl.hostname;
+  const protocol = apiUrl.protocol || "http:";
+  const webPort = params.port || Constants.expoConfig?.extra?.webPort || "5173";
+  const url = new URL(`${protocol}//${host}${webPort ? `:${webPort}` : ""}/yearbook/${batchId}/view`);
+
+  Object.entries(params).forEach(([key, value]) => {
+    if (key === "port" || value === undefined || value === null || value === "") return;
+    url.searchParams.set(key, String(value));
+  });
+
+  return url.toString();
 };
 
 export const getMobileYearbookPdfUrl = async (batchId) => {
@@ -597,6 +742,11 @@ export const getMessageThread = async (userId) => {
   return response.data;
 };
 
+export const getMessageParticipant = async (userId) => {
+  const response = await api.get(`/messages/users/${userId}`);
+  return response.data;
+};
+
 export const markMessageRead = async (id) => {
   const response = await api.patch(`/messages/${id}/read`);
   return response.data;
@@ -610,7 +760,23 @@ export const sendTypingStatus = async (receiverId, isTyping) => {
   return response.data;
 };
 
-export const sendMessage = async (receiverId, body) => {
+export const sendMessage = async (receiverId, body, image = null) => {
+  if (image?.uri) {
+    const form = new FormData();
+    form.append("receiver_id", String(receiverId));
+    form.append("body", body || "");
+    form.append("image", {
+      uri: image.uri,
+      name: image.fileName || `message-${Date.now()}.jpg`,
+      type: image.mimeType || "image/jpeg",
+    });
+
+    const response = await api.post("/messages", form, {
+      headers: { "Content-Type": "multipart/form-data" },
+    });
+    return response.data;
+  }
+
   const response = await api.post("/messages", { receiver_id: receiverId, body });
   return response.data;
 };
@@ -641,10 +807,36 @@ export const getVoiceNotesForProfile = async (userId) => {
 };
 
 export const sendVoiceNote = async (formData) => {
-  const response = await api.post("/voice-notes", formData, {
-    headers: { "Content-Type": "multipart/form-data" },
+  const token = await getToken();
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", `${API_BASE_URL}/voice-notes`);
+    xhr.timeout = 60000;
+    xhr.setRequestHeader("Accept", "application/json");
+    if (token) xhr.setRequestHeader("Authorization", `Bearer ${token}`);
+
+    xhr.onload = () => {
+      let data = {};
+      try {
+        data = xhr.responseText ? JSON.parse(xhr.responseText) : {};
+      } catch (_error) {
+        data = { message: xhr.responseText || "Unable to send this voice memory." };
+      }
+
+      if (xhr.status < 200 || xhr.status >= 300) {
+        const error = new Error(data?.message || "Unable to send this voice memory.");
+        error.response = { status: xhr.status, data };
+        reject(error);
+        return;
+      }
+
+      resolve(data);
+    };
+
+    xhr.onerror = () => reject(new Error(`Network Error while uploading to ${API_BASE_URL}/voice-notes`));
+    xhr.ontimeout = () => reject(new Error(`Upload timed out while sending to ${API_BASE_URL}/voice-notes`));
+    xhr.send(formData);
   });
-  return response.data;
 };
 
 export const deleteVoiceNote = async (id) => {
@@ -674,6 +866,11 @@ export const getDiscoveryStudent = async (id) => {
 
 export const createPaymentIntent = async (plan, redirectUrls = {}) => {
   const response = await api.post("/payments/create-intent", { plan, ...redirectUrls });
+  return response.data;
+};
+
+export const confirmPayment = async (sessionId) => {
+  const response = await api.post("/payments/confirm", { session_id: sessionId });
   return response.data;
 };
 

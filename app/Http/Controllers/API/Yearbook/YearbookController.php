@@ -7,6 +7,7 @@ use App\Models\Album;
 use App\Models\Batch;
 use App\Models\Faculty;
 use App\Models\Student;
+use App\Models\Subscription;
 use App\Models\User;
 use App\Models\Yearbook;
 use App\Models\YearbookBookmark;
@@ -17,20 +18,17 @@ use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Storage;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class YearbookController extends Controller
 {
-    private const TOC_ENTRIES_PER_PAGE = 8;
+    private const TOC_ENTRIES_PER_PAGE = 7;
 
     public function __construct(
         private WatermarkService    $watermark,
         private PageResolverService $pageResolver,
     ) {}
-
-    // ── Existing methods — DO NOT TOUCH ──────────────────────────────────────
 
     public function exportStudentPdf(Request $request, int $userId)
     {
@@ -82,11 +80,8 @@ class YearbookController extends Controller
         return response()->json($students);
     }
 
-    // ── New endpoints ─────────────────────────────────────────────────────────
-
     /**
      * GET /api/yearbooks/{batch}
-     * Yearbook metadata for the cover.
      */
     public function show(Batch $batch): JsonResponse
     {
@@ -107,7 +102,6 @@ class YearbookController extends Controller
 
     /**
      * GET /api/yearbooks/{batch}/pages
-     * Returns the ordered page manifest consumed by FlipbookViewer.
      */
     public function pages(Request $request, Batch $batch): JsonResponse
     {
@@ -199,36 +193,51 @@ class YearbookController extends Controller
         $pages[] = ['type' => 'stats', 'side' => 'left', 'meta' => $meta, 'stats' => $stats, 'studentCount' => $allStudents->count(), 'sectionCount' => $sections->count()];
         $pages[] = ['type' => 'achievements', 'side' => 'right', 'meta' => $meta, 'students' => $this->featuredStudents($mappedStudents, 'achievements', 6), 'stats' => $stats];
 
-        // 3. Section spreads with student profile/story pages.
-        foreach ($sections as $section) {
-            $pages[] = ['type' => 'section-header', 'side' => 'left',  'section' => $this->mapSection($section)];
-            $pages[] = ['type' => 'section-header', 'side' => 'right', 'section' => $this->mapSection($section)];
+        $nextSide = fn () => count($pages) % 2 === 0 ? 'left' : 'right';
 
-            $students = $section->students
-                ->map(fn ($student) => $this->mapStudent($student))
-                ->values()
-                ->toArray();
+        // 3. Course -> section -> student profile/story pages.
+        foreach ($sections->groupBy(fn ($section) => $this->courseNameForSection($section)) as $courseName => $courseSections) {
+            $pages[] = [
+                'type' => 'course-header',
+                'side' => $nextSide(),
+                'course' => $this->mapCourse($courseName, $courseSections),
+                'meta' => $meta,
+            ];
 
-            foreach ($students as $student) {
-                $pageNumber = count($pages) + 1;
+            foreach ($courseSections as $section) {
                 $pages[] = [
-                    'type' => 'student-profile',
-                    'side' => $pageNumber % 2 === 0 ? 'right' : 'left',
-                    'profilePart' => 'portrait',
-                    'student' => $student,
+                    'type' => 'section-header',
+                    'side' => $nextSide(),
                     'section' => $this->mapSection($section),
-                    'pageNum' => $pageNumber,
+                    'meta' => $meta,
                 ];
 
-                $detailPageNumber = count($pages) + 1;
-                $pages[] = [
-                    'type' => 'student-profile',
-                    'side' => $detailPageNumber % 2 === 0 ? 'right' : 'left',
-                    'profilePart' => 'details',
-                    'student' => $student,
-                    'section' => $this->mapSection($section),
-                    'pageNum' => $detailPageNumber,
-                ];
+                $students = $section->students
+                    ->map(fn ($student) => $this->mapStudent($student))
+                    ->values()
+                    ->toArray();
+
+                foreach ($students as $student) {
+                    $pageNumber = count($pages) + 1;
+                    $pages[] = [
+                        'type' => 'student-profile',
+                        'side' => $pageNumber % 2 === 0 ? 'right' : 'left',
+                        'profilePart' => 'portrait',
+                        'student' => $student,
+                        'section' => $this->mapSection($section),
+                        'pageNum' => $pageNumber,
+                    ];
+
+                    $detailPageNumber = count($pages) + 1;
+                    $pages[] = [
+                        'type' => 'student-profile',
+                        'side' => $detailPageNumber % 2 === 0 ? 'right' : 'left',
+                        'profilePart' => 'details',
+                        'student' => $student,
+                        'section' => $this->mapSection($section),
+                        'pageNum' => $detailPageNumber,
+                    ];
+                }
             }
         }
 
@@ -307,20 +316,17 @@ class YearbookController extends Controller
 
         return response()->json([
             'meta'  => $meta,
+            'toc'   => $toc,
             'pages' => $pages,
         ]);
     }
 
     /**
-     * GET /api/yearbooks/{batch}/download  (premium only)
+     * GET /api/yearbooks/{batch}/download  (standard or premium only)
      */
     public function download(Batch $batch): StreamedResponse|JsonResponse
     {
         if ($denied = PlatformSettings::featureDisabled('enable_yearbook_pdf_download', 'Yearbook PDF download')) {
-            return $denied;
-        }
-
-        if ($denied = PlatformSettings::featureDisabled('publish_yearbook', 'Published yearbook')) {
             return $denied;
         }
 
@@ -330,29 +336,36 @@ class YearbookController extends Controller
             return response()->json(['message' => 'PDF not ready yet.'], 404);
         }
 
-        $user            = Auth::user();
-        $watermarkedPath = $this->watermark->apply(
-            sourcePath: $yearbook->pdf_path,
-            userName:   $user->name,
-            userId:     $user->id,
-        );
+        $user = Auth::user();
+        $watermarkedPath = $this->shouldWatermarkPdf($user)
+            ? $this->watermark->apply(
+                sourcePath: $yearbook->pdf_path,
+                userName: $user?->name ?: 'Sinag-Bughaw Protected Copy',
+                userId: (int) ($user?->id ?? 0),
+            )
+            : $yearbook->pdf_path;
 
         $filename = "yearbook-{$batch->year}.pdf";
 
         return Storage::download($watermarkedPath, $filename, [
             'Content-Type'        => 'application/pdf',
-            'Content-Disposition' => "attachment; filename=\"{$filename}\"",
+            'Content-Disposition' => "inline; filename=\"{$filename}\"",
         ]);
     }
 
     /**
-     * POST /api/yearbooks/{batch}/generate  (admin only)
+     * POST /api/yearbooks/{batch}/generate
      */
     public function generate(Batch $batch): JsonResponse
     {
-        Gate::authorize('admin', $batch);
-
-        $yearbook = Yearbook::where('batch_id', $batch->id)->firstOrFail();
+        $yearbook = Yearbook::firstOrCreate(
+            ['batch_id' => $batch->id],
+            [
+                'title' => sprintf('%s - %s', PlatformSettings::get('yearbook_name') ?: 'Sinag-Bughaw Digital Yearbook', $batch->year ?? now()->year),
+                'theme' => PlatformSettings::get('graduation_theme') ?: 'classic',
+                'status' => 'draft',
+            ]
+        );
 
         dispatch(new \App\Jobs\Yearbook\GenerateYearbookPdf($yearbook, $batch));
         $yearbook->update(['status' => 'generating']);
@@ -370,7 +383,7 @@ class YearbookController extends Controller
         return response()->json(['message' => 'Upload endpoint — wire to your CloudinaryService.'], 501);
     }
 
-    // ── Bookmark endpoints ────────────────────────────────────────────────────
+    // Bookmark endpoints 
 
     /**
      * GET /api/yearbook/bookmarks/{batchId}
@@ -420,7 +433,6 @@ class YearbookController extends Controller
 
     /**
      * GET /api/yearbook/search
-     * ── Fixed: pageIndex now resolved via PageResolverService instead of hardcoded 0
      */
     public function search(Request $request): JsonResponse
     {
@@ -479,7 +491,7 @@ class YearbookController extends Controller
         ]));
     }
 
-    // ── Private helpers ───────────────────────────────────────────────────────
+    // Private helpers 
 
     private function yearbookScope(Request $request): array
     {
@@ -487,6 +499,17 @@ class YearbookController extends Controller
             'department' => trim((string) $request->query('department', '')),
             'course' => trim((string) $request->query('course', '')),
         ];
+    }
+
+    private function shouldWatermarkPdf(?User $user): bool
+    {
+        if (! $user instanceof User) {
+            return true;
+        }
+
+        $subscription = Subscription::where('user_id', $user->id)->latest()->first();
+
+        return ! $subscription?->isPremium();
     }
 
     private function yearbookScopeLabel(array $scope): ?string
@@ -507,6 +530,7 @@ class YearbookController extends Controller
         return [
             'id'           => $section->id,
             'name'         => $section->name,
+            'course'       => $section->course ?? $section->strand ?? null,
             'strand'       => $section->course ?? $section->strand ?? null,
             'year'         => $section->batch?->graduation_year ?? $section->batch_year ?? null,
             'adviser'      => $section->adviser?->name,
@@ -645,6 +669,7 @@ class YearbookController extends Controller
             'program-overview' => 'Program Overview',
             'stats' => 'Class Statistics',
             'achievements' => 'Achievements',
+            'course-header' => 'Courses',
             'section-header' => 'Class Sections',
             'student-profile' => 'Graduate Profiles',
             'gallery' => 'Memories',
@@ -664,9 +689,11 @@ class YearbookController extends Controller
                 continue;
             }
 
-            $label = $type === 'section-header'
-                ? $this->sectionTocLabel($page['section'] ?? [])
-                : $labels[$type];
+            $label = match ($type) {
+                'course-header' => $page['course']['name'] ?? $labels[$type],
+                'section-header' => $this->sectionTocLabel($page['section'] ?? []),
+                default => $labels[$type],
+            };
 
             if (collect($toc)->contains('label', $label)) {
                 continue;
@@ -684,5 +711,20 @@ class YearbookController extends Controller
         $course = $section['strand'] ?? $section['course'] ?? null;
 
         return $course && $course !== $name ? "{$course} - {$name}" : $name;
+    }
+
+    private function courseNameForSection($section): string
+    {
+        return $section->course ?: $section->strand ?: 'Course';
+    }
+
+    private function mapCourse(string $courseName, $sections): array
+    {
+        return [
+            'name' => $courseName,
+            'sectionCount' => $sections->count(),
+            'studentCount' => $sections->sum(fn ($section) => $section->students?->count() ?? 0),
+            'sections' => $sections->pluck('name')->values()->toArray(),
+        ];
     }
 }

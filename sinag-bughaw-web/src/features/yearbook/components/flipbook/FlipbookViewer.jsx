@@ -405,6 +405,7 @@ function pageLabel(page, idx) {
     cover:            'Cover',
     dedication:       'Dedication',
     toc:              'Table of Contents',
+    'course-header': page.course?.name ?? 'Course',
     'section-header': page.section?.name ?? 'Section',
     'student-grid':   `${page.section?.name ?? 'Students'} — portraits`,
     'student-profile': `${page.student?.name ?? page.section?.name ?? 'Student'} — profile`,

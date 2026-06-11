@@ -19,7 +19,7 @@ class AwsRekognitionFaceRecognition implements FaceRecognition
         private readonly array $config,
     ) {}
 
-    // ── isEnabled ─────────────────────────────────────────────────────────
+    //isEnabled 
 
     public function isEnabled(): bool
     {
@@ -30,7 +30,7 @@ class AwsRekognitionFaceRecognition implements FaceRecognition
             && filled($this->config['collection'] ?? null);
     }
 
-    // ── indexStudent ──────────────────────────────────────────────────────
+    // indexStudent 
 
     public function indexStudent(User $user): array
     {
@@ -71,8 +71,7 @@ class AwsRekognitionFaceRecognition implements FaceRecognition
         ];
     }
 
-    // ── indexPhoto ────────────────────────────────────────────────────────
-
+    // indexPhoto
     public function indexPhoto(string $imageUrl, string $externalImageId): array
     {
         if (! $this->isEnabled()) {
@@ -118,7 +117,7 @@ class AwsRekognitionFaceRecognition implements FaceRecognition
         }
     }
 
-    // ── syncStudents ──────────────────────────────────────────────────────
+    // syncStudents
 
     public function syncStudents(iterable $students): array
     {
@@ -143,7 +142,7 @@ class AwsRekognitionFaceRecognition implements FaceRecognition
         return $summary;
     }
 
-    // ── analyzePhoto ──────────────────────────────────────────────────────
+    // analyzePhoto 
 
     public function analyzePhoto(string $disk, string $path): array
     {
@@ -199,7 +198,7 @@ class AwsRekognitionFaceRecognition implements FaceRecognition
         ];
     }
 
-    // ── searchUploadedFace ────────────────────────────────────────────────
+    // searchUploadedFace
 
     public function searchUploadedFace(
         UploadedFile $file,
@@ -219,7 +218,7 @@ class AwsRekognitionFaceRecognition implements FaceRecognition
         );
     }
 
-    // ── searchPhotosByFace ────────────────────────────────────────────────
+    // searchPhotosByFace 
 
     public function searchIndexedFaces(
         UploadedFile $file,
@@ -357,7 +356,7 @@ class AwsRekognitionFaceRecognition implements FaceRecognition
         ];
     }
 
-    // ── analyzeUploadedImage ──────────────────────────────────────────────
+    // analyzeUploadedImage 
 
     public function analyzeUploadedImage(UploadedFile $file): array
     {
@@ -432,7 +431,7 @@ class AwsRekognitionFaceRecognition implements FaceRecognition
         }
     }
 
-    // ── Private helpers ───────────────────────────────────────────────────
+    // Private helpers
 
     private function searchBytes(string $bytes, int $maxMatches, ?float $threshold = null): array
     {

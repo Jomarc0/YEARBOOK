@@ -40,14 +40,13 @@ class StudentController extends Controller
         ]);
     }
 
-    // ── List ──────────────────────────────────────────────────────────────────
-
+    // List 
     public function index(Request $request)
     {
         $viewer    = $request->user();
         $viewerKey = $viewer ? $viewer->id : 'guest';
 
-        $key = 'students.api.' . $viewerKey . '.' . md5(serialize($request->only(['section_id', 'course', 'q', 'page'])));
+        $key = 'students.api.v2.' . $viewerKey . '.' . md5(serialize($request->only(['section_id', 'course', 'q', 'page'])));
 
         return Cache::remember($key, 300, function () use ($request, $viewer) {
             return User::with(['section', 'studentRecord'])
@@ -87,6 +86,9 @@ class StudentController extends Controller
                               ->orWhere('id', $viewer->id);
                     })
                 )
+                ->when($viewer, fn($q) =>
+                    $q->whereKeyNot($viewer->id)
+                )
                 ->when($request->section_id, fn($q) =>
                     $q->where('section_id', $request->section_id)
                 )
@@ -106,7 +108,7 @@ class StudentController extends Controller
         });
     }
 
-    // ── Show ──────────────────────────────────────────────────────────────────
+    // Show
 
     public function show(Request $request, int $id): JsonResponse
     {
@@ -172,7 +174,7 @@ class StudentController extends Controller
         ));
     }
 
-    // ── Update photo ──────────────────────────────────────────────────────────
+    // Update photo 
 
     public function updatePhoto(Request $request): JsonResponse
     {
@@ -219,7 +221,7 @@ class StudentController extends Controller
         ]);
     }
 
-    // ── Update bio ────────────────────────────────────────────────────────────
+    // Update bio 
 
     public function updateBio(Request $request): JsonResponse
     {
@@ -231,7 +233,7 @@ class StudentController extends Controller
         return response()->json(['success' => true, 'new_bio' => $request->user()->bio]);
     }
 
-    // ── Update password ───────────────────────────────────────────────────────
+    // Update password 
 
     public function updatePassword(Request $request): JsonResponse
     {
@@ -256,8 +258,7 @@ class StudentController extends Controller
         ]);
     }
 
-    // ── Achievements ──────────────────────────────────────────────────────────
-
+    // Achievements 
     public function achievements(Request $request, int $id): JsonResponse
     {
         $isSubscribed = $request->attributes->get('viewer_is_subscribed', false);
@@ -287,7 +288,7 @@ class StudentController extends Controller
         ]);
     }
 
-    // ── Tagged photos (list) ──────────────────────────────────────────────────
+    // Tagged photos 
 
     public function taggedPhotos(Request $request, int $id): JsonResponse
     {
@@ -321,14 +322,6 @@ class StudentController extends Controller
         ]);
     }
 
-    // ── Tag students on a feed post (batch tag: photo_id + student_ids) ───────
-    //
-    //  POST /api/students/profile/tagged-photos
-    //  Body: { photo_id: int, student_ids: int[] }
-    //
-    //  Used by the DashboardPage TagModal. Replaces the old addTaggedPhoto()
-    //  contract which expected a file upload.
-    // ─────────────────────────────────────────────────────────────────────────
 
     public function tagStudentsOnPost(Request $request): JsonResponse
     {
@@ -374,10 +367,9 @@ class StudentController extends Controller
 
         foreach ($newlyTagged as $tagged) {
             try {
-                $actionUrl = rtrim(config('app.frontend_url'), '/') . '/students/' . $photo->user_id . '?post=' . $photo->id;
-                PhotoTaggedNotification::dispatchFor($tagged, $request->user(), $photoUrl, $actionUrl);
+                $actionUrl = rtrim(config('app.frontend_url'), '/') . '/profile/' . $photo->user_id . '?post=' . $photo->id;
+                PhotoTaggedNotification::dispatchFor($tagged, $request->user(), $photoUrl, $actionUrl, $photo->id, $photo->user_id);
             } catch (\Throwable) {
-                // Never let a notification failure break the response
             }
         }
 
@@ -397,15 +389,6 @@ class StudentController extends Controller
             'tagged_students' => $tagged,
         ]);
     }
-
-    // ── Tagged photos (upload a photo and tag a single user) ──────────────────
-    //
-    //  POST /api/students/profile/tagged-photos/upload
-    //  Body: multipart — photo (file), user_id (int), caption (string|null)
-    //
-    //  Original endpoint kept intact under a new path so existing callers
-    //  are not broken.
-    // ─────────────────────────────────────────────────────────────────────────
 
     public function addTaggedPhoto(Request $request): JsonResponse
     {
@@ -428,7 +411,8 @@ class StudentController extends Controller
         $taggedUser = User::find($request->user_id);
         if ($taggedUser) {
             try {
-                PhotoTaggedNotification::dispatchFor($taggedUser, $request->user(), $photo->photo_url);
+                $actionUrl = rtrim(config('app.frontend_url'), '/') . '/profile/' . $taggedUser->id . '?tab=tagged';
+                PhotoTaggedNotification::dispatchFor($taggedUser, $request->user(), $photo->photo_url, $actionUrl, null, $request->user()->id);
             } catch (\Throwable) {}
         }
 
@@ -448,7 +432,7 @@ class StudentController extends Controller
         ], 201);
     }
 
-    // ── Tagged photos (remove) ────────────────────────────────────────────────
+    // Tagged photos 
 
     public function removeTaggedPhoto(Request $request, int $photoId): JsonResponse
     {

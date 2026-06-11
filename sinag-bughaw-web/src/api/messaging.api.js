@@ -5,7 +5,17 @@ export const messagesApi = {
   unreadCount:   ()                     => api.get('/messages/unread-count'),
   participant:    (userId)              => api.get(`/messages/users/${userId}`),
   thread:        (userId)               => api.get(`/messages/${userId}`),
-  send:          (receiverId, body)     => api.post('/messages', { receiver_id: receiverId, body }),
+  send:          (receiverId, body, image = null) => {
+    if (image) {
+      const form = new FormData();
+      form.append('receiver_id', receiverId);
+      form.append('body', body ?? '');
+      form.append('image', image);
+      return api.post('/messages', form, { headers: { 'Content-Type': 'multipart/form-data' } });
+    }
+
+    return api.post('/messages', { receiver_id: receiverId, body });
+  },
   markRead:      (id)                   => api.patch(`/messages/${id}/read`),
   typing:        (receiverId, isTyping) => api.post('/messages/typing', {
                                             receiver_id: receiverId,

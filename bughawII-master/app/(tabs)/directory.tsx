@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, Animated, Dimensions, FlatList, Modal, RefreshControl, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, Animated, Dimensions, FlatList, Modal, Platform, RefreshControl, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { Image } from 'expo-image';
 import { FontAwesome } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
@@ -7,10 +7,15 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import * as ImagePicker from 'expo-image-picker';
 import { createAudioPlayer, RecordingPresets, requestRecordingPermissionsAsync, setAudioModeAsync, useAudioRecorder, useAudioRecorderState } from 'expo-audio';
-import { getAppConfig, getErrorMessage, getSearchFilters, getStudent, getStudentAchievements, getStudentSuggestions, getStudents, getVoiceNotesForProfile, imageUrl, paginationMeta, searchFace, sendVoiceNote, unwrap } from '../../lib/api';
+import { fetchCurrentUser, getAppConfig, getErrorMessage, getSearchFilters, getStudent, getStudentAchievements, getStudentSuggestions, getStudents, getVoiceNotesForProfile, imageUrl, paginationMeta, searchFace, sendVoiceNote, unwrap } from '../../lib/api';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 const { height } = Dimensions.get('window');
+const audioUploadPart = (uri: string) => ({
+  uri: Platform.OS === 'ios' ? uri.replace('file://', '') : uri,
+  name: 'voice-memory.m4a',
+  type: 'audio/m4a',
+});
 
 const COURSE_SHORT: Record<string, string> = {
   'Bachelor of Science in Architecture': 'BSArch',
@@ -31,6 +36,19 @@ const COURSE_SHORT: Record<string, string> = {
   HUMSS: 'HUMSS',
 };
 
+const COURSE_FULL_BY_SHORT = Object.entries(COURSE_SHORT).reduce<Record<string, string>>((map, [full, short]) => {
+  map[short.toUpperCase()] = full;
+  map[short.replace(/[^a-z0-9]/gi, '').toUpperCase()] = full;
+  return map;
+}, {});
+
+const normalizeCourseName = (course?: string | null) => {
+  const raw = String(course || '').trim();
+  if (!raw || raw.toLowerCase() === 'no program listed') return '';
+  const compact = raw.replace(/[^a-z0-9]/gi, '').toUpperCase();
+  return COURSE_FULL_BY_SHORT[raw.toUpperCase()] || COURSE_FULL_BY_SHORT[compact] || raw;
+};
+
 const COURSE_FILTERS = [
   { label: 'All Programs', value: 'All Programs' },
   ...Object.entries(COURSE_SHORT).map(([value, label]) => ({ label, value })),
@@ -40,22 +58,46 @@ const DEFAULT_BATCH_FILTERS = [
   ...Array.from({ length: 8 }, (_, index) => String(new Date().getFullYear() - index)).map((year) => ({ label: year, value: year })),
 ];
 
-const getCourseShort = (course: string, fallback = 'Student') => COURSE_SHORT[course] || course || fallback;
+const getCourseShort = (course: string, fallback = 'Student') => COURSE_SHORT[normalizeCourseName(course)] || course || fallback;
 const getStudentId = (student: any) => student?.id || student?.user_id || student?.student_id;
 const getStudentName = (student: any) => student?.name || student?.full_name || `${student?.first_name || ''} ${student?.last_name || ''}`.trim() || 'Unnamed Student';
-const getStudentCourse = (student: any) => student?.course || student?.program || student?.degree || 'No program listed';
+const getStudentCourse = (student: any) => normalizeCourseName(student?.course || student?.program || student?.degree);
 const getStudentSection = (student: any) => student?.section?.name || student?.section_name || student?.section || 'No section';
 const getStudentYear = (student: any) => student?.batch_year || student?.year_level || student?.year || student?.batch?.year || student?.graduation_year || new Date().getFullYear();
 const getStudentPhoto = (student: any) => imageUrl(student?.profile_picture || student?.profile_pic || student?.photo || student?.avatar);
 const getInitials = (name = '') => name.trim().split(/\s+/).map((word) => word[0]?.toUpperCase() || '').slice(0, 2).join('') || 'NU';
-const getRecipientId = (student: any) => student?.user_id || student?.user?.id || student?.id;
+const getRecipientId = (student: any) => student?.user_id || student?.account_user_id || student?.user?.id || student?.student?.user_id || student?.student?.account_user_id || student?.id;
 const faceMatchId = (match: any) => match?.user_id || match?.student_id || match?.id;
-const normalizeFaceScore = (value: any) => {
-  const score = Number(value || 0);
-  if (!Number.isFinite(score) || score <= 0) return 0;
-  return score <= 1 ? score * 100 : score;
+const collectOwnDirectoryIds = (user: any) => {
+  const student = user?.student_record || user?.studentRecord || user?.student || {};
+  return new Set(
+    [
+      user?.id,
+      user?.user_id,
+      user?.account_user_id,
+      user?.student_id,
+      user?.student_record_id,
+      user?.studentRecordId,
+      student?.id,
+      student?.user_id,
+      student?.student_id,
+      student?.account_user_id,
+    ].filter((value) => value !== undefined && value !== null && value !== '').map((value) => String(value))
+  );
 };
-const faceScore = (match: any) => normalizeFaceScore(match?.similarity ?? match?.confidence ?? match?.score ?? match?.Similarity);
+const directoryIdentityValues = (student: any) => [
+  student?.id,
+  student?.user_id,
+  student?.account_user_id,
+  student?.student_id,
+  student?.student_record_id,
+  student?.studentRecordId,
+  student?.student?.id,
+  student?.student?.user_id,
+  student?.student?.student_id,
+  student?.user?.id,
+].filter((value) => value !== undefined && value !== null && value !== '').map((value) => String(value));
+const isOwnDirectoryEntry = (student: any, ownIds: Set<string>) => ownIds.size > 0 && directoryIdentityValues(student).some((value) => ownIds.has(value));
 const getAudioUrl = (note: any) => imageUrl(note?.audio_url || note?.audio_path || note?.url);
 const formatDuration = (seconds?: number) => {
   if (!seconds) return null;
@@ -68,12 +110,13 @@ const formatDate = (value?: string) => {
 
 export default function DirectoryScreen() {
   const router = useRouter();
-  const { filter, q } = useLocalSearchParams();
+  const { filter, q, batch } = useLocalSearchParams();
   const [students, setStudents] = useState<any[]>([]);
   const [courseFilters, setCourseFilters] = useState(COURSE_FILTERS);
   const [batchFilters, setBatchFilters] = useState(DEFAULT_BATCH_FILTERS);
   const [activeFilter, setActiveFilter] = useState('All Programs');
   const [activeBatchYear, setActiveBatchYear] = useState('All Years');
+  const [filterSheet, setFilterSheet] = useState<null | 'program' | 'year'>(null);
   const [query, setQuery] = useState(typeof q === 'string' ? q : '');
   const [suggestions, setSuggestions] = useState<any[]>([]);
   const [suggestLoading, setSuggestLoading] = useState(false);
@@ -87,7 +130,6 @@ export default function DirectoryScreen() {
   const [faceSearching, setFaceSearching] = useState(false);
   const [faceMatches, setFaceMatches] = useState<any[]>([]);
   const [matchedIds, setMatchedIds] = useState<Set<any>>(new Set());
-  const [matchedScores, setMatchedScores] = useState<Record<string, number>>({});
   const [error, setError] = useState('');
   const [selectedStudent, setSelectedStudent] = useState<any>(null);
   const [selectedAchievements, setSelectedAchievements] = useState<any[]>([]);
@@ -99,6 +141,7 @@ export default function DirectoryScreen() {
   const [recordedUri, setRecordedUri] = useState<string | null>(null);
   const [isModalVisible, setIsModalVisible] = useState(false);
   const [appConfig, setAppConfig] = useState<any>(null);
+  const [currentUser, setCurrentUser] = useState<any>(null);
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(height)).current;
   const audioPlayerRef = useRef<any>(null);
@@ -106,6 +149,7 @@ export default function DirectoryScreen() {
   const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
   const recorderState = useAudioRecorderState(recorder, 300);
   const directoryEnabled = appConfig?.features?.enable_student_directory_search !== false;
+  const ownDirectoryIds = useMemo(() => collectOwnDirectoryIds(currentUser), [currentUser]);
 
   useEffect(() => {
     let mounted = true;
@@ -118,19 +162,30 @@ export default function DirectoryScreen() {
         if (mounted) setAppConfig(null);
       });
 
+    fetchCurrentUser()
+      .then((user) => {
+        if (mounted) setCurrentUser(user);
+      })
+      .catch(() => {
+        if (mounted) setCurrentUser(null);
+      });
+
     return () => {
       mounted = false;
     };
   }, []);
 
   useEffect(() => {
-    if (filter && typeof filter === 'string') setActiveFilter(filter);
+    if (filter && typeof filter === 'string') setActiveFilter(normalizeCourseName(filter) || filter);
   }, [filter]);
+
+  useEffect(() => {
+    if (batch && typeof batch === 'string') setActiveBatchYear(batch);
+  }, [batch]);
 
   const clearFaceResults = () => {
     setFaceMatches([]);
     setMatchedIds(new Set());
-    setMatchedScores({});
   };
 
   useEffect(() => {
@@ -144,12 +199,15 @@ export default function DirectoryScreen() {
         const batchYears = Array.isArray(payload?.batch_years) ? payload.batch_years : payload?.data?.batch_years || [];
 
         if (courses.length) {
-          const apiCourses = courses.map((item: any) => ({
-            label: item?.label || getCourseShort(item?.value || item, 'Program'),
-            value: item?.value || item,
-          }));
+          const apiCourses = courses.map((item: any) => {
+            const normalized = normalizeCourseName(item?.value || item?.label || item);
+            return {
+              label: getCourseShort(normalized, 'Program'),
+              value: normalized || String(item?.value || item),
+            };
+          });
           const mergedCourses = [...COURSE_FILTERS, ...apiCourses].filter((item, index, list) => (
-            list.findIndex((candidate) => candidate.value === item.value) === index
+            list.findIndex((candidate) => normalizeCourseName(candidate.value) === normalizeCourseName(item.value)) === index
           ));
           setCourseFilters([
             { label: 'All Programs', value: 'All Programs' },
@@ -212,16 +270,21 @@ export default function DirectoryScreen() {
       setError('');
       const params: any = { page: nextPage, per_page: 20 };
       if (query.trim()) params.q = query.trim();
-      if (activeFilter !== 'All Programs') params.course = activeFilter;
+      if (activeFilter !== 'All Programs') {
+        params.course = activeFilter;
+        params.course_short = getCourseShort(activeFilter);
+      }
       if (activeBatchYear !== 'All Years') params.batch_year = activeBatchYear;
 
       const payload = await getStudents(params);
       const data = unwrap(payload);
       const meta = paginationMeta(payload);
-      const nextStudents = Array.isArray(data) ? data : [];
+      const nextStudents = (Array.isArray(data) ? data : []).filter((student) => !isOwnDirectoryEntry(student, ownDirectoryIds));
 
       setStudents((current) => (append ? [...current, ...nextStudents] : nextStudents));
-      setTotal(payload?.meta?.total || payload?.total || nextStudents.length);
+      const totalFromApi = Number(payload?.meta?.total || payload?.total || nextStudents.length);
+      const removedOwnEntry = Array.isArray(data) && data.length !== nextStudents.length ? 1 : 0;
+      setTotal(Math.max(0, totalFromApi - removedOwnEntry));
       setPage(meta.currentPage);
       setLastPage(meta.lastPage);
     } catch (requestError: any) {
@@ -232,7 +295,7 @@ export default function DirectoryScreen() {
       setRefreshing(false);
       setLoadingMore(false);
     }
-  }, [activeBatchYear, activeFilter, directoryEnabled, query, refreshing]);
+  }, [activeBatchYear, activeFilter, directoryEnabled, ownDirectoryIds, query, refreshing]);
 
   useEffect(() => {
     const timer = setTimeout(() => loadStudents(1), 350);
@@ -273,10 +336,11 @@ export default function DirectoryScreen() {
       } as any);
 
       const payload = await searchFace(form);
-      const matches = (payload?.matches || payload?.data?.matches || []).filter((match: any) => faceMatchId(match));
+      const matches = (payload?.matches || payload?.data?.matches || [])
+        .filter((match: any) => faceMatchId(match))
+        .filter((match: any) => !isOwnDirectoryEntry(match, ownDirectoryIds));
       setFaceMatches(matches);
       setMatchedIds(new Set(matches.map(faceMatchId)));
-      setMatchedScores(Object.fromEntries(matches.map((match: any) => [String(faceMatchId(match)), faceScore(match)])));
 
       const topName = matches[0]?.name;
       if (topName) setQuery(topName);
@@ -326,7 +390,7 @@ export default function DirectoryScreen() {
   };
 
   const handleSendMessage = async () => {
-    const id = getStudentId(selectedStudent);
+    const id = getRecipientId(selectedStudent);
     if (!id) return;
     toggleModal(false);
     router.push({ pathname: '/messages', params: { userId: String(id), name: getStudentName(selectedStudent) } } as any);
@@ -386,11 +450,7 @@ export default function DirectoryScreen() {
       form.append('recipient_id', String(recipientId));
       form.append('title', voiceTitle.trim() || 'Voice memory');
       form.append('duration_seconds', String(durationSeconds));
-      form.append('audio', {
-        uri: recordedUri,
-        name: 'voice-memory.m4a',
-        type: 'audio/m4a',
-      } as any);
+      form.append('audio', audioUploadPart(recordedUri) as any);
 
       await sendVoiceNote(form);
       setRecordedUri(null);
@@ -423,15 +483,29 @@ export default function DirectoryScreen() {
   };
 
   const selectedFilterLabel = useMemo(() => courseFilters.find((item) => item.value === activeFilter)?.label || activeFilter, [activeFilter, courseFilters]);
+  const selectedYearLabel = useMemo(() => batchFilters.find((item) => item.value === activeBatchYear)?.label || activeBatchYear, [activeBatchYear, batchFilters]);
   const isFaceMode = faceMatches.length > 0;
+
+  const selectProgramFilter = (value: string) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    clearFaceResults();
+    setActiveFilter(value);
+    setFilterSheet(null);
+  };
+
+  const selectYearFilter = (value: string) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    clearFaceResults();
+    setActiveBatchYear(value);
+    setFilterSheet(null);
+  };
 
   const renderStudent = ({ item, index }: { item: any; index: number }) => {
     const name = getStudentName(item);
     const program = getStudentCourse(item);
-    const hasProgram = program && program !== 'No program listed';
+    const hasProgram = Boolean(program);
     const photo = getStudentPhoto(item);
     const matched = matchedIds.has(getStudentId(item)) || matchedIds.has(item?.user_id);
-    const score = matchedScores[String(getRecipientId(item))] || matchedScores[String(getStudentId(item))];
 
     return (
       <TouchableOpacity
@@ -439,9 +513,26 @@ export default function DirectoryScreen() {
         activeOpacity={0.88}
         onPress={() => {
           Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-          const id = getRecipientId(item);
-          if (id) {
-            router.push({ pathname: '/student/[id]', params: { id: String(id) } } as any);
+          const userId = getRecipientId(item);
+          const studentRecordId = item?.student_record_id || item?.student?.id || item?.record?.id;
+          const profileId = studentRecordId || userId || getStudentId(item);
+          if (profileId) {
+            router.push({
+              pathname: '/student/[id]',
+              params: {
+                id: String(profileId),
+                ...(userId ? { userId: String(userId) } : {}),
+                ...(studentRecordId ? { studentRecordId: String(studentRecordId) } : {}),
+                source: 'directory',
+                name,
+                ...(hasProgram ? { course: program } : {}),
+                year: String(getStudentYear(item) || ''),
+                section: getStudentSection(item),
+                studentNo: String(item?.student_no || item?.student_id || ''),
+                email: String(item?.email || ''),
+                ...(photo ? { photo } : {}),
+              },
+            } as any);
           } else {
             toggleModal(true, item);
           }
@@ -456,23 +547,21 @@ export default function DirectoryScreen() {
           {matched ? (
             <View style={styles.matchBadge}>
               <FontAwesome name="camera" size={9} color="#1d2b4b" />
-              <Text style={styles.matchText}>{score ? `${Math.round(score)}%` : 'match'}</Text>
+              <Text style={styles.matchText}>match</Text>
             </View>
           ) : null}
         </View>
         <View style={styles.cardInfo}>
           <Text style={styles.name} numberOfLines={1}>{name}</Text>
-          <Text style={styles.studentMeta} numberOfLines={1}>{program}</Text>
+          {hasProgram ? <Text style={styles.studentMeta} numberOfLines={1}>{program}</Text> : null}
           <View style={styles.studentMetaRow}>
             {hasProgram ? (
               <View style={styles.courseBadge}>
                 <Text style={styles.courseBadgeText}>{getCourseShort(program).toUpperCase()}</Text>
               </View>
-            ) : (
-              <Text style={styles.missingProgramText}>NO PROGRAM LISTED</Text>
-            )}
+            ) : null}
             <View style={styles.yearBadge}>
-              <FontAwesome name="graduation-cap" size={9} color="#fdb813" />
+              <FontAwesome name="graduation-cap" size={9} color="#9a6100" />
               <Text style={styles.batchText}>{getStudentYear(item)}</Text>
             </View>
           </View>
@@ -586,26 +675,22 @@ export default function DirectoryScreen() {
                 ) : null}
             </View>
 
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
-              {courseFilters.map((item) => {
-                const active = activeFilter === item.value;
-                return (
-                  <TouchableOpacity key={`course-${item.value}`} style={[styles.filterChip, active && styles.filterChipActive]} onPress={() => { clearFaceResults(); setActiveFilter(item.value); }}>
-                    <Text style={[styles.filterChipText, active && styles.filterChipTextActive]}>{item.label}</Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </ScrollView>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRowSecondary}>
-              {batchFilters.map((item) => {
-                const active = activeBatchYear === item.value;
-                return (
-                  <TouchableOpacity key={`batch-${item.value}`} style={[styles.filterChip, active && styles.filterChipActive]} onPress={() => { clearFaceResults(); setActiveBatchYear(item.value); }}>
-                    <Text style={[styles.filterChipText, active && styles.filterChipTextActive]}>{item.label}</Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </ScrollView>
+            <View style={styles.dropdownFilterBar}>
+              <TouchableOpacity style={[styles.dropdownPill, styles.programDropdown]} activeOpacity={0.88} onPress={() => setFilterSheet('program')}>
+                <View style={styles.dropdownTextWrap}>
+                  <Text style={styles.programDropdownLabel}>Program</Text>
+                  <Text style={styles.programDropdownValue} numberOfLines={1}>{selectedFilterLabel}</Text>
+                </View>
+                <FontAwesome name="chevron-down" size={12} color="#1A2547" />
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.dropdownPill, styles.yearDropdown]} activeOpacity={0.88} onPress={() => setFilterSheet('year')}>
+                <View style={styles.dropdownTextWrap}>
+                  <Text style={styles.yearDropdownLabel}>Year</Text>
+                  <Text style={styles.yearDropdownValue} numberOfLines={1}>{selectedYearLabel}</Text>
+                </View>
+                <FontAwesome name="chevron-down" size={12} color="#F5A623" />
+              </TouchableOpacity>
+            </View>
 
             {!loading ? (
               <Text style={styles.resultCount}>
@@ -633,6 +718,37 @@ export default function DirectoryScreen() {
         }}
       />
 
+      <Modal transparent visible={Boolean(filterSheet)} animationType="fade" onRequestClose={() => setFilterSheet(null)}>
+        <View style={styles.sheetOverlay}>
+          <TouchableOpacity style={styles.sheetBackdrop} activeOpacity={1} onPress={() => setFilterSheet(null)} />
+          <View style={styles.filterSheet}>
+            <View style={styles.sheetHandle} />
+            <Text style={styles.sheetTitle}>{filterSheet === 'program' ? 'Filter by program' : 'Filter by year'}</Text>
+            <ScrollView style={styles.sheetScroll} showsVerticalScrollIndicator={false}>
+              {(filterSheet === 'program' ? courseFilters : batchFilters).map((item) => {
+                const selected = filterSheet === 'program' ? activeFilter === item.value : activeBatchYear === item.value;
+                return (
+                  <TouchableOpacity
+                    key={`${filterSheet}-${item.value}`}
+                    style={styles.sheetOption}
+                    onPress={() => filterSheet === 'program' ? selectProgramFilter(item.value) : selectYearFilter(item.value)}
+                    activeOpacity={0.84}
+                  >
+                    <Text style={styles.sheetOptionText} numberOfLines={1}>{item.label}</Text>
+                    <View style={[styles.optionCircle, selected && styles.optionCircleSelected]}>
+                      {selected ? <FontAwesome name="check" size={11} color="#1A2547" /> : null}
+                    </View>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+            <TouchableOpacity style={styles.applyButton} onPress={() => setFilterSheet(null)}>
+              <Text style={styles.applyButtonText}>Apply filter</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
       <Modal visible={isModalVisible} transparent animationType="none" onRequestClose={() => toggleModal(false)}>
         <View style={styles.modalOverlay}>
           <Animated.View style={[styles.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.5)', opacity: fadeAnim }]}>
@@ -653,7 +769,7 @@ export default function DirectoryScreen() {
                       </View>
                     )}
                     <Text style={styles.userName}>{getStudentName(selectedStudent)}</Text>
-                    <Text style={styles.userDegree}>{getStudentCourse(selectedStudent)}</Text>
+                    {getStudentCourse(selectedStudent) ? <Text style={styles.userDegree}>{getStudentCourse(selectedStudent)}</Text> : null}
                     <Text style={styles.userYear}>{getStudentYear(selectedStudent)} - {getStudentSection(selectedStudent)}</Text>
                     <View style={styles.actionButtons}>
                       <TouchableOpacity style={styles.primaryActionButton} onPress={handleSendMessage}>
@@ -808,6 +924,15 @@ const styles = StyleSheet.create({
   suggestionMeta: { color: '#8fa0bf', fontSize: 11, marginTop: 2 },
   suggestionLoading: { marginTop: 10, alignSelf: 'stretch', borderRadius: 14, backgroundColor: '#ffffff', borderWidth: 1, borderColor: '#e2e8f0', paddingVertical: 10, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 8 },
   suggestionLoadingText: { color: '#64748b', fontSize: 12, fontWeight: '800' },
+  dropdownFilterBar: { flexDirection: 'row', gap: 8, paddingHorizontal: 18, paddingTop: 12, paddingBottom: 8 },
+  dropdownPill: { flex: 1, minHeight: 52, borderRadius: 18, paddingHorizontal: 14, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  dropdownTextWrap: { flex: 1, minWidth: 0, marginRight: 8 },
+  programDropdown: { backgroundColor: '#F5A623' },
+  yearDropdown: { backgroundColor: '#1A2547' },
+  programDropdownLabel: { color: '#1A2547', fontSize: 11, fontWeight: '900' },
+  programDropdownValue: { color: '#1A2547', fontSize: 13, fontWeight: '900', marginTop: 3 },
+  yearDropdownLabel: { color: '#FFFFFF', fontSize: 11, fontWeight: '900' },
+  yearDropdownValue: { color: '#F5A623', fontSize: 13, fontWeight: '900', marginTop: 3 },
   filtersWrap: { paddingTop: 12, paddingHorizontal: 18, paddingBottom: 4, gap: 10 },
   chipRow: { gap: 8, paddingHorizontal: 18, paddingTop: 12, paddingBottom: 8 },
   chipRowSecondary: { gap: 8, paddingHorizontal: 18, paddingBottom: 8 },
@@ -833,7 +958,7 @@ const styles = StyleSheet.create({
   initialsArea: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#1d2b4b' },
   initialsText: { color: '#fdb813', fontSize: 18, fontWeight: '900' },
   batchBadge: { position: 'absolute', top: 10, right: 10, flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: 'rgba(29,43,75,0.86)', borderRadius: 999, paddingHorizontal: 8, paddingVertical: 5 },
-  batchText: { color: '#ffffff', fontSize: 10, fontWeight: '900' },
+  batchText: { color: '#9a6100', fontSize: 10, fontWeight: '900' },
   matchBadge: { position: 'absolute', top: 10, left: 10, flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#fdb813', borderRadius: 999, paddingHorizontal: 8, paddingVertical: 5 },
   matchText: { color: '#1d2b4b', fontSize: 10, fontWeight: '900' },
   cardInfo: { flex: 1, minWidth: 0, justifyContent: 'center', paddingHorizontal: 12 },
@@ -843,7 +968,7 @@ const styles = StyleSheet.create({
   courseBadge: { backgroundColor: '#eef2ff', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 999 },
   courseBadgeText: { color: '#3f51b5', fontSize: 10, fontWeight: '900', letterSpacing: 0.7 },
   missingProgramText: { color: '#6B7280', fontSize: 10, fontWeight: '900' },
-  yearBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#fff8e1', borderRadius: 999, paddingHorizontal: 8, paddingVertical: 5 },
+  yearBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#fff3c4', borderWidth: 1, borderColor: '#ffe08a', borderRadius: 999, paddingHorizontal: 8, paddingVertical: 5 },
   profileButton: { width: 30, height: 30, borderRadius: 10, backgroundColor: '#f8fafc', alignItems: 'center', justifyContent: 'center' },
   emptyContainer: { marginHorizontal: 18, backgroundColor: '#ffffff', borderRadius: 18, borderWidth: 1, borderColor: '#e2e8f0', paddingVertical: 54, alignItems: 'center' },
   emptyTitle: { color: '#1d2b4b', fontSize: 18, fontWeight: '900', marginTop: 16 },
@@ -854,6 +979,18 @@ const styles = StyleSheet.create({
   unavailableText: { color: '#64748b', fontSize: 14, lineHeight: 21, textAlign: 'center', marginTop: 8, marginBottom: 20 },
   unavailableButton: { minHeight: 46, borderRadius: 14, backgroundColor: '#fdb813', paddingHorizontal: 18, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
   unavailableButtonText: { color: '#1d2b4b', fontSize: 13, fontWeight: '900' },
+  sheetOverlay: { flex: 1, justifyContent: 'flex-end' },
+  sheetBackdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.35)' },
+  filterSheet: { backgroundColor: '#FFFFFF', borderTopLeftRadius: 20, borderTopRightRadius: 20, paddingHorizontal: 18, paddingTop: 10, paddingBottom: 26, maxHeight: '82%' },
+  sheetHandle: { width: 36, height: 4, borderRadius: 999, backgroundColor: '#D1D5E0', alignSelf: 'center', marginBottom: 14 },
+  sheetTitle: { color: '#1A2547', fontSize: 13, fontWeight: '900', marginBottom: 4 },
+  sheetScroll: { maxHeight: 430 },
+  sheetOption: { minHeight: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderBottomWidth: 0.5, borderBottomColor: '#F0F2F7', gap: 12 },
+  sheetOptionText: { flex: 1, color: '#1A2547', fontSize: 13, fontWeight: '700' },
+  optionCircle: { width: 20, height: 20, borderRadius: 10, borderWidth: 1, borderColor: '#D1D5E0', alignItems: 'center', justifyContent: 'center' },
+  optionCircleSelected: { backgroundColor: '#F5A623', borderColor: '#F5A623' },
+  applyButton: { height: 48, borderRadius: 12, backgroundColor: '#1A2547', alignItems: 'center', justifyContent: 'center', marginTop: 14 },
+  applyButtonText: { color: '#FFFFFF', fontSize: 14, fontWeight: '900' },
   modalOverlay: { flex: 1, justifyContent: 'flex-end' },
   absoluteFill: { ...StyleSheet.absoluteFillObject },
   modalContainer: { backgroundColor: 'white', borderTopLeftRadius: 16, borderTopRightRadius: 16, height: height * 0.9, overflow: 'hidden' },

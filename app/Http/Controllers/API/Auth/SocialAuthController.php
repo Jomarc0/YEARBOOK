@@ -11,6 +11,7 @@ use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Laravel\Socialite\Facades\Socialite;
+use Laravel\Socialite\Two\AbstractProvider;
 
 class SocialAuthController extends Controller
 {
@@ -19,46 +20,154 @@ class SocialAuthController extends Controller
         return rtrim(config('app.frontend_url', 'http://localhost:5173'), '/');
     }
 
+    private function isAllowedMobileRedirect(?string $redirectUri): bool
+    {
+        return is_string($redirectUri)
+            && preg_match('/^(capstoneapp:\/\/|exp:\/\/|http:\/\/localhost|http:\/\/127\.0\.0\.1|https:\/\/[a-z0-9\-]+\.ngrok-free\.dev|https:\/\/yearbook-myji\.onrender\.com)/', $redirectUri);
+    }
+
+    private function encodeMobileState(string $redirectUri): string
+    {
+        return 'mobile:' . rtrim(strtr(base64_encode($redirectUri), '+/', '-_'), '=');
+    }
+
+    private function defaultMobileRedirect(): string
+    {
+        return 'capstoneapp://sso/callback';
+    }
+
+    private function googleCallbackUrl(Request $request, bool $mobile = false): string
+    {
+        if ($mobile && config('services.google_mobile.redirect')) {
+            return config('services.google_mobile.redirect');
+        }
+
+        if (! $mobile && config('services.google.redirect')) {
+            return config('services.google.redirect');
+        }
+
+        return rtrim($request->getSchemeAndHttpHost(), '/') . ($mobile ? '/app/auth/google/callback' : '/auth/google/callback');
+    }
+
+    private function googleProvider(): AbstractProvider
+    {
+        /** @var AbstractProvider $provider */
+        $provider = Socialite::driver('google');
+
+        return $provider;
+    }
+
+    private function decodeMobileState(?string $state): ?string
+    {
+        if (! is_string($state) || ! str_starts_with($state, 'mobile:')) {
+            return null;
+        }
+
+        $decoded = base64_decode(strtr(substr($state, 7), '-_', '+/'), true);
+
+        return $this->isAllowedMobileRedirect($decoded) ? $decoded : null;
+    }
+
+    private function isMobileCallbackRequest(Request $request): bool
+    {
+        $state = $request->query('state');
+        if (is_string($state) && str_starts_with($state, 'mobile:')) {
+            return true;
+        }
+
+        $mobileCallback = config('services.google_mobile.redirect');
+        $mobileHost = is_string($mobileCallback) ? parse_url($mobileCallback, PHP_URL_HOST) : null;
+
+        return is_string($mobileHost) && $mobileHost !== '' && $request->getHost() === $mobileHost;
+    }
+
+    private function redirectToMobileOrWeb(Request $request, string $query): \Illuminate\Http\RedirectResponse
+    {
+        $mobileRedirect = session()->pull('google_oauth_redirect_uri')
+            ?: $this->decodeMobileState($request->query('state'));
+
+        if (! $mobileRedirect && $this->isMobileCallbackRequest($request)) {
+            $mobileRedirect = $this->defaultMobileRedirect();
+        }
+
+        if ($mobileRedirect) {
+            $separator = str_contains($mobileRedirect, '?') ? '&' : '?';
+            return redirect("{$mobileRedirect}{$separator}{$query}");
+        }
+
+        return redirect("{$this->frontendUrl()}/sso/callback?{$query}");
+    }
+
     public function redirectToGoogle(Request $request)
     {
         $redirectUri = $request->query('redirect_uri');
 
-        if (is_string($redirectUri) && preg_match('/^(capstoneapp:\/\/|exp:\/\/|http:\/\/localhost|http:\/\/127\.0\.0\.1)/', $redirectUri)) {
+        if ($this->isAllowedMobileRedirect($redirectUri)) {
             session(['google_oauth_redirect_uri' => $redirectUri]);
+            return $this->googleProvider()
+                ->stateless()
+                ->redirectUrl($this->googleCallbackUrl($request, true))
+                ->with(['state' => $this->encodeMobileState($redirectUri)])
+                ->redirect();
         } elseif ($request->query('client') === 'mobile') {
-            session(['google_oauth_redirect_uri' => 'capstoneapp://sso/callback']);
+            session(['google_oauth_redirect_uri' => $this->defaultMobileRedirect()]);
+            return $this->googleProvider()
+                ->stateless()
+                ->redirectUrl($this->googleCallbackUrl($request, true))
+                ->with(['state' => $this->encodeMobileState($this->defaultMobileRedirect())])
+                ->redirect();
         } else {
             session()->forget('google_oauth_redirect_uri');
         }
 
-        return Socialite::driver('google')->redirect();
+        return $this->googleProvider()->redirect();
+    }
+
+    public function mobileRedirectToGoogle(Request $request)
+    {
+        $redirectUri = $request->query('redirect_uri');
+
+        if (! $this->isAllowedMobileRedirect($redirectUri)) {
+            $redirectUri = $this->defaultMobileRedirect();
+        }
+
+        session(['google_oauth_redirect_uri' => $redirectUri]);
+
+        return $this->googleProvider()
+            ->stateless()
+            ->redirectUrl($this->googleCallbackUrl($request, true))
+            ->with(['state' => $this->encodeMobileState($redirectUri)])
+            ->redirect();
     }
 
     public function handleGoogleCallback(Request $request)
     {
         $frontend = $this->frontendUrl();
+        $mobileRedirect = $this->decodeMobileState($request->query('state'));
 
     // ── 1. Exchange code for Google user ─────────────────────────────────
     try {
-        $googleUser = Socialite::driver('google')->user();
+        $googleUser = $mobileRedirect
+            ? $this->googleProvider()->stateless()->redirectUrl($this->googleCallbackUrl($request, true))->user()
+            : $this->googleProvider()->user();
     } catch (\Laravel\Socialite\Two\InvalidStateException $e) {
         Log::warning('Google OAuth: InvalidStateException — session likely expired or duplicate callback.', [
             'message' => $e->getMessage(),
         ]);
-        return redirect("{$frontend}/login?error=sso_failed");
+        return $this->redirectToMobileOrWeb($request, 'error=sso_failed');
     } catch (\Exception $e) {
         Log::error('Google OAuth callback failed', [
             'exception' => get_class($e),
             'message'   => $e->getMessage(),
         ]);
-        return redirect("{$frontend}/login?error=sso_failed");
+        return $this->redirectToMobileOrWeb($request, 'error=sso_failed');
     }
 
         // ── 2. Validate email is present ─────────────────────────────────────
         $email = $googleUser->getEmail();
         if (! $email) {
             Log::warning('Google OAuth: no email returned from Google.');
-            return redirect("{$frontend}/login?error=sso_failed");
+            return $this->redirectToMobileOrWeb($request, 'error=sso_failed');
         }
 
         // ── 3. Upsert user record ─────────────────────────────────────────────
@@ -99,7 +208,7 @@ class SocialAuthController extends Controller
                 'exception' => get_class($e),
                 'message'   => $e->getMessage(),
             ]);
-            return redirect("{$frontend}/login?error=sso_failed");
+            return $this->redirectToMobileOrWeb($request, 'error=sso_failed');
         }
 
         // ── 4. Auto-create consent log for new SSO users ──────────────────────
@@ -127,13 +236,11 @@ class SocialAuthController extends Controller
         );
 
         // ── 6. Send token to React via URL param ──────────────────────────────
-        $mobileRedirect = session()->pull('google_oauth_redirect_uri');
+        return $this->redirectToMobileOrWeb($request, "token={$token}");
+    }
 
-        if ($mobileRedirect) {
-            $separator = str_contains($mobileRedirect, '?') ? '&' : '?';
-            return redirect("{$mobileRedirect}{$separator}token={$token}");
-        }
-
-        return redirect("{$frontend}/sso/callback?token={$token}");
+    public function mobileHandleGoogleCallback(Request $request)
+    {
+        return $this->handleGoogleCallback($request);
     }
 }

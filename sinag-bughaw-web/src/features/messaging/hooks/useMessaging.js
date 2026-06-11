@@ -51,7 +51,7 @@ export function useMessaging(recipientId = null) {
 
   // ── Send ───────────────────────────────────────────────────────────────────
 
-  const sendMessage = useCallback(async (receiverId, body) => {
+  const sendMessage = useCallback(async (receiverId, body, image = null) => {
     const tempId = `opt-${Date.now()}`;
 
     // Optimistic message
@@ -60,6 +60,7 @@ export function useMessaging(recipientId = null) {
       sender_id:   user?.id,
       receiver_id: receiverId,
       body,
+      image_url:   image ? URL.createObjectURL(image) : null,
       is_read:     false,
       created_at:  new Date().toISOString(),
       _optimistic: true,
@@ -67,7 +68,7 @@ export function useMessaging(recipientId = null) {
     setThread(prev => [...prev, optimistic]);
 
     try {
-      const { data } = await messagesApi.send(receiverId, body);
+      const { data } = await messagesApi.send(receiverId, body, image);
 
       // Register the real ID so the WS event doesn't add it again
       seenIdsRef.current.add(data.id);
@@ -99,7 +100,9 @@ export function useMessaging(recipientId = null) {
     try {
       const { data } = await messagesApi.unreadCount();
       setUnreadTotal(data.unread_count ?? 0);
-    } catch {}
+    } catch {
+      // Keep the UI stable if the unread badge refresh fails.
+    }
   }, []);
 
   // ── Typing ─────────────────────────────────────────────────────────────────
@@ -190,18 +193,22 @@ export function useMessaging(recipientId = null) {
   // ── Initial load ──────────────────────────────────────────────────────────
 
   useEffect(() => {
-    fetchConversations();
-    fetchUnreadCount();
+    queueMicrotask(() => {
+      fetchConversations();
+      fetchUnreadCount();
+    });
   }, [fetchConversations, fetchUnreadCount]);
 
   // Load thread when recipient changes
   useEffect(() => {
-    if (recipientId) {
-      seenIdsRef.current = new Set(); // reset seen IDs for new thread
-      fetchThread(recipientId);
-    } else {
-      setThread([]);
-    }
+    queueMicrotask(() => {
+      if (recipientId) {
+        seenIdsRef.current = new Set(); // reset seen IDs for new thread
+        fetchThread(recipientId);
+      } else {
+        setThread([]);
+      }
+    });
   }, [recipientId, fetchThread]);
 
   return {

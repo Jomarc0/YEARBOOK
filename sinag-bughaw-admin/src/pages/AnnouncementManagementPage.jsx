@@ -4,6 +4,7 @@ import { announcementsApi } from '@/api/yearbook.api';
 // ── Constants ──────────────────────────────────────────────────────────────────
 
 const TYPE_CONFIG = {
+  graduation:  { bg: '#fffbeb', color: '#b77905', icon: 'fa-graduation-cap', label: 'Graduation'  },
   event:       { bg: '#eef2ff', color: '#3f51b5', icon: 'fa-calendar',    label: 'Event'       },
   reminder:    { bg: '#fffbeb', color: '#d97706', icon: 'fa-bell',        label: 'Reminder'    },
   urgent:      { bg: '#fef2f2', color: '#dc2626', icon: 'fa-exclamation', label: 'Urgent'      },
@@ -13,12 +14,16 @@ const TYPE_CONFIG = {
 const EMPTY_FORM = {
   title:        '',
   body:         '',
-  type:         'information',
+  type:         '',
   send_email:   true,
   send_push:    true,
   action_url:   '',
   action_label: '',
 };
+
+const graduationKeywordPattern = /\b(graduation|commencement|baccalaureate)\b/i;
+const defaultAnnouncementType = ({ title = '', body = '', type = '' }) =>
+  type || (graduationKeywordPattern.test(`${title} ${body}`) ? 'graduation' : 'information');
 
 // ── Sub-components ─────────────────────────────────────────────────────────────
 
@@ -223,12 +228,14 @@ export default function AnnouncementManagementPage({ showToast }) {
     if (!form.title.trim()) return showToast?.('Title is required.', 'error');
     if (!form.body.trim())  return showToast?.('Message body is required.', 'error');
 
+    const resolvedType = defaultAnnouncementType(form);
+
     setSubmitting(true);
     try {
       const payload = {
         title:        form.title.trim(),
         body:         form.body.trim(),
-        type:         form.type,
+        type:         resolvedType,
         send_push:    form.send_push,
         send_email:   form.send_email,
         action_url:   form.action_url.trim()   || null,
@@ -236,11 +243,11 @@ export default function AnnouncementManagementPage({ showToast }) {
       };
 
       if (editingId) {
-        await announcementsApi.update(editingId, payload);
-        showToast?.('Announcement updated.', 'success');
+        const { data } = await announcementsApi.update(editingId, payload);
+        showToast?.(data?.message ?? 'Announcement updated.', 'success');
       } else {
-        await announcementsApi.create(payload);
-        showToast?.('Announcement published! Emails are being sent.', 'success');
+        const { data } = await announcementsApi.create(payload);
+        showToast?.(data?.message ?? 'Announcement published.', 'success');
       }
 
       setForm(EMPTY_FORM);
@@ -258,7 +265,7 @@ export default function AnnouncementManagementPage({ showToast }) {
     setForm({
       title:        ann.title ?? '',
       body:         ann.body ?? '',
-      type:         ann.type ?? 'information',
+      type:         ann.type ?? '',
       send_email:   false,
       send_push:    Boolean(ann.send_push),
       action_url:   ann.action_url ?? '',
@@ -385,13 +392,18 @@ export default function AnnouncementManagementPage({ showToast }) {
             <div style={{ marginBottom: '16px' }}>
               <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: '#94a3b8',
                 textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '8px' }}>
-                Type *
+                Category *
               </label>
               <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                 {Object.keys(TYPE_CONFIG).map(t => (
                   <TypeButton key={t} value={t} active={form.type === t} onClick={v => setField('type', v)} />
                 ))}
               </div>
+              {!form.type && graduationKeywordPattern.test(`${form.title} ${form.body}`) && (
+                <p style={{ margin: '8px 0 0', fontSize: '11px', color: '#b77905', fontWeight: 700 }}>
+                  Graduation will be selected automatically unless you choose another category.
+                </p>
+              )}
             </div>
 
             {/* Body */}

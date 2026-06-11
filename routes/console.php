@@ -42,8 +42,6 @@ Artisan::command('faces:sync-students', function (FaceRecognition $faceRecogniti
         $this->warn('Errors: ' . count($summary['errors']));
     }
 })->purpose('Index student profile photos into the Rekognition collection.');
-
-// ── Re-upload authenticated Cloudinary photos as public ────────────────────
 Artisan::command('transcripts:backfill-graduation {--dry-run}', function () {
     $transcriptCategories = ['videos', 'songs', 'mass', 'speeches'];
     $created = 0;
@@ -222,7 +220,7 @@ Artisan::command('cloudinary:reupload-as-public', function () {
     $this->info('All done!');
 })->purpose('Re-upload authenticated Cloudinary profile photos as public (type=upload).');
 
-// ── Memory Digest Scheduler ────────────────────────────────────────────────
+// Memory Digest Scheduler 
 Schedule::command('memories:send-digest')
     ->dailyAt('08:00')
     ->timezone('Asia/Manila')

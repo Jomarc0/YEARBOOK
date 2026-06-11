@@ -15,7 +15,7 @@ return [
             'driver'   => 'session',
             'provider' => 'users',
         ],
-        'admin' => [                        // ← added
+        'admin' => [                       
             'driver'   => 'session',
             'provider' => 'admins',
         ],
@@ -26,7 +26,7 @@ return [
             'driver' => 'eloquent',
             'model'  => env('AUTH_MODEL', User::class),
         ],
-        'admins' => [                       // ← added
+        'admins' => [                     
             'driver' => 'eloquent',
             'model'  => Admin::class,
         ],

@@ -21,7 +21,7 @@ class StudentController extends Controller
 
     public function __construct(private CloudinaryService $cloudinary) {}
 
-    // ── GET /api/admin/sections/{section}/students ─────────────────────────
+    // GET /api/admin/sections/{section}/students
 
     public function index(Request $request, Section $section): JsonResponse
     {
@@ -54,8 +54,7 @@ class StudentController extends Controller
         return response()->json($students);
     }
 
-    // ── POST /api/admin/sections/{section}/students ────────────────────────
-
+    // POST /api/admin/sections/{section}/students 
     public function store(Request $request, Section $section): JsonResponse
     {
         $validated = $request->validate($this->rules());
@@ -92,7 +91,7 @@ class StudentController extends Controller
         return response()->json(['message' => 'Student added.', 'data' => $student], 201);
     }
 
-    // ── PUT /api/admin/sections/{section}/students/{student} ──────────────
+    // PUT /api/admin/sections/{section}/students/{student} 
 
     public function update(Request $request, Section $section, Student $student): JsonResponse
     {
@@ -158,8 +157,7 @@ class StudentController extends Controller
         return response()->json(['message' => 'Student updated.', 'data' => $student->fresh()]);
     }
 
-    // ── DELETE /api/admin/sections/{section}/students/{student} ───────────
-
+    //  DELETE /api/admin/sections/{section}/students/{student}
     public function destroy(Section $section, Student $student): JsonResponse
     {
         if ((int) $student->section_id !== (int) $section->id) {
@@ -193,7 +191,7 @@ class StudentController extends Controller
         return response()->json(['message' => 'Student moved to trash.']);
     }
 
-    // ── POST /api/admin/sections/{section}/students/import ────────────────
+    // POST /api/admin/sections/{section}/students/import 
 
     public function import(Request $request, Section $section): JsonResponse
     {
@@ -240,22 +238,13 @@ class StudentController extends Controller
         ]);
     }
 
-    // ── Helpers ────────────────────────────────────────────────────────────
-
-    /**
-     * After importing a student, check if a user registered with matching
-     * name + student_no but has no link yet (student_record_id IS NULL).
-     * If found, link them automatically.
-     */
+    // Helpers 
     private function autoLinkUser(Student $student): void
     {
         User::whereNull('student_record_id')
             ->whereRaw('LOWER(TRIM(first_name)) = ?', [strtolower(trim($student->first_name))])
             ->whereRaw('LOWER(TRIM(last_name)) = ?',  [strtolower(trim($student->last_name))])
             ->where(function ($q) use ($student) {
-                // Match users who registered with this student_no
-                // (stored as a string before the migration, now we match by name only
-                //  since student_id column is dropped — this is a best-effort link)
                 $q->whereNull('student_record_id');
             })
             ->update([

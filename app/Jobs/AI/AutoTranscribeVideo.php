@@ -10,15 +10,6 @@ use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Log;
 
-/**
- * AutoTranscribeVideo
- * ─────────────────────────────────────────────────────────────
- * Fired after any graduation video/audio upload.
- * Creates a Transcript record (source = 'auto', linked to the Album
- * AND the specific GraduationPhoto) and chains into GenerateTranscript.
- *
- * Idempotent: skips if a Transcript for this public_id already exists.
- */
 class AutoTranscribeVideo implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;

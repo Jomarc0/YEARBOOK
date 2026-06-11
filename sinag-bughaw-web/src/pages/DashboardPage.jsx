@@ -66,6 +66,34 @@ const batchLabel = (user) =>
 const batchRequestValue = (user) =>
   firstValue(user, ['graduation_year', 'batch_year', 'year', 'batch.year', 'batch_id', 'batch.id']);
 
+const meaningfulText = (value) => {
+  const text = String(value || '').replace(/\s+/g, ' ').trim();
+  const compact = text.replace(/[^a-z0-9]/gi, '').toLowerCase();
+  if (text.length < 3 || compact.length < 3) return false;
+  if (/^(test|asdf|qwerty|sample|lorem|abc|haha)+$/i.test(compact)) return false;
+  if (/^(.)\1{2,}$/.test(compact)) return false;
+  return true;
+};
+
+const postMedia = (post) => (Array.isArray(post?.media) ? post.media.filter(item => item?.file_path) : []);
+
+const uniqueTaggedStudents = (students = []) => {
+  const seen = new Set();
+  return students.filter((student) => {
+    const key = student?.id ?? student?.user_id ?? student?.name;
+    if (key === undefined || key === null || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+};
+
+const shouldShowFeedPost = (post) => {
+  const status = String(post?.status || post?.moderation_status || post?.approval_status || '').toLowerCase();
+  if (['pending', 'rejected', 'unapproved', 'hidden', 'flagged'].includes(status)) return false;
+  if (post?.is_approved === false || post?.approved === false || post?.is_public === false) return false;
+  return postMedia(post).length > 0 || meaningfulText(post?.caption || post?.body || post?.message);
+};
+
 // ─── Visibility pill ─────────────────────────────────────────────────────────
 function VisPill({ visibility }) {
   const map = {
@@ -352,6 +380,7 @@ function PostCard({ post, currentUser, batchmates, onTagSaved, onViewed }) {
   const viewedRef = useRef(false);
   const posterName = post.user?.name || post.user_name || post.name || 'Student';
   const posterCourse = post.user?.course || post.course || '';
+  const taggedStudents = uniqueTaggedStudents(post.tagged_students ?? []);
 
   const avatar = storageUrl(post.user?.profile_picture)
     || `https://ui-avatars.com/api/?name=${encodeURIComponent(posterName)}&background=1d2b4b&color=fdb813&size=64`;
@@ -422,9 +451,9 @@ function PostCard({ post, currentUser, batchmates, onTagSaved, onViewed }) {
           )}
 
           {/* Tagged students */}
-          {post.tagged_students?.length > 0 && (
+          {taggedStudents.length > 0 && (
             <div className="flex flex-wrap gap-1.5 mb-2">
-              {post.tagged_students.map(s => (
+              {taggedStudents.map(s => (
                 <Link key={s.id} to={`/students/${s.id}`}
                   className="inline-flex items-center gap-1 text-[11px] bg-indigo-50 text-indigo-700
                              border border-indigo-100 rounded-full px-2.5 py-0.5 no-underline
@@ -496,7 +525,7 @@ function LeftSidebar({ user, isOn }) {
     { to: '/messages',    icon: 'fa-comment-dots',      label: 'Messages'   },
     { to: '/voice-notes', icon: 'fa-microphone',        label: 'Voice Notes'},
     { to: '/analytics',   icon: 'fa-chart-bar',         label: 'Analytics'  },
-    { to: '/flipbook',    icon: 'fa-book-open',         label: 'Flipbook',    feature: ['enable_flipbook_viewer','publish_yearbook'] },
+    { to: '/flipbook',    icon: 'fa-book-open',         label: 'Flipbook',    feature: 'enable_flipbook_viewer' },
   ].filter(n => {
     if (!n.feature) return true;
     const keys = Array.isArray(n.feature) ? n.feature : [n.feature];
@@ -583,7 +612,85 @@ function LeftSidebar({ user, isOn }) {
 }
 
 // ─── Right sidebar ────────────────────────────────────────────────────────────
-function RightSidebar({ batchmates, batchStats, topViewed, currentUser }) {
+function memoryTitle(memory) {
+  return memory?.title || memory?.caption || memory?.label || 'Yearbook memory';
+}
+
+function arrayValue(value) {
+  return Array.isArray(value) ? value : [];
+}
+
+function memoryEntry(item, type, fallbackTitle, fallbackSubtitle) {
+  if (!item || typeof item !== 'object') return null;
+  const yearsAgo = item.years_ago ? `${item.years_ago} ${item.years_ago === 1 ? 'year' : 'years'} ago` : null;
+  const subtitle = type === 'on_this_day'
+    ? (item.subtitle || yearsAgo || item.taken_at || item.album || fallbackSubtitle)
+    : (item.subtitle || item.album || item.tagged_at || item.taken_at || fallbackSubtitle);
+
+  return {
+    ...item,
+    type: item.type || type,
+    title: item.title || item.caption || fallbackTitle,
+    subtitle,
+  };
+}
+
+function digestMemories(data) {
+  if (Array.isArray(data)) return data;
+  if (!data || typeof data !== 'object') return [];
+
+  const onThisDay = data.on_this_day || {};
+  const taggedPhotos = data.tagged_photos || {};
+  const graduation = data.graduation || {};
+  const interactions = data.top_interactions || {};
+  const mostViewed = data.most_viewed || {};
+
+  return [
+    ...arrayValue(onThisDay.uploaded).map(item =>
+      memoryEntry(item, 'on_this_day', onThisDay.label || 'On this day', item.years_ago ? `${item.years_ago} years ago` : onThisDay.date)
+    ),
+    ...arrayValue(onThisDay.tagged).map(item =>
+      memoryEntry(item, 'on_this_day', 'You were tagged in a memory', item.years_ago ? `${item.years_ago} years ago` : onThisDay.date)
+    ),
+    ...arrayValue(taggedPhotos.photos).map(item =>
+      memoryEntry(item, 'tagged_photo', 'You appeared in a photo', item.similarity ? `${item.similarity}% match` : taggedPhotos.label)
+    ),
+    ...arrayValue(graduation.photos).map(item =>
+      memoryEntry(item, 'graduation_photo', graduation.label || 'Graduation memory', graduation.graduation_year ? `Batch ${graduation.graduation_year}` : undefined)
+    ),
+    ...arrayValue(interactions.peers).map(item =>
+      memoryEntry(
+        { ...item, user_id: item.user?.id, title: item.user?.name, subtitle: `${item.messages || 0} messages · ${item.shared_photos || 0} shared photos` },
+        'student_profile',
+        'Batchmate memory',
+        interactions.label
+      )
+    ),
+    ...arrayValue(mostViewed.students).map(item =>
+      memoryEntry({ ...item, user_id: item.id, title: item.name, subtitle: `${item.views || 0} profile views` }, 'student_profile', 'Popular profile', mostViewed.label)
+    ),
+  ].filter(Boolean);
+}
+
+function memoryHref(memory) {
+  const type = String(memory?.content_type || memory?.type || '').toLowerCase();
+  const id = memory?.content_id || memory?.id || memory?.photo_id || memory?.album_id;
+
+  if ((type.includes('on_this_day') || type.includes('tagged_photo') || type.includes('graduation_photo')) && memory?.album_id) {
+    const query = memory?.photo_id || memory?.id ? `?photo=${encodeURIComponent(memory.photo_id || memory.id)}` : '';
+    return `/gallery/${memory.album_id}${query}`;
+  }
+  if (type.includes('student') || type.includes('profile') || memory?.user_id) {
+    return `/students/${memory?.user_id || id}`;
+  }
+  if (type.includes('yearbook') || memory?.batch_id) {
+    const query = memory?.page_index !== undefined ? `?pageIndex=${encodeURIComponent(memory.page_index)}` : '';
+    return memory?.batch_id ? `/yearbook/${memory.batch_id}/view${query}` : '/yearbook';
+  }
+  return '/gallery';
+}
+
+function RightSidebar({ batchmates, batchStats, topViewed, currentUser, memories }) {
   const sameBatchmates = useMemo(() => sameBatchOnly(batchmates, currentUser), [batchmates, currentUser]);
   const visibleBatchmates = sameBatchmates.slice(0, 5);
   const userBatchLabel = batchLabel(currentUser);
@@ -592,6 +699,7 @@ function RightSidebar({ batchmates, batchStats, topViewed, currentUser }) {
     <aside className="flex flex-col gap-4 sticky top-[88px]">
 
       {/* Batchmates */}
+      {sameBatchmates.length > 0 && (
       <div className="bg-white rounded-[24px] border border-slate-100 p-4 shadow-[0_18px_45px_rgba(29,43,75,0.07)]">
         <div className="flex items-start justify-between gap-3 mb-3">
           <div>
@@ -636,6 +744,7 @@ function RightSidebar({ batchmates, batchStats, topViewed, currentUser }) {
           View all batchmates →
         </Link>
       </div>
+      )}
 
       {/* Trending this week */}
       {topViewed?.length > 0 && (
@@ -668,6 +777,27 @@ function RightSidebar({ batchmates, batchStats, topViewed, currentUser }) {
                        border-t border-slate-100 no-underline hover:text-[#1d2b4b] transition-colors">
             See full analytics →
           </Link>
+        </div>
+      )}
+
+      {/* Memory recommendations */}
+      {memories?.length > 0 && (
+        <div className="bg-white rounded-2xl border border-slate-100 p-4">
+          <p className="text-[11px] font-bold tracking-widest uppercase text-slate-400 mb-3">
+            <i className="fas fa-history text-[#fdb813] mr-1.5" aria-hidden="true" />
+            Memory digest
+          </p>
+          {memories.slice(0, 5).map((memory, i) => (
+            <Link key={memory?.id || memory?.content_id || i} to={memoryHref(memory)}
+              className="block py-2 no-underline group border-b border-slate-50 last:border-b-0">
+              <p className="text-[12px] font-semibold text-[#1d2b4b] truncate m-0 group-hover:text-[#3f51b5] transition-colors">
+                {memoryTitle(memory)}
+              </p>
+              <p className="text-[10px] text-slate-400 m-0 mt-0.5 truncate">
+                {memory?.subtitle || memory?.category || memory?.date_label || 'Recommended memory'}
+              </p>
+            </Link>
+          ))}
         </div>
       )}
 
@@ -731,6 +861,7 @@ export default function DashboardPage() {
 
   const [batchmates,  setBatchmates]  = useState([]);
   const [topViewed,   setTopViewed]   = useState([]);
+  const [memories,    setMemories]    = useState([]);
   const [batchStats]  = useState(null);
 
   // ── Search state ────────────────────────────────────────────────────────────
@@ -740,12 +871,12 @@ export default function DashboardPage() {
   const searchRef = useRef();
 
   // ── Fetch feed ──────────────────────────────────────────────────────────────
-  const fetchFeed = useCallback(async (activeFilter, activePage, activeQuery = query) => {
+  const fetchFeed = useCallback(async (activeFilter, activePage) => {
     try {
       const { data } = await axios.get('/feed', {
-        params: { filter: activeFilter, page: activePage, per_page: 10, q: activeQuery || undefined },
+        params: { filter: activeFilter, page: activePage, per_page: 10 },
       });
-      const newPosts = data.data ?? data ?? [];
+      const newPosts = (data.data ?? data ?? []).filter(shouldShowFeedPost);
       if (activePage === 1) {
         setPosts(newPosts);
       } else {
@@ -756,7 +887,7 @@ export default function DashboardPage() {
     } catch {
       // silently degrade
     }
-  }, [query]);
+  }, []);
 
   // initial load + filter change
   useEffect(() => {
@@ -764,20 +895,28 @@ export default function DashboardPage() {
       setLoading(true);
       setPage(1);
       setHasMore(true);
-      fetchFeed(filter, 1, query).finally(() => setLoading(false));
+      fetchFeed(filter, 1).finally(() => setLoading(false));
     });
-  }, [filter, query, fetchFeed]);
+  }, [filter, fetchFeed]);
 
   // ── Sidebar data ─────────────────────────────────────────────────────────────
   useEffect(() => {
     (async () => {
       try {
-        const [bm, tv] = await Promise.allSettled([
+        const [bm, tv, digest, onThisDay] = await Promise.allSettled([
           axios.get('/batchmates', { params: { per_page: 10, year: batchRequestValue(user) || undefined } }),
           axios.get('/analytics/trending'),
+          axios.get('/memories/digest'),
+          axios.get('/memories/on-this-day'),
         ]);
         if (bm.status === 'fulfilled') setBatchmates(bm.value.data.data ?? bm.value.data ?? []);
         if (tv.status === 'fulfilled') setTopViewed(tv.value.data.data ?? tv.value.data ?? []);
+        const digestData = digest.status === 'fulfilled' ? (digest.value.data.data ?? digest.value.data ?? []) : [];
+        const onThisDayData = onThisDay.status === 'fulfilled' ? (onThisDay.value.data.data ?? onThisDay.value.data ?? []) : [];
+        setMemories([
+          ...digestMemories(onThisDayData),
+          ...digestMemories(digestData),
+        ]);
       } catch {
         // Sidebar data is optional.
       }
@@ -790,7 +929,7 @@ export default function DashboardPage() {
     setLoadingMore(true);
     const next = page + 1;
     setPage(next);
-    await fetchFeed(filter, next, query);
+    await fetchFeed(filter, next);
     setLoadingMore(false);
   };
 
@@ -1001,6 +1140,7 @@ export default function DashboardPage() {
             <RightSidebar
               batchmates={batchmates}
               topViewed={topViewed}
+              memories={memories}
               batchStats={batchStats}
               currentUser={user}
             />

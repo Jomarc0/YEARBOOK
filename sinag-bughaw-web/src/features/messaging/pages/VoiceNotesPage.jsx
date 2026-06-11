@@ -2,14 +2,17 @@ import { useEffect, useRef, useState } from 'react';
 import { voiceNotesApi } from '@/api/messaging.api';
 import Navbar from '@/components/layout/Navbar';
 import Footer from '@/components/layout/Footer';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 
 export default function VoiceNotesPage() {
+  const [searchParams] = useSearchParams();
   const [tab,      setTab]      = useState('inbox');  // 'inbox' | 'outbox'
   const [notes,    setNotes]    = useState([]);
   const [loading,  setLoading]  = useState(true);
   const [playing,  setPlaying]  = useState(null);
   const audioRef = useRef({});
+  const noteRefs = useRef({});
+  const targetNote = searchParams.get('note');
 
   const load = (activeTab) => {
     setLoading(true);
@@ -18,6 +21,14 @@ export default function VoiceNotesPage() {
   };
 
   useEffect(() => { load(tab); }, [tab]);
+
+  useEffect(() => {
+    if (!targetNote || loading || notes.length === 0) return;
+    const timer = window.setTimeout(() => {
+      noteRefs.current[targetNote]?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 80);
+    return () => window.clearTimeout(timer);
+  }, [targetNote, loading, notes]);
 
   const togglePlay = (id, url) => {
     if (playing === id) {
@@ -156,9 +167,12 @@ export default function VoiceNotesPage() {
             {notes.map(note => {
               const other = tab === 'inbox' ? note.sender : note.recipient;
               return (
-                <div key={note.id} style={{
+                <div key={note.id} ref={(el) => { noteRefs.current[note.id] = el; }} style={{
                   background: '#fff', borderRadius: '20px', padding: '18px 22px',
-                  boxShadow: '0 4px 16px rgba(0,0,0,0.04)', border: '1px solid rgba(0,0,0,0.02)',
+                  boxShadow: String(note.id) === String(targetNote)
+                    ? '0 0 0 3px rgba(253,184,19,0.35), 0 12px 30px rgba(29,43,75,0.08)'
+                    : '0 4px 16px rgba(0,0,0,0.04)',
+                  border: String(note.id) === String(targetNote) ? '1px solid rgba(253,184,19,0.7)' : '1px solid rgba(0,0,0,0.02)',
                   display: 'flex', alignItems: 'center', gap: '14px',
                   opacity: note.status === 'rejected' ? 0.6 : 1,
                   transition: 'transform 0.15s, box-shadow 0.15s',

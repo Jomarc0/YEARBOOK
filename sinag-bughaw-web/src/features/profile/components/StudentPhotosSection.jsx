@@ -44,16 +44,17 @@ function postFromTaggedItem(item) {
   };
 }
 
-function galleryLink(item) {
+function taggedPhotoLink(item) {
   const photo = item?.photo ?? {};
   const albumId = photo.album?.id ?? photo.album_id ?? item?.album?.id ?? item?.album_id;
   const galleryId = photo.gallery_id ?? item?.gallery_id;
   const ownerId = photo.user_id ?? item?.user_id;
   const postId = item?.photo_id ?? photo.id;
 
+  if (ownerId && postId) return `/students/${ownerId}?post=${postId}`;
+  if (postId) return `/profile?post=${postId}`;
   if (albumId) return `/gallery/${albumId}`;
   if (galleryId) return `/gallery/${galleryId}`;
-  if (ownerId && postId) return `/students/${ownerId}?post=${postId}`;
   return '#';
 }
 
@@ -78,7 +79,7 @@ export default function StudentPhotosSection({ userId, compact = false, openInMo
     }
   };
 
-  useEffect(() => { if (userId) load(1); }, [userId]); // eslint-disable-line
+  useEffect(() => { if (userId) load(1); }, [userId]);
 
   // ── Loading ────────────────────────────────────────────────────────────────
   if (loading) return (
@@ -166,7 +167,7 @@ export default function StudentPhotosSection({ userId, compact = false, openInMo
                 </div>
               </button>
               ) : (
-              <Link key={key} to={galleryLink(item)} className="no-underline block">
+              <Link key={key} to={taggedPhotoLink(item)} className="no-underline block">
                 <div className="relative aspect-square rounded-xl overflow-hidden bg-[#1d2b4b]
                                 hover:scale-[1.03] hover:shadow-md transition-all duration-200">
                   {photoUrl ? (
@@ -293,7 +294,7 @@ export default function StudentPhotosSection({ userId, compact = false, openInMo
               </div>
             </button>
             ) : (
-            <Link key={key} to={galleryLink(item)} className="no-underline block">
+            <Link key={key} to={taggedPhotoLink(item)} className="no-underline block">
               <div className="relative aspect-square rounded-2xl overflow-hidden bg-[#1d2b4b]
                               shadow-sm hover:scale-[1.03] hover:shadow-lg transition-all duration-300 group">
                 {photoUrl ? (

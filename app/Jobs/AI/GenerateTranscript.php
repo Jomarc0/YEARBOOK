@@ -11,24 +11,14 @@ use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Log;
 
-/**
- * GenerateTranscript
- * ─────────────────────────────────────────────────────────────
- * Dispatched by TranscriptController::store() after audio upload.
- * Calls Groq Whisper via TranscriptionService and persists result.
- *
- * Dispatch:
- *   GenerateTranscript::dispatch($transcript);
- *
- * Queue: default (or set QUEUE_CONNECTION=database in .env)
- */
+
 class GenerateTranscript implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
     public int $tries   = 3;
-    public int $timeout = 300;   // 5 min — long speeches may take a while
-    public int $backoff = 60;    // retry after 60s on failure
+    public int $timeout = 300;   
+    public int $backoff = 60;    
 
     public function __construct(
         public readonly Transcript $transcript

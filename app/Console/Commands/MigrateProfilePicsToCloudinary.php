@@ -43,7 +43,7 @@ class MigrateProfilePicsToCloudinary extends Command
                     basename($localPath),
                     mime_content_type($localPath),
                     null,
-                    true // mark as already uploaded (test mode)
+                    true // mark as already uploaded 
                 );
 
                 // Upload to Cloudinary

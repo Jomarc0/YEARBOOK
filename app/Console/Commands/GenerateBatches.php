@@ -30,7 +30,7 @@ class GenerateBatches extends Command
             $this->newLine();
         }
 
-        // ── Step 1: Generate batch records ────────────────────────────────
+        // Step 1: Generate batch records
         $this->line('  <fg=blue>📦 Step 1:</> Scanning users for unique batch groups...');
 
         if ($isDryRun) {

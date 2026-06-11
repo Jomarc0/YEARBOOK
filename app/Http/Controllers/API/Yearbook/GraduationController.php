@@ -13,10 +13,7 @@ use Throwable;
 
 class GraduationController extends Controller
 {
-    // ─────────────────────────────────────────────────────────────────────
     // LIST ALBUMS
-    // ─────────────────────────────────────────────────────────────────────
-
     public function index(Request $request): JsonResponse
     {
         try {
@@ -53,10 +50,8 @@ class GraduationController extends Controller
         }
     }
 
-    // ─────────────────────────────────────────────────────────────────────
-    // SHOW ALBUM
-    // ─────────────────────────────────────────────────────────────────────
 
+    // SHOW ALBUM
     public function show(int $id): JsonResponse
     {
         try {
@@ -79,10 +74,7 @@ class GraduationController extends Controller
         }
     }
 
-    // ─────────────────────────────────────────────────────────────────────
     // LIST PHOTOS IN ALBUM
-    // ─────────────────────────────────────────────────────────────────────
-
     public function photos(Request $request, int $id): JsonResponse
     {
         try {

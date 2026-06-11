@@ -65,12 +65,22 @@ class PaymentController extends Controller
 
         if ($type === 'checkout_session.payment.paid') {
 
+            $sessionId         = $request->json('data.attributes.data.id');
             $sessionAttributes = $request->json('data.attributes.data.attributes');
             $meta              = $sessionAttributes['metadata']          ?? [];
             $userId            = $meta['user_id']                        ?? null;
             $planKey           = $meta['plan']                           ?? 'standard_monthly';
-            $intentId          = $sessionAttributes['payment_intent_id'] ?? null;
-            $amountPaid        = $sessionAttributes['amount_due']        ?? null;
+            $plan              = $this->plans[$planKey] ?? $this->plans['standard_monthly'];
+            $intentId          = $sessionAttributes['payment_intent_id']
+                ?? data_get($sessionAttributes, 'payment_intent.id')
+                ?? data_get($sessionAttributes, 'payments.0.id')
+                ?? $sessionId;
+            $amountPaid        = $sessionAttributes['amount_paid']
+                ?? $sessionAttributes['amount_due']
+                ?? $sessionAttributes['amount_total']
+                ?? data_get($sessionAttributes, 'payments.0.attributes.amount')
+                ?? data_get($sessionAttributes, 'line_items.0.amount')
+                ?? $plan['amount'];
 
             Log::info('Parsed webhook data', [
                 'user_id'   => $userId,
@@ -84,7 +94,6 @@ class PaymentController extends Controller
                 return response()->json(['received' => true]);
             }
 
-            $plan      = $this->plans[$planKey] ?? $this->plans['standard_monthly'];
             $expiresAt = $plan['duration'] === 'year'
                 ? now()->addYear()
                 : now()->addMonth();
@@ -101,7 +110,7 @@ class PaymentController extends Controller
                 ]
             );
 
-            // ── Notify the user ───────────────────────────────────────────────
+            // Notify the user 
             $user      = User::find($userId);
             $planLabel = ucwords(str_replace('_', ' ', $planKey)); // e.g. "Premium Monthly"
             $expiry    = $expiresAt->format('F d, Y');             // e.g. "June 29, 2026"

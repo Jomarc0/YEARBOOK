@@ -11,8 +11,13 @@ class Message extends Model
         'sender_id',
         'receiver_id',
         'body',
+        'image_path',
         'is_read',
         'read_at',
+    ];
+
+    protected $appends = [
+        'image_url',
     ];
 
     protected $casts = [
@@ -20,7 +25,7 @@ class Message extends Model
         'read_at' => 'datetime',
     ];
 
-    // ── Relationships ─────────────────────────────────────────────────────────
+    // Relationships 
 
     public function sender()
     {
@@ -32,8 +37,23 @@ class Message extends Model
         return $this->belongsTo(User::class, 'receiver_id');
     }
 
-    // ── Scopes ────────────────────────────────────────────────────────────────
+    public function getImageUrlAttribute(): ?string
+    {
+        if (! $this->image_path) {
+            return null;
+        }
 
+        if (str_starts_with($this->image_path, 'http://') || str_starts_with($this->image_path, 'https://')) {
+            return $this->image_path;
+        }
+
+        $baseUrl = rtrim((string) config('filesystems.disks.public.url', url('/storage')), '/');
+        $path = ltrim($this->image_path, '/');
+
+        return "{$baseUrl}/{$path}";
+    }
+
+    //  Scopes 
     /**
      * Messages in a thread between two users (either direction).
      */

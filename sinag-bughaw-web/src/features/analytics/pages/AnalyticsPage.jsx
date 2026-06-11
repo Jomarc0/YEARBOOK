@@ -3,6 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import Navbar from '@/components/layout/Navbar';
 import Footer from '@/components/layout/Footer';
 import { useAnalyticsDashboard } from '../hooks/useAnalytics';
+import { useAuth } from '@/features/auth/hooks/useAuth';
 import { recordProfileView } from '../../../api/analytics.api';
 import {
   trackPageView,
@@ -67,7 +68,9 @@ function Skeleton({ height = 16, radius = 8 }) {
   );
 }
 
-function AlumniCard({ person, rank, badge, onClick }) {
+function AlumniCard({ person, rank, badge, onClick, currentUserId }) {
+  const isCurrentUser = currentUserId && String(person.id) === String(currentUserId);
+  const displayName = isCurrentUser ? 'You' : person.name;
   const medals = ['🥇', '🥈', '🥉'];
 
   return (
@@ -79,11 +82,11 @@ function AlumniCard({ person, rank, badge, onClick }) {
         {rank <= 3 ? medals[rank - 1] : `#${rank}`}
       </span>
 
-      <Avatar src={person.profile_picture} name={person.name} size={44} />
+      <Avatar src={person.profile_picture} name={displayName} size={44} />
 
       <div className="flex-1 min-w-0">
         <p className="m-0 text-sm font-bold text-slate-900 whitespace-nowrap overflow-hidden text-ellipsis">
-          {person.name}
+          {displayName}
         </p>
         <p className="mt-0.5 text-xs text-slate-400">
           {person.course} · {person.batch || person.graduation_year}
@@ -141,9 +144,10 @@ function EmptyState({ icon: Icon, colorClass, bgClass, title, desc }) {
   );
 }
 
-export default function AnalyticsPage({ isAuthenticated = true, currentUser = null }) {
+export default function AnalyticsPage({ isAuthenticated = true }) {
   const navigate = useNavigate();
   const location = useLocation();
+  const { user } = useAuth();
   const [tab, setTab] = useState('trending');
 
   const { summary, trending, topViewed, myStats, trend, batchmates } =
@@ -165,7 +169,7 @@ function handleTrendingClick(person) {
       return;
     }
     recordProfileView(person.id);
-    navigate(`/profile/${person.id}`);
+    openProfile(person);
   }
 
   function handleTopViewedClick(person) {
@@ -175,15 +179,46 @@ function handleTrendingClick(person) {
       return;
     }
     recordProfileView(person.id);
-    navigate(`/profile/${person.id}`);
+    openProfile(person);
   }
+
+  const topTrending = trending.data?.[0] ?? null;
+  const topViewedProfile = topViewed.data?.[0] ?? null;
+  const currentUserId = user?.id;
+  const topBatchmates = (batchmates.data?.top_profiles ?? [])
+    .filter(person => !currentUserId || String(person.id) !== String(currentUserId));
+
+  const openProfile = (person) => {
+    if (currentUserId && String(person.id) === String(currentUserId)) {
+      navigate('/profile');
+      return;
+    }
+    navigate(`/students/${person.id}`);
+  };
+  const heroStats = tab === 'trending'
+    ? [
+        { label: 'Total views this week', value: trending.data?.reduce((sum, person) => sum + Number(person.views_this_week ?? 0), 0), icon: Eye },
+        { label: 'Profiles trending', value: trending.data?.length ?? 0, icon: Flame },
+        { label: 'Top viewed count', value: topTrending?.views_this_week ?? 0, icon: BarChart2 },
+      ]
+    : tab === 'top-viewed'
+      ? [
+          { label: 'Top profile', value: topViewedProfile?.name ?? 'No data', icon: Users },
+          { label: 'Profile views', value: topViewedProfile?.views ?? 0, icon: Eye },
+          { label: 'Profiles ranked', value: topViewed.data?.length ?? 0, icon: BarChart2 },
+        ]
+      : [
+          { label: 'Personal profile views', value: myStats.data?.profile_views ?? 0, icon: Eye },
+          { label: 'Photos uploaded', value: myStats.data?.photos_uploaded ?? 0, icon: ImageIcon },
+          { label: 'Messages sent', value: myStats.data?.messages_sent ?? 0, icon: MessageSquare },
+        ];
 
   return (
     <div className="min-h-screen flex flex-col bg-slate-50 font-sans">
       <Navbar />
 
       {/* ── Hero ── */}
-      <div className="bg-gradient-to-br from-slate-900 via-indigo-950 to-indigo-900 pt-8 px-6 sm:px-10 pb-8 relative overflow-hidden">
+      <div className="bg-gradient-to-br from-[#1d2b4b] to-[#2a3d66] px-6 py-8 sm:px-10 relative overflow-hidden">
         {/* Decorative blobs */}
         <div className="absolute -top-20 -right-20 w-[360px] h-[360px] rounded-full bg-indigo-500/10 pointer-events-none blur-3xl" />
         <div className="absolute -bottom-16 -left-10 w-[280px] h-[280px] rounded-full bg-yellow-400/5 pointer-events-none blur-2xl" />
@@ -216,16 +251,12 @@ function handleTrendingClick(person) {
             {/* Summary stat pills in hero */}
             {!summary.loading && summary.data && (
               <div className="flex gap-3 flex-wrap">
-                {[
-                  { label:'Alumni',   value: summary.data.total_students, icon: Users },
-                  { label:'Photos',   value: summary.data.total_photos,   icon: ImageIcon },
-                  { label:'Messages', value: summary.data.total_messages, icon: MessageSquare },
-                ].map(s => (
+                {heroStats.map(s => (
                   <div key={s.label} className="bg-white/10 backdrop-blur-md border border-white/10 rounded-2xl px-4 py-3 flex items-center gap-2.5">
                     <s.icon className="w-4 h-4 text-yellow-400" />
-                    <div>
-                      <div className="text-lg font-extrabold text-white leading-none">
-                        {s.value?.toLocaleString() ?? '—'}
+                    <div className="min-w-0">
+                      <div className="max-w-[160px] truncate text-lg font-extrabold text-white leading-none">
+                        {typeof s.value === 'number' ? s.value.toLocaleString() : (s.value ?? '—')}
                       </div>
                       <div className="text-[11px] text-white/45 mt-1">{s.label}</div>
                     </div>
@@ -288,7 +319,7 @@ function handleTrendingClick(person) {
             ) : (
               <div className="flex flex-col gap-2.5">
                 {trending.data.map((person, i) => (
-                  <AlumniCard key={person.id} person={person} rank={i + 1} badge={person.views_this_week} onClick={() => handleTrendingClick(person)} />
+                  <AlumniCard key={person.id} person={person} rank={i + 1} badge={person.views_this_week} currentUserId={currentUserId} onClick={() => handleTrendingClick(person)} />
                 ))}
               </div>
             )}
@@ -318,7 +349,7 @@ function handleTrendingClick(person) {
             ) : (
               <div className="flex flex-col gap-2.5">
                 {topViewed.data.map((person, i) => (
-                  <AlumniCard key={person.id} person={person} rank={i + 1} badge={person.views} onClick={() => handleTopViewedClick(person)} />
+                  <AlumniCard key={person.id} person={person} rank={i + 1} badge={person.views} currentUserId={currentUserId} onClick={() => handleTopViewedClick(person)} />
                 ))}
               </div>
             )}
@@ -362,16 +393,17 @@ function handleTrendingClick(person) {
             )}
 
             {/* Top Batchmates */}
-            {batchmates.data?.top_profiles?.length > 0 && (
+            {topBatchmates.length > 0 && (
               <div className="mt-8">
                 <h3 className="m-0 mb-4 text-base font-extrabold text-slate-900">
                   Top batchmates
                 </h3>
                 <div className="flex flex-col gap-2.5">
-                  {batchmates.data.top_profiles.map((person, i) => (
+                  {topBatchmates.map((person, i) => (
                     <AlumniCard
                       key={person.id} person={person} rank={i + 1} badge={person.views}
-                      onClick={() => { recordProfileView(person.id); navigate(`/profile/${person.id}`); }}
+                      currentUserId={currentUserId}
+                      onClick={() => { recordProfileView(person.id); openProfile(person); }}
                     />
                   ))}
                 </div>

@@ -1,15 +1,15 @@
 import React, { useEffect } from 'react';
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { FontAwesome } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { colors, shadows } from '../../components/webTheme';
-import { getAppConfig, unwrap } from '../../lib/api';
+import { confirmPayment, getAppConfig, getErrorMessage, unwrap } from '../../lib/api';
 
 export default function PaymentSuccessScreen() {
   const router = useRouter();
-  const params = useLocalSearchParams<{ tier?: string }>();
+  const params = useLocalSearchParams<{ tier?: string; session_id?: string; checkout_session_id?: string }>();
   const tier = params.tier === 'standard' ? 'Standard' : 'Premium';
   const [config, setConfig] = React.useState<any>(null);
   const yearbookName = config?.yearbook_name?.replace(/\s*Digital Yearbook/i, '') || 'Sinag-Bughaw';
@@ -30,6 +30,15 @@ export default function PaymentSuccessScreen() {
 
     return () => { active = false; };
   }, []);
+
+  useEffect(() => {
+    const sessionId = params.session_id || params.checkout_session_id;
+    if (!sessionId || Array.isArray(sessionId)) return;
+
+    confirmPayment(sessionId).catch((error) => {
+      Alert.alert('Payment confirmation pending', getErrorMessage(error, 'Your payment succeeded, but confirmation is still pending. Pull down your subscription page to refresh.'));
+    });
+  }, [params.checkout_session_id, params.session_id]);
 
   return (
     <SafeAreaView style={styles.container}>

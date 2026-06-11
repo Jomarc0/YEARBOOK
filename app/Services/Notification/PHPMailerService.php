@@ -33,7 +33,7 @@ class PHPMailerService
         $this->mailer->CharSet = 'UTF-8';
     }
 
-    // ── 1. OTP (login / registration) ─────────────────────────────────
+    // 1. OTP (login / registration)
 
     public function sendOtp(string $toEmail, string $toName, string $otp): bool
     {
@@ -51,7 +51,7 @@ class PHPMailerService
         }
     }
 
-    // ── 2. Password Reset OTP ─────────────────────────────────────────
+    // 2. Password Reset OTP 
 
     public function sendPasswordReset(string $toEmail, string $toName, string $otp): bool
     {
@@ -69,7 +69,7 @@ class PHPMailerService
         }
     }
 
-    // ── 3. Announcement ───────────────────────────────────────────────
+    // 3. Announcement
 
     public function sendAnnouncement(
         string $toEmail,
@@ -93,7 +93,7 @@ class PHPMailerService
         }
     }
 
-    // ── 4. Graduation Reminder ────────────────────────────────────────
+    // 4. Graduation Reminder 
 
     public function sendGraduationReminder(
         string $toEmail,
@@ -117,7 +117,7 @@ class PHPMailerService
         }
     }
 
-    // ── 5. Photo Tagged ───────────────────────────────────────────────
+    // 5. Photo Tagged
 
     public function sendTaggedNotification(
         string $toEmail,
@@ -142,7 +142,7 @@ class PHPMailerService
         }
     }
 
-    // ── 6. New Message ────────────────────────────────────────────────
+    // 6. New Message 
 
     public function sendNewMessageNotification(
         string $toEmail,
@@ -166,7 +166,7 @@ class PHPMailerService
         }
     }
 
-    // ── 7. Subscription Confirmed ─────────────────────────────────────
+    // 7. Subscription Confirmed
 
     public function sendSubscriptionConfirmed(
         string $toEmail,
@@ -189,7 +189,7 @@ class PHPMailerService
         }
     }
 
-    // ══ Templates ══════════════════════════════════════════════════════
+    // Templates 
 
     private function header(): string
     {

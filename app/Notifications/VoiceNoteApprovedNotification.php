@@ -1,6 +1,4 @@
 <?php
-// ── VoiceNoteApprovedNotification.php ──────────────────────────────────────────
-// Sent to the RECIPIENT when admin approves a voice note
 
 namespace App\Notifications;
 

@@ -10,26 +10,6 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
-/**
- * App\Models\Gallery
- *
- * Central upload model — one row per logical "photo/item".
- * Physical files live in gallery_media (has-many).
- *
- * @property int         $id
- * @property int         $album_id
- * @property int|null    $user_id
- * @property string|null $caption
- * @property string      $status            pending | approved | rejected
- * @property string      $visibility        public | private
- * @property array|null  $ai_metadata
- * @property int         $sort_order
- * @property string|null $rejection_reason
- * @property \Carbon\Carbon|null $approved_at
- * @property int|null    $approved_by
- * @property \Carbon\Carbon|null $rejected_at
- * @property int|null    $rejected_by
- */
 class Gallery extends Model implements AnalyzablePhoto
 {
     use HasFactory, SoftDeletes;
@@ -60,7 +40,7 @@ class Gallery extends Model implements AnalyzablePhoto
         'rejected_by' => 'integer',
     ];
 
-    // ─── Relationships ────────────────────────────────────────────────────────
+    // Relationships 
 
     public function album(): BelongsTo
     {
@@ -97,7 +77,7 @@ class Gallery extends Model implements AnalyzablePhoto
                     ->limit(1);
     }
 
-    // ─── Scopes ───────────────────────────────────────────────────────────────
+    // Scopes 
 
     public function scopeApproved(Builder $query): Builder
     {
@@ -114,8 +94,7 @@ class Gallery extends Model implements AnalyzablePhoto
         return $query->where('status', 'pending');
     }
 
-    // ─── Helpers ──────────────────────────────────────────────────────────────
-
+    // Helpers 
     public function isApproved(): bool
     {
         return $this->status === 'approved';

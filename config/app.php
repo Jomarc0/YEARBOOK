@@ -9,8 +9,7 @@ return [
     'debug' => (bool) env('APP_DEBUG', false),
 
     'url' => env('APP_URL', 'http://localhost'),
-
-    // ✅ ADDED: Used by SocialAuthController to redirect back to React after Google login
+    
     'frontend_url' => env('FRONTEND_URL', 'http://localhost:5173'),
 
     'timezone' => 'UTC',

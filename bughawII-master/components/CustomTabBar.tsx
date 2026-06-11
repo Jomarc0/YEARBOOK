@@ -9,12 +9,12 @@ import { colors } from "./webTheme";
 import { fetchCurrentUser, imageUrl } from "../lib/api";
 import { Image } from "expo-image";
 
-const VISIBLE_TABS = ["home", "directory", "discovery", "gallery", "profile"];
+const VISIBLE_TABS = ["home", "directory", "gallery", "discovery", "profile"];
 const TAB_ICONS: Record<string, any> = {
   home: "home",
   directory: "users",
-  discovery: "compass",
   gallery: "image",
+  discovery: "compass",
   profile: "th-large",
 };
 
@@ -128,8 +128,16 @@ export const CustomTabBar = ({
             </TouchableOpacity>
 
             <View style={styles.divider} />
+            <SheetRow icon="users" label="Directory" onPress={() => go("/directory")} />
             <SheetRow icon="briefcase" label="Faculty" onPress={() => go("/faculty")} />
-            <SheetRow icon="graduation-cap" label="Sections" onPress={() => go("/sections")} />
+            <SheetRow icon="graduation-cap" label="Batch" onPress={() => go("/sections")} />
+            <SheetRow icon="compass" label="Discovery" onPress={() => go("/discovery")} />
+            <SheetRow icon="bar-chart" label="Analytics" onPress={() => go("/analytics")} />
+            <SheetRow icon="address-card" label="Alumni Tracker" onPress={() => go("/alumni")} />
+            <View style={styles.divider} />
+            <SheetRow icon="bullhorn" label="Announcements" onPress={() => go("/announcements")} />
+            <SheetRow icon="bell" label="Notifications" onPress={() => go("/notifications")} />
+            <SheetRow icon="comments" label="Messages" onPress={() => go("/messages")} />
             <View style={styles.divider} />
             <SheetRow icon="gear" label="Settings" onPress={() => go({ pathname: "/profile", params: { sheet: "settings" } } as any)} />
           </View>

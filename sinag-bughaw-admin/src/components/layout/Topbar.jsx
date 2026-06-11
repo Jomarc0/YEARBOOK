@@ -13,6 +13,8 @@ export default function Topbar() {
 
   const displayName = admin?.name ?? "Admin";
   const displayRole = isSuperAdmin ? "Super Admin" : "Admin";
+  const photoUrl = admin?.profile_photo ?? admin?.profile_picture ?? admin?.avatar ?? admin?.photo ?? null;
+  const initials = displayName.trim().slice(0, 1).toUpperCase() || "A";
 
   return (
     <header className="sticky top-0 z-20 flex h-[72px] items-center justify-between gap-4 border-b border-slate-200/80 bg-white/90 px-6 backdrop-blur-md">
@@ -34,9 +36,17 @@ export default function Topbar() {
               {displayRole}
             </div>
           </div>
-          <div className={`grid h-10 w-10 place-items-center rounded-xl border ${isSuperAdmin ? "border-violet-200 bg-violet-100 text-violet-700" : "border-indigo-200 bg-indigo-50 text-indigo-700"}`}>
-            <Icon name={isSuperAdmin ? "crown" : "user"} className="h-4 w-4" />
-          </div>
+          {photoUrl ? (
+            <img
+              src={photoUrl}
+              alt={displayName}
+              className="h-10 w-10 rounded-xl border border-indigo-200 object-cover"
+            />
+          ) : (
+            <div className={`grid h-10 w-10 place-items-center rounded-full border text-sm font-black ${isSuperAdmin ? "border-violet-200 bg-violet-100 text-violet-700" : "border-indigo-200 bg-indigo-100 text-indigo-700"}`}>
+              {initials}
+            </div>
+          )}
         </div>
       </div>
     </header>

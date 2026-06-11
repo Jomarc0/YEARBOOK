@@ -26,7 +26,6 @@ class MemoryReminderNotification extends Notification implements ShouldQueue
         return $channels;
     }
 
-    // ── In-app / DB ───────────────────────────────────────────────────────
 
     public function toArray(object $notifiable): array
     {
@@ -43,15 +42,14 @@ class MemoryReminderNotification extends Notification implements ShouldQueue
         ];
     }
 
-    // ── Broadcast (Reverb → NotificationBell.jsx) ─────────────────────────
+    // Broadcast (Reverb → NotificationBell.jsx) 
 
     public function toBroadcast(object $notifiable): BroadcastMessage
     {
         return new BroadcastMessage($this->toArray($notifiable));
     }
 
-    // ── Mail ──────────────────────────────────────────────────────────────
-
+    // Mail 
     public function toMail(object $notifiable): MailMessage
     {
         $onThisDay = $this->digest['on_this_day'];
@@ -65,7 +63,7 @@ class MemoryReminderNotification extends Notification implements ShouldQueue
             ->line('These memories are waiting for you on your Pioneer Yearbook dashboard.');
     }
 
-    // ── Helpers ───────────────────────────────────────────────────────────
+    // Helpers 
 
     private function buildBody(): string
     {

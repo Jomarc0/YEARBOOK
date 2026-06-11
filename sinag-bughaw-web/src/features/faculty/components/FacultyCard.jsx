@@ -3,40 +3,36 @@ import { useState } from 'react';
 export default function FacultyCard({ faculty }) {
   const [imgError, setImgError] = useState(false);
 
-  // Fallback to a generated avatar when no image is provided or it fails to load
-  const avatarUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(faculty.name)}&background=1d2b4b&color=fdb813&bold=true&size=300`;
-  const src = (!faculty.image_url || imgError) ? avatarUrl : faculty.image_url;
+  const initials = faculty.name?.trim().split(/\s+/).map(part => part[0]?.toUpperCase() || '').slice(0, 2).join('');
+  const hasPhoto = !!faculty.image_url && !imgError;
 
   return (
-    <article
-      className="group relative overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition hover:-translate-y-1 hover:shadow-xl hover:shadow-[#1d2b4b]/10"
-    >
-      {/* Top accent bar */}
-      <div className="h-1.5 w-full bg-[#fdb813]" />
-
-      {/* Avatar */}
-      <div className="flex justify-center px-5 pt-6">
-        <div className="h-20 w-20 overflow-hidden rounded-2xl border border-slate-200 bg-[#1d2b4b] shadow-inner">
-          <img
-            src={src}
-            alt={faculty.name}
-            loading="lazy"
-            onError={() => setImgError(true)}
-            className="h-full w-full object-cover"
-          />
+    <article className="group relative overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition hover:-translate-y-1 hover:shadow-xl hover:shadow-[#1d2b4b]/10">
+      <div className="flex justify-center bg-gradient-to-br from-[#1d2b4b] to-[#2a3d66] px-5 py-7">
+        <div className="h-28 w-28 overflow-hidden rounded-full border-4 border-[#fdb813] bg-[#1d2b4b] shadow-xl">
+          {hasPhoto ? (
+            <img
+              src={faculty.image_url}
+              alt={faculty.name}
+              loading="lazy"
+              onError={() => setImgError(true)}
+              className="h-full w-full object-cover"
+            />
+          ) : (
+            <div className="grid h-full w-full place-items-center text-3xl font-black text-[#fdb813]">
+              {initials || 'NU'}
+            </div>
+          )}
         </div>
       </div>
 
-      {/* Info */}
       <div className="px-5 pb-5 pt-4 text-center">
-        {/* `position` is the aliased `title` column from the server */}
-        <span className="text-[10px] font-black uppercase tracking-[0.18em] text-[#fdb813]">
-          {faculty.position}
-        </span>
-        <h3 className="m-0 mt-2 text-base font-black text-[#1d2b4b]">{faculty.name}</h3>
+        <h3 className="m-0 text-base font-black uppercase tracking-wide text-[#1d2b4b]">{faculty.name}</h3>
+        <p className="m-0 mt-1 text-sm font-bold text-slate-700">{faculty.position}</p>
+        <p className="m-0 mt-0.5 text-xs font-semibold text-[#b77905]">{faculty.department}</p>
 
         {faculty.bio && (
-          <p className="mx-auto mt-3 line-clamp-3 max-w-[220px] text-xs italic leading-relaxed text-slate-500">"{faculty.bio}"</p>
+          <p className="mx-auto mt-4 line-clamp-4 max-w-[240px] text-sm leading-relaxed text-slate-500">{faculty.bio}</p>
         )}
 
         {faculty.email && (

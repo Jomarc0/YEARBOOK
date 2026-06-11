@@ -16,13 +16,13 @@ class IntegrationServiceProvider extends ServiceProvider
 {
     public function register(): void
     {
-        // ── Storage ───────────────────────────────────────────────────────
+        // Storage 
         $this->app->singleton(
             StorageServiceInterface::class,
             CloudinaryService::class
         );
 
-        // ── Face Recognition ──────────────────────────────────────────────
+        //Face Recognition ─
         $this->app->singleton(
             FaceRecognition::class,
             fn () => new AwsRekognitionFaceRecognition([
@@ -32,7 +32,7 @@ class IntegrationServiceProvider extends ServiceProvider
                 'collection' => env('AWS_REKOGNITION_COLLECTION', 'nu-lipa-yearbook'),
             ])
         );
-        // ── Transcription (Groq Whisper) ─────────────────────────────────
+        // Transcription (Groq Whisper) 
         $this->app->singleton(
             TranscriptionServiceInterface::class,
             TranscriptionService::class

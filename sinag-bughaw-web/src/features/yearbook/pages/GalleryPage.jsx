@@ -9,7 +9,7 @@ import BulkUploadZone from '@/features/yearbook/components/BulkUploadZone';
 import StorageUsageBar from '@/features/yearbook/components/StorageUsageBar';
 import Navbar from '@/components/layout/Navbar';
 import Footer from '@/components/layout/Footer';
-import { imageUrl, avatarUrl } from '@/utils/imageUrl';
+import { imageUrl } from '@/utils/imageUrl';
 import ProtectedImage from '@/components/ui/ProtectedImage';
 import { ContentOwnershipBanner } from '@/components/ui/CopyrightLabel';
 
@@ -30,10 +30,10 @@ const TABS = [
   { key: 'general',               label: 'Gallery',       icon: 'fa-photo-film'         },
   { key: 'graduation:photos',     label: 'Graduation',    icon: 'fa-graduation-cap'     },
   { key: 'graduation:videos',     label: 'Videos',        icon: 'fa-film'               },
+  { key: 'graduation:mass',       label: 'Baccalaureate', icon: 'fa-church'             },
   { key: 'graduation:program',    label: 'Program',       icon: 'fa-file-pdf'           },
   { key: 'graduation:invitation', label: 'Invitation',    icon: 'fa-envelope-open-text' },
   { key: 'graduation:song',       label: 'Grad Song',     icon: 'fa-music'              },
-  { key: 'graduation:mass',       label: 'Baccalaureate', icon: 'fa-church'             },
 ];
 
 const searchText = (value) => String(value ?? '').toLowerCase();
@@ -80,8 +80,61 @@ const albumMediaFiles = (album) => {
   if (files.length > 0) return files;
   return album?.photos ?? [];
 };
+const isApprovedMedia = (item) => {
+  const status = String(item?.status || item?.moderation_status || item?.approval_status || item?.pivot?.status || '').toLowerCase();
+  if (['rejected', 'denied', 'declined', 'pending', 'unapproved', 'hidden'].includes(status)) return false;
+  if (item?.is_approved === false || item?.approved === false || item?.is_public === false) return false;
+  return status ? ['approved', 'published', 'active', 'public'].includes(status) : true;
+};
+const mediaFileRef = (file) => file?.url
+  || file?.file_path
+  || file?.media_url
+  || file?.thumbnail_url
+  || file?.preview_url
+  || file?.path
+  || file?.secure_url
+  || file?.src
+  || '';
+const isImageMedia = (url = '') => /\.(jpg|jpeg|png|webp|gif)(\?|$)/i.test(String(url));
 const albumMediaCount = (album) => Number(albumMediaFiles(album).length || album?.file_count || album?.media_count || album?.photos_count || (album?.media_url || album?.file_path ? 1 : 0));
-const primaryAlbumMedia = (album) => album?.media_url || album?.file_path || albumMediaFiles(album)[0]?.file_path || album?.cover_photo_url || album?.thumbnail_url || '';
+const primaryAlbumMedia = (album) => mediaFileRef(albumMediaFiles(album).find(isApprovedMedia)) || '';
+const albumCoverMedia = (album) => {
+  const firstPhoto = albumMediaFiles(album).find(file => {
+    const ref = mediaFileRef(file);
+    return isApprovedMedia(file) && !/\.(mp4|mov|webm|mkv|mp3|wav|m4a)(\?|$)/i.test(String(ref));
+  });
+  return mediaFileRef(firstPhoto) || '';
+};
+const albumNeedsCoverHydration = (album) => !albumCoverMedia(album) && albumMediaCount(album) > 0;
+
+function AlbumCover({ album, alt, icon = 'fa-images' }) {
+  const [loading, setLoading] = useState(true);
+  const [failed, setFailed] = useState(false);
+  const cover = albumCoverMedia(album);
+  const src = cover ? imageUrl(cover) : '';
+
+  if (!src || failed) {
+    return (
+      <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-[#1B2A4A] via-[#253968] to-slate-950 text-[#F5A623]/75">
+        <i className={`fas ${icon} text-5xl`} />
+      </div>
+    );
+  }
+
+  return (
+    <div className="relative h-full w-full">
+      {loading && <div className="absolute inset-0 z-10 bg-gray-200 animate-pulse" />}
+      <img
+        src={src}
+        alt={alt}
+        loading="lazy"
+        onLoad={() => setLoading(false)}
+        onError={() => { setLoading(false); setFailed(true); }}
+        className="h-full w-full object-cover"
+      />
+    </div>
+  );
+}
 
 const matchTabKey = (photo) => {
   const category = photo?.album?.category ?? photo?.category;
@@ -480,21 +533,13 @@ function TranscriptModal({ photoId, albumId, videoTitle, onClose }) {
 
 // ─── Grad content cards ───────────────────────────────────────────────────────
 function GradAlbumCard({ album }) {
-  const cover = album.photos?.[0]?.file_path;
   return (
     <Link to={`/graduation/archive/${album.id}`} className="no-underline block group">
       <div className="rounded-3xl overflow-hidden bg-white border border-black/[0.04]
                       shadow-sm transition-all duration-300
                       group-hover:-translate-y-2 group-hover:shadow-xl">
         <div className="h-[220px] bg-gradient-to-br from-[#1d2b4b] to-[#2a3d66] relative overflow-hidden">
-          {cover
-            ? <ProtectedImage src={cover} alt={album.title} watermark={false} showCopyright={false}
-                imgStyle={{ width: '100%', height: '100%', objectFit: 'cover', opacity: 0.9 }}
-                style={{ width: '100%', height: '100%' }} />
-            : <div className="w-full h-full flex items-center justify-center">
-                <i className="fas fa-images text-5xl text-[#fdb813]/40" />
-              </div>
-          }
+          <AlbumCover album={album} alt={album.title} icon="fa-images" />
           <div className="absolute bottom-3 right-3 bg-[#fdb813]/95 text-[#1d2b4b] text-[11px] font-bold px-2.5 py-1 rounded-full">
             {album.photos_count ?? 0} photos
           </div>
@@ -611,11 +656,24 @@ function GradVideoCard({ video, photoId, albumId, albumTitle, badge }) {
 
 function GradProgramCard({ album, isPremium = false }) {
   const mediaUrl = primaryAlbumMedia(album);
+  const imageProgram = isImageMedia(mediaUrl);
   return (
     <div className="rounded-3xl bg-white p-6 flex gap-5 items-start border border-black/[0.04] shadow-sm">
-      <div className="w-14 h-14 rounded-2xl bg-[#fdb813]/[0.12] flex items-center justify-center shrink-0">
-        <i className="fas fa-file-pdf text-2xl text-[#fdb813]" />
-      </div>
+      {imageProgram ? (
+        <div className="w-20 h-20 rounded-2xl overflow-hidden bg-[#1d2b4b] shrink-0">
+          <ProtectedImage
+            src={mediaUrl}
+            alt={album.title}
+            watermarkText="© NU Lipa"
+            style={{ width: '100%', height: '100%' }}
+            imgStyle={{ width: '100%', height: '100%', objectFit: 'cover' }}
+          />
+        </div>
+      ) : (
+        <div className="w-14 h-14 rounded-2xl bg-[#fdb813]/[0.12] flex items-center justify-center shrink-0">
+          <i className="fas fa-file-pdf text-2xl text-[#fdb813]" />
+        </div>
+      )}
       <div className="flex-1 min-w-0">
         <h4 className="font-extrabold text-[15px] text-[#1d2b4b] mb-1">{album.title}</h4>
         {album.description && <p className="text-sm text-slate-500 mb-2.5">{album.description}</p>}
@@ -853,18 +911,39 @@ export default function GalleryPage() {
     dragHandlers: uploadHook.dragProps,
   };
 
+  const hydrateAlbumCovers = async (list, tab) => {
+    const albumsToHydrate = list.filter(albumNeedsCoverHydration);
+    if (!albumsToHydrate.length) return list;
+
+    const api = tab === 'general' ? galleryApi : graduationApi;
+    const hydrated = await Promise.all(albumsToHydrate.map(album =>
+      api.show(album.id)
+        .then(({ data }) => ({ id: album.id, detail: data.data ?? data ?? {} }))
+        .catch(() => ({ id: album.id, detail: null }))
+    ));
+    const detailMap = new Map(hydrated.filter(item => item.detail).map(item => [item.id, item.detail]));
+
+    return list.map(album => {
+      const detail = detailMap.get(album.id);
+      return detail ? { ...album, ...detail } : album;
+    });
+  };
+
   const loadAlbums = (tab = activeTab) => {
     setLoading(true);
     const req = tab === 'general'
       ? galleryApi.list('general', null)
       : graduationApi.list(apiCategoryForTab(tab));
     req
-      .then(({ data }) => setAlbums(data.data ?? data ?? []))
+      .then(async ({ data }) => {
+        const list = data.data ?? data ?? [];
+        setAlbums(await hydrateAlbumCovers(list, tab));
+      })
       .catch(() => setAlbums([]))
       .finally(() => setLoading(false));
   };
 
-  useEffect(() => { loadAlbums(activeTab); }, [activeTab]); // eslint-disable-line
+  useEffect(() => { loadAlbums(activeTab); }, [activeTab]);
 
   useEffect(() => {
     const q = searchQuery.trim().toLowerCase();
@@ -1033,7 +1112,7 @@ export default function GalleryPage() {
       <Navbar />
 
       {/* ── Hero ── */}
-      <header className="bg-gradient-to-br from-[#1d2b4b] to-[#2a3d66] px-[8%] pt-10 pb-10 text-center text-white rounded-b-[28px]">
+      <header className="min-h-[140px] bg-gradient-to-br from-[#1d2b4b] to-[#2a3d66] px-[8%] py-8 text-center text-white rounded-b-[28px]">
         <p className="text-[11px] font-bold tracking-[0.15em] uppercase text-white/50 mb-2.5">{heroLabel}</p>
         <h1 className="text-3xl sm:text-4xl font-black tracking-tight mb-2">{heroTitle}</h1>
         <p className="text-sm text-white/70 max-w-[520px] mx-auto mb-4 leading-relaxed font-light">
@@ -1214,20 +1293,7 @@ export default function GalleryPage() {
                   to={tab.key === 'general' ? `/gallery/${album.id}` : `/graduation/archive/${album.id}`}
                   className="block no-underline text-inherit bg-white rounded-[24px] overflow-hidden border border-slate-100 hover:-translate-y-1.5 hover:shadow-xl transition-all">
                   <div className="h-[190px] bg-slate-100 relative overflow-hidden">
-                    {album.cover_photo_url || album.thumbnail_url || album.media_url ? (
-                      <ProtectedImage
-                        src={album.cover_photo_url || album.thumbnail_url || album.media_url}
-                        alt={album.title}
-                        watermark={false}
-                        showCopyright={false}
-                        style={{ width: '100%', height: '100%' }}
-                        imgStyle={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                      />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center text-5xl bg-gradient-to-br from-[#e8edf5] to-[#dbe3f0]">
-                        <i className={`fas ${tab.icon} text-slate-400`} />
-                      </div>
-                    )}
+                    <AlbumCover album={album} alt={album.title} icon={tab.icon} />
                     <span className="absolute top-3 right-3 bg-[#1d2b4b] text-white text-[11px] font-black px-3 py-1.5 rounded-xl">
                       <i className={`fas ${tab.icon} text-[#fdb813] mr-1.5`} />{tab.label}
                     </span>
@@ -1275,13 +1341,7 @@ export default function GalleryPage() {
                                    border border-slate-100 hover:-translate-y-2.5 hover:shadow-2xl
                                    transition-all duration-300">
                         <div className="h-[240px] bg-slate-100 relative overflow-hidden">
-                          {album.cover_photo_url
-                            ? <ProtectedImage src={album.cover_photo_url} alt={album.title} watermark={false}
-                                showCopyright={false} style={{ width: '100%', height: '100%' }}
-                                imgStyle={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                            : <div className="w-full h-full flex items-center justify-center text-5xl
-                                              bg-gradient-to-br from-[#e8edf5] to-[#dbe3f0]">📷</div>
-                          }
+                          <AlbumCover album={album} alt={album.title} icon="fa-photo-film" />
                           <div className="absolute top-3.5 right-3.5 bg-white/95 px-3 py-[5px] rounded-xl
                                           text-[11px] font-bold text-[#1d2b4b] flex items-center gap-1">
                             <i className="fas fa-photo-film text-[#fdb813]" /> {album.photos_count ?? 0} media

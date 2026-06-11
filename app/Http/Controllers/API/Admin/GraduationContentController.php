@@ -55,10 +55,7 @@ class GraduationContentController extends Controller
         private readonly FaceRecognition         $faceRecognition,
     ) {}
 
-    // =========================================================================
     // STATS
-    // =========================================================================
-
     public function stats(): JsonResponse
     {
         try {
@@ -85,10 +82,8 @@ class GraduationContentController extends Controller
         }
     }
 
-    // =========================================================================
-    // INDEX
-    // =========================================================================
 
+    // INDEX
     public function index(Request $request): JsonResponse
     {
         try {
@@ -129,9 +124,7 @@ class GraduationContentController extends Controller
         }
     }
 
-    // =========================================================================
     // SHOW
-    // =========================================================================
 
     public function show(GraduationAlbum $album): JsonResponse
     {
@@ -143,10 +136,7 @@ class GraduationContentController extends Controller
         }
     }
 
-    // =========================================================================
     // STUDENT INDEX (published only)
-    // =========================================================================
-
     public function studentIndex(Request $request): JsonResponse
     {
         try {
@@ -177,10 +167,7 @@ class GraduationContentController extends Controller
         }
     }
 
-    // =========================================================================
     // CREATE ALBUM
-    // =========================================================================
-
     public function createAlbum(Request $request): JsonResponse
     {
         $data = $request->validate([
@@ -206,10 +193,7 @@ class GraduationContentController extends Controller
         return response()->json(['data' => $album], 201);
     }
 
-    // =========================================================================
     // UPLOAD TO ALBUM
-    // =========================================================================
-
     public function uploadToAlbum(Request $request, GraduationAlbum $album): JsonResponse
     {
         $request->validate([
@@ -302,10 +286,7 @@ class GraduationContentController extends Controller
         }
     }
 
-    // =========================================================================
     // UPLOAD HELPERS
-    // =========================================================================
-
     public function uploadContent(Request $request): JsonResponse
     {
         $data = $request->validate([
@@ -474,7 +455,7 @@ class GraduationContentController extends Controller
                 'batch_id'    => 'nullable|exists:batches,id',
                 'status'      => 'in:draft,published',
                 'event_date'  => 'nullable|date',
-                'program'     => 'required|file|mimes:pdf|max:20480',
+                'program'     => 'required|file|mimes:pdf,jpg,jpeg,png,webp|max:20480',
             ]);
 
             $album      = $this->getOrCreateAlbum($request, 'program');
@@ -556,10 +537,7 @@ class GraduationContentController extends Controller
         }
     }
 
-    // =========================================================================
     // UPDATE
-    // =========================================================================
-
     public function update(Request $request, GraduationAlbum $album): JsonResponse
     {
         try {
@@ -586,10 +564,7 @@ class GraduationContentController extends Controller
         }
     }
 
-    // =========================================================================
     // PUBLISH
-    // =========================================================================
-
     public function publish(GraduationAlbum $album): JsonResponse
     {
         try {
@@ -601,10 +576,7 @@ class GraduationContentController extends Controller
         }
     }
 
-    // =========================================================================
     // ARCHIVE
-    // =========================================================================
-
     public function archiveContent(GraduationAlbum $album): JsonResponse
     {
         try {
@@ -616,17 +588,7 @@ class GraduationContentController extends Controller
         }
     }
 
-    // =========================================================================
     // DESTROY — soft delete only
-    //
-    // Previously: hard-deleted Transcript + GraduationPhotos (with Cloudinary purge) + Album.
-    // Now: soft-deletes the GraduationAlbum only (sets deleted_at).
-    //
-    // Cloudinary cleanup (GraduationPhotos, Transcripts) is handled by
-    // TrashController@forceDelete when the admin permanently deletes from Trash.
-    // This preserves restorability and keeps destroy() fast and non-destructive.
-    // =========================================================================
-
     public function destroy(GraduationAlbum $album): JsonResponse
     {
         try {
@@ -639,10 +601,7 @@ class GraduationContentController extends Controller
         }
     }
 
-    // =========================================================================
     // PRIVATE HELPERS
-    // =========================================================================
-
     private function getOrCreateAlbum(Request $request, string $category): GraduationAlbum
     {
         if ($request->filled('album_id')) {
@@ -709,7 +668,7 @@ class GraduationContentController extends Controller
             'photos', 'toga', 'invitations', 'messages' => 'image/jpeg',
             'videos', 'mass', 'highlights'              => 'video/mp4',
             'songs'                                      => 'audio/mpeg',
-            'program'                                    => 'application/pdf',
+            'program'                                    => 'image/jpeg',
             default                                      => 'application/octet-stream',
         };
     }

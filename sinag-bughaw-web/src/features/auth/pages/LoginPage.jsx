@@ -5,10 +5,17 @@ import { authApi, consentApi } from '@/api/auth.api';
 import ConsentModal             from '../components/ConsentModal';
 
 const STATS = [
+  // TODO before launch: replace these static stats with real API counts from the backend.
   { value: '12,500+', label: 'Graduates' },
   { value: '35+',     label: 'Programs'  },
   { value: '50k+',    label: 'Photos'    },
 ];
+
+const maskEmail = (value) => {
+  const [local, domain] = value.split('@');
+  if (!local || !domain) return value;
+  return `${local[0]}${'*'.repeat(Math.max(local.length - 1, 4))}@${domain}`;
+};
 
 export default function LoginPage() {
   const { loginCredentials, fetchUser } = useAuth();
@@ -140,10 +147,10 @@ export default function LoginPage() {
       </div>
 
       {/* ── RIGHT PANEL ── */}
-      <div className="w-full lg:w-[55%] flex flex-col bg-[#f8fafc] animate-[slideRight_0.6s_ease]">
+      <div className="relative w-full lg:w-[55%] min-h-screen flex items-center justify-center bg-[#f8fafc] animate-[slideRight_0.6s_ease]">
 
         {/* Top bar */}
-        <div className="px-8 sm:px-14 lg:px-16 pt-8">
+        <div className="absolute left-0 right-0 top-0 px-8 sm:px-14 lg:px-16 pt-8">
           {step === 'form' ? (
             <Link to="/" className="inline-flex items-center gap-2.5 text-slate-400 hover:text-[#1d2b4b] text-sm font-semibold no-underline transition-colors group w-fit">
               <div className="w-8 h-8 rounded-full bg-white shadow-sm flex items-center justify-center group-hover:bg-[#1d2b4b] group-hover:text-white transition-all">
@@ -163,7 +170,7 @@ export default function LoginPage() {
         </div>
 
         {/* Centered form area */}
-        <div className="flex-1 flex flex-col items-center justify-center px-8 sm:px-14 lg:px-16 py-10">
+        <div className="w-full flex flex-col items-center justify-center px-8 sm:px-14 lg:px-16 py-10">
 
           {/* Mobile logo */}
           <div className="flex items-center gap-3 mb-8 lg:hidden self-start">
@@ -179,9 +186,9 @@ export default function LoginPage() {
             {/* ── STEP 1: Login form ── */}
             {step === 'form' && (
               <div className="animate-[slideUp_0.35s_ease]">
-                {/* Icon + heading */}
-                <div className="w-12 h-12 rounded-2xl bg-indigo-50 text-[#3f51b5] flex items-center justify-center text-xl mb-5 shadow-sm">
-                  <i className="fas fa-lock" aria-hidden="true" />
+                <div className="flex items-center gap-2 mb-5">
+                  <img src="/images/NU_logo.png" alt="NU Lipa" className="h-7 w-7 object-contain" />
+                  <span className="text-[11px] font-semibold text-slate-500">National University Lipa</span>
                 </div>
                 <h1 className="text-[1.85rem] font-black text-[#1d2b4b] mb-1 tracking-tight">Welcome Back</h1>
                 <p className="text-slate-400 text-sm mb-6">Sign in to your Sinag-Bughaw account.</p>
@@ -219,7 +226,7 @@ export default function LoginPage() {
 
                   {/* Sign in button */}
                   <button type="submit" disabled={loading}
-                    className="w-full bg-[#1d2b4b] hover:bg-[#162038] disabled:opacity-60 text-white font-bold py-3.5 rounded-xl transition-all flex items-center justify-center gap-2.5 shadow-lg cursor-pointer border-none text-sm">
+                    className="w-full bg-[#F5A623] hover:bg-[#f7b73d] disabled:opacity-60 text-[#1B2A4A] font-semibold py-3.5 rounded-xl transition-all flex items-center justify-center gap-2.5 shadow-lg cursor-pointer border-none text-sm">
                     {loading ? <><span>Sending OTP…</span><Spinner /></> : <><span>Sign In</span><i className="fas fa-arrow-right text-xs" aria-hidden="true" /></>}
                   </button>
                 </form>
@@ -258,12 +265,12 @@ export default function LoginPage() {
               <div className="animate-[slideUp_0.35s_ease]">
 
                 {/* Icon + heading */}
-                <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center text-xl mb-5 shadow-sm">
+                <div className="w-12 h-12 rounded-2xl bg-[#1B2A4A] text-[#F5A623] flex items-center justify-center text-xl mb-5 shadow-sm">
                   <i className="fas fa-envelope-open-text" aria-hidden="true" />
                 </div>
                 <h1 className="text-[1.85rem] font-black text-[#1d2b4b] mb-1 tracking-tight">Check Your Email</h1>
                 <p className="text-slate-400 text-sm mb-1">We sent a 6-digit verification code to:</p>
-                <p className="text-[#3f51b5] font-bold text-sm mb-6">{email}</p>
+                <p className="text-[#3f51b5] font-bold text-sm mb-6">{maskEmail(email)}</p>
 
                 {error && <ErrorBanner message={error} />}
 
@@ -288,17 +295,17 @@ export default function LoginPage() {
                         onKeyDown={e => handleOtpKeyDown(i, e)}
                         className={`w-12 h-12 text-center text-lg font-black bg-white border-2 rounded-xl outline-none transition-all shadow-sm
                           ${digit
-                            ? 'border-[#3f51b5] bg-indigo-50 text-[#1d2b4b]'
+                            ? 'border-amber-400 bg-indigo-50 text-[#1d2b4b]'
                             : 'border-slate-200 text-slate-300'
                           }
-                          focus:border-[#3f51b5] focus:bg-indigo-50 focus:ring-4 focus:ring-[#3f51b5]/10`}
+                          focus:border-amber-400 focus:bg-indigo-50 focus:ring-1 focus:ring-amber-400`}
                       />
                     ))}
                   </div>
 
                   {/* Verify button */}
                   <button type="submit" disabled={loading}
-                    className="w-full bg-[#1d2b4b] hover:bg-[#162038] disabled:opacity-60 text-white font-bold py-3.5 rounded-xl transition-all flex items-center justify-center gap-2.5 shadow-lg cursor-pointer border-none text-sm">
+                    className="w-full bg-[#F5A623] hover:bg-[#f7b73d] disabled:opacity-60 text-[#1B2A4A] font-semibold py-3.5 rounded-xl transition-all flex items-center justify-center gap-2.5 shadow-lg cursor-pointer border-none text-sm">
                     {loading
                       ? <><span>Verifying…</span><Spinner /></>
                       : <><span>Verify & Sign In</span><i className="fas fa-check text-xs" aria-hidden="true" /></>}

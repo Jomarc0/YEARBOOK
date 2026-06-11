@@ -17,7 +17,7 @@ class AlumniTrackerController extends Controller
         private PageResolverService $pageResolver
     ) {}
 
-    // ── List ──────────────────────────────────────────────────────────────────
+    // List 
 
     public function index(Request $request): JsonResponse
     {
@@ -48,7 +48,7 @@ class AlumniTrackerController extends Controller
         ]);
     }
 
-    // ── Single ────────────────────────────────────────────────────────────────
+    // Single
 
     public function show(int $id): JsonResponse
     {
@@ -62,7 +62,7 @@ class AlumniTrackerController extends Controller
         ]);
     }
 
-    // ── Own profile ───────────────────────────────────────────────────────────
+    // Own profile 
 
     public function me(): JsonResponse
     {
@@ -75,8 +75,7 @@ class AlumniTrackerController extends Controller
         ]);
     }
 
-    // ── Update career ─────────────────────────────────────────────────────────
-
+    // Update career 
     public function updateCareer(Request $request): JsonResponse
     {
         $validated = $request->validate([
@@ -101,7 +100,7 @@ class AlumniTrackerController extends Controller
         ]);
     }
 
-    // ── By batch ──────────────────────────────────────────────────────────────
+    // By batch
 
     public function byBatch(int $batchId): JsonResponse
     {
@@ -117,7 +116,7 @@ class AlumniTrackerController extends Controller
         ]);
     }
 
-    // ── Search ────────────────────────────────────────────────────────────────
+    // Search 
 
     public function search(Request $request): JsonResponse
     {
@@ -138,7 +137,7 @@ class AlumniTrackerController extends Controller
         return response()->json(['success' => true, 'data' => $results]);
     }
 
-    // ── DEEP LINK: Alumni Tracker → Yearbook ──────────────────────────────────
+    // DEEP LINK: Alumni Tracker → Yearbook 
 
     public function yearbookEntry(int $id): JsonResponse
     {
@@ -167,7 +166,7 @@ class AlumniTrackerController extends Controller
         ]);
     }
 
-    // ── DEEP LINK: Yearbook → Alumni Tracker ──────────────────────────────────
+    // DEEP LINK: Yearbook → Alumni Tracker 
 
     public function fromYearbookPage(Request $request): JsonResponse
     {
@@ -207,7 +206,7 @@ class AlumniTrackerController extends Controller
         ]);
     }
 
-    // ── Helpers ───────────────────────────────────────────────────────────────
+    // Helpers 
 
     private function formatAlumni(User $user, bool $detailed = false): array
     {

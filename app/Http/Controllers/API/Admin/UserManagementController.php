@@ -102,7 +102,7 @@ class UserManagementController extends Controller
             return response()->json(['message' => 'Cannot suspend an admin account.'], 403);
         }
 
-        $user->update(['suspended_at' => now()]);
+        $user->forceFill(['suspended_at' => now()])->save();
         $user->tokens()->delete();
 
         $this->audit(
@@ -114,13 +114,16 @@ class UserManagementController extends Controller
             "user#{$user->id}",
         );
 
-        return response()->json(['message' => 'User suspended and sessions revoked.']);
+        return response()->json([
+            'message' => 'User suspended and sessions revoked.',
+            'data'    => $user->fresh(),
+        ]);
     }
 
     // PATCH /api/admin/users/{id}/unsuspend
     public function unsuspend(User $user): JsonResponse
     {
-        $user->update(['suspended_at' => null]);
+        $user->forceFill(['suspended_at' => null])->save();
 
         $this->audit(
             AuditLog::ACTION_USER_UPDATED,
@@ -131,7 +134,10 @@ class UserManagementController extends Controller
             "user#{$user->id}",
         );
 
-        return response()->json(['message' => 'User unsuspended.']);
+        return response()->json([
+            'message' => 'User unsuspended.',
+            'data'    => $user->fresh(),
+        ]);
     }
 
     // PATCH /api/admin/users/{id}/verify

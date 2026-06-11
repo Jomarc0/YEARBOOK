@@ -20,6 +20,30 @@ import { getCourseShort } from '@/utils/courseShort';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 const isGraduate = (student) => !!student?.graduation_year;
+const isMeaningfulText = (value, minLength = 3) => {
+  const text = String(value || '').replace(/\s+/g, ' ').trim();
+  const compact = text.replace(/[^a-z0-9]/gi, '').toLowerCase();
+  if (text.length < minLength || compact.length < minLength) return false;
+  if (/^(test|asdf|qwerty|sample|lorem|abc|haha)+$/i.test(compact)) return false;
+  if (/^(.)\1{2,}$/.test(compact)) return false;
+  return true;
+};
+const postMediaItems = (post) => {
+  if (Array.isArray(post?.media) && post.media.length) return post.media;
+  return post?.file_path || post?.url || post?.path ? [post] : [];
+};
+const shouldShowProfilePost = (post) => {
+  const status = String(post?.status || post?.moderation_status || post?.approval_status || '').toLowerCase();
+  if (['pending', 'rejected', 'unapproved', 'hidden', 'flagged'].includes(status)) return false;
+  if (post?.is_approved === false || post?.approved === false || post?.is_public === false) return false;
+  return postMediaItems(post).length > 0 || isMeaningfulText(post?.caption || post?.body || post?.message, 3);
+};
+const isPaidViewer = (viewer) => {
+  if (!viewer) return false;
+  const tier = String(viewer.tier || '').toLowerCase();
+  const plan = String(viewer.plan || '').toLowerCase();
+  return Boolean(viewer.is_premium || ['standard', 'premium'].includes(tier) || plan.startsWith('premium'));
+};
 
 // ── Sub-components ────────────────────────────────────────────────────────────
 function SkeletonBlock({ w = '60%', h = 11 }) {
@@ -61,6 +85,182 @@ function InfoTile({ icon, label, value }) {
 }
 
 // ── Main component ────────────────────────────────────────────────────────────
+function initialsFor(name = '') {
+  return String(name || 'NU')
+    .trim()
+    .split(/\s+/)
+    .map(part => part[0]?.toUpperCase() || '')
+    .slice(0, 2)
+    .join('') || 'NU';
+}
+
+const pickFirst = (...values) => values.find(value => value !== undefined && value !== null && String(value).trim() !== '');
+const publicStudentField = (student, ...keys) => {
+  const sources = [
+    student,
+    student?.data,
+    student?.student,
+    student?.user,
+    student?.profile,
+    student?.student_record,
+    student?.studentRecord,
+  ].filter(Boolean);
+
+  for (const source of sources) {
+    for (const key of keys) {
+      const value = source?.[key];
+      if (value !== undefined && value !== null && String(value).trim() !== '') return value;
+    }
+  }
+  return '';
+};
+
+function RestrictedProfileView({ student, visibility, authUser, onBack, onLogin }) {
+  const name = publicStudentField(student, 'name', 'full_name')
+    || [publicStudentField(student, 'first_name'), publicStudentField(student, 'last_name')].filter(Boolean).join(' ')
+    || 'Student Profile';
+  const photo = imageUrl(publicStudentField(student, 'profile_picture', 'profile_pic', 'avatar', 'photo_url', 'photo', 'image_url'));
+  const rawCourse = publicStudentField(student, 'course', 'program', 'strand');
+  const course = publicStudentField(student, 'course_short') || getCourseShort(rawCourse) || rawCourse || 'Student';
+  const sectionName = pickFirst(student?.section?.name, student?.student_record?.section, student?.studentRecord?.section);
+  const batch = publicStudentField(student, 'graduation_year', 'batch_year', 'batch') || student?.section?.batch_year || student?.batch?.graduation_year;
+  const isBatchmatesOnly = visibility === 'batchmates' || visibility === 'alumni_only';
+  const badge = isBatchmatesOnly ? 'Batchmates Only' : 'Private Profile';
+  const metaSeparator = ' · ';
+  const details = [rawCourse || course, 'National University Lipa'].filter(Boolean).join(' · ');
+  const profileMeta = [details, sectionName].filter(Boolean).join(metaSeparator);
+  const loggedIn = Boolean(authUser);
+  const studentNo = publicStudentField(student, 'student_no', 'student_id');
+  const stats = [
+    { value: course, label: 'Program' },
+    { value: studentNo || 'N/A', label: 'ID' },
+    { value: batch || 'N/A', label: 'Batch' },
+  ];
+
+  return (
+    <div className="min-h-screen flex flex-col bg-[#f0f2f7]">
+      <Navbar />
+      <main className="flex-1">
+        <section className="bg-[#f0f2f7] px-4 pt-5 sm:pt-8">
+          <div className="mx-auto max-w-[840px] rounded-2xl border border-slate-200 bg-white shadow-sm">
+            <div className="relative h-[128px] overflow-hidden rounded-t-2xl bg-[#1d2b4b] bg-[radial-gradient(circle_at_84%_8%,rgba(79,96,190,0.42),transparent_32%)]">
+              <div className="absolute inset-0 opacity-20 [background-image:radial-gradient(circle,rgba(255,255,255,0.18)_1px,transparent_1px)] [background-size:18px_18px]" />
+              <button type="button" onClick={onBack}
+                className="absolute left-5 top-4 inline-flex items-center gap-2 rounded-lg border border-white/10 bg-white/10 px-3 py-2 text-xs font-bold text-white/80 cursor-pointer hover:bg-white/15">
+                <i className="fas fa-chevron-left text-[10px]" /> Back
+              </button>
+            </div>
+            <div className="px-5 pb-6 sm:px-8">
+              <div className="-mt-12 flex items-end justify-between gap-4">
+                <div className="relative z-10 shrink-0">
+                  <div className="inline-block rounded-full bg-gradient-to-br from-[#fdb813] to-amber-500 p-[3px]">
+                    <div className="inline-block rounded-full bg-white p-[3px]">
+                      {photo ? (
+                        <img
+                          src={photo}
+                          alt={name}
+                          className="h-24 w-24 rounded-full bg-[#1d2b4b] object-cover shadow-xl"
+                        />
+                      ) : (
+                        <div className="flex h-24 w-24 items-center justify-center rounded-full bg-[#14213d] text-3xl font-black text-[#fdb813] shadow-xl">
+                          {initialsFor(name)}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  <div className="absolute bottom-2 right-2 h-3.5 w-3.5 rounded-full border-2 border-white bg-emerald-400" />
+                </div>
+
+                <div className="flex items-center gap-2 pb-2 pt-14">
+                  <button
+                    type="button"
+                    disabled
+                    className="hidden cursor-not-allowed items-center gap-2 rounded-xl border-none bg-[#1d2b4b] px-4 py-2.5 text-xs font-black text-white opacity-60 sm:inline-flex"
+                  >
+                    <i className="fas fa-paper-plane text-[#fdb813]" /> Message
+                  </button>
+                  <button
+                    type="button"
+                    className="grid h-9 w-9 place-items-center rounded-xl border border-slate-200 bg-white text-slate-500 transition hover:bg-slate-50"
+                    onClick={() => navigator.clipboard?.writeText(window.location.href)}
+                    aria-label="Copy profile link"
+                  >
+                    <i className="fas fa-share-alt" />
+                  </button>
+                </div>
+              </div>
+              <div className="mt-4">
+                <div className="flex flex-col items-start gap-2">
+                  <div className="flex flex-wrap items-center justify-center gap-2 sm:justify-start">
+                    <h1 className="m-0 text-[22px] font-black leading-tight text-[#1d2b4b]">{name}</h1>
+                    <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2.5 py-1 text-[10px] font-black uppercase text-amber-700">
+                      <i className="fas fa-lock text-[9px]" /> {badge}
+                    </span>
+                  </div>
+                  <p className="m-0 text-sm font-semibold text-[#38517c]">
+                    {profileMeta}
+                  </p>
+                </div>
+                <div className="mt-4 flex flex-wrap gap-5 border-b border-slate-100 pb-4">
+                  {stats.map((item) => (
+                    <div key={item.label} className="text-center">
+                      <p className="m-0 max-w-[130px] break-words text-sm font-black leading-tight text-[#1d2b4b]">{item.value}</p>
+                      <p className="m-0 mt-1 text-[10px] font-medium text-slate-400">{item.label}</p>
+                    </div>
+                  ))}
+                </div>
+                <p className="m-0 mt-3 flex items-center gap-1.5 text-xs text-slate-400">
+                  <i className="fas fa-university text-[#3f51b5] text-[10px]" /> NU Lipa
+                </p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section className="mx-auto mt-5 w-[calc(100%-32px)] max-w-[840px] rounded-xl border border-slate-200 bg-white/60 p-5 shadow-sm backdrop-blur-md pointer-events-none">
+          <div className="relative overflow-hidden rounded-lg bg-white/40 p-4">
+            <div className="space-y-3 opacity-70 blur-[2px]">
+              <div className="h-4 w-3/4 rounded-full bg-slate-300" />
+              <div className="h-4 w-full rounded-full bg-slate-200" />
+              <div className="h-4 w-2/3 rounded-full bg-slate-200" />
+            </div>
+            <div className="absolute inset-0 flex items-center justify-center bg-white/60 backdrop-blur-[6px]">
+              <div className="flex items-center gap-2 text-sm font-semibold text-slate-500">
+                <i className="fas fa-lock text-[#fdb813]" /> Content hidden
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section className="mx-auto mt-5 mb-12 w-[calc(100%-32px)] max-w-[840px] rounded-2xl border border-slate-100 bg-white p-5 sm:p-8 text-center shadow-md shadow-slate-200/70">
+          <div className="mx-auto mb-4 flex h-10 w-10 items-center justify-center rounded-2xl bg-[#fdb813]/15 text-[#fdb813]">
+            <i className="fas fa-users text-xl" />
+          </div>
+          <h2 className="m-0 text-[18px] font-semibold text-[#1d2b4b]">This profile is private</h2>
+          <p className="mx-auto mt-3 mb-0 max-w-[330px] text-sm leading-relaxed text-slate-500">
+            {!loggedIn
+              ? 'Only students from the same batch can view the full profile. Sign in with your NU Lipa student account to check access.'
+              : `You're not in the same batch as ${name}. Only their batchmates can view this profile.`}
+          </p>
+          <div className="mt-6 flex flex-col gap-3">
+            {!loggedIn && (
+              <button type="button" onClick={onLogin}
+                className="w-full rounded-xl border-none bg-[#fdb813] px-5 py-3 text-sm font-black text-[#1d2b4b] cursor-pointer transition hover:bg-amber-300">
+                Sign In with NU Account
+              </button>
+            )}
+            <button type="button" onClick={onBack}
+              className="w-full rounded-xl border border-slate-200 bg-white px-5 py-3 text-sm font-bold text-slate-500 cursor-pointer transition hover:bg-slate-50">
+              ← Back to Directory
+            </button>
+          </div>
+        </section>
+      </main>
+      <Footer />
+    </div>
+  );
+}
+
 export default function StudentProfileView() {
   const { id }             = useParams();
   const { user: authUser } = useAuth();
@@ -68,6 +268,7 @@ export default function StudentProfileView() {
   const [searchParams]     = useSearchParams();
 
   const [student,          setStudent]          = useState(null);
+  const [restrictedStudent,setRestrictedStudent]= useState(null);
   const [loading,          setLoading]          = useState(true);
   const [visibility,       setVisibility]       = useState(null);
   const [activeTab,        setActiveTab]        = useState('posts');
@@ -83,7 +284,7 @@ export default function StudentProfileView() {
   const [achieveLoading,   setAchieveLoading]   = useState(false);
   const postParam = searchParams.get('post');
 
-  const canViewFull = student?.is_subscribed_viewer ?? false;
+  const canViewFull = Boolean(student?.is_subscribed_viewer || isPaidViewer(authUser));
 
   // Build tabs dynamically — Yearbook only for graduates
   const TABS = [
@@ -108,6 +309,8 @@ export default function StudentProfileView() {
     studentsApi.show(id)
       .then(({ data }) => {
         setStudent(data);
+        setRestrictedStudent(null);
+        setVisibility(null);
         // id here is users.id — correct for profile_views table
         recordProfileView(parseInt(id));
         trackProfileView({
@@ -118,7 +321,9 @@ export default function StudentProfileView() {
         });
       })
       .catch(err => {
-        setVisibility(err.response?.data?.visibility ?? null);
+        const payload = err.response?.data ?? {};
+        setVisibility(payload.visibility ?? null);
+        setRestrictedStudent(payload.student ?? null);
         setStudent(null);
       })
       .finally(() => setLoading(false));
@@ -148,7 +353,7 @@ export default function StudentProfileView() {
     profileApi.getPosts(id)
       .then(({ data }) => {
         if (data.restricted) { setPostsRestricted(true); setPosts([]); }
-        else { setPostsRestricted(false); setPosts(data.data?.data ?? data.data ?? []); }
+        else { setPostsRestricted(false); setPosts((data.data?.data ?? data.data ?? []).filter(shouldShowProfilePost)); }
       })
       .catch(() => {})
       .finally(() => setPostsLoading(false));
@@ -216,6 +421,16 @@ export default function StudentProfileView() {
       </main>
       <Footer />
     </div>
+  );
+
+  if (!student && ['private', 'batchmates', 'alumni_only'].includes(visibility)) return (
+    <RestrictedProfileView
+      student={restrictedStudent}
+      visibility={visibility}
+      authUser={authUser}
+      onBack={() => navigate('/directory')}
+      onLogin={() => navigate('/login')}
+    />
   );
 
   if (!student) return (

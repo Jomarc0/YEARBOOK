@@ -8,8 +8,10 @@ import { Stack, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { FontAwesome } from '@expo/vector-icons';
 import { Image } from 'expo-image';
-import { acceptConsent, fetchCurrentUser, getErrorMessage, register, saveToken, sendOtp, STORAGE_BASE_URL, verifyOtp, verifyStudent } from '../lib/api';
+import { acceptConsent, AUTH_BASE_URL, fetchCurrentUser, getErrorMessage, register, saveToken, sendOtp, verifyOtp, verifyStudent } from '../lib/api';
 import { colors, layout, radii } from './webTheme';
+
+WebBrowser.maybeCompleteAuthSession();
 
 const SCHOOLS = [
   { key: 'SACE', courses: ['Bachelor of Science in Architecture', 'Bachelor of Science in Civil Engineering', 'Bachelor of Science in Computer Science', 'Bachelor of Science in Information Technology', 'Bachelor of Multimedia Arts'] },
@@ -134,15 +136,10 @@ export default function Register() {
   };
 
   const handleGoogleSignup = async () => {
-    if (!consentChecked) {
-      Alert.alert('Privacy consent required', 'Please accept the Privacy Policy before continuing with Google.');
-      return;
-    }
-
     try {
       setLoading(true);
-      const redirectUri = Linking.createURL('/sso/callback');
-      const authUrl = `${STORAGE_BASE_URL}/auth/google/redirect?client=mobile&redirect_uri=${encodeURIComponent(redirectUri)}`;
+      const redirectUri = 'capstoneapp://sso/callback';
+      const authUrl = `${AUTH_BASE_URL}/auth/google/redirect?client=mobile&redirect_uri=${encodeURIComponent(redirectUri)}`;
       const result = await WebBrowser.openAuthSessionAsync(authUrl, redirectUri);
       if (result.type !== 'success' || !result.url) return;
 
@@ -255,16 +252,17 @@ export default function Register() {
                 <Text style={styles.buttonText}>Next</Text>
               </TouchableOpacity>
             ) : (
-              <>
+              <View style={styles.primaryActionGroup}>
                 <TouchableOpacity style={[styles.button, (!canContinue || loading) && styles.buttonDisabled]} onPress={handleRegister} disabled={!canContinue || loading}>
                   <Text style={styles.buttonText}>{loading ? 'Creating...' : 'Create My Account'}</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.googleButton} onPress={handleGoogleSignup} disabled={loading}>
-                  <FontAwesome name="google" size={17} color="#3f51b5" />
-                  <Text style={styles.googleButtonText}>Sign up with Google</Text>
-                </TouchableOpacity>
-              </>
+              </View>
             )}
+            <TouchableOpacity style={styles.googleButton} onPress={handleGoogleSignup} disabled={loading}>
+              <FontAwesome name="google" size={17} color="#3f51b5" />
+              <Text style={styles.googleButtonText}>Sign up with Google</Text>
+            </TouchableOpacity>
+            <Text style={styles.googleConsentText}>By continuing with Google, you accept the Privacy Policy.</Text>
             <TouchableOpacity style={styles.textButton} onPress={() => router.push('/login')}>
               <Text style={styles.footerLink}>Already have an account? Sign In</Text>
             </TouchableOpacity>
@@ -400,6 +398,7 @@ const styles = StyleSheet.create({
   checkRow: { minHeight: 48, flexDirection: 'row', alignItems: 'center', marginTop: 6 },
   checkText: { flex: 1, marginLeft: 10, color: colors.navy, fontSize: 13, lineHeight: 19 },
   footerActions: { paddingHorizontal: 20, paddingBottom: 18, gap: 10 },
+  primaryActionGroup: { gap: 10 },
   button: { height: layout.buttonHeight, borderRadius: radii.control, backgroundColor: colors.navy, justifyContent: 'center', alignItems: 'center' },
   buttonDisabled: { opacity: 0.45 },
   buttonText: { fontSize: 15, fontWeight: '900', color: '#FFFFFF' },
@@ -408,6 +407,7 @@ const styles = StyleSheet.create({
   secondaryButtonText: { color: colors.navy, fontWeight: '900' },
   googleButton: { height: layout.buttonHeight, borderRadius: radii.control, borderWidth: 1, borderColor: colors.border, backgroundColor: '#ffffff', alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 10 },
   googleButtonText: { color: colors.navy, fontSize: 14, fontWeight: '900' },
+  googleConsentText: { color: colors.muted, fontSize: 11, lineHeight: 15, textAlign: 'center', marginTop: -4 },
   textButton: { alignItems: 'center', paddingVertical: 8 },
   footerLink: { fontSize: 14, fontWeight: '900', color: colors.navy },
   matchText: { color: colors.success, fontSize: 12, fontWeight: '800', marginTop: 10 },

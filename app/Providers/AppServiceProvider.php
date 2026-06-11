@@ -17,7 +17,7 @@ class AppServiceProvider extends ServiceProvider
 {
     public function register(): void
     {
-        // ── Face Recognition ──────────────────────────────────────────
+        // Face Recognition
         $this->app->singleton(FaceRecognition::class, function () {
             return new AwsRekognitionFaceRecognition([
                 'key'        => config('services.rekognition.key'),
@@ -28,7 +28,7 @@ class AppServiceProvider extends ServiceProvider
             ]);
         });
 
-        // ── Storage / Cloudinary ──────────────────────────────────────
+        // Storage / Cloudinary 
         $this->app->singleton(StorageServiceInterface::class, function () {
             $cloudName = config('services.cloudinary.cloud_name')
                         ?? env('CLOUDINARY_CLOUD_NAME');
@@ -44,27 +44,23 @@ class AppServiceProvider extends ServiceProvider
             return new CloudinaryService();
         });
 
-        // ── PHPMailer ─────────────────────────────────────────────────
+        // PHPMailer 
         $this->app->singleton(PHPMailerService::class, fn() => new PHPMailerService());
 
-        // ── WatermarkService (yearbook PDF watermarking) ──────────────
+        // WatermarkService (yearbook PDF watermarking) 
         if (class_exists(\App\Services\Yearbook\WatermarkService::class)) {
             $this->app->singleton(
                 \App\Services\Yearbook\WatermarkService::class,
                 \App\Services\Yearbook\WatermarkService::class,
             );
         }
-
-        // NOTE: YearbookPageBuilderService does NOT exist in this codebase.
-        // All page-building logic lives inside YearbookController::pages().
-        // Do NOT add a binding for it here.
     }
 
     public function boot(): void
     {
         Photo::observe(PhotoObserver::class);
 
-        // ── Policies ──────────────────────────────────────────────────
+        // Policies 
         Gate::policy(Photo::class, PhotoPolicy::class);
     }
 }

@@ -1,6 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { profileSettingsApi } from '@/api/profile.api';
 import { studentsApi } from '@/api/student.api';
+import { alumniApi } from '@/api/alumni.api';
 import { useAuth } from '@/features/auth/hooks/useAuth';
 import Navbar from '@/components/layout/Navbar';
 import Footer from '@/components/layout/Footer';
@@ -39,8 +40,40 @@ const NAV_SECTIONS = [
   { id: 'password',     icon: 'fa-lock',          label: 'Password'     },
 ];
 
+const CAREER_SECTION = { id: 'career', icon: 'fa-briefcase', label: 'Career' };
+
+const isMeaningfulText = (value, minLength = 10) => {
+  const text = String(value || '').replace(/\s+/g, ' ').trim();
+  const compact = text.replace(/[^a-z0-9]/gi, '').toLowerCase();
+  if (text.length < minLength || compact.length < minLength) return false;
+  if (/^(test|asdf|qwerty|sample|lorem|abc|haha)+$/i.test(compact)) return false;
+  if (/^(.)\1{2,}$/.test(compact)) return false;
+  return true;
+};
+
+const parseAchievementType = (value) => {
+  try {
+    return JSON.parse(value || '{}');
+  } catch {
+    return {};
+  }
+};
+
+const isGraduateUser = (user) => {
+  if (!user) return false;
+  if (['alumni', 'graduate', 'graduated'].includes(String(user.role || '').toLowerCase())) return true;
+  const year = Number(user.graduation_year ?? user.student?.graduation_year);
+  return Number.isFinite(year) && year <= new Date().getFullYear();
+};
+
 export default function SettingsPage() {
   const { user } = useAuth();
+  const canEditCareer = isGraduateUser(user);
+  const navSections = useMemo(() => (
+    canEditCareer
+      ? [...NAV_SECTIONS.slice(0, 3), CAREER_SECTION, ...NAV_SECTIONS.slice(3)]
+      : NAV_SECTIONS
+  ), [canEditCareer]);
 
   // ── Visibility ────────────────────────────────────────────────────────────
   const [visibility, setVis] = useState(user?.profile_visibility === 'alumni_only' ? 'batchmates' : (user?.profile_visibility ?? 'public'));
@@ -69,6 +102,13 @@ export default function SettingsPage() {
   });
   const [academicSaving, setAcademicSaving] = useState(false);
 
+  // ── Career / Alumni Tracker ────────────────────────────────────────────────
+  const [careerForm, setCareerForm] = useState({
+    job_title: '', company: '', location: '', field: '', bio: '',
+  });
+  const [careerLoading, setCareerLoading] = useState(false);
+  const [careerSaving, setCareerSaving] = useState(false);
+
   // ── Achievements ──────────────────────────────────────────────────────────
   const [achievements,   setAchievements]   = useState([]);
   const [achieveLoading, setAchieveLoading] = useState(false);
@@ -77,6 +117,7 @@ export default function SettingsPage() {
 
   // ── Toast ─────────────────────────────────────────────────────────────────
   const [toast, setToast] = useState(null);
+  const [activeSection, setActiveSection] = useState(navSections[0].id);
   const showToast = (msg, type = 'success') => {
     setToast({ msg, type });
     if (type === 'success') window.dispatchEvent(new Event('notifications:refresh'));
@@ -89,14 +130,13 @@ export default function SettingsPage() {
   //      to silently skip creates and delete everything on save.
   useEffect(() => {
     if (!user?.id) return;
-    setAchieveLoading(true);
+    queueMicrotask(() => setAchieveLoading(true));
     studentsApi.getAchievements(user.id)
       .then(res => {
         const data = res.data?.data ?? [];
         if (Array.isArray(data) && data.length) {
           setAchievements(data.map(a => {
-            let meta = {};
-            try { meta = JSON.parse(a.type || '{}'); } catch {}
+            const meta = parseAchievementType(a.type);
             return {
               id:    a.id,
               t:     a.title,
@@ -114,6 +154,41 @@ export default function SettingsPage() {
       .finally(() => setAchieveLoading(false));
   }, [user?.id]);
 
+  useEffect(() => {
+    if (!user?.id || !canEditCareer) return;
+    queueMicrotask(() => setCareerLoading(true));
+    alumniApi.me()
+      .then(({ data }) => {
+        const career = data?.data?.career ?? data?.career ?? {};
+        setCareerForm({
+          job_title: career?.job_title ?? '',
+          company:   career?.company   ?? '',
+          location:  career?.location  ?? '',
+          field:     career?.field     ?? '',
+          bio:       career?.bio       ?? '',
+        });
+      })
+      .catch(() => setCareerForm(current => current))
+      .finally(() => setCareerLoading(false));
+  }, [canEditCareer, user?.id]);
+
+  useEffect(() => {
+    const onScroll = () => {
+      const current = navSections
+        .map(section => {
+          const el = document.getElementById(section.id);
+          return el ? { id: section.id, top: Math.abs(el.getBoundingClientRect().top - 120) } : null;
+        })
+        .filter(Boolean)
+        .sort((a, b) => a.top - b.top)[0];
+      if (current) setActiveSection(current.id);
+    };
+
+    onScroll();
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
+  }, [navSections]);
+
   // ── Handlers ──────────────────────────────────────────────────────────────
   const saveVisibility = async () => {
     setVisibilitySaving(true);
@@ -128,6 +203,10 @@ export default function SettingsPage() {
   };
 
   const saveMotto = async () => {
+    if (motto.trim() && !isMeaningfulText(motto, 10)) {
+      showToast('Please enter a meaningful bio.', 'error');
+      return;
+    }
     setMottoSaving(true);
     try {
       await profileSettingsApi.updateMotto(motto);
@@ -183,6 +262,29 @@ export default function SettingsPage() {
     } finally { setAcademicSaving(false); }
   };
 
+  const saveCareer = async () => {
+    if (careerForm.bio.trim() && !isMeaningfulText(careerForm.bio, 12)) {
+      showToast('Please enter a meaningful career bio.', 'error');
+      return;
+    }
+
+    setCareerSaving(true);
+    try {
+      await alumniApi.updateCareer({
+        job_title: careerForm.job_title || null,
+        company:   careerForm.company   || null,
+        location:  careerForm.location  || null,
+        field:     careerForm.field     || null,
+        bio:       careerForm.bio       || null,
+      });
+      showToast('Your alumni career profile was updated successfully.');
+    } catch {
+      showToast('Failed to save career profile.', 'error');
+    } finally {
+      setCareerSaving(false);
+    }
+  };
+
   const addAchievement = () =>
     setAchievements(prev => [...prev, { id: null, t: '', s: '', icon: 'fa-star', color: '#fdb813' }]);
     // FIX: use null instead of Date.now() — Date.now() produces a large numeric
@@ -211,8 +313,7 @@ export default function SettingsPage() {
       const res  = await studentsApi.getAchievements(user.id);
       const data = res.data?.data ?? [];
       setAchievements(data.map(a => {
-        let meta = {};
-        try { meta = JSON.parse(a.type || '{}'); } catch {}
+        const meta = parseAchievementType(a.type);
         return { id: a.id, t: a.title, s: a.subtitle ?? '', icon: meta.icon ?? 'fa-star', color: meta.color ?? '#fdb813' };
       }));
     } catch {
@@ -226,8 +327,10 @@ export default function SettingsPage() {
     { label: 'Contains a letter',     ok: /[a-zA-Z]/.test(pwForm.password) },
   ];
 
-  const scrollTo = (id) =>
+  const scrollTo = (id) => {
+    setActiveSection(id);
     document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
 
   const inputCls = (hasErr) =>
     `w-full px-4 py-3 border-2 rounded-xl text-sm outline-none transition bg-slate-50 text-[#1d2b4b]
@@ -257,12 +360,12 @@ export default function SettingsPage() {
         {/* ── Sticky sidebar nav ── */}
         <aside className="hidden lg:flex flex-col gap-1 w-52 shrink-0 sticky top-24">
           <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-3 mb-2">Settings</p>
-          {NAV_SECTIONS.map(s => (
+          {navSections.map(s => (
             <button key={s.id} onClick={() => scrollTo(s.id)}
-              className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm font-semibold text-slate-500
-                         hover:bg-white hover:text-[#1d2b4b] hover:shadow-sm transition-all cursor-pointer border-none bg-transparent text-left">
-              <div className="w-7 h-7 rounded-lg bg-slate-100 flex items-center justify-center shrink-0">
-                <i className={`fas ${s.icon} text-[11px] text-slate-400`} />
+              className={`flex items-center gap-2.5 rounded-xl border-0 border-l-4 px-3 py-2.5 text-left text-sm font-semibold transition-all cursor-pointer
+                         ${activeSection === s.id ? 'border-l-amber-400 bg-[#1d2b4b] text-white shadow-sm' : 'border-l-transparent bg-transparent text-slate-500 hover:bg-white hover:text-[#1d2b4b] hover:shadow-sm'}`}>
+              <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${activeSection === s.id ? 'bg-[#fdb813]/20' : 'bg-slate-100'}`}>
+                <i className={`fas ${s.icon} text-[11px] ${activeSection === s.id ? 'text-[#fdb813]' : 'text-slate-400'}`} />
               </div>
               {s.label}
             </button>
@@ -270,7 +373,7 @@ export default function SettingsPage() {
         </aside>
 
         {/* ── Main content ── */}
-        <main className="flex-1 min-w-0 flex flex-col gap-4 animate-[fadeUp_0.35s_ease]">
+        <main className="flex-1 min-w-0 max-w-2xl mx-auto w-full flex flex-col gap-4 animate-[fadeUp_0.35s_ease]">
 
           {/* Page header */}
           <div className="mb-2">
@@ -397,17 +500,79 @@ export default function SettingsPage() {
               </div>
             </div>
 
-            <button
-              onClick={saveAcademic}
-              disabled={academicSaving}
-              className="w-full py-3.5 rounded-xl bg-[#1d2b4b] hover:bg-[#162038] text-white font-bold text-sm
-                         border-none cursor-pointer transition-colors flex items-center justify-center gap-2
-                         disabled:opacity-60 disabled:cursor-not-allowed">
-              {academicSaving
-                ? <><i className="fas fa-spinner animate-spin" /> Saving…</>
-                : <><i className="fas fa-graduation-cap" /> Save Academic Info</>}
-            </button>
+<SaveButton onClick={saveAcademic} loading={academicSaving} label="Save Academic Info" loadingLabel="Saving..." icon="fa-graduation-cap" />
           </Section>
+
+          {canEditCareer && (
+          <Section id="career" icon="fa-briefcase" iconBg="bg-emerald-50" iconColor="text-emerald-600"
+            title="Career Path" desc="Shown in Alumni Tracker so classmates can see where you are now">
+            {careerLoading ? (
+              <div className="flex items-center justify-center py-10 gap-2 text-slate-400 text-sm">
+                <div className="w-5 h-5 rounded-full border-2 border-slate-200 border-t-[#1d2b4b] animate-spin" />
+                Loading career profile...
+              </div>
+            ) : (
+              <>
+                <div className="space-y-4 mb-5">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="flex items-center gap-1.5 text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-1.5">
+                        <i className="fas fa-briefcase text-[#fdb813] text-[9px]" /> Job Title
+                      </label>
+                      <input type="text" value={careerForm.job_title} onChange={e => setCareerForm(p => ({ ...p, job_title: e.target.value }))} placeholder="e.g. Software Engineer" className={inputCls(false)} />
+                    </div>
+                    <div>
+                      <label className="flex items-center gap-1.5 text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-1.5">
+                        <i className="fas fa-building text-[#fdb813] text-[9px]" /> Company
+                      </label>
+                      <input type="text" value={careerForm.company} onChange={e => setCareerForm(p => ({ ...p, company: e.target.value }))} placeholder="e.g. Accenture" className={inputCls(false)} />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="flex items-center gap-1.5 text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-1.5">
+                        <i className="fas fa-location-dot text-[#fdb813] text-[9px]" /> Location
+                      </label>
+                      <input type="text" value={careerForm.location} onChange={e => setCareerForm(p => ({ ...p, location: e.target.value }))} placeholder="e.g. Makati" className={inputCls(false)} />
+                    </div>
+                    <div>
+                      <label className="flex items-center gap-1.5 text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-1.5">
+                        <i className="fas fa-tag text-[#fdb813] text-[9px]" /> Career Field
+                      </label>
+                      <input type="text" value={careerForm.field} onChange={e => setCareerForm(p => ({ ...p, field: e.target.value }))} placeholder="e.g. Technology" className={inputCls(false)} />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="flex items-center gap-1.5 text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-1.5">
+                      <i className="fas fa-align-left text-[#fdb813] text-[9px]" /> Career Bio
+                    </label>
+                    <textarea
+                      value={careerForm.bio}
+                      onChange={e => setCareerForm(p => ({ ...p, bio: e.target.value }))}
+                      rows={4}
+                      maxLength={500}
+                      placeholder="Share a short update about your career path..."
+                      className="w-full resize-none outline-none text-sm text-[#1d2b4b] bg-slate-50 border-2 border-slate-200 rounded-xl px-4 py-3 leading-relaxed transition-colors focus:border-[#3f51b5] box-border"
+                      style={{ fontFamily: 'inherit' }}
+                    />
+                    <div className="flex items-center justify-between mt-1.5">
+                      <span className="text-[11px] text-slate-400">{careerForm.bio.length}/500 characters</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-amber-50 border border-amber-100 rounded-xl px-4 py-3 mb-4 text-xs text-amber-700 leading-relaxed">
+                  <i className="fas fa-circle-info text-[#fdb813] mr-1.5" />
+                  These details appear on the Alumni Tracker page after you save them.
+                </div>
+
+                <SaveButton onClick={saveCareer} loading={careerSaving} label="Save Career Path" loadingLabel="Saving..." icon="fa-briefcase" />
+              </>
+            )}
+          </Section>
+          )}
 
           {/* ── 4. Achievements ── */}
           <Section id="achievements" icon="fa-award" iconBg="bg-amber-50" iconColor="text-amber-500"
@@ -528,16 +693,7 @@ export default function SettingsPage() {
                   <i className="fas fa-plus" /> Add Achievement
                 </button>
 
-                <button
-                  onClick={saveAchievements}
-                  disabled={achieveSaving}
-                  className="w-full py-3.5 rounded-xl bg-[#1d2b4b] hover:bg-[#162038] text-white font-bold text-sm
-                             border-none cursor-pointer transition-colors flex items-center justify-center gap-2
-                             disabled:opacity-60 disabled:cursor-not-allowed">
-                  {achieveSaving
-                    ? <><i className="fas fa-spinner animate-spin" /> Saving…</>
-                    : <><i className="fas fa-award" /> Save Achievements</>}
-                </button>
+<SaveButton onClick={saveAchievements} loading={achieveSaving} label="Save Achievements" loadingLabel="Saving..." icon="fa-award" />
               </>
             )}
           </Section>
@@ -592,14 +748,7 @@ export default function SettingsPage() {
                 </div>
               )}
 
-              <button type="submit" disabled={loading}
-                className="w-full py-3.5 rounded-xl bg-[#1d2b4b] hover:bg-[#162038] text-white font-bold text-sm
-                           transition flex items-center justify-center gap-2 disabled:opacity-60
-                           disabled:cursor-not-allowed border-none cursor-pointer">
-                {loading
-                  ? <><i className="fas fa-spinner animate-spin" /> Saving…</>
-                  : <><i className="fas fa-lock" /> Change Password</>}
-              </button>
+<SaveButton type="submit" loading={loading} label="Change Password" loadingLabel="Saving..." icon="fa-lock" />
             </form>
           </Section>
 
@@ -643,13 +792,13 @@ function Section({ id, icon, iconBg, iconColor, title, desc, children }) {
 }
 
 // ── Save button ────────────────────────────────────────────────────────────────
-function SaveButton({ onClick, label, loading = false, loadingLabel = 'Saving...' }) {
+function SaveButton({ onClick, label, loading = false, loadingLabel = 'Saving...', icon, type = 'button' }) {
   return (
-    <button onClick={onClick} disabled={loading}
-      className="w-full py-3.5 rounded-xl bg-[#1d2b4b] hover:bg-[#162038] text-white font-bold text-sm
+    <button type={type} onClick={onClick} disabled={loading}
+      className="w-auto px-6 py-2 rounded bg-amber-500 hover:bg-amber-400 text-white font-bold text-sm
                  border-none cursor-pointer transition-colors disabled:opacity-60 disabled:cursor-not-allowed
                  flex items-center justify-center gap-2">
-      {loading ? <><i className="fas fa-spinner animate-spin" /> {loadingLabel}</> : label}
+      {loading ? <><i className="fas fa-spinner animate-spin" /> {loadingLabel}</> : <>{icon && <i className={`fas ${icon}`} />} {label}</>}
     </button>
   );
 }

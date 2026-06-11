@@ -55,7 +55,7 @@ export const getBatchmates = () =>
  * @returns {{ views_today, views_this_week, views_this_month, unique_viewers_today }}
  */
 export const getPlatformEngagement = () =>
-  client.get(`${BASE}/platform`).then((r) => r.data);
+  client.get('/admin/analytics/engagement').then((r) => r.data);
 
 /**
  * Record a profile view. Call this when any StudentProfileView page mounts.
@@ -65,8 +65,28 @@ export const getPlatformEngagement = () =>
 export const recordProfileView = (userId) =>
   client.post(`${BASE}/record-view/${userId}`).then((r) => r.data);
 
-export const recordContentView = (payload) =>
-  client.post(`${BASE}/record-content-view`, payload).then((r) => r.data);
+const trimText = (value, max) => {
+  if (value === undefined || value === null) return undefined;
+  const text = String(value).trim();
+  return text ? text.slice(0, max) : undefined;
+};
+
+export const recordContentView = (payload = {}) => {
+  const contentId = Number(payload.content_id);
+  const contentType = trimText(payload.content_type, 40);
+
+  if (!contentType || !Number.isInteger(contentId) || contentId < 1) {
+    return Promise.resolve({ recorded: false, skipped: true });
+  }
+
+  return client.post(`${BASE}/record-content-view`, {
+    content_type: contentType,
+    content_id: contentId,
+    title: trimText(payload.title, 255),
+    category: trimText(payload.category, 60),
+    url: trimText(payload.url, 255),
+  }).then((r) => r.data);
+};
 
 // ─── JSDoc type stubs ─────────────────────────────────────────────────────────
 

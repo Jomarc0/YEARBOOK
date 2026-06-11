@@ -59,6 +59,7 @@ class FacultyAdminController extends Controller
             'department' => 'required|string|max:255',
             'bio'        => 'nullable|string',
             'image'      => 'nullable|image|max:4096',
+            'email'      => 'nullable|email|max:255',
         ]);
 
         if ($request->hasFile('image')) {
@@ -93,6 +94,7 @@ class FacultyAdminController extends Controller
             'department' => 'sometimes|required|string|max:255',
             'bio'        => 'nullable|string',
             'image'      => 'nullable|image|max:4096',
+            'email'      => 'nullable|email|max:255',
         ]);
 
         if ($request->hasFile('image')) {
@@ -139,8 +141,71 @@ class FacultyAdminController extends Controller
         return response()->json(['message' => 'Faculty member moved to trash.']);
     }
 
-    // ── Private helpers ───────────────────────────────────────────────────────
+    // POST /api/admin/faculty/import-csv
+    public function importCsv(Request $request)
+    {
+        $request->validate([
+            'file' => 'required|file|mimes:csv,txt|max:4096',
+        ]);
 
+        $handle = fopen($request->file('file')->getRealPath(), 'r');
+        if (! $handle) {
+            return response()->json(['message' => 'Unable to read CSV file.'], 422);
+        }
+
+        $headers = fgetcsv($handle);
+        $imported = 0;
+        $skipped = 0;
+        $errors = [];
+
+        if (! is_array($headers)) {
+            fclose($handle);
+            return response()->json(['imported' => 0, 'skipped' => 0, 'errors' => ['CSV header row is missing.']], 422);
+        }
+
+        $headers = array_map(fn ($h) => strtolower(trim((string) $h)), $headers);
+
+        while (($row = fgetcsv($handle)) !== false) {
+            $data = array_combine($headers, array_pad($row, count($headers), null));
+            if (! is_array($data)) {
+                $skipped++;
+                $errors[] = 'Skipped row with invalid column count.';
+                continue;
+            }
+
+            $name = trim((string) ($data['name'] ?? ''));
+            if ($name === '') {
+                $skipped++;
+                continue;
+            }
+
+            $email = trim((string) ($data['email'] ?? ''));
+            if ($email !== '' && Faculty::where('email', $email)->exists()) {
+                $skipped++;
+                continue;
+            }
+
+            Faculty::create([
+                'name'       => $name,
+                'title'      => trim((string) ($data['title'] ?? 'Faculty')),
+                'department' => trim((string) ($data['department'] ?? 'General')),
+                'email'      => $email !== '' ? $email : null,
+                'bio'        => trim((string) ($data['bio'] ?? '')) ?: null,
+            ]);
+
+            $imported++;
+        }
+
+        fclose($handle);
+
+        return response()->json([
+            'imported' => $imported,
+            'skipped'  => $skipped,
+            'errors'   => $errors,
+        ]);
+    }
+
+    // Private helpers
     private function formatRecord(Faculty $f): array
     {
         return [
@@ -150,6 +215,7 @@ class FacultyAdminController extends Controller
             'department' => $f->department,
             'bio'        => $f->bio,
             'photo'      => $this->resolveImageUrl($f->image),
+            'email'      => $f->email,
         ];
     }
 

@@ -13,7 +13,7 @@ class TaggedPhoto extends Model
 
     protected $fillable = [
         'photo_id',
-        'graduation_photo_id', // ← added: FK for GraduationPhoto::taggedPhotos()
+        'graduation_photo_id', 
         'user_id',
         'uploaded_by',
         'photo_path',
@@ -30,7 +30,7 @@ class TaggedPhoto extends Model
         'confidence' => 'float',
     ];
 
-    // ── Relationships ─────────────────────────────────────────────────────
+    // Relationships 
 
     public function photo(): BelongsTo
     {
@@ -57,8 +57,7 @@ class TaggedPhoto extends Model
         return $this->belongsTo(User::class, 'tagged_by');
     }
 
-    // ── Accessors ─────────────────────────────────────────────────────────
-
+    // Accessors 
     public function getPhotoUrlAttribute(): string
     {
         if ($this->photo_path && str_starts_with($this->photo_path, 'http')) {
@@ -70,8 +69,7 @@ class TaggedPhoto extends Model
             : '';
     }
 
-    // ── Scopes ────────────────────────────────────────────────────────────
-
+    // copes 
     public function scopeAuto($query)
     {
         return $query->where('source', 'rekognition');

@@ -234,8 +234,8 @@ export const mediaApi = {
   /** GET /api/profile/storage-usage */
   storageUsage: () => api.get('/profile/storage-usage'),
 
-  /** GET /api/media/bandwidth */
-  bandwidth: () => api.get('/media/bandwidth'),
+  /** GET /api/profile/storage-usage */
+  bandwidth: () => api.get('/profile/storage-usage'),
 
   /**
    * POST /api/media/bulk-upload
@@ -347,7 +347,7 @@ export const announcementsApi = {
 // ANALYTICS
 // ─────────────────────────────────────────────────────────────────────────────
 export const analyticsApi = {
-  summary:    () => api.get('/analytics'),
+  summary:    () => api.get('/analytics/summary'),
   myStats:    () => api.get('/analytics/my-stats'),
   topViewed:  () => api.get('/analytics/top-viewed'),
   batchmates: () => api.get('/analytics/batchmates'),

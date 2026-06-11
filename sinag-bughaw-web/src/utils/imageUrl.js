@@ -3,7 +3,12 @@ const APP_BASE = import.meta.env.VITE_APP_URL || API_BASE.replace(/\/api\/?$/, '
 
 export function imageUrl(path) {
   if (!path) return null;
-  if (path.startsWith('http://') || path.startsWith('https://')) return path;
+  if (
+    path.startsWith('http://') ||
+    path.startsWith('https://') ||
+    path.startsWith('blob:') ||
+    path.startsWith('data:')
+  ) return path;
 
   const cleanPath = String(path).replace(/^\/+/, '');
   if (cleanPath.startsWith('storage/')) return `${APP_BASE}/${cleanPath}`;

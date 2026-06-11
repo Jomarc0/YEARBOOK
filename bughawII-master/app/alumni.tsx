@@ -6,17 +6,30 @@ import { Image } from 'expo-image';
 import { FontAwesome } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
-import { getAlumni, getAlumniMe, getAlumniYearbookEntry, getAppConfig, getBatches, getErrorMessage, imageUrl, paginationMeta, unwrap, updateAlumniCareer } from '../lib/api';
+import { getAlumni, getAlumniMe, getAppConfig, getBatches, getCurrentUser, getErrorMessage, imageUrl, paginationMeta, unwrap, updateAlumniCareer } from '../lib/api';
 import { colors, shadows } from '../components/webTheme';
 
 const FIELDS = ['All Fields', 'Engineering', 'Business', 'Education', 'Health Sciences', 'Technology', 'Arts', 'Law', 'Other'];
+const TRACKER_TABS = [
+  { id: 'directory', label: 'Directory', icon: 'users' },
+  { id: 'profile', label: 'My Alumni Profile', icon: 'briefcase' },
+];
 
 const alumniName = (item: any) => item?.name || `${item?.first_name || ''} ${item?.last_name || ''}`.trim() || 'Alumni';
 const alumniPhoto = (item: any) => imageUrl(item?.profile_picture || item?.avatar || item?.photo);
+const alumniUserId = (item: any) => item?.user_id || item?.account_user_id || item?.user?.id || item?.student?.user_id || item?.student?.account_user_id || item?.id;
 const career = (item: any) => item?.career || {};
 const initials = (name = '') => name.trim().split(/\s+/).slice(0, 2).map((part) => part[0]?.toUpperCase()).join('') || 'NU';
 const batchId = (item: any) => item?.id || item?.batch_id;
 const batchLabel = (item: any) => item?.title || item?.name || `Batch ${item?.year || item?.batch_year || ''}`.trim();
+const graduationYear = (item: any) => item?.graduation_year || item?.batch_year || item?.student?.graduation_year || item?.student_record?.graduation_year;
+const isGraduate = (item: any) => {
+  const role = String(item?.role || item?.user?.role || '').toLowerCase();
+  if (['alumni', 'graduate', 'graduated'].includes(role)) return true;
+  if (['student', 'faculty', 'admin', 'super_admin'].includes(role)) return false;
+  const year = Number(graduationYear(item));
+  return Number.isFinite(year) && year <= new Date().getFullYear();
+};
 const flattenBatches = (payload: any) => {
   const data = unwrap(payload);
   if (Array.isArray(data)) return data;
@@ -45,6 +58,7 @@ export default function AlumniScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
   const [me, setMe] = useState<any>(null);
+  const [activeTab, setActiveTab] = useState('directory');
   const [careerOpen, setCareerOpen] = useState(false);
   const [careerSaving, setCareerSaving] = useState(false);
   const [appConfig, setAppConfig] = useState<any>(null);
@@ -62,8 +76,7 @@ export default function AlumniScreen() {
     batch_id: selectedBatch ? batchId(selectedBatch) : undefined,
   }), [field, query, selectedBatch]);
   const schoolName = appConfig?.school_name || 'National University Lipa';
-  const features = appConfig?.features || {};
-  const yearbookEnabled = features.enable_flipbook_viewer !== false && features.publish_yearbook !== false;
+  const canEditCareer = isGraduate(me);
 
   const loadAlumni = useCallback(async (nextPage = 1, append = false) => {
     try {
@@ -128,9 +141,12 @@ export default function AlumniScreen() {
 
   const loadMyAlumniProfile = useCallback(async () => {
     try {
-      const payload = await getAlumniMe();
+      const [cachedUser, payload] = await Promise.all([
+        getCurrentUser().catch(() => null),
+        getAlumniMe(),
+      ]);
       const profile = unwrap(payload);
-      setMe(profile);
+      setMe({ ...(cachedUser || {}), ...(profile || {}), role: profile?.role || cachedUser?.role });
       const careerProfile = profile?.career || {};
       setCareerForm({
         job_title: careerProfile.job_title || '',
@@ -140,7 +156,8 @@ export default function AlumniScreen() {
         bio: careerProfile.bio || '',
       });
     } catch {
-      setMe(null);
+      const cachedUser = await getCurrentUser().catch(() => null);
+      setMe(cachedUser);
     }
   }, []);
 
@@ -160,34 +177,14 @@ export default function AlumniScreen() {
     setBatchOpen(false);
   };
 
-  const openYearbook = async (item: any) => {
-    if (!yearbookEnabled) {
-      Alert.alert('Yearbook unavailable', 'The digital yearbook is not published yet.');
-      return;
-    }
-
-    try {
-      const payload = await getAlumniYearbookEntry(item.id);
-      const entry = unwrap(payload);
-      if (!entry?.batch_id) throw new Error('No yearbook entry found.');
-      router.push({
-        pathname: '/yearbook',
-        params: {
-          batchId: String(entry.batch_id),
-          ...(entry.page_index !== undefined && entry.page_index !== null ? { pageIndex: String(entry.page_index) } : {}),
-        },
-      } as any);
-    } catch (requestError: any) {
-      Alert.alert('Yearbook unavailable', getErrorMessage(requestError, 'No yearbook entry was found for this alumni.'));
-    }
-  };
-
   const openStudentProfile = (item: any) => {
     router.push({ pathname: '/student/[id]', params: { id: String(item.id), source: 'alumni' } } as any);
   };
 
   const openMessage = (item: any) => {
-    router.push({ pathname: '/messages', params: { userId: String(item.id), name: alumniName(item) } } as any);
+    const id = alumniUserId(item);
+    if (!id) return;
+    router.push({ pathname: '/messages', params: { userId: String(id), name: alumniName(item) } } as any);
   };
 
   const updateCareerField = (key: keyof typeof careerForm, value: string) => {
@@ -195,6 +192,10 @@ export default function AlumniScreen() {
   };
 
   const saveCareer = async () => {
+    if (!canEditCareer) {
+      Alert.alert('Career profile unavailable', 'Career details are available after graduation.');
+      return;
+    }
     try {
       setCareerSaving(true);
       await updateAlumniCareer(careerForm);
@@ -210,13 +211,18 @@ export default function AlumniScreen() {
   };
 
   const myCareer = career(me);
+  const showDirectory = activeTab === 'directory';
 
   const renderHeader = () => (
     <>
       <View style={styles.hero}>
+        <TouchableOpacity style={styles.backButton} onPress={() => router.back()} activeOpacity={0.82}>
+          <FontAwesome name="chevron-left" size={14} color={colors.navy} />
+          <Text style={styles.backText}>Back</Text>
+        </TouchableOpacity>
         <Text style={styles.eyebrow}>{schoolName}</Text>
         <Text style={styles.heroTitle}>Alumni <Text style={styles.gold}>Tracker</Text></Text>
-        <Text style={styles.heroText}>Find batchmates, careers, locations, and their yearbook entries.</Text>
+        <Text style={styles.heroText}>Find batchmates, careers, and locations.</Text>
         <View style={styles.statsPill}>
           <FontAwesome name="graduation-cap" size={13} color={colors.gold} />
           <Text style={styles.statsText}>{loading ? 'Loading alumni...' : `${total} alumni`}</Text>
@@ -231,7 +237,24 @@ export default function AlumniScreen() {
         ) : null}
       </View>
 
-      <View style={styles.filters}>
+      <View style={styles.tabShell}>
+        {TRACKER_TABS.map((item) => {
+          const selected = activeTab === item.id;
+          return (
+            <TouchableOpacity
+              key={item.id}
+              style={[styles.trackerTab, selected && styles.trackerTabActive]}
+              onPress={() => setActiveTab(item.id)}
+              activeOpacity={0.86}
+            >
+              <FontAwesome name={item.icon as any} size={13} color={selected ? colors.gold : '#7d8aa3'} />
+              <Text style={[styles.trackerTabText, selected && styles.trackerTabTextActive]}>{item.label}</Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+
+      {showDirectory ? <View style={styles.filters}>
         <View style={styles.searchBox}>
           <FontAwesome name="search" size={14} color="#94a3b8" />
           <TextInput
@@ -252,7 +275,21 @@ export default function AlumniScreen() {
           <Text style={styles.fieldText}>{selectedBatch ? batchLabel(selectedBatch) : 'All Batches'}</Text>
           <FontAwesome name="chevron-down" size={11} color="#94a3b8" />
         </TouchableOpacity>
-      </View>
+      </View> : null}
+
+      {!showDirectory && !canEditCareer ? (
+        <View style={styles.lockedCareerCard}>
+          <View style={styles.lockedCareerIcon}>
+            <FontAwesome name="lock" size={18} color={colors.gold} />
+          </View>
+          <Text style={styles.lockedCareerTitle}>Career details unlock after graduation</Text>
+          <Text style={styles.lockedCareerText}>
+            Alumni career profiles are only for graduates. Current students can browse alumni, but cannot add job or company details yet.
+          </Text>
+        </View>
+      ) : null}
+
+      {!showDirectory && canEditCareer ? (
       <View style={styles.myCareerCard}>
         <View style={styles.myCareerIcon}>
           <FontAwesome name="briefcase" size={15} color={colors.gold} />
@@ -271,6 +308,7 @@ export default function AlumniScreen() {
           <Text style={styles.editCareerText}>Edit</Text>
         </TouchableOpacity>
       </View>
+      ) : null}
       {!!error && <Text style={styles.errorText}>{error}</Text>}
     </>
   );
@@ -279,7 +317,7 @@ export default function AlumniScreen() {
     <SafeAreaView style={styles.container} edges={['left', 'right']}>
       <StatusBar style="light" />
       <FlatList
-        data={alumni}
+        data={showDirectory ? alumni : []}
         keyExtractor={(item, index) => String(item?.id || index)}
         renderItem={({ item }) => (
           <View style={[styles.card, highlightedAlumniId && String(item?.id) === String(highlightedAlumniId) && styles.cardHighlighted]}>
@@ -325,12 +363,6 @@ export default function AlumniScreen() {
                   <FontAwesome name="user" size={12} color={colors.gold} />
                   <Text style={styles.primaryActionText}>Profile</Text>
                 </TouchableOpacity>
-                {yearbookEnabled ? (
-                  <TouchableOpacity style={styles.secondaryAction} onPress={() => openYearbook(item)}>
-                    <FontAwesome name="book" size={12} color={colors.gold} />
-                    <Text style={styles.secondaryActionText}>Yearbook</Text>
-                  </TouchableOpacity>
-                ) : null}
               </View>
               <TouchableOpacity style={styles.messageAction} onPress={() => openMessage(item)}>
                 <FontAwesome name="comment" size={12} color={colors.indigo} />
@@ -340,7 +372,7 @@ export default function AlumniScreen() {
           </View>
         )}
         ListHeaderComponent={renderHeader}
-        ListEmptyComponent={loading ? <ActivityIndicator color={colors.navy} style={{ marginTop: 32 }} /> : (
+        ListEmptyComponent={!showDirectory ? null : loading ? <ActivityIndicator color={colors.navy} style={{ marginTop: 32 }} /> : (
           <View style={styles.empty}>
             <FontAwesome name="users" size={38} color="#cbd5e1" />
             <Text style={styles.emptyTitle}>No Alumni Found</Text>
@@ -355,7 +387,7 @@ export default function AlumniScreen() {
         }}
         onEndReachedThreshold={0.35}
       />
-      <Modal visible={careerOpen} transparent animationType="slide" onRequestClose={() => setCareerOpen(false)}>
+      <Modal visible={careerOpen && canEditCareer} transparent animationType="slide" onRequestClose={() => setCareerOpen(false)}>
         <View style={styles.modalBackdrop}>
           <View style={styles.careerSheet}>
             <View style={styles.sheetHandle} />
@@ -456,6 +488,8 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f4f7fe' },
   content: { paddingBottom: 20 },
   hero: { backgroundColor: colors.navy, paddingHorizontal: 22, paddingTop: 28, paddingBottom: 34, borderBottomLeftRadius: 30, borderBottomRightRadius: 30 },
+  backButton: { alignSelf: 'flex-start', height: 42, borderRadius: 14, backgroundColor: '#ffffff', paddingHorizontal: 14, flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 18 },
+  backText: { color: colors.navy, fontSize: 13, fontWeight: '900' },
   eyebrow: { color: 'rgba(253,184,19,0.72)', fontSize: 11, fontWeight: '900', textTransform: 'uppercase', letterSpacing: 1.3, textAlign: 'center' },
   heroTitle: { color: '#ffffff', fontSize: 30, fontWeight: '900', textAlign: 'center', marginTop: 8 },
   gold: { color: colors.gold },
@@ -464,6 +498,11 @@ const styles = StyleSheet.create({
   statsText: { color: '#ffffff', fontSize: 12, fontWeight: '900' },
   deepLinkPill: { alignSelf: 'center', marginTop: 10, borderRadius: 999, backgroundColor: 'rgba(255,255,255,0.1)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.16)', paddingHorizontal: 12, paddingVertical: 7, flexDirection: 'row', alignItems: 'center', gap: 7 },
   deepLinkText: { color: 'rgba(255,255,255,0.82)', fontSize: 11, fontWeight: '900' },
+  tabShell: { marginHorizontal: 18, marginTop: -24, borderRadius: 18, backgroundColor: '#ffffff', borderWidth: 1, borderColor: colors.border, padding: 6, flexDirection: 'row', gap: 6, ...shadows.card },
+  trackerTab: { flex: 1, minHeight: 48, borderRadius: 14, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 7 },
+  trackerTabActive: { backgroundColor: colors.navy },
+  trackerTabText: { color: '#7d8aa3', fontSize: 12, fontWeight: '900' },
+  trackerTabTextActive: { color: '#ffffff' },
   filters: { padding: 18, gap: 10 },
   searchBox: { minHeight: 50, borderRadius: 15, backgroundColor: '#ffffff', borderWidth: 1, borderColor: colors.border, paddingHorizontal: 14, flexDirection: 'row', alignItems: 'center', gap: 10 },
   searchInput: { flex: 1, color: colors.navy, fontSize: 14 },
@@ -477,6 +516,10 @@ const styles = StyleSheet.create({
   myCareerMeta: { color: colors.muted, fontSize: 11, fontWeight: '700', marginTop: 3 },
   editCareerButton: { height: 36, borderRadius: 12, backgroundColor: colors.gold, paddingHorizontal: 13, flexDirection: 'row', alignItems: 'center', gap: 6 },
   editCareerText: { color: colors.navy, fontSize: 12, fontWeight: '900' },
+  lockedCareerCard: { marginHorizontal: 18, marginTop: 16, marginBottom: 14, backgroundColor: '#ffffff', borderRadius: 18, borderWidth: 1, borderColor: colors.border, padding: 18, alignItems: 'center', ...shadows.card },
+  lockedCareerIcon: { width: 46, height: 46, borderRadius: 15, backgroundColor: colors.navy, alignItems: 'center', justifyContent: 'center', marginBottom: 12 },
+  lockedCareerTitle: { color: colors.navy, fontSize: 16, fontWeight: '900', textAlign: 'center' },
+  lockedCareerText: { color: colors.muted, fontSize: 13, fontWeight: '700', lineHeight: 19, textAlign: 'center', marginTop: 7 },
   errorText: { color: colors.danger, fontSize: 12, fontWeight: '800', textAlign: 'center', paddingHorizontal: 18, marginBottom: 8 },
   card: { marginHorizontal: 18, marginBottom: 14, backgroundColor: '#ffffff', borderRadius: 20, borderWidth: 1, borderColor: colors.border, padding: 15, flexDirection: 'row', gap: 14, ...shadows.card },
   cardHighlighted: { borderColor: colors.gold, borderWidth: 2, backgroundColor: '#fffaf0' },

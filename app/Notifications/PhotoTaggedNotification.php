@@ -17,11 +17,11 @@ class PhotoTaggedNotification extends Notification
         public User    $tagger,       // the person who did the tagging
         public string  $photoUrl,     // thumbnail / direct URL of the photo
         public ?string $actionUrl = null,  // deep-link into the app / web view
+        public ?int    $photoId = null,
+        public ?int    $photoOwnerId = null,
     ) {}
 
-    // -------------------------------------------------------------------------
     // Channels
-    // -------------------------------------------------------------------------
 
     public function via(object $notifiable): array
     {
@@ -29,21 +29,15 @@ class PhotoTaggedNotification extends Notification
         return [];
     }
 
-    // -------------------------------------------------------------------------
     // Dispatch helpers — call this instead of Notification::send()
-    // -------------------------------------------------------------------------
 
-    /**
-     * Dispatch both push + email for a tagged user.
-     *
-     * Usage:
-     *   PhotoTaggedNotification::dispatchFor($taggedUser, $tagger, $photoUrl, $actionUrl);
-     */
     public static function dispatchFor(
         User    $tagged,
         User    $tagger,
         string  $photoUrl,
         ?string $actionUrl = null,
+        ?int    $photoId = null,
+        ?int    $photoOwnerId = null,
     ): void {
         $taggerName = $tagger->name ?? 'Someone';
 
@@ -58,6 +52,9 @@ class PhotoTaggedNotification extends Notification
                 'tagger_name'=> $taggerName,
                 'photo_url'  => $photoUrl,
                 'action_url' => $actionUrl ?? '',
+                'photo_id'   => $photoId,
+                'photo_owner_id' => $photoOwnerId,
+                'receiver_id' => $tagged->id,
             ],
             type: 'photo_tagged',
         );

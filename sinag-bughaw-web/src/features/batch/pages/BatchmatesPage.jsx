@@ -245,6 +245,7 @@ function YearbookFilterPill({ year, department, course }) {
 }
 
 // FIX: Face result banner component
+// eslint-disable-next-line no-unused-vars
 function FaceResultBanner({ matches, onClear }) {
   if (!matches.length) return null;
   return (
@@ -285,7 +286,7 @@ export default function BatchmatesPage() {
     return ['null', 'undefined', ''].includes(normalized.toLowerCase()) ? null : normalized;
   };
   const {
-    user, batchmates, loading, error,
+    user, batchmates, loading,
     isPremium, filterMeta, fetchBatchmates,
   } = useBatch();
 

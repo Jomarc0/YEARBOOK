@@ -22,7 +22,7 @@ export default function Footer() {
 
   const quickLinks = QUICK_LINKS.filter((link) => {
     if (link.to === '/directory') return isOn('enable_student_directory_search');
-    if (link.to === '/flipbook') return isOn('enable_flipbook_viewer') && isOn('publish_yearbook');
+    if (link.to === '/flipbook') return isOn('enable_flipbook_viewer');
     return true;
   });
 

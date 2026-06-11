@@ -32,32 +32,20 @@ class Yearbook extends Model
         ];
     }
 
-    // ── Relationships ──────────────────────────────────────────────────────
+    // Relationships
 
     public function batch(): BelongsTo
     {
         return $this->belongsTo(Batch::class);
     }
 
-    /**
-     * Photos associated with this yearbook.
-     *
-     * NOTE: Requires a `yearbook_id` (unsignedBigInteger, nullable, foreign)
-     * column on the `photos` table. Add via migration if not present:
-     *
-     *   Schema::table('photos', function (Blueprint $table) {
-     *       $table->foreignId('yearbook_id')->nullable()->constrained()->nullOnDelete()->after('album_id');
-     *   });
-     *
-     * Also add 'yearbook_id' to Photo::$fillable.
-     * Remove this relationship entirely if Yearbook→Photo linking is not needed.
-     */
+
     public function photos(): HasMany
     {
         return $this->hasMany(Photo::class);
     }
 
-    // ── Scopes ─────────────────────────────────────────────────────────────
+    // Scopes 
 
     public function scopePublished($query)
     {
@@ -69,7 +57,7 @@ class Yearbook extends Model
         return $query->where('is_active', true);
     }
 
-    // ── Accessors ──────────────────────────────────────────────────────────
+    // Accessors 
 
     public function getIsPdfReadyAttribute(): bool
     {

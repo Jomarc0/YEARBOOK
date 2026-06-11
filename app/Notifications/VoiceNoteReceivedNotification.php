@@ -1,5 +1,4 @@
 <?php
-// app/Notifications/VoiceNoteReceivedNotification.php
 
 namespace App\Notifications;
 
@@ -25,6 +24,7 @@ class VoiceNoteReceivedNotification extends Notification
             'voice_note_id' => $this->voiceNote->id,
             'sender_id'   => $this->voiceNote->sender_id,
             'sender_name' => $this->voiceNote->sender->name ?? 'Someone',
+            'sender_avatar' => $this->voiceNote->sender->profile_picture ?? $this->voiceNote->sender->avatar ?? null,
             'title'       => $this->voiceNote->title,
             'message'     => ($this->voiceNote->sender->name ?? 'Someone') . ' sent you a voice note!',
         ];

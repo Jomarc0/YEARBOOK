@@ -7,12 +7,8 @@ namespace App\Http\Requests\Yearbook;
 use Illuminate\Foundation\Http\FormRequest;
 
 /**
- * UploadVideoRequest
- *
  * Validates HD video uploads.
- * Per-tier video size limits (free: 50 MB / premium: 2 GB)
- * are enforced inside CloudinaryService.
- * This provides the HTTP-level baseline guard only (2 GB cap).
+ * Per-tier video size limits premium: 2 GB
  */
 class UploadVideoRequest extends FormRequest
 {

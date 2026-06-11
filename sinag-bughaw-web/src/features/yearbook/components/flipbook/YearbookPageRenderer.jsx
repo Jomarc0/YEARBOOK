@@ -10,7 +10,7 @@
  *      so yearbook profiles can open discovery student profiles.
  *   4. Wrapped in forwardRef (required by react-pageflip).
  */
-import React, { forwardRef } from 'react';
+import { forwardRef } from 'react';
 
 import CoverPage        from '../pages/CoverPage';
 import DedicationPage   from '../pages/DedicationPage';   // FIX: only DedicationPage now
@@ -42,6 +42,7 @@ const YearbookPageRenderer = forwardRef(
         case 'cover':           return <CoverPage        {...sharedProps} />;
         case 'dedication':      return <DedicationPage   {...sharedProps} />;
         case 'toc':             return <TOCPage          {...sharedProps} />;
+        case 'course-header':
         case 'section-header':  return <SectionHeader    {...sharedProps} />;
 
         case 'student-grid':

@@ -31,10 +31,6 @@ class GraduationAlbum extends Model
         'published_at' => 'datetime',
     ];
 
-    // =========================================================================
-    // Relationships — all with explicit FK 'graduation_album_id' to match GraduationPhoto
-    // =========================================================================
-
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
@@ -73,10 +69,7 @@ class GraduationAlbum extends Model
             ->orderBy('sort_order');
     }
 
-    // =========================================================================
     // Scopes
-    // =========================================================================
-
     public function scopePublished(Builder $query): Builder
     {
         return $query->where('status', 'published');
@@ -102,9 +95,7 @@ class GraduationAlbum extends Model
         return $query->where('batch_id', $batchId);
     }
 
-    // =========================================================================
     // Accessors
-    // =========================================================================
 
     public function getCoverPhotoUrlAttribute(): ?string
     {
@@ -118,9 +109,7 @@ class GraduationAlbum extends Model
         return $first?->file_path ?? $this->media_url;
     }
 
-    // =========================================================================
     // Helpers
-    // =========================================================================
 
     public function isPublished(): bool { return $this->status === 'published'; }
     public function isDraft(): bool     { return $this->status === 'draft'; }

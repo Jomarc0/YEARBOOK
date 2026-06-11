@@ -1,6 +1,5 @@
 import { useParams, Link } from 'react-router-dom';
 import { useSection } from '@/features/batch/hooks/useBatch';
-import { useAuth } from '@/features/auth/hooks/useAuth';
 import Navbar from '@/components/layout/Navbar';
 import Footer from '@/components/layout/Footer';
 
@@ -50,7 +49,6 @@ function LockedOverlay() {
 
 export default function SectionDetailPage() {
   const { id }   = useParams();
-  const { user } = useAuth();
   const {
     section, students, loading,
     error, isPremium, counts,
