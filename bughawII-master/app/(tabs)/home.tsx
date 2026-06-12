@@ -87,6 +87,10 @@ const shouldShowFeedPost = (post: any) => {
   return mediaItemsOf(post).length > 0 || meaningfulText(post?.caption || post?.body || post?.message);
 };
 
+// ─── Helper: deduplicate an array by a string key ───────────────────────────
+const deduplicateById = (list: any[]): any[] =>
+  [...new Map(list.map((item) => [String(item?.id ?? item?.name ?? Math.random()), item])).values()];
+
 function DividerLine() {
   return <View style={styles.divider} />;
 }
@@ -150,7 +154,7 @@ function QuickLinks({ onPress }: { onPress: (route: string) => void }) {
   return (
     <FlatList
       data={QUICK_LINKS}
-      keyExtractor={(item) => item.label}
+      keyExtractor={(item) => `quicklink-${item.label}`}
       horizontal
       scrollEnabled={false}
       contentContainerStyle={styles.quickList}
@@ -176,7 +180,7 @@ function StatsRow({ batchmatesCount, trendingCount, memoriesCount }: { batchmate
   return (
     <View style={styles.statsRow}>
       {stats.map((stat) => (
-        <View key={stat.key} style={styles.statCard}>
+        <View key={`stat-${stat.key}`} style={styles.statCard}>
           <Text style={styles.statLabel}>{stat.label}</Text>
           <Text style={[styles.statValue, stat.amber && styles.statValueAmber]}>{compactNumber(stat.value)}</Text>
           <Text style={styles.statSubtitle}>{stat.subtitle}</Text>
@@ -194,7 +198,8 @@ function SuggestedBatchmates({ students, onOpen, onSeeAll }: { students: any[]; 
       <SectionHeader title="Suggested Batchmates" onSeeAll={onSeeAll} />
       <FlatList
         data={students.slice(0, 12)}
-        keyExtractor={(item, index) => String(item?.id || `${item?.name}-${index}`)}
+        // FIX: prefix + index appended to guarantee uniqueness even if IDs collide
+        keyExtractor={(item, index) => `batchmate-${String(item?.id ?? item?.name ?? index)}-${index}`}
         horizontal
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.horizontalList}
@@ -217,7 +222,8 @@ function TrendingThisWeek({ students, onOpen, onSeeAll }: { students: any[]; onO
       <SectionHeader title="Trending This Week" onSeeAll={onSeeAll} />
       <FlatList
         data={students.slice(0, 12)}
-        keyExtractor={(item, index) => String(item?.id || `${item?.name}-${index}`)}
+        // FIX: prefix + index appended to guarantee uniqueness even if IDs collide
+        keyExtractor={(item, index) => `trending-${String(item?.id ?? item?.name ?? index)}-${index}`}
         horizontal
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.horizontalList}
@@ -296,7 +302,7 @@ function MemoryDigest({
       {loading ? (
         <View style={styles.memoryRows}>
           {[0, 1, 2].map((item) => (
-            <View key={item} style={styles.memorySkeletonRow}>
+            <View key={`memory-skeleton-${item}`} style={styles.memorySkeletonRow}>
               <View style={styles.memorySkeletonIcon} />
               <View style={styles.memorySkeletonText}>
                 <View style={styles.memorySkeletonLineWide} />
@@ -317,7 +323,7 @@ function MemoryDigest({
             const thumb = type === 'appeared_in_photo' ? memoryThumb(item) : null;
             return (
               <TouchableOpacity
-                key={String(item?.id || item?.photo_id || item?.content_id || `${type}-${index}`)}
+                key={`memory-${String(item?.id || item?.photo_id || item?.content_id || `${type}-${index}`)}-${index}`}
                 style={styles.memoryRow}
                 onPress={() => onOpen(item)}
                 activeOpacity={0.84}
@@ -360,7 +366,7 @@ function AnalyticsSnapshot({ metrics }: { metrics: { key: string; label: string;
           const hasValue = Number(metric.value || 0) > 0;
           const positive = Number(metric.trend || metric.value || 0) >= 0;
           return (
-            <View key={metric.key} style={styles.metricCard}>
+            <View key={`metric-${metric.key}`} style={styles.metricCard}>
               <View style={styles.metricIcon}>
                 <FontAwesome name={metric.icon} size={15} color={AMBER} />
               </View>
@@ -386,7 +392,7 @@ function FilterPills({ active, onChange }: { active: string; onChange: (key: str
   return (
     <FlatList
       data={FEED_FILTERS}
-      keyExtractor={(item) => item.key}
+      keyExtractor={(item) => `filter-${item.key}`}
       horizontal
       showsHorizontalScrollIndicator={false}
       contentContainerStyle={styles.filterList}
@@ -417,8 +423,13 @@ function SearchResults({ results, onOpen }: { results: any[]; onOpen: (item: any
 
   return (
     <View style={styles.searchResults}>
-      {results.map((item) => (
-        <TouchableOpacity key={`${item.type}-${item.id}`} style={styles.resultRow} onPress={() => onOpen(item)} activeOpacity={0.8}>
+      {results.map((item, index) => (
+        <TouchableOpacity
+          key={`search-${item.type}-${String(item.id ?? index)}-${index}`}
+          style={styles.resultRow}
+          onPress={() => onOpen(item)}
+          activeOpacity={0.8}
+        >
           <Avatar user={item} size="small" />
           <View style={styles.resultCopy}>
             <Text style={styles.resultName} numberOfLines={1}>{item.name || 'Result'}</Text>
@@ -493,7 +504,7 @@ function FeedPost({ post, currentUser, onOpenProfile }: { post: any; currentUser
               <View style={styles.mediaDots}>
                 {media.map((item: any, index: number) => (
                   <TouchableOpacity
-                    key={String(item?.id || item?.file_path || index)}
+                    key={`media-dot-${String(item?.id || item?.file_path || index)}-${index}`}
                     style={[styles.mediaDot, index === mediaIndex && styles.mediaDotActive]}
                     onPress={() => setMediaIndex(index)}
                   />
@@ -641,7 +652,11 @@ export default function HomeScreen() {
       const nextPosts = unwrap(payload);
       const meta = paginationMeta(payload);
       const visiblePosts = nextPosts.filter(shouldShowFeedPost);
-      setPosts((current) => append ? [...current, ...visiblePosts] : visiblePosts);
+      // FIX: deduplicate posts to prevent key collisions in the feed FlatList
+      setPosts((current) => {
+        const combined = append ? [...current, ...visiblePosts] : visiblePosts;
+        return deduplicateById(combined);
+      });
       setPage(meta.currentPage);
       setLastPage(meta.lastPage);
     } catch (requestError: any) {
@@ -693,8 +708,17 @@ export default function HomeScreen() {
       getTrending(),
     ]);
 
-    if (batchmatesResult.status === 'fulfilled') setBatchmates((unwrap(batchmatesResult.value) || []).slice(0, 12));
-    if (trendingResult.status === 'fulfilled') setTrending((unwrap(trendingResult.value) || []).slice(0, 12));
+    if (batchmatesResult.status === 'fulfilled') {
+      const raw = (unwrap(batchmatesResult.value) || []).slice(0, 12);
+      // FIX: deduplicate at the data level — root cause of the duplicate key warning
+      setBatchmates(deduplicateById(raw));
+    }
+
+    if (trendingResult.status === 'fulfilled') {
+      const raw = (unwrap(trendingResult.value) || []).slice(0, 12);
+      // FIX: deduplicate at the data level — root cause of the duplicate key warning
+      setTrending(deduplicateById(raw));
+    }
   }, []);
 
   useEffect(() => {
@@ -912,7 +936,8 @@ export default function HomeScreen() {
       <StatusBar style="light" />
       <FlatList
         data={posts}
-        keyExtractor={(item, index) => String(item?.id || index)}
+        // FIX: prefix + index to prevent collision between numeric IDs and fallback indices
+        keyExtractor={(item, index) => `post-${String(item?.id ?? index)}-${index}`}
         renderItem={({ item }) => <FeedPost post={item} currentUser={currentUser} onOpenProfile={openProfile} />}
         ListHeaderComponent={renderHeader}
         ListEmptyComponent={!loading ? (

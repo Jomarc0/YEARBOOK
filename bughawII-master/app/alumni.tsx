@@ -20,7 +20,7 @@ const alumniPhoto = (item: any) => imageUrl(item?.profile_picture || item?.avata
 const alumniUserId = (item: any) => item?.user_id || item?.account_user_id || item?.user?.id || item?.student?.user_id || item?.student?.account_user_id || item?.id;
 const career = (item: any) => item?.career || {};
 const initials = (name = '') => name.trim().split(/\s+/).slice(0, 2).map((part) => part[0]?.toUpperCase()).join('') || 'NU';
-const batchId = (item: any) => item?.id || item?.batch_id;
+const batchId = (item: any) => item?.id ?? item?.batch_id;
 const batchLabel = (item: any) => item?.title || item?.name || `Batch ${item?.year || item?.batch_year || ''}`.trim();
 const graduationYear = (item: any) => item?.graduation_year || item?.batch_year || item?.student?.graduation_year || item?.student_record?.graduation_year;
 const isGraduate = (item: any) => {
@@ -318,7 +318,10 @@ export default function AlumniScreen() {
       <StatusBar style="light" />
       <FlatList
         data={showDirectory ? alumni : []}
-        keyExtractor={(item, index) => String(item?.id || index)}
+        keyExtractor={(item, index) => {
+          const id = item?.id ?? item?.user_id ?? item?.alumni_id;
+          return id != null ? String(id) : `alumni-${index}`;
+        }}
         renderItem={({ item }) => (
           <View style={[styles.card, highlightedAlumniId && String(item?.id) === String(highlightedAlumniId) && styles.cardHighlighted]}>
             <View style={styles.avatarWrap}>
@@ -464,7 +467,10 @@ export default function AlumniScreen() {
             </TouchableOpacity>
             <FlatList
               data={batches}
-              keyExtractor={(item, index) => String(batchId(item) || index)}
+              keyExtractor={(item, index) => {
+                const id = batchId(item);
+                return id != null ? String(id) : `batch-${index}`;
+              }}
               renderItem={({ item }) => {
                 const active = selectedBatch && String(batchId(selectedBatch)) === String(batchId(item));
                 return (

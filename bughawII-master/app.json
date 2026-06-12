@@ -7,7 +7,6 @@
     "icon": "./assets/images/NU_logo.png",
     "scheme": "nuyearbook",
     "userInterfaceStyle": "automatic",
-
     "android": {
       "package": "ph.edu.nu.yearbook",
       "usesCleartextTraffic": true,
@@ -15,19 +14,20 @@
         "foregroundImage": "./assets/images/NU_logo.png",
         "backgroundColor": "#003DA5"
       },
-      "edgeToEdgeEnabled": true
+      "edgeToEdgeEnabled": true,
+      "permissions": [
+        "android.permission.RECORD_AUDIO",
+        "android.permission.MODIFY_AUDIO_SETTINGS"
+      ]
     },
-
     "ios": {
       "bundleIdentifier": "ph.edu.nu.yearbook",
       "supportsTablet": true
     },
-
     "web": {
       "output": "static",
       "favicon": "./assets/images/NU_logo.png"
     },
-
     "plugins": [
       "expo-router",
       [
@@ -48,7 +48,12 @@
     },
     "extra": {
       "apiUrl": "https://yearbook-myji.onrender.com/api",
-      "authBaseUrl": "https://yearbook-myji.onrender.com"
-    }
+      "authBaseUrl": "https://yearbook-myji.onrender.com",
+      "router": {},
+      "eas": {
+        "projectId": "d8da1a59-b679-4db5-a1d9-d223546b3b93"
+      }
+    },
+    "owner": "togi012322"
   }
 }

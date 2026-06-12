@@ -1,568 +1,489 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, Animated, Dimensions, FlatList, Modal, Platform, RefreshControl, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, Animated, Modal, RefreshControl, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
 import { FontAwesome } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import * as Haptics from 'expo-haptics';
 import * as ImagePicker from 'expo-image-picker';
-import { createAudioPlayer, RecordingPresets, requestRecordingPermissionsAsync, setAudioModeAsync, useAudioRecorder, useAudioRecorderState } from 'expo-audio';
-import { fetchCurrentUser, getAppConfig, getErrorMessage, getSearchFilters, getStudent, getStudentAchievements, getStudentSuggestions, getStudents, getVoiceNotesForProfile, imageUrl, paginationMeta, searchFace, sendVoiceNote, unwrap } from '../../lib/api';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import {
+  fetchCurrentUser,
+  generateYearbook,
+  getAppConfig,
+  getBatchmates,
+  getBatches,
+  getCurrentUser,
+  getDiscoveryCrossProgram,
+  getDiscoverySchool,
+  getDiscoverySectionmates,
+  getErrorMessage,
+  imageUrl,
+  searchFace,
+  unwrap,
+} from '../../lib/api';
 
-const { height } = Dimensions.get('window');
-const audioUploadPart = (uri: string) => ({
-  uri: Platform.OS === 'ios' ? uri.replace('file://', '') : uri,
-  name: 'voice-memory.m4a',
-  type: 'audio/m4a',
-});
-
-const COURSE_SHORT: Record<string, string> = {
-  'Bachelor of Science in Architecture': 'BSArch',
-  'Bachelor of Science in Civil Engineering': 'BSCE',
-  'Bachelor of Science in Computer Science': 'BSCS',
-  'Bachelor of Science in Information Technology': 'BSIT',
-  'Bachelor of Multimedia Arts': 'BMA',
-  'Bachelor of Science in Nursing': 'BSN',
-  'Bachelor of Science in Medical Technology': 'BSMT',
-  'Bachelor of Science in Psychology': 'BSPsy',
-  'Bachelor of Science in Accountancy': 'BSA',
-  'Bachelor of Science in Business Administration - Financial Management': 'BSBA-FM',
-  'Bachelor of Science in Business Administration - Marketing Management': 'BSBA-MM',
-  'Bachelor of Science in Tourism Management': 'BSTM',
-  'Master in Management': 'MM',
-  ABM: 'ABM',
-  STEM: 'STEM',
-  HUMSS: 'HUMSS',
+const COLORS = {
+  navy: '#1B2A5E',
+  gold: '#F5A623',
+  background: '#F0F2F7',
+  card: '#FFFFFF',
+  border: '#E0E3EC',
+  muted: '#888888',
 };
 
-const COURSE_FULL_BY_SHORT = Object.entries(COURSE_SHORT).reduce<Record<string, string>>((map, [full, short]) => {
-  map[short.toUpperCase()] = full;
-  map[short.replace(/[^a-z0-9]/gi, '').toUpperCase()] = full;
-  return map;
-}, {});
-
-const normalizeCourseName = (course?: string | null) => {
-  const raw = String(course || '').trim();
-  if (!raw || raw.toLowerCase() === 'no program listed') return '';
-  const compact = raw.replace(/[^a-z0-9]/gi, '').toUpperCase();
-  return COURSE_FULL_BY_SHORT[raw.toUpperCase()] || COURSE_FULL_BY_SHORT[compact] || raw;
+const DEPARTMENTS = ['All Departments', 'SAHS', 'SACE', 'SHS', 'SABM'];
+const YEAR_OPTIONS = ['All Years', '2026', '2025', '2024', '2023', '2022'];
+const VIEW_MODES = [
+  { key: 'batch', label: 'My Batch', icon: 'graduation-cap', desc: 'Same course & year' },
+  { key: 'section', label: 'My Section', icon: 'clone', desc: 'My classmates' },
+  { key: 'school', label: 'Whole School', icon: 'institution', desc: 'All students' },
+  { key: 'cross_program', label: 'Cross-Program', icon: 'random', desc: 'Other programs' },
+] as const;
+const COURSE_BY_DEPT: Record<string, string[]> = {
+  SAHS: ['BS Medical Technology', 'BS Psychology', 'BS Nursing'],
+  SACE: ['BS Civil Engineering', 'BS Architecture', 'BS Computer Engineering'],
+  SHS: ['STEM', 'ABM', 'HUMSS'],
+  SABM: ['BS Accountancy', 'BS Business Admin', 'BS Multimedia Arts'],
 };
 
-const COURSE_FILTERS = [
-  { label: 'All Programs', value: 'All Programs' },
-  ...Object.entries(COURSE_SHORT).map(([value, label]) => ({ label, value })),
-];
-const DEFAULT_BATCH_FILTERS = [
-  { label: 'All Years', value: 'All Years' },
-  ...Array.from({ length: 8 }, (_, index) => String(new Date().getFullYear() - index)).map((year) => ({ label: year, value: year })),
-];
+const COURSE_ALIASES: Record<string, string[]> = {
+  'bachelor of science in architecture': ['bs architecture', 'architecture', 'bsarch'],
+  'bachelor of multimedia arts': ['bachelor of multimedia arts (bmma)', 'bmma', 'bma', 'multimedia arts'],
+  'bachelor of science in civil engineering': ['bs civil engineering', 'civil engineering', 'bsce'],
+  'bachelor of science in computer science': ['bs computer science', 'bscs', 'computer science'],
+  'bachelor of science in information technology': ['bs information technology', 'bsit', 'information technology'],
+  'bachelor of science in nursing': ['bs nursing', 'bsn', 'nursing'],
+  'bachelor of science in medical technology': ['bs medical technology', 'bsmt', 'medical technology'],
+  'bachelor of science in psychology': ['bs psychology', 'bsp', 'psychology'],
+  'bachelor of science in accountancy': ['bs accountancy', 'bsa', 'accountancy'],
+  'bachelor of science in business administration - financial management': ['bsba financial management', 'bsba-fm', 'financial management'],
+  'bachelor of science in business administration - marketing management': ['bsba marketing management', 'bsba-mm', 'marketing management'],
+  'bachelor of science in tourism management': ['bs tourism management', 'bstm', 'tourism management'],
+  'master in management': ['mm'],
+  abm: ['accountancy business and management'],
+  stem: ['science technology engineering mathematics'],
+  humss: ['humanities and social sciences'],
+};
 
-const getCourseShort = (course: string, fallback = 'Student') => COURSE_SHORT[normalizeCourseName(course)] || course || fallback;
-const getStudentId = (student: any) => student?.id || student?.user_id || student?.student_id;
-const getStudentName = (student: any) => student?.name || student?.full_name || `${student?.first_name || ''} ${student?.last_name || ''}`.trim() || 'Unnamed Student';
-const getStudentCourse = (student: any) => normalizeCourseName(student?.course || student?.program || student?.degree);
-const getStudentSection = (student: any) => student?.section?.name || student?.section_name || student?.section || 'No section';
-const getStudentYear = (student: any) => student?.batch_year || student?.year_level || student?.year || student?.batch?.year || student?.graduation_year || new Date().getFullYear();
-const getStudentPhoto = (student: any) => imageUrl(student?.profile_picture || student?.profile_pic || student?.photo || student?.avatar);
-const getInitials = (name = '') => name.trim().split(/\s+/).map((word) => word[0]?.toUpperCase() || '').slice(0, 2).join('') || 'NU';
-const getRecipientId = (student: any) => student?.user_id || student?.account_user_id || student?.user?.id || student?.student?.user_id || student?.student?.account_user_id || student?.id;
-const faceMatchId = (match: any) => match?.user_id || match?.student_id || match?.id;
-const collectOwnDirectoryIds = (user: any) => {
-  const student = user?.student_record || user?.studentRecord || user?.student || {};
-  return new Set(
-    [
-      user?.id,
-      user?.user_id,
-      user?.account_user_id,
-      user?.student_id,
-      user?.student_record_id,
-      user?.studentRecordId,
-      student?.id,
-      student?.user_id,
-      student?.student_id,
-      student?.account_user_id,
-    ].filter((value) => value !== undefined && value !== null && value !== '').map((value) => String(value))
+const normalizeText = (value: any) => String(value ?? '').trim().toLowerCase();
+const studentName = (item: any) => item?.name || item?.full_name || item?.student_name || 'Student';
+const studentId = (item: any) => item?.id ?? item?.user_id ?? item?.account_user_id ?? item?.student_id;
+const studentCourse = (item: any) => item?.course || item?.program || item?.student?.course || '';
+const studentDepartment = (item: any) => item?.batch?.department || item?.department || 'Department';
+const studentSection = (item: any) => item?.section?.name || item?.section_name || item?.section || 'No Section';
+const studentYear = (item: any) => String(item?.graduation_year || item?.batch_year || item?.batch?.graduation_year || item?.year || '');
+const studentNo = (item: any) => item?.student_no || item?.student_number || item?.student_id || item?.student?.student_no || '';
+const studentPhoto = (item: any) => imageUrl(
+  item?.profile_picture ||
+  item?.profile_pic ||
+  item?.photo_url ||
+  item?.photo ||
+  item?.avatar ||
+  item?.avatar_url ||
+  item?.image_url ||
+  item?.user?.profile_picture ||
+  item?.user?.profile_pic ||
+  item?.user?.photo ||
+  item?.student?.profile_picture ||
+  item?.student?.photo_url ||
+  item?.student?.photo ||
+  item?.student_record?.photo ||
+  item?.studentRecord?.photo,
+);
+const initials = (name: string) => name.split(' ').filter(Boolean).slice(0, 2).map((part) => part[0]).join('').toUpperCase() || 'NU';
+const courseShortLabel = (course: string) => {
+  const normalized = normalizeText(course);
+  const direct = Object.entries(COURSE_ALIASES).find(([full, aliases]) => full === normalized || aliases.some((alias) => alias === normalized));
+  if (!direct) return course;
+  const [full] = direct;
+  if (full.includes('accountancy')) return 'BSA';
+  if (full.includes('financial management')) return 'BSBA-FM';
+  if (full.includes('marketing management')) return 'BSBA-MM';
+  if (full.includes('tourism')) return 'BSTM';
+  if (full.includes('computer science')) return 'BSCS';
+  if (full.includes('information technology')) return 'BSIT';
+  if (full.includes('medical technology')) return 'BSMT';
+  if (full.includes('psychology')) return 'BSP';
+  if (full.includes('nursing')) return 'BSN';
+  if (full.includes('architecture')) return 'BSARCH';
+  if (full.includes('civil engineering')) return 'BSCE';
+  if (full.includes('multimedia')) return 'BMMA';
+  return course;
+};
+const userStudent = (user: any) => user?.student || user?.profile || user || {};
+const userYear = (user: any) => String(userStudent(user)?.graduation_year || user?.graduation_year || user?.batch_year || '');
+const userCourse = (user: any) => userStudent(user)?.course || user?.course || '';
+const userSection = (user: any) => userStudent(user)?.section?.name || userStudent(user)?.section_name || user?.section?.name || user?.section_name || '';
+const sameText = (a: any, b: any) => Boolean(a && b && normalizeText(a) === normalizeText(b));
+const hasPaidAccess = (user: any) => Boolean(
+  user?.is_premium ||
+  user?.is_subscribed ||
+  user?.premium ||
+  user?.tier === 'premium' ||
+  user?.tier === 'standard' ||
+  user?.subscription?.active ||
+  user?.subscription_status === 'active'
+);
+
+const getPayloadList = (payload: any) => {
+  const raw = unwrap(payload);
+  if (Array.isArray(raw)) return raw;
+  if (Array.isArray(raw?.data)) return raw.data;
+  if (Array.isArray(payload?.data)) return payload.data;
+  return [];
+};
+
+const flattenBatches = (payload: any) => {
+  const raw = unwrap(payload);
+  if (Array.isArray(raw)) return raw;
+  if (Array.isArray(raw?.data)) return raw.data;
+  if (raw && typeof raw === 'object') return Object.values(raw).flat();
+  return [];
+};
+
+function courseMatches(studentCourseValue: string, selectedCourse: string) {
+  if (!selectedCourse) return true;
+  const selected = normalizeText(selectedCourse);
+  const course = normalizeText(studentCourseValue);
+  const selectedTerms = [selected, ...(COURSE_ALIASES[selected] ?? [])];
+  const courseTerms = [course, ...(COURSE_ALIASES[course] ?? [])];
+  return selectedTerms.some((term) => courseTerms.some((courseTerm) => courseTerm === term || courseTerm.includes(term) || term.includes(courseTerm)));
+}
+
+function FilterDropdown({ label, value, variant, onPress }: { label: string; value: string; variant: 'gold' | 'navy' | 'white'; onPress: () => void }) {
+  const isNavy = variant === 'navy';
+  const isWhite = variant === 'white';
+  return (
+    <TouchableOpacity style={[styles.dropdown, isNavy && styles.dropdownNavy, isWhite && styles.dropdownWhite]} onPress={onPress} activeOpacity={0.88}>
+      <Text style={[styles.dropdownLabel, isNavy && styles.dropdownLabelNavy]}>{label}</Text>
+      <View style={styles.dropdownValueRow}>
+        <Text style={[styles.dropdownValue, isNavy && styles.dropdownValueNavy, isWhite && styles.dropdownValueWhite]} numberOfLines={1}>{value}</Text>
+        <FontAwesome name="chevron-down" size={10} color={isNavy ? COLORS.gold : isWhite ? COLORS.muted : COLORS.navy} />
+      </View>
+    </TouchableOpacity>
   );
-};
-const directoryIdentityValues = (student: any) => [
-  student?.id,
-  student?.user_id,
-  student?.account_user_id,
-  student?.student_id,
-  student?.student_record_id,
-  student?.studentRecordId,
-  student?.student?.id,
-  student?.student?.user_id,
-  student?.student?.student_id,
-  student?.user?.id,
-].filter((value) => value !== undefined && value !== null && value !== '').map((value) => String(value));
-const isOwnDirectoryEntry = (student: any, ownIds: Set<string>) => ownIds.size > 0 && directoryIdentityValues(student).some((value) => ownIds.has(value));
-const getAudioUrl = (note: any) => imageUrl(note?.audio_url || note?.audio_path || note?.url);
-const formatDuration = (seconds?: number) => {
-  if (!seconds) return null;
-  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
-};
-const formatDate = (value?: string) => {
-  if (!value) return 'Pending';
-  return new Date(value).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' });
-};
+}
 
-export default function DirectoryScreen() {
+function BottomSheetFilter({ visible, title, options, selected, onSelect, onApply, onClose }: {
+  visible: boolean;
+  title: string;
+  options: { label: string; value: string }[];
+  selected: string;
+  onSelect: (value: string) => void;
+  onApply: () => void;
+  onClose: () => void;
+}) {
+  return (
+    <Modal transparent visible={visible} animationType="slide" onRequestClose={onClose}>
+      <View style={styles.sheetOverlay}>
+        <TouchableOpacity style={styles.sheetBackdrop} activeOpacity={1} onPress={onClose} />
+        <View style={styles.sheet}>
+          <View style={styles.sheetHandle} />
+          <Text style={styles.sheetTitle}>{title}</Text>
+          <ScrollView style={styles.sheetScroll} showsVerticalScrollIndicator={false}>
+            {options.map((option) => {
+              const active = selected === option.value;
+              return (
+                <TouchableOpacity key={option.value} style={styles.sheetOption} onPress={() => onSelect(option.value)} activeOpacity={0.84}>
+                  <Text style={styles.sheetOptionText}>{option.label}</Text>
+                  <View style={[styles.sheetCircle, active && styles.sheetCircleActive]}>
+                    {active ? <FontAwesome name="check" size={11} color={COLORS.navy} /> : null}
+                  </View>
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+          <TouchableOpacity style={styles.sheetApply} onPress={onApply}>
+            <Text style={styles.sheetApplyText}>Apply filter</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
+export default function DiscoveryScreen() {
   const router = useRouter();
-  const { filter, q, batch } = useLocalSearchParams();
+  const routeParams = useLocalSearchParams<{ year?: string; department?: string; course?: string }>();
+  const [query, setQuery] = useState('');
+  const [year, setYear] = useState('');
+  const [department, setDepartment] = useState('All Departments');
+  const [course, setCourse] = useState('');
+  const [viewMode, setViewMode] = useState<(typeof VIEW_MODES)[number]['key']>('batch');
+  const [filterSheet, setFilterSheet] = useState<null | 'dept' | 'course' | 'year'>(null);
   const [students, setStudents] = useState<any[]>([]);
-  const [courseFilters, setCourseFilters] = useState(COURSE_FILTERS);
-  const [batchFilters, setBatchFilters] = useState(DEFAULT_BATCH_FILTERS);
-  const [activeFilter, setActiveFilter] = useState('All Programs');
-  const [activeBatchYear, setActiveBatchYear] = useState('All Years');
-  const [filterSheet, setFilterSheet] = useState<null | 'program' | 'year'>(null);
-  const [query, setQuery] = useState(typeof q === 'string' ? q : '');
-  const [suggestions, setSuggestions] = useState<any[]>([]);
-  const [suggestLoading, setSuggestLoading] = useState(false);
-  const [showSuggestions, setShowSuggestions] = useState(false);
-  const [total, setTotal] = useState(0);
-  const [page, setPage] = useState(1);
-  const [lastPage, setLastPage] = useState(1);
+  const [faceMatchedIds, setFaceMatchedIds] = useState<Set<any>>(new Set());
+  const [faceSearching, setFaceSearching] = useState(false);
+  const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [loadingMore, setLoadingMore] = useState(false);
-  const [faceSearching, setFaceSearching] = useState(false);
-  const [faceMatches, setFaceMatches] = useState<any[]>([]);
-  const [matchedIds, setMatchedIds] = useState<Set<any>>(new Set());
+  const [openingYearbook, setOpeningYearbook] = useState(false);
   const [error, setError] = useState('');
-  const [selectedStudent, setSelectedStudent] = useState<any>(null);
-  const [selectedAchievements, setSelectedAchievements] = useState<any[]>([]);
-  const [voiceNotes, setVoiceNotes] = useState<any[]>([]);
-  const [voiceLoading, setVoiceLoading] = useState(false);
-  const [voiceSending, setVoiceSending] = useState(false);
-  const [voiceTitle, setVoiceTitle] = useState('Voice memory');
-  const [playingVoiceId, setPlayingVoiceId] = useState<any>(null);
-  const [recordedUri, setRecordedUri] = useState<string | null>(null);
-  const [isModalVisible, setIsModalVisible] = useState(false);
   const [appConfig, setAppConfig] = useState<any>(null);
-  const [currentUser, setCurrentUser] = useState<any>(null);
-  const fadeAnim = useRef(new Animated.Value(0)).current;
-  const slideAnim = useRef(new Animated.Value(height)).current;
-  const audioPlayerRef = useRef<any>(null);
-  const suggestionTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
-  const recorderState = useAudioRecorderState(recorder, 300);
-  const directoryEnabled = appConfig?.features?.enable_student_directory_search !== false;
-  const ownDirectoryIds = useMemo(() => collectOwnDirectoryIds(currentUser), [currentUser]);
+  const courseAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    let mounted = true;
+    const nextYear = Array.isArray(routeParams.year) ? routeParams.year[0] : routeParams.year;
+    const nextDepartment = Array.isArray(routeParams.department) ? routeParams.department[0] : routeParams.department;
+    const nextCourse = Array.isArray(routeParams.course) ? routeParams.course[0] : routeParams.course;
 
-    getAppConfig()
-      .then((payload) => {
-        if (mounted) setAppConfig(unwrap(payload));
-      })
-      .catch(() => {
-        if (mounted) setAppConfig(null);
-      });
+    if (nextYear) setYear(String(nextYear));
+    if (nextDepartment) setDepartment(String(nextDepartment));
+    if (nextCourse) setCourse(String(nextCourse));
+  }, [routeParams.course, routeParams.department, routeParams.year]);
 
-    fetchCurrentUser()
-      .then((user) => {
-        if (mounted) setCurrentUser(user);
-      })
-      .catch(() => {
-        if (mounted) setCurrentUser(null);
-      });
+  const premium = hasPaidAccess(user);
+  const premiumEnabled = appConfig?.features?.enable_premium_subscription !== false;
+  const yearbookEnabled = appConfig?.features?.enable_flipbook_viewer !== false;
+  const activeMode = VIEW_MODES.find((mode) => mode.key === viewMode) || VIEW_MODES[0];
 
-    return () => {
-      mounted = false;
-    };
-  }, []);
-
-  useEffect(() => {
-    if (filter && typeof filter === 'string') setActiveFilter(normalizeCourseName(filter) || filter);
-  }, [filter]);
-
-  useEffect(() => {
-    if (batch && typeof batch === 'string') setActiveBatchYear(batch);
-  }, [batch]);
-
-  const clearFaceResults = () => {
-    setFaceMatches([]);
-    setMatchedIds(new Set());
-  };
-
-  useEffect(() => {
-    let mounted = true;
-
-    getSearchFilters()
-      .then((payload) => {
-        if (!mounted) return;
-
-        const courses = Array.isArray(payload?.courses) ? payload.courses : payload?.data?.courses || [];
-        const batchYears = Array.isArray(payload?.batch_years) ? payload.batch_years : payload?.data?.batch_years || [];
-
-        if (courses.length) {
-          const apiCourses = courses.map((item: any) => {
-            const normalized = normalizeCourseName(item?.value || item?.label || item);
-            return {
-              label: getCourseShort(normalized, 'Program'),
-              value: normalized || String(item?.value || item),
-            };
-          });
-          const mergedCourses = [...COURSE_FILTERS, ...apiCourses].filter((item, index, list) => (
-            list.findIndex((candidate) => normalizeCourseName(candidate.value) === normalizeCourseName(item.value)) === index
-          ));
-          setCourseFilters([
-            { label: 'All Programs', value: 'All Programs' },
-            ...mergedCourses.filter((item) => item.value !== 'All Programs'),
-          ]);
-        }
-
-        if (batchYears.length) {
-          const apiYears = batchYears.map((year: any) => ({ label: String(year), value: String(year) }));
-          const mergedYears = [...DEFAULT_BATCH_FILTERS, ...apiYears].filter((item, index, list) => (
-            list.findIndex((candidate) => candidate.value === item.value) === index
-          ));
-          setBatchFilters([
-            { label: 'All Years', value: 'All Years' },
-            ...mergedYears.filter((item) => item.value !== 'All Years').sort((a, b) => Number(b.value) - Number(a.value)),
-          ]);
-        }
-      })
-      .catch(() => {
-        setCourseFilters(COURSE_FILTERS);
-        setBatchFilters(DEFAULT_BATCH_FILTERS);
-      });
-
-    return () => {
-      mounted = false;
-    };
-  }, []);
-
-  const loadSuggestions = useCallback(async (text: string) => {
-    if (text.trim().length < 2) {
-      setSuggestions([]);
-      return;
-    }
-
+  const loadCurrentUser = useCallback(async () => {
     try {
-      setSuggestLoading(true);
-      const payload = await getStudentSuggestions({ q: text.trim() });
-      setSuggestions(Array.isArray(payload?.suggestions) ? payload.suggestions : []);
-    } catch {
-      setSuggestions([]);
-    } finally {
-      setSuggestLoading(false);
-    }
-  }, []);
-
-  const loadStudents = useCallback(async (nextPage = 1, append = false) => {
-    if (!directoryEnabled) {
-      setStudents([]);
-      setTotal(0);
-      setLoading(false);
-      setRefreshing(false);
-      setLoadingMore(false);
-      return;
-    }
-
-    try {
-      if (append) setLoadingMore(true);
-      else if (!refreshing) setLoading(true);
-
-      setError('');
-      const params: any = { page: nextPage, per_page: 20 };
-      if (query.trim()) params.q = query.trim();
-      if (activeFilter !== 'All Programs') {
-        params.course = activeFilter;
-        params.course_short = getCourseShort(activeFilter);
+      const cached = await getCurrentUser();
+      if (cached) {
+        setUser(cached);
+        setYear((current) => current ? current : (userYear(cached) || ''));
       }
-      if (activeBatchYear !== 'All Years') params.batch_year = activeBatchYear;
 
-      const payload = await getStudents(params);
-      const data = unwrap(payload);
-      const meta = paginationMeta(payload);
-      const nextStudents = (Array.isArray(data) ? data : []).filter((student) => !isOwnDirectoryEntry(student, ownDirectoryIds));
+      const fresh = await fetchCurrentUser();
+      if (fresh) {
+        setUser(fresh);
+        setYear((current) => current ? current : (userYear(fresh) || ''));
+      }
+    } catch {
+      // Batchmates can still attempt to render with cached filters.
+    }
+  }, []);
 
-      setStudents((current) => (append ? [...current, ...nextStudents] : nextStudents));
-      const totalFromApi = Number(payload?.meta?.total || payload?.total || nextStudents.length);
-      const removedOwnEntry = Array.isArray(data) && data.length !== nextStudents.length ? 1 : 0;
-      setTotal(Math.max(0, totalFromApi - removedOwnEntry));
-      setPage(meta.currentPage);
-      setLastPage(meta.lastPage);
+  const loadStudents = useCallback(async () => {
+    try {
+      setError('');
+      if (!refreshing) setLoading(true);
+      const scopedYear = viewMode === 'batch' ? (year && year !== 'All Years' ? year : userYear(user)) : year;
+      const params = {
+        per_page: 500,
+        search: query.trim() || undefined,
+        q: query.trim() || undefined,
+        year: scopedYear && scopedYear !== 'All Years' ? scopedYear : undefined,
+        department: department !== 'All Departments' ? department : undefined,
+        course: viewMode === 'batch' ? undefined : (course || undefined),
+      };
+      const payload = viewMode === 'section'
+        ? await getDiscoverySectionmates({ search: params.search, q: params.q })
+        : viewMode === 'school'
+          ? await getDiscoverySchool(params)
+          : viewMode === 'cross_program'
+            ? await getDiscoveryCrossProgram(params)
+            : await getBatchmates(params);
+      const raw = unwrap(payload);
+      const list = getPayloadList(payload);
+      setStudents(list.length ? list : (Array.isArray(raw?.data?.data) ? raw.data.data : []));
     } catch (requestError: any) {
-      setError(getErrorMessage(requestError, 'Unable to load the student directory.'));
-      if (!append) setStudents([]);
+      setError(getErrorMessage(requestError, 'Unable to load students.'));
     } finally {
       setLoading(false);
       setRefreshing(false);
-      setLoadingMore(false);
     }
-  }, [activeBatchYear, activeFilter, directoryEnabled, ownDirectoryIds, query, refreshing]);
+  }, [course, department, query, refreshing, user, viewMode, year]);
 
   useEffect(() => {
-    const timer = setTimeout(() => loadStudents(1), 350);
+    setFaceMatchedIds(new Set());
+    setQuery('');
+    setDepartment('All Departments');
+    setCourse('');
+    setYear(viewMode === 'batch' ? (userYear(user) || '') : viewMode === 'section' ? '' : 'All Years');
+  }, [user, viewMode]);
+
+  useEffect(() => {
+    Animated.timing(courseAnim, {
+      toValue: department === 'All Departments' ? 0 : 1,
+      duration: 200,
+      useNativeDriver: false,
+    }).start();
+  }, [courseAnim, department]);
+
+  useEffect(() => {
+    loadCurrentUser();
+  }, [loadCurrentUser]);
+
+  useEffect(() => {
+    let active = true;
+    getAppConfig()
+      .then((payload) => { if (active) setAppConfig(unwrap(payload)); })
+      .catch(() => { if (active) setAppConfig(null); });
+    return () => { active = false; };
+  }, []);
+
+  useEffect(() => {
+    const timer = setTimeout(() => loadStudents(), 300);
     return () => clearTimeout(timer);
   }, [loadStudents]);
 
+  const filteredStudents = useMemo(() => {
+    const searchQuery = normalizeText(query);
+    const ownCourse = userCourse(user);
+    const ownSection = userSection(user);
+    const ownYear = userYear(user);
+    return students.filter((student) => {
+      const faceMatch = faceMatchedIds.size === 0 || faceMatchedIds.has(studentId(student)) || faceMatchedIds.has(student?.user_id) || faceMatchedIds.has(student?.student_id);
+      const selectedDepartmentMatch = ['batch', 'section'].includes(viewMode) || department === 'All Departments' || normalizeText(studentDepartment(student)) === normalizeText(department);
+      const selectedCourseMatch = ['batch', 'section'].includes(viewMode) || courseMatches(studentCourse(student), course);
+      const targetYear = viewMode === 'batch' ? (year && year !== 'All Years' ? year : ownYear) : year;
+      const selectedYearMatch = viewMode === 'section' || !targetYear || targetYear === 'All Years' || studentYear(student) === String(targetYear);
+      const sameOwnCourse = Boolean(ownCourse) && courseMatches(studentCourse(student), ownCourse);
+      const batchScopeMatch = viewMode !== 'batch' || sameOwnCourse || sameText(studentSection(student), ownSection);
+      const crossProgramMatch = viewMode !== 'cross_program' || !sameOwnCourse;
+      const textMatch = !searchQuery || [
+        studentName(student),
+        studentNo(student),
+        studentCourse(student),
+        studentDepartment(student),
+        studentSection(student),
+        studentYear(student),
+      ].some((value) => normalizeText(value).includes(searchQuery));
+      return faceMatch && selectedDepartmentMatch && selectedCourseMatch && selectedYearMatch && batchScopeMatch && crossProgramMatch && textMatch;
+    });
+  }, [course, department, faceMatchedIds, query, students, user, viewMode, year]);
+
+  const courseOptions = useMemo(() => {
+    const mapped = COURSE_BY_DEPT[department] || [];
+    const source = department === 'All Departments'
+      ? filteredStudents
+      : students.filter((student) => normalizeText(studentDepartment(student)) === normalizeText(department));
+    const courses = Array.from(new Set([...mapped, ...source.map(studentCourse).filter(Boolean)]));
+    return courses.sort((a, b) => a.localeCompare(b));
+  }, [department, filteredStudents, students]);
+
+  const activeYear = year || userYear(user) || '';
+  const selectedDeptValue = department === 'All Departments' ? 'All' : department;
+  const selectedCourseValue = course ? course.replace(/^Bachelor of Science in\s+/i, 'BS ') : 'All';
+  const selectedYearValue = year || 'Set batch';
+  const resultLabel = viewMode === 'section' ? 'classmate' : viewMode === 'batch' ? 'batchmate' : 'student';
+  const departmentOptions = DEPARTMENTS.map((item) => ({ label: item, value: item }));
+  const courseSheetOptions = [{ label: 'All Courses', value: '' }, ...courseOptions.map((item) => ({ label: item, value: item }))];
+  const yearChoices = year && !YEAR_OPTIONS.includes(year) ? [year, ...YEAR_OPTIONS] : YEAR_OPTIONS;
+  const yearOptions = yearChoices.map((item) => ({ label: item, value: item }));
+
   const handleFaceSearch = async () => {
-    if (!directoryEnabled) {
-      Alert.alert('Directory unavailable', 'Student directory search is currently disabled.');
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) {
+      Alert.alert('Permission needed', 'Allow photo access to search by face.');
       return;
     }
+    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.8 });
+    if (result.canceled || !result.assets?.[0]) return;
+
+    const asset = result.assets[0];
+    const form = new FormData();
+    form.append('face_image', {
+      uri: asset.uri,
+      name: asset.fileName || 'batchmates-face-search.jpg',
+      type: asset.mimeType || 'image/jpeg',
+    } as any);
 
     try {
-      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (!permission.granted) {
-        Alert.alert('Permission needed', 'Allow photo access to search by face.');
-        return;
-      }
-
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ['images'],
-        allowsEditing: true,
-        quality: 0.85,
-      });
-
-      if (result.canceled || !result.assets?.[0]) return;
-
       setFaceSearching(true);
-      clearFaceResults();
-      setSuggestions([]);
-      setShowSuggestions(false);
-      const asset = result.assets[0];
-      const form = new FormData();
-      form.append('face_image', {
-        uri: asset.uri,
-        name: asset.fileName || 'face-search.jpg',
-        type: asset.mimeType || 'image/jpeg',
-      } as any);
-
       const payload = await searchFace(form);
-      const matches = (payload?.matches || payload?.data?.matches || [])
-        .filter((match: any) => faceMatchId(match))
-        .filter((match: any) => !isOwnDirectoryEntry(match, ownDirectoryIds));
-      setFaceMatches(matches);
-      setMatchedIds(new Set(matches.map(faceMatchId)));
-
-      const topName = matches[0]?.name;
-      if (topName) setQuery(topName);
-      Haptics.notificationAsync(matches.length ? Haptics.NotificationFeedbackType.Success : Haptics.NotificationFeedbackType.Warning);
+      const matches = (payload?.matches || payload?.data?.matches || []).filter((match: any) => studentId(match) || match?.user_id || match?.student_id);
+      setFaceMatchedIds(new Set(matches.flatMap((match: any) => [studentId(match), match?.user_id, match?.student_id].filter(Boolean))));
     } catch (requestError: any) {
-      setError(getErrorMessage(requestError, 'Face search failed. Please try again.'));
+      Alert.alert('Face search failed', getErrorMessage(requestError, 'Unable to run face search.'));
     } finally {
       setFaceSearching(false);
     }
   };
 
-  const toggleModal = (visible: boolean, student: any = null) => {
-    if (visible) {
-      setSelectedStudent(student);
-      setSelectedAchievements([]);
-      setVoiceNotes([]);
-      setVoiceTitle('Voice memory');
-      setRecordedUri(null);
-      setIsModalVisible(true);
-      Animated.parallel([
-        Animated.timing(fadeAnim, { toValue: 1, duration: 250, useNativeDriver: true }),
-        Animated.spring(slideAnim, { toValue: 0, useNativeDriver: true, tension: 50, friction: 8 }),
-      ]).start();
-
-      const id = getStudentId(student);
-      if (id) {
-        Promise.allSettled([getStudent(id), getStudentAchievements(id)]).then(([profileResult, achievementResult]) => {
-          if (profileResult.status === 'fulfilled') setSelectedStudent((current: any) => ({ ...current, ...unwrap(profileResult.value) }));
-          if (achievementResult.status === 'fulfilled') {
-            const achievements = unwrap(achievementResult.value);
-            setSelectedAchievements(Array.isArray(achievements) ? achievements : []);
-          }
-        });
-        loadVoiceNotes(id);
-      }
-    } else {
-      audioPlayerRef.current?.pause?.();
-      setPlayingVoiceId(null);
-      Animated.parallel([
-        Animated.timing(fadeAnim, { toValue: 0, duration: 220, useNativeDriver: true }),
-        Animated.timing(slideAnim, { toValue: height, duration: 220, useNativeDriver: true }),
-      ]).start(() => {
-        setIsModalVisible(false);
-        setSelectedStudent(null);
-      });
-    }
+  const clearAllFilters = () => {
+    setQuery('');
+    setFaceMatchedIds(new Set());
+    setYear(userYear(user) || '');
+    setDepartment('All Departments');
+    setCourse('');
   };
 
-  const handleSendMessage = async () => {
-    const id = getRecipientId(selectedStudent);
-    if (!id) return;
-    toggleModal(false);
-    router.push({ pathname: '/messages', params: { userId: String(id), name: getStudentName(selectedStudent) } } as any);
-  };
-
-  const loadVoiceNotes = async (userId: any) => {
-    try {
-      setVoiceLoading(true);
-      const payload = await getVoiceNotesForProfile(userId);
-      const data = unwrap(payload);
-      setVoiceNotes(Array.isArray(data) ? data : data?.data || []);
-    } catch {
-      setVoiceNotes([]);
-    } finally {
-      setVoiceLoading(false);
-    }
-  };
-
-  const handleStartRecording = async () => {
-    try {
-      const permission = await requestRecordingPermissionsAsync();
-      if (!permission.granted) {
-        Alert.alert('Microphone needed', 'Allow microphone access to record a voice memory.');
-        return;
-      }
-
-      await setAudioModeAsync({ allowsRecording: true, playsInSilentMode: true });
-      await recorder.prepareToRecordAsync();
-      recorder.record({ forDuration: 300 });
-      setRecordedUri(null);
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    } catch (requestError: any) {
-      Alert.alert('Recording failed', getErrorMessage(requestError, 'Unable to start recording.'));
-    }
-  };
-
-  const handleStopRecording = async () => {
-    try {
-      await recorder.stop();
-      await setAudioModeAsync({ allowsRecording: false, playsInSilentMode: true });
-      const status = recorder.getStatus();
-      setRecordedUri(status.url || recorder.uri || null);
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    } catch (requestError: any) {
-      Alert.alert('Recording failed', getErrorMessage(requestError, 'Unable to stop recording.'));
-    }
-  };
-
-  const handleSendVoiceNote = async () => {
-    const recipientId = getRecipientId(selectedStudent);
-    if (!recipientId || !recordedUri) return;
-
-    try {
-      setVoiceSending(true);
-      const durationSeconds = Math.max(1, Math.round((recorderState.durationMillis || 0) / 1000));
-      const form = new FormData();
-      form.append('recipient_id', String(recipientId));
-      form.append('title', voiceTitle.trim() || 'Voice memory');
-      form.append('duration_seconds', String(durationSeconds));
-      form.append('audio', audioUploadPart(recordedUri) as any);
-
-      await sendVoiceNote(form);
-      setRecordedUri(null);
-      setVoiceTitle('Voice memory');
-      await loadVoiceNotes(recipientId);
-      Alert.alert('Voice memory sent', 'Your voice note is pending approval before it appears on their profile.');
-    } catch (requestError: any) {
-      Alert.alert('Send failed', getErrorMessage(requestError, 'Unable to send this voice memory.'));
-    } finally {
-      setVoiceSending(false);
-    }
-  };
-
-  const toggleVoicePlayback = async (note: any) => {
-    const url = getAudioUrl(note);
-    if (!url) return;
-
-    if (playingVoiceId === note.id) {
-      audioPlayerRef.current?.pause?.();
-      setPlayingVoiceId(null);
+  const handleOpenYearbook = async () => {
+    if (!yearbookEnabled) {
+      Alert.alert('Yearbook unavailable', 'The digital yearbook viewer is currently disabled.');
       return;
     }
 
-    audioPlayerRef.current?.pause?.();
-    audioPlayerRef.current?.remove?.();
-    const player = createAudioPlayer({ uri: url });
-    audioPlayerRef.current = player;
-    setPlayingVoiceId(note.id);
-    player.play();
+    try {
+      setOpeningYearbook(true);
+      const payload = await getBatches({ year: activeYear, course: course || undefined });
+      const batches = flattenBatches(payload) as any[];
+      const target = batches.find((batch) => String(batch?.year || batch?.batch_year || batch?.graduation_year || batch?.name) === String(activeYear))
+        || batches[0];
+      if (!target?.id) {
+        Alert.alert('Yearbook not found', 'Select a batch year with an available yearbook.');
+        return;
+      }
+      await generateYearbook(target.id).catch(() => null);
+      router.push({
+        pathname: '/yearbook',
+        params: { batchId: String(target.id), view: '1' },
+      } as any);
+    } catch (requestError: any) {
+      Alert.alert('Yearbook unavailable', getErrorMessage(requestError, 'Unable to open this yearbook.'));
+    } finally {
+      setOpeningYearbook(false);
+    }
   };
 
-  const selectedFilterLabel = useMemo(() => courseFilters.find((item) => item.value === activeFilter)?.label || activeFilter, [activeFilter, courseFilters]);
-  const selectedYearLabel = useMemo(() => batchFilters.find((item) => item.value === activeBatchYear)?.label || activeBatchYear, [activeBatchYear, batchFilters]);
-  const isFaceMode = faceMatches.length > 0;
-
-  const selectProgramFilter = (value: string) => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    clearFaceResults();
-    setActiveFilter(value);
-    setFilterSheet(null);
-  };
-
-  const selectYearFilter = (value: string) => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    clearFaceResults();
-    setActiveBatchYear(value);
-    setFilterSheet(null);
-  };
-
-  const renderStudent = ({ item, index }: { item: any; index: number }) => {
-    const name = getStudentName(item);
-    const program = getStudentCourse(item);
-    const hasProgram = Boolean(program);
-    const photo = getStudentPhoto(item);
-    const matched = matchedIds.has(getStudentId(item)) || matchedIds.has(item?.user_id);
+  const renderStudentCard = (student: any, index: number) => {
+    const name = studentName(student);
+    const photo = studentPhoto(student);
+    const program = studentCourse(student);
+    const hasProgram = Boolean(program && !['course', 'no program listed'].includes(normalizeText(program)));
+    const matched = faceMatchedIds.has(studentId(student)) || faceMatchedIds.has(student?.user_id) || faceMatchedIds.has(student?.student_id);
+    const profileId = student?.student_record_id || student?.student?.id || student?.record?.id || student?.id || studentId(student);
+    const userId = student?.user_id || student?.user?.id || student?.account_user_id;
+    const id = studentId(student);
+    const cardKey = id != null ? String(id) : `student-${index}`;
 
     return (
       <TouchableOpacity
+        key={cardKey}
         style={[styles.studentCard, matched && styles.studentCardMatched]}
         activeOpacity={0.88}
-        onPress={() => {
-          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-          const userId = getRecipientId(item);
-          const studentRecordId = item?.student_record_id || item?.student?.id || item?.record?.id;
-          const profileId = studentRecordId || userId || getStudentId(item);
-          if (profileId) {
-            router.push({
-              pathname: '/student/[id]',
-              params: {
-                id: String(profileId),
-                ...(userId ? { userId: String(userId) } : {}),
-                ...(studentRecordId ? { studentRecordId: String(studentRecordId) } : {}),
-                source: 'directory',
-                name,
-                ...(hasProgram ? { course: program } : {}),
-                year: String(getStudentYear(item) || ''),
-                section: getStudentSection(item),
-                studentNo: String(item?.student_no || item?.student_id || ''),
-                email: String(item?.email || ''),
-                ...(photo ? { photo } : {}),
-              },
-            } as any);
-          } else {
-            toggleModal(true, item);
-          }
-        }}
+        onPress={() => router.push({
+          pathname: '/student/[id]',
+          params: {
+            id: String(profileId),
+            source: 'discovery',
+            ...(userId ? { userId: String(userId) } : {}),
+            name,
+            ...(hasProgram ? { course: program } : {}),
+            year: String(studentYear(student) || ''),
+            section: studentSection(student),
+            studentNo: String(studentNo(student) || ''),
+            ...(photo ? { photo } : {}),
+          },
+        } as any)}
       >
         <View style={styles.photoArea}>
           {photo ? <Image source={photo} style={styles.cardPhoto} contentFit="cover" /> : (
             <View style={styles.initialsArea}>
-              <Text style={styles.initialsText}>{getInitials(name)}</Text>
+              <Text style={styles.initialsText}>{initials(name)}</Text>
             </View>
           )}
           {matched ? (
             <View style={styles.matchBadge}>
-              <FontAwesome name="camera" size={9} color="#1d2b4b" />
-              <Text style={styles.matchText}>match</Text>
+              <FontAwesome name="camera" size={8} color={COLORS.navy} />
             </View>
           ) : null}
         </View>
         <View style={styles.cardInfo}>
-          <Text style={styles.name} numberOfLines={1}>{name}</Text>
+          <Text style={styles.studentName} numberOfLines={1}>{name}</Text>
           {hasProgram ? <Text style={styles.studentMeta} numberOfLines={1}>{program}</Text> : null}
           <View style={styles.studentMetaRow}>
             {hasProgram ? (
               <View style={styles.courseBadge}>
-                <Text style={styles.courseBadgeText}>{getCourseShort(program).toUpperCase()}</Text>
+                <Text style={styles.courseBadgeText} numberOfLines={1}>{courseShortLabel(program).toUpperCase()}</Text>
               </View>
             ) : null}
             <View style={styles.yearBadge}>
               <FontAwesome name="graduation-cap" size={9} color="#9a6100" />
-              <Text style={styles.batchText}>{getStudentYear(item)}</Text>
+              <Text style={styles.batchText}>{studentYear(student) || activeYear}</Text>
             </View>
           </View>
         </View>
@@ -573,471 +494,273 @@ export default function DirectoryScreen() {
     );
   };
 
-  if (!directoryEnabled) {
-    return (
-      <SafeAreaView style={styles.container} edges={['left', 'right']}>
-        <StatusBar style="dark" />
-        <View style={styles.unavailableWrap}>
-          <View style={styles.unavailableIcon}>
-            <FontAwesome name="lock" size={24} color="#fdb813" />
-          </View>
-          <Text style={styles.unavailableTitle}>Directory Unavailable</Text>
-          <Text style={styles.unavailableText}>
-            Student directory search is currently disabled by platform settings.
-          </Text>
-          <TouchableOpacity style={styles.unavailableButton} onPress={() => router.replace('/(tabs)/home' as any)}>
-            <FontAwesome name="home" size={14} color="#1d2b4b" />
-            <Text style={styles.unavailableButtonText}>Go Home</Text>
-          </TouchableOpacity>
-        </View>
-      </SafeAreaView>
-    );
-  }
-
   return (
     <SafeAreaView style={styles.container} edges={['left', 'right']}>
-      <StatusBar style="dark" />
-      <FlatList
-        data={students}
-        keyExtractor={(item, index) => String(getStudentId(item) || index)}
-        renderItem={renderStudent}
-        ListHeaderComponent={(
-          <>
-            <View style={styles.directoryHeader}>
-              <View>
-                <Text style={styles.headerKicker}>Directory</Text>
-                <Text style={styles.headerTitle}>Students</Text>
-              </View>
+      <StatusBar style="light" />
+      <ScrollView
+        stickyHeaderIndices={[2]}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); loadStudents(); }} />}
+        contentContainerStyle={styles.content}
+      >
+        <View style={styles.hero}>
+          <Text style={styles.eyebrow}>National University Lipa</Text>
+          <Text style={styles.heroTitle}>Student <Text style={styles.gold}>Discovery</Text></Text>
+          <Text style={styles.heroSubtitle}>Find classmates, explore other programs, and connect with the NU Lipa community.</Text>
+          <View style={styles.pillRow}>
+            <View style={styles.statusPill}>
+              <FontAwesome name={premium ? 'star' : 'lock'} size={12} color="#fdb813" />
+              <Text style={styles.statusPillText}>{premium ? 'Paid - Full Access' : premiumEnabled ? 'Upgrade to Unlock' : 'Discovery Access'}</Text>
             </View>
-
-            <View style={styles.searchArea}>
-              <View style={styles.searchContainer}>
-                    <FontAwesome name="search" size={16} color="#94a3b8" style={styles.searchIcon} />
-                    <TextInput
-                      style={styles.searchInput}
-                      placeholder={isFaceMode ? 'Showing face match results...' : 'Search names, student IDs, or programs...'}
-                      placeholderTextColor="#94a3b8"
-                      value={query}
-                      onChangeText={(value) => {
-                        setQuery(value);
-                        setShowSuggestions(true);
-                        clearFaceResults();
-                        if (suggestionTimer.current) clearTimeout(suggestionTimer.current);
-                        suggestionTimer.current = setTimeout(() => loadSuggestions(value), 150);
-                      }}
-                      onFocus={() => setShowSuggestions(true)}
-                    />
-                    <TouchableOpacity style={styles.searchCameraButton} onPress={handleFaceSearch} disabled={faceSearching}>
-                      {faceSearching ? <ActivityIndicator color="#F5A623" size="small" /> : <FontAwesome name="camera" size={15} color="#F5A623" />}
-                    </TouchableOpacity>
-              </View>
-                {showSuggestions && suggestions.length ? (
-                  <View style={styles.suggestionBox}>
-                    {suggestions.map((item) => (
-                      <TouchableOpacity
-                        key={String(item.id)}
-                        style={styles.suggestionRow}
-                        onPress={() => {
-                          setQuery(item.name || '');
-                          setSuggestions([]);
-                          setShowSuggestions(false);
-                          clearFaceResults();
-                        }}
-                      >
-                        {item.profile_picture ? (
-                          <Image source={imageUrl(item.profile_picture)} style={styles.suggestionAvatar} contentFit="cover" />
-                        ) : (
-                          <View style={styles.suggestionInitials}>
-                            <Text style={styles.suggestionInitialsText}>{getInitials(item.name)}</Text>
-                          </View>
-                        )}
-                        <View style={{ flex: 1, minWidth: 0 }}>
-                          <Text style={styles.suggestionName} numberOfLines={1}>{item.name}</Text>
-                          <Text style={styles.suggestionMeta} numberOfLines={1}>{item.student_id || 'Student'} - {item.course_short || 'Program'}</Text>
-                        </View>
-                        <FontAwesome name="chevron-right" size={12} color="#94a3b8" />
-                      </TouchableOpacity>
-                    ))}
-                  </View>
-                ) : suggestLoading ? (
-                  <View style={styles.suggestionLoading}>
-                    <ActivityIndicator color="#fdb813" size="small" />
-                    <Text style={styles.suggestionLoadingText}>Finding students...</Text>
-                  </View>
-                ) : null}
-                {isFaceMode ? (
-                  <View style={styles.faceBanner}>
-                    <Text style={styles.faceBannerText}>{faceMatches.length} face match{faceMatches.length > 1 ? 'es' : ''} found</Text>
-                    <TouchableOpacity onPress={() => { clearFaceResults(); setQuery(''); }}>
-                      <Text style={styles.clearFaceText}>Clear</Text>
-                    </TouchableOpacity>
-                  </View>
-                ) : null}
-            </View>
-
-            <View style={styles.dropdownFilterBar}>
-              <TouchableOpacity style={[styles.dropdownPill, styles.programDropdown]} activeOpacity={0.88} onPress={() => setFilterSheet('program')}>
-                <View style={styles.dropdownTextWrap}>
-                  <Text style={styles.programDropdownLabel}>Program</Text>
-                  <Text style={styles.programDropdownValue} numberOfLines={1}>{selectedFilterLabel}</Text>
-                </View>
-                <FontAwesome name="chevron-down" size={12} color="#1A2547" />
-              </TouchableOpacity>
-              <TouchableOpacity style={[styles.dropdownPill, styles.yearDropdown]} activeOpacity={0.88} onPress={() => setFilterSheet('year')}>
-                <View style={styles.dropdownTextWrap}>
-                  <Text style={styles.yearDropdownLabel}>Year</Text>
-                  <Text style={styles.yearDropdownValue} numberOfLines={1}>{selectedYearLabel}</Text>
-                </View>
-                <FontAwesome name="chevron-down" size={12} color="#F5A623" />
-              </TouchableOpacity>
-            </View>
-
-            {!loading ? (
-              <Text style={styles.resultCount}>
-                {isFaceMode ? 'Showing ' : query ? 'Found ' : 'Showing '}
-                <Text style={styles.resultStrong}>{isFaceMode ? faceMatches.length : total}</Text>
-                {isFaceMode ? ' face matches' : query ? ` results for "${query}"` : ` students${activeFilter !== 'All Programs' ? ` in ${selectedFilterLabel}` : ''}${activeBatchYear !== 'All Years' ? ` from ${activeBatchYear}` : ''}`}
-              </Text>
-            ) : null}
-
-            {error ? <Text style={styles.errorText}>{error}</Text> : null}
-          </>
-        )}
-        ListEmptyComponent={loading ? <ActivityIndicator color="#1d2b4b" style={{ marginTop: 34 }} /> : (
-          <View style={styles.emptyContainer}>
-            <FontAwesome name="user-times" size={42} color="#cbd5e1" />
-            <Text style={styles.emptyTitle}>No Students Found</Text>
-            <Text style={styles.emptyText}>Try adjusting your search or filters.</Text>
           </View>
-        )}
-        ListFooterComponent={loadingMore ? <ActivityIndicator color="#1d2b4b" style={{ marginVertical: 20 }} /> : <View style={{ height: 110 }} />}
-        contentContainerStyle={styles.scrollContent}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); loadStudents(1); }} />}
-        onEndReached={() => {
-          if (!loadingMore && page < lastPage) loadStudents(page + 1, true);
-        }}
-      />
+        </View>
 
-      <Modal transparent visible={Boolean(filterSheet)} animationType="fade" onRequestClose={() => setFilterSheet(null)}>
-        <View style={styles.sheetOverlay}>
-          <TouchableOpacity style={styles.sheetBackdrop} activeOpacity={1} onPress={() => setFilterSheet(null)} />
-          <View style={styles.filterSheet}>
-            <View style={styles.sheetHandle} />
-            <Text style={styles.sheetTitle}>{filterSheet === 'program' ? 'Filter by program' : 'Filter by year'}</Text>
-            <ScrollView style={styles.sheetScroll} showsVerticalScrollIndicator={false}>
-              {(filterSheet === 'program' ? courseFilters : batchFilters).map((item) => {
-                const selected = filterSheet === 'program' ? activeFilter === item.value : activeBatchYear === item.value;
+        <View style={styles.modeTabsWrap}>
+          <View style={styles.modeTabs}>
+            {VIEW_MODES.map((mode) => {
+              const active = viewMode === mode.key;
+              return (
+                <TouchableOpacity key={mode.key} style={[styles.modeTab, active && styles.modeTabActive]} onPress={() => setViewMode(mode.key)} activeOpacity={0.88}>
+                  <FontAwesome name={mode.icon as any} size={13} color={active ? COLORS.gold : '#6B7896'} />
+                  <View style={styles.modeTabCopy}>
+                    <Text style={[styles.modeTabLabel, active && styles.modeTabLabelActive]} numberOfLines={1}>{mode.label}</Text>
+                    <Text style={[styles.modeTabDesc, active && styles.modeTabDescActive]} numberOfLines={1}>{mode.desc}</Text>
+                  </View>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </View>
+
+        <View style={styles.filterBar}>
+          <View style={styles.sectionTitleRow}>
+            <View style={styles.groupIcon}>
+              <FontAwesome name={activeMode.icon as any} size={14} color="#fdb813" />
+            </View>
+            <View>
+              <Text style={styles.sectionHeading}>{activeMode.label}</Text>
+              <Text style={styles.sectionSubheading}>{activeMode.desc}</Text>
+            </View>
+          </View>
+          <View style={styles.searchRow}>
+            <FontAwesome name="search" size={14} color="#8fa0bf" />
+            <TextInput
+              style={styles.searchInput}
+              placeholder="Search name or student ID..."
+              placeholderTextColor="#8fa0bf"
+              value={query}
+              onChangeText={(value) => {
+                setQuery(value);
+                setFaceMatchedIds(new Set());
+              }}
+            />
+            <TouchableOpacity onPress={handleFaceSearch} disabled={faceSearching}>
+              {faceSearching ? <ActivityIndicator color={COLORS.gold} size="small" /> : <FontAwesome name="camera" size={14} color={COLORS.gold} />}
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.dropdownRow}>
+            {viewMode !== 'batch' && viewMode !== 'section' ? <FilterDropdown label="Dept" value={selectedDeptValue} variant="gold" onPress={() => setFilterSheet('dept')} /> : null}
+            {viewMode !== 'batch' && viewMode !== 'section' ? <FilterDropdown label="Course" value={selectedCourseValue} variant="navy" onPress={() => setFilterSheet('course')} /> : null}
+            {viewMode !== 'section' ? <FilterDropdown label="Year" value={selectedYearValue} variant="white" onPress={() => setFilterSheet('year')} /> : null}
+            {viewMode === 'batch' && yearbookEnabled && activeYear ? (
+              <TouchableOpacity style={styles.generateButton} onPress={handleOpenYearbook} disabled={openingYearbook} activeOpacity={0.88}>
+                {openingYearbook ? <ActivityIndicator color={COLORS.gold} size="small" /> : <FontAwesome name="book" size={12} color={COLORS.gold} />}
+                <Text style={styles.generateButtonText}>Yearbook {activeYear}</Text>
+              </TouchableOpacity>
+            ) : null}
+          </View>
+
+          <Animated.View style={[
+            styles.courseChipWrap,
+            {
+              opacity: courseAnim,
+              maxHeight: courseAnim.interpolate({ inputRange: [0, 1], outputRange: [0, 48] }),
+            },
+          ]}>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.courseRow}>
+              <TouchableOpacity style={[styles.courseTab, !course && styles.courseTabActive]} onPress={() => setCourse('')}>
+                <Text style={[styles.courseTabText, !course && styles.courseTabTextActive]}>All Courses</Text>
+              </TouchableOpacity>
+              {courseOptions.map((item) => {
+                const active = course === item;
                 return (
-                  <TouchableOpacity
-                    key={`${filterSheet}-${item.value}`}
-                    style={styles.sheetOption}
-                    onPress={() => filterSheet === 'program' ? selectProgramFilter(item.value) : selectYearFilter(item.value)}
-                    activeOpacity={0.84}
-                  >
-                    <Text style={styles.sheetOptionText} numberOfLines={1}>{item.label}</Text>
-                    <View style={[styles.optionCircle, selected && styles.optionCircleSelected]}>
-                      {selected ? <FontAwesome name="check" size={11} color="#1A2547" /> : null}
-                    </View>
+                  <TouchableOpacity key={item} style={[styles.courseTab, active && styles.courseTabActive]} onPress={() => setCourse(item)}>
+                    <Text style={[styles.courseTabText, active && styles.courseTabTextActive]} numberOfLines={1}>{item}</Text>
                   </TouchableOpacity>
                 );
               })}
             </ScrollView>
-            <TouchableOpacity style={styles.applyButton} onPress={() => setFilterSheet(null)}>
-              <Text style={styles.applyButtonText}>Apply filter</Text>
+          </Animated.View>
+        </View>
+
+        <View style={styles.resultPill}>
+          <FontAwesome name="graduation-cap" size={13} color="#fdb813" />
+          <Text style={styles.resultText}>{filteredStudents.length} {resultLabel}{filteredStudents.length === 1 ? '' : 's'} found</Text>
+        </View>
+
+        {!premium && premiumEnabled ? (
+          <View style={styles.upgradeBanner}>
+            <FontAwesome name="lock" size={18} color="#fdb813" />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.upgradeTitle}>Unlock Full Discovery</Text>
+              <Text style={styles.upgradeText}>Standard or Premium unlocks full student profiles, gallery access, uploads, and contact details.</Text>
+            </View>
+            <TouchableOpacity style={styles.upgradeButton} onPress={() => router.push('/payment' as any)}>
+              <Text style={styles.upgradeButtonText}>Upgrade</Text>
             </TouchableOpacity>
           </View>
-        </View>
-      </Modal>
+        ) : null}
 
-      <Modal visible={isModalVisible} transparent animationType="none" onRequestClose={() => toggleModal(false)}>
-        <View style={styles.modalOverlay}>
-          <Animated.View style={[styles.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.5)', opacity: fadeAnim }]}>
-            <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={() => toggleModal(false)} />
-          </Animated.View>
+        {loading ? (
+          <ActivityIndicator color="#1d2b4b" style={styles.loading} />
+        ) : filteredStudents.length === 0 ? (
+          <View style={styles.emptyPanel}>
+            <FontAwesome name="search" size={40} color={COLORS.gold} />
+            <Text style={styles.emptyTitle}>No results</Text>
+            <Text style={styles.emptyText}>
+              {error || (viewMode === 'batch' && !activeYear ? 'Set your batch year in your profile to find batchmates.' : 'Try adjusting your filters')}
+            </Text>
+            <TouchableOpacity onPress={clearAllFilters}>
+              <Text style={styles.clearFiltersText}>Clear all filters</Text>
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <View style={styles.studentList}>
+            {filteredStudents.map((student, index) => renderStudentCard(student, index))}
+          </View>
+        )}
+      </ScrollView>
 
-          <Animated.View style={[styles.modalContainer, { transform: [{ translateY: slideAnim }] }]}>
-            <FlatList
-              data={selectedAchievements}
-              keyExtractor={(item, index) => String(item?.id || index)}
-              ListHeaderComponent={(
-                <View style={styles.profileModalContent}>
-                  <View style={styles.blueHeader} />
-                  <View style={styles.profileInfoSection}>
-                    {getStudentPhoto(selectedStudent) ? <Image source={getStudentPhoto(selectedStudent)} style={styles.largeAvatar} contentFit="cover" /> : (
-                      <View style={[styles.largeAvatar, styles.avatarFallback]}>
-                        <Text style={styles.largeAvatarFallbackText}>{getInitials(getStudentName(selectedStudent))}</Text>
-                      </View>
-                    )}
-                    <Text style={styles.userName}>{getStudentName(selectedStudent)}</Text>
-                    {getStudentCourse(selectedStudent) ? <Text style={styles.userDegree}>{getStudentCourse(selectedStudent)}</Text> : null}
-                    <Text style={styles.userYear}>{getStudentYear(selectedStudent)} - {getStudentSection(selectedStudent)}</Text>
-                    <View style={styles.actionButtons}>
-                      <TouchableOpacity style={styles.primaryActionButton} onPress={handleSendMessage}>
-                        <Text style={styles.primaryActionButtonText}>Message</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity style={styles.voiceActionButton} onPress={recorderState.isRecording ? handleStopRecording : handleStartRecording}>
-                        <FontAwesome name={recorderState.isRecording ? 'stop' : 'microphone'} size={14} color="#1d2b4b" />
-                        <Text style={styles.voiceActionButtonText}>{recorderState.isRecording ? 'Stop' : 'Voice'}</Text>
-                      </TouchableOpacity>
-                    </View>
-                  </View>
-                  <View style={styles.contentSection}>
-                    <View style={styles.sectionHeader}>
-                      <FontAwesome name="book" size={16} color="#1d2b4b" style={{ marginRight: 10 }} />
-                      <Text style={styles.sectionTitle}>ABOUT</Text>
-                    </View>
-                    <Text style={styles.aboutText}>{selectedStudent?.bio || selectedStudent?.motto || 'No bio has been added yet.'}</Text>
-                    <View style={[styles.sectionHeader, { marginTop: 30 }]}>
-                      <FontAwesome name="bookmark-o" size={16} color="#1d2b4b" style={{ marginRight: 10 }} />
-                      <Text style={styles.sectionTitle}>ACHIEVEMENTS</Text>
-                    </View>
-                  </View>
-                </View>
-              )}
-              renderItem={({ item }) => (
-                <View style={[styles.achievementCardYellow, { marginHorizontal: 24 }]}>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.achievementTitleYellow}>{item?.title || item?.name || 'Achievement'}</Text>
-                    <Text style={styles.achievementSubYellow}>{item?.description || item?.date || item?.year || 'Student achievement'}</Text>
-                  </View>
-                  <FontAwesome name="bookmark-o" size={18} color="#A67C00" />
-                </View>
-              )}
-              ListEmptyComponent={<Text style={[styles.emptyText, { paddingHorizontal: 24 }]}>No achievements listed.</Text>}
-              ListFooterComponent={(
-                <View style={styles.voiceSection}>
-                  <View style={styles.sectionHeader}>
-                    <FontAwesome name="microphone" size={16} color="#1d2b4b" style={{ marginRight: 10 }} />
-                    <Text style={styles.sectionTitle}>VOICE MEMORIES</Text>
-                  </View>
-
-                  <View style={styles.voiceComposer}>
-                    <View style={styles.voiceComposerTop}>
-                      <View style={styles.voiceIconCircle}>
-                        <FontAwesome name={recorderState.isRecording ? 'circle' : 'microphone'} size={18} color="#fdb813" />
-                      </View>
-                      <View style={{ flex: 1 }}>
-                        <Text style={styles.voiceComposerTitle}>{recordedUri ? 'Recording ready' : recorderState.isRecording ? 'Recording voice memory' : 'Send a voice memory'}</Text>
-                        <Text style={styles.voiceComposerMeta}>
-                          {recorderState.isRecording || recordedUri ? formatDuration(Math.round((recorderState.durationMillis || 0) / 1000)) || '0:00' : 'Audio dedications are reviewed before delivery.'}
-                        </Text>
-                      </View>
-                    </View>
-
-                    <TextInput
-                      style={styles.voiceTitleInput}
-                      value={voiceTitle}
-                      onChangeText={setVoiceTitle}
-                      placeholder="Voice memory title"
-                      placeholderTextColor="#94a3b8"
-                    />
-
-                    <View style={styles.voiceButtonRow}>
-                      <TouchableOpacity style={[styles.recordButton, recorderState.isRecording && styles.stopButton]} onPress={recorderState.isRecording ? handleStopRecording : handleStartRecording}>
-                        <FontAwesome name={recorderState.isRecording ? 'stop' : 'microphone'} size={14} color={recorderState.isRecording ? '#ffffff' : '#fdb813'} />
-                        <Text style={[styles.recordButtonText, recorderState.isRecording && styles.stopButtonText]}>{recorderState.isRecording ? 'Stop Recording' : recordedUri ? 'Re-record' : 'Start Recording'}</Text>
-                      </TouchableOpacity>
-
-                      {recordedUri ? (
-                        <TouchableOpacity style={styles.sendVoiceButton} onPress={handleSendVoiceNote} disabled={voiceSending}>
-                          {voiceSending ? <ActivityIndicator color="#1d2b4b" size="small" /> : <FontAwesome name="paper-plane" size={14} color="#1d2b4b" />}
-                          <Text style={styles.sendVoiceButtonText}>Send</Text>
-                        </TouchableOpacity>
-                      ) : null}
-                    </View>
-                  </View>
-
-                  {voiceLoading ? (
-                    <ActivityIndicator color="#1d2b4b" style={{ marginTop: 20 }} />
-                  ) : voiceNotes.length ? (
-                    voiceNotes.map((note) => {
-                      const playing = playingVoiceId === note.id;
-                      return (
-                        <View key={String(note.id)} style={styles.voiceNoteCard}>
-                          <View style={styles.voiceNoteInfo}>
-                            <Text style={styles.voiceNoteTitle} numberOfLines={1}>{note.title || 'Voice memory'}</Text>
-                            <Text style={styles.voiceNoteMeta}>
-                              From {note?.sender?.name || 'Classmate'} · {formatDate(note.created_at)}
-                              {formatDuration(note.duration_seconds) ? ` · ${formatDuration(note.duration_seconds)}` : ''}
-                            </Text>
-                            <View style={styles.waveRow}>
-                              {Array.from({ length: 18 }, (_, index) => (
-                                <View key={String(index)} style={[styles.waveBar, { height: 7 + Math.abs(Math.sin(index * 0.8)) * 12, backgroundColor: playing ? '#fdb813' : '#e2e8f0' }]} />
-                              ))}
-                            </View>
-                          </View>
-                          <TouchableOpacity style={[styles.playVoiceButton, playing && styles.playVoiceButtonActive]} onPress={() => toggleVoicePlayback(note)}>
-                            <FontAwesome name={playing ? 'pause' : 'play'} size={14} color={playing ? '#1d2b4b' : '#fdb813'} />
-                          </TouchableOpacity>
-                        </View>
-                      );
-                    })
-                  ) : (
-                    <View style={styles.voiceEmpty}>
-                      <FontAwesome name="microphone-slash" size={28} color="#cbd5e1" />
-                      <Text style={styles.voiceEmptyTitle}>No voice memories yet</Text>
-                      <Text style={styles.voiceEmptyText}>Be the first to send a message they can keep.</Text>
-                    </View>
-                  )}
-                </View>
-              )}
-            />
-          </Animated.View>
-        </View>
-      </Modal>
+      <BottomSheetFilter
+        visible={filterSheet === 'dept'}
+        title="Filter by department"
+        options={departmentOptions}
+        selected={department}
+        onSelect={(value) => { setDepartment(value); setCourse(''); setFilterSheet(null); }}
+        onApply={() => setFilterSheet(null)}
+        onClose={() => setFilterSheet(null)}
+      />
+      <BottomSheetFilter
+        visible={filterSheet === 'course'}
+        title="Filter by course"
+        options={courseSheetOptions}
+        selected={course}
+        onSelect={(value) => { setCourse(value); setFilterSheet(null); }}
+        onApply={() => setFilterSheet(null)}
+        onClose={() => setFilterSheet(null)}
+      />
+      <BottomSheetFilter
+        visible={filterSheet === 'year'}
+        title="Filter by year"
+        options={yearOptions}
+        selected={year}
+        onSelect={(value) => { setYear(value); setFilterSheet(null); }}
+        onApply={() => setFilterSheet(null)}
+        onClose={() => setFilterSheet(null)}
+      />
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F0F2F8' },
-  scrollContent: { paddingBottom: 0, paddingTop: 0 },
-  directoryHeader: { height: 56, paddingHorizontal: 18, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  headerKicker: { color: '#F5A623', fontSize: 12, fontWeight: '900', letterSpacing: 1.2, textTransform: 'uppercase' },
-  headerTitle: { color: '#1A2547', fontSize: 24, fontWeight: '900', marginTop: 0 },
-  headerCameraButton: { width: 42, height: 42, borderRadius: 16, backgroundColor: 'rgba(255,255,255,0.12)', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: 'rgba(253,184,19,0.28)' },
-  searchArea: { paddingHorizontal: 18, paddingTop: 14 },
-  hero: { minHeight: 360, borderBottomLeftRadius: 28, borderBottomRightRadius: 28, overflow: 'hidden' },
-  heroOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(29,43,75,0.9)' },
-  dotPattern: { ...StyleSheet.absoluteFillObject, opacity: 0.05, backgroundColor: 'transparent' },
-  heroContent: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 20, paddingTop: 36, paddingBottom: 30 },
-  heroBadge: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: 'rgba(253,184,19,0.15)', borderWidth: 1, borderColor: 'rgba(253,184,19,0.35)', borderRadius: 999, paddingHorizontal: 13, paddingVertical: 7, marginBottom: 14 },
-  heroBadgeText: { color: '#fdb813', fontSize: 10, fontWeight: '900', letterSpacing: 1.1 },
-  heroTitle: { color: '#ffffff', fontSize: 32, lineHeight: 38, fontWeight: '900', textAlign: 'center' },
-  heroTitleGold: { color: '#fdb813' },
-  heroSubtitle: { color: 'rgba(255,255,255,0.74)', fontSize: 14, lineHeight: 21, textAlign: 'center', marginTop: 8, marginBottom: 24, maxWidth: 340 },
-  searchShell: { width: '100%', borderRadius: 17, padding: 8, backgroundColor: 'rgba(255,255,255,0.1)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.2)' },
-  searchContainer: { flexDirection: 'row', alignItems: 'center', minHeight: 56, borderRadius: 12, backgroundColor: '#F3F4F6', paddingHorizontal: 14 },
-  searchIcon: { marginRight: 10 },
-  searchInput: { flex: 1, color: '#1A2547', fontSize: 15 },
-  searchCameraButton: { width: 48, height: 48, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
-  cameraButton: { width: 40, height: 40, borderRadius: 11, borderWidth: 1, borderColor: '#fdb813', alignItems: 'center', justifyContent: 'center', marginRight: 6 },
-  faceBanner: { marginTop: 10, paddingHorizontal: 12, paddingVertical: 9, borderRadius: 12, borderWidth: 1, borderColor: 'rgba(253,184,19,0.4)', backgroundColor: 'rgba(253,184,19,0.12)', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', width: '100%' },
-  faceBannerText: { color: '#fdb813', fontSize: 12, fontWeight: '800' },
-  clearFaceText: { color: '#ffffff', fontSize: 12, fontWeight: '800' },
-  suggestionBox: { width: '100%', marginTop: 10, borderRadius: 16, overflow: 'hidden', backgroundColor: '#ffffff', borderWidth: 1, borderColor: 'rgba(255,255,255,0.55)' },
-  suggestionRow: { minHeight: 56, flexDirection: 'row', alignItems: 'center', gap: 11, paddingHorizontal: 12, borderBottomWidth: 1, borderBottomColor: '#eef2f7' },
-  suggestionAvatar: { width: 38, height: 38, borderRadius: 12, backgroundColor: '#eef2ff' },
-  suggestionInitials: { width: 38, height: 38, borderRadius: 12, backgroundColor: '#1d2b4b', alignItems: 'center', justifyContent: 'center' },
-  suggestionInitialsText: { color: '#fdb813', fontSize: 12, fontWeight: '900' },
-  suggestionName: { color: '#1d2b4b', fontSize: 13, fontWeight: '900' },
-  suggestionMeta: { color: '#8fa0bf', fontSize: 11, marginTop: 2 },
-  suggestionLoading: { marginTop: 10, alignSelf: 'stretch', borderRadius: 14, backgroundColor: '#ffffff', borderWidth: 1, borderColor: '#e2e8f0', paddingVertical: 10, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 8 },
-  suggestionLoadingText: { color: '#64748b', fontSize: 12, fontWeight: '800' },
-  dropdownFilterBar: { flexDirection: 'row', gap: 8, paddingHorizontal: 18, paddingTop: 12, paddingBottom: 8 },
-  dropdownPill: { flex: 1, minHeight: 52, borderRadius: 18, paddingHorizontal: 14, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  dropdownTextWrap: { flex: 1, minWidth: 0, marginRight: 8 },
-  programDropdown: { backgroundColor: '#F5A623' },
-  yearDropdown: { backgroundColor: '#1A2547' },
-  programDropdownLabel: { color: '#1A2547', fontSize: 11, fontWeight: '900' },
-  programDropdownValue: { color: '#1A2547', fontSize: 13, fontWeight: '900', marginTop: 3 },
-  yearDropdownLabel: { color: '#FFFFFF', fontSize: 11, fontWeight: '900' },
-  yearDropdownValue: { color: '#F5A623', fontSize: 13, fontWeight: '900', marginTop: 3 },
-  filtersWrap: { paddingTop: 12, paddingHorizontal: 18, paddingBottom: 4, gap: 10 },
-  chipRow: { gap: 8, paddingHorizontal: 18, paddingTop: 12, paddingBottom: 8 },
-  chipRowSecondary: { gap: 8, paddingHorizontal: 18, paddingBottom: 8 },
-  filterChip: { height: 32, borderRadius: 12, borderWidth: 1, borderColor: '#1A2547', paddingHorizontal: 13, alignItems: 'center', justifyContent: 'center', backgroundColor: 'transparent' },
-  filterChipActive: { backgroundColor: '#F5A623', borderColor: '#F5A623' },
-  filterChipText: { color: '#1A2547', fontSize: 12, fontWeight: '900' },
-  filterChipTextActive: { color: '#ffffff' },
-  filterContent: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 8 },
-  filterPill: { paddingHorizontal: 16, paddingVertical: 10, borderRadius: 16, backgroundColor: '#ffffff', borderWidth: 1, borderColor: '#e2e8f0', shadowColor: '#0f172a', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 6, elevation: 1 },
-  activeFilterPill: { backgroundColor: '#3f51b5', borderColor: '#3f51b5' },
-  filterText: { color: '#1d2b4b', fontSize: 12, fontWeight: '900' },
-  activeFilterText: { color: '#ffffff' },
-  resultCount: { color: '#94a3b8', fontSize: 12, marginHorizontal: 18, marginTop: 12, marginBottom: 12 },
-  resultStrong: { color: '#1d2b4b', fontWeight: '900' },
-  errorText: { color: '#dc2626', textAlign: 'center', marginHorizontal: 20, marginBottom: 16 },
-  columnWrapper: { paddingHorizontal: 14, gap: 12 },
-  studentCard: { backgroundColor: '#ffffff', borderRadius: 16, marginHorizontal: 18, marginBottom: 10, borderWidth: 1, borderColor: '#dbe3ef', shadowColor: '#0f172a', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.05, shadowRadius: 8, elevation: 2, flexDirection: 'row', alignItems: 'center', padding: 10 },
-  leftCard: { marginRight: 0 },
-  rightCard: { marginLeft: 0 },
-  studentCardMatched: { borderColor: '#fdb813', borderWidth: 2 },
-  photoArea: { width: 58, height: 58, borderRadius: 16, backgroundColor: '#1d2b4b', position: 'relative', overflow: 'hidden' },
+  container: { flex: 1, backgroundColor: COLORS.background },
+  content: { paddingBottom: 44 },
+  hero: { backgroundColor: COLORS.navy, paddingTop: 52, paddingHorizontal: 20, paddingBottom: 22, borderBottomLeftRadius: 22, borderBottomRightRadius: 22, alignItems: 'center' },
+  eyebrow: { color: 'rgba(255,255,255,0.4)', fontSize: 10, fontWeight: '900', letterSpacing: 1.1, textTransform: 'uppercase', marginBottom: 8 },
+  heroTitle: { color: '#ffffff', fontSize: 24, fontWeight: '900', textAlign: 'center' },
+  gold: { color: COLORS.gold },
+  heroSubtitle: { color: 'rgba(255,255,255,0.6)', fontSize: 11, lineHeight: 17, textAlign: 'center', marginTop: 8, maxWidth: 320 },
+  pillRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 14, justifyContent: 'center' },
+  statusPill: { flexDirection: 'row', alignItems: 'center', gap: 7, borderWidth: 1, borderColor: 'rgba(255,255,255,0.25)', borderRadius: 18, paddingHorizontal: 14, paddingVertical: 7 },
+  statusPillText: { color: COLORS.gold, fontSize: 11, fontWeight: '900' },
+  modeTabsWrap: { marginTop: -20, marginBottom: 10, paddingHorizontal: 12, zIndex: 20 },
+  modeTabs: { backgroundColor: '#FFFFFF', borderRadius: 16, padding: 7, gap: 7, flexDirection: 'row', flexWrap: 'wrap', shadowColor: '#101828', shadowOpacity: 0.1, shadowRadius: 14, shadowOffset: { width: 0, height: 6 }, elevation: 6 },
+  modeTab: { width: '48.95%', minHeight: 50, borderRadius: 12, alignItems: 'center', flexDirection: 'row', gap: 8, paddingHorizontal: 9 },
+  modeTabActive: { backgroundColor: COLORS.navy },
+  modeTabCopy: { flex: 1, minWidth: 0 },
+  modeTabLabel: { color: '#5F6E88', fontSize: 10, fontWeight: '900' },
+  modeTabLabelActive: { color: '#FFFFFF' },
+  modeTabDesc: { color: '#9AA5B8', fontSize: 8, fontWeight: '700', marginTop: 2 },
+  modeTabDescActive: { color: 'rgba(255,255,255,0.72)' },
+  filterBar: { backgroundColor: '#ffffff', borderBottomWidth: 0.5, borderBottomColor: COLORS.border, paddingHorizontal: 12, paddingTop: 10, paddingBottom: 9, zIndex: 10, elevation: 8 },
+  sectionTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 9, marginBottom: 10 },
+  sectionHeading: { color: COLORS.navy, fontSize: 15, fontWeight: '900' },
+  sectionSubheading: { color: '#8fa0bf', fontSize: 11, fontWeight: '800', marginTop: 1 },
+  searchRow: { minHeight: 40, borderRadius: 18, backgroundColor: COLORS.background, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, marginBottom: 9 },
+  searchInput: { flex: 1, color: COLORS.navy, fontSize: 13, paddingHorizontal: 8 },
+  dropdownRow: { flexDirection: 'row', gap: 7 },
+  dropdown: { flex: 1, borderRadius: 16, backgroundColor: COLORS.gold, paddingHorizontal: 9, paddingVertical: 7, minHeight: 42 },
+  dropdownNavy: { backgroundColor: COLORS.navy },
+  dropdownWhite: { backgroundColor: '#FFFFFF', borderWidth: 1.5, borderColor: COLORS.border },
+  dropdownLabel: { color: COLORS.navy, fontSize: 10, fontWeight: '900' },
+  dropdownLabelNavy: { color: '#FFFFFF' },
+  dropdownValueRow: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 2 },
+  dropdownValue: { flex: 1, minWidth: 0, color: COLORS.navy, fontSize: 11, fontWeight: '900' },
+  dropdownValueNavy: { color: COLORS.gold },
+  dropdownValueWhite: { color: COLORS.muted },
+  generateButton: { flex: 1, minHeight: 42, borderRadius: 16, backgroundColor: COLORS.navy, flexDirection: 'row', gap: 6, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 8 },
+  generateButtonText: { color: COLORS.gold, fontSize: 10, fontWeight: '900' },
+  courseChipWrap: { overflow: 'hidden', marginTop: 8 },
+  courseRow: { gap: 8 },
+  courseTab: { maxWidth: 210, height: 32, borderRadius: 20, backgroundColor: '#FFFFFF', borderWidth: 1.5, borderColor: COLORS.border, paddingHorizontal: 12, alignItems: 'center', justifyContent: 'center' },
+  courseTabActive: { backgroundColor: COLORS.navy, borderColor: COLORS.navy },
+  courseTabText: { color: COLORS.navy, fontSize: 11, fontWeight: '900' },
+  courseTabTextActive: { color: '#FFFFFF' },
+  resultPill: { alignSelf: 'center', marginTop: 8, marginBottom: 10, flexDirection: 'row', gap: 8, alignItems: 'center', backgroundColor: '#ffffff', borderRadius: 18, paddingHorizontal: 14, paddingVertical: 6, borderWidth: 0.5, borderColor: COLORS.border },
+  resultText: { color: COLORS.navy, fontSize: 12, fontWeight: '900' },
+  upgradeBanner: { marginHorizontal: 18, marginBottom: 18, borderRadius: 16, backgroundColor: '#263187', padding: 15, flexDirection: 'row', alignItems: 'center', gap: 12 },
+  upgradeTitle: { color: '#ffffff', fontSize: 13, fontWeight: '900' },
+  upgradeText: { color: '#d8dff4', fontSize: 11, marginTop: 2 },
+  upgradeButton: { height: 38, borderRadius: 11, backgroundColor: '#fdb813', paddingHorizontal: 13, alignItems: 'center', justifyContent: 'center' },
+  upgradeButtonText: { color: '#102044', fontSize: 11, fontWeight: '900' },
+  groupWrap: { paddingHorizontal: 14, gap: 10 },
+  departmentGroup: { backgroundColor: '#ffffff', borderRadius: 16, borderWidth: 0.5, borderColor: COLORS.border, overflow: 'hidden', marginBottom: 10 },
+  groupHeader: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 14, paddingVertical: 12, borderBottomWidth: 0.5, borderBottomColor: COLORS.background },
+  groupIcon: { width: 38, height: 38, borderRadius: 10, backgroundColor: COLORS.navy, alignItems: 'center', justifyContent: 'center' },
+  departmentTitle: { color: COLORS.navy, fontSize: 14, fontWeight: '900' },
+  departmentMeta: { color: COLORS.muted, fontSize: 12, fontWeight: '800', marginTop: 2 },
+  courseGroup: { paddingHorizontal: 14, paddingVertical: 10, borderBottomWidth: 0.5, borderBottomColor: COLORS.background },
+  courseTitle: { color: COLORS.gold, fontSize: 12, fontWeight: '900', marginBottom: 8 },
+  sectionGroup: { marginTop: 8, marginBottom: 8 },
+  sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 10, marginBottom: 10 },
+  sectionTitle: { color: COLORS.navy, fontSize: 12, fontWeight: '900' },
+  sectionCount: { borderRadius: 20, backgroundColor: '#EEF0F7', paddingHorizontal: 10, paddingVertical: 3 },
+  sectionCountText: { color: COLORS.navy, fontSize: 10, fontWeight: '900' },
+  studentList: { paddingHorizontal: 18, paddingBottom: 20 },
+  studentCard: { backgroundColor: '#ffffff', borderRadius: 16, marginBottom: 10, borderWidth: 1, borderColor: '#dbe3ef', shadowColor: '#0f172a', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.05, shadowRadius: 8, elevation: 2, flexDirection: 'row', alignItems: 'center', padding: 10 },
+  studentCardMatched: { borderColor: COLORS.gold, borderWidth: 2, shadowColor: COLORS.gold, shadowOpacity: 0.16 },
+  photoArea: { width: 58, height: 58, borderRadius: 16, backgroundColor: COLORS.navy, position: 'relative', overflow: 'hidden' },
   cardPhoto: { width: '100%', height: '100%' },
-  initialsArea: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#1d2b4b' },
-  initialsText: { color: '#fdb813', fontSize: 18, fontWeight: '900' },
-  batchBadge: { position: 'absolute', top: 10, right: 10, flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: 'rgba(29,43,75,0.86)', borderRadius: 999, paddingHorizontal: 8, paddingVertical: 5 },
-  batchText: { color: '#9a6100', fontSize: 10, fontWeight: '900' },
-  matchBadge: { position: 'absolute', top: 10, left: 10, flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#fdb813', borderRadius: 999, paddingHorizontal: 8, paddingVertical: 5 },
-  matchText: { color: '#1d2b4b', fontSize: 10, fontWeight: '900' },
+  initialsArea: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: COLORS.navy },
+  initialsText: { color: COLORS.gold, fontSize: 18, fontWeight: '900' },
+  matchBadge: { position: 'absolute', right: 4, top: 4, width: 18, height: 18, borderRadius: 9, backgroundColor: COLORS.gold, alignItems: 'center', justifyContent: 'center' },
   cardInfo: { flex: 1, minWidth: 0, justifyContent: 'center', paddingHorizontal: 12 },
-  name: { color: '#1d2b4b', fontSize: 14, fontWeight: '900', marginBottom: 3, textTransform: 'capitalize' },
+  studentName: { color: COLORS.navy, fontSize: 14, lineHeight: 18, fontWeight: '900', marginBottom: 3, textTransform: 'capitalize' },
   studentMeta: { color: '#64748b', fontSize: 11, marginBottom: 7 },
   studentMetaRow: { flexDirection: 'row', alignItems: 'center', gap: 7 },
-  courseBadge: { backgroundColor: '#eef2ff', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 999 },
+  courseBadge: { maxWidth: 112, backgroundColor: '#eef2ff', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 999 },
   courseBadgeText: { color: '#3f51b5', fontSize: 10, fontWeight: '900', letterSpacing: 0.7 },
   missingProgramText: { color: '#6B7280', fontSize: 10, fontWeight: '900' },
   yearBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#fff3c4', borderWidth: 1, borderColor: '#ffe08a', borderRadius: 999, paddingHorizontal: 8, paddingVertical: 5 },
+  batchText: { color: '#9a6100', fontSize: 10, fontWeight: '900' },
   profileButton: { width: 30, height: 30, borderRadius: 10, backgroundColor: '#f8fafc', alignItems: 'center', justifyContent: 'center' },
-  emptyContainer: { marginHorizontal: 18, backgroundColor: '#ffffff', borderRadius: 18, borderWidth: 1, borderColor: '#e2e8f0', paddingVertical: 54, alignItems: 'center' },
-  emptyTitle: { color: '#1d2b4b', fontSize: 18, fontWeight: '900', marginTop: 16 },
-  emptyText: { color: '#8E8E93', fontSize: 14, textAlign: 'center', marginTop: 6 },
-  unavailableWrap: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 28 },
-  unavailableIcon: { width: 66, height: 66, borderRadius: 20, backgroundColor: '#1d2b4b', alignItems: 'center', justifyContent: 'center', marginBottom: 18 },
-  unavailableTitle: { color: '#1d2b4b', fontSize: 22, fontWeight: '900', textAlign: 'center' },
-  unavailableText: { color: '#64748b', fontSize: 14, lineHeight: 21, textAlign: 'center', marginTop: 8, marginBottom: 20 },
-  unavailableButton: { minHeight: 46, borderRadius: 14, backgroundColor: '#fdb813', paddingHorizontal: 18, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
-  unavailableButtonText: { color: '#1d2b4b', fontSize: 13, fontWeight: '900' },
+  viewAllButton: { alignItems: 'center', marginTop: 8 },
+  viewAllText: { color: COLORS.gold, fontSize: 11, fontWeight: '900' },
+  loading: { marginTop: 42 },
+  emptyPanel: { marginHorizontal: 20, minHeight: 250, borderRadius: 22, backgroundColor: '#ffffff', alignItems: 'center', justifyContent: 'center', padding: 28 },
+  emptyTitle: { color: COLORS.navy, fontSize: 14, fontWeight: '900', marginTop: 16 },
+  emptyText: { color: COLORS.muted, textAlign: 'center', lineHeight: 20, marginTop: 8, fontSize: 12 },
+  clearFiltersText: { color: COLORS.gold, fontSize: 12, fontWeight: '900', marginTop: 12 },
   sheetOverlay: { flex: 1, justifyContent: 'flex-end' },
   sheetBackdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.35)' },
-  filterSheet: { backgroundColor: '#FFFFFF', borderTopLeftRadius: 20, borderTopRightRadius: 20, paddingHorizontal: 18, paddingTop: 10, paddingBottom: 26, maxHeight: '82%' },
-  sheetHandle: { width: 36, height: 4, borderRadius: 999, backgroundColor: '#D1D5E0', alignSelf: 'center', marginBottom: 14 },
-  sheetTitle: { color: '#1A2547', fontSize: 13, fontWeight: '900', marginBottom: 4 },
+  sheet: { backgroundColor: '#FFFFFF', borderTopLeftRadius: 20, borderTopRightRadius: 20, paddingHorizontal: 18, paddingTop: 10, paddingBottom: 26, maxHeight: '82%' },
+  sheetHandle: { width: 36, height: 4, borderRadius: 999, backgroundColor: '#D1D5E0', alignSelf: 'center', marginBottom: 12 },
+  sheetTitle: { color: COLORS.navy, fontSize: 13, fontWeight: '900', marginBottom: 10 },
   sheetScroll: { maxHeight: 430 },
-  sheetOption: { minHeight: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderBottomWidth: 0.5, borderBottomColor: '#F0F2F7', gap: 12 },
-  sheetOptionText: { flex: 1, color: '#1A2547', fontSize: 13, fontWeight: '700' },
-  optionCircle: { width: 20, height: 20, borderRadius: 10, borderWidth: 1, borderColor: '#D1D5E0', alignItems: 'center', justifyContent: 'center' },
-  optionCircleSelected: { backgroundColor: '#F5A623', borderColor: '#F5A623' },
-  applyButton: { height: 48, borderRadius: 12, backgroundColor: '#1A2547', alignItems: 'center', justifyContent: 'center', marginTop: 14 },
-  applyButtonText: { color: '#FFFFFF', fontSize: 14, fontWeight: '900' },
-  modalOverlay: { flex: 1, justifyContent: 'flex-end' },
-  absoluteFill: { ...StyleSheet.absoluteFillObject },
-  modalContainer: { backgroundColor: 'white', borderTopLeftRadius: 16, borderTopRightRadius: 16, height: height * 0.9, overflow: 'hidden' },
-  profileModalContent: { flex: 1 },
-  blueHeader: { height: 150, backgroundColor: '#1d2b4b', width: '100%' },
-  profileInfoSection: { alignItems: 'center', marginTop: -70, paddingHorizontal: 24 },
-  largeAvatar: { width: 140, height: 140, borderRadius: 70, borderWidth: 6, borderColor: '#FFFFFF', backgroundColor: '#eef2ff', marginBottom: 20 },
-  avatarFallback: { backgroundColor: '#1d2b4b', justifyContent: 'center', alignItems: 'center' },
-  largeAvatarFallbackText: { color: '#fdb813', fontSize: 44, fontWeight: '900' },
-  userName: { fontSize: 26, fontWeight: 'bold', color: '#1C1C1E', marginBottom: 6, textAlign: 'center' },
-  userDegree: { fontSize: 16, color: '#1d2b4b', fontWeight: '500', marginBottom: 4, textAlign: 'center' },
-  userYear: { fontSize: 14, color: '#8E8E93', marginBottom: 20 },
-  actionButtons: { flexDirection: 'row', gap: 12, width: '100%', marginBottom: 30 },
-  primaryActionButton: { flex: 1, height: 50, backgroundColor: '#1d2b4b', borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
-  primaryActionButtonText: { color: 'white', fontWeight: 'bold', fontSize: 14 },
-  voiceActionButton: { width: 96, height: 50, backgroundColor: '#fdb813', borderRadius: 12, justifyContent: 'center', alignItems: 'center', flexDirection: 'row', gap: 7 },
-  voiceActionButtonText: { color: '#1d2b4b', fontWeight: '900', fontSize: 13 },
-  contentSection: { paddingHorizontal: 24, paddingBottom: 20 },
-  sectionHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 16 },
-  sectionTitle: { fontSize: 14, fontWeight: 'bold', color: '#1C1C1E', letterSpacing: 0.5 },
-  aboutText: { fontSize: 14, color: '#4A4A4A', lineHeight: 22 },
-  achievementCardYellow: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff8e1', padding: 16, borderRadius: 16, marginBottom: 12, borderWidth: 1, borderColor: '#FFF1B8' },
-  achievementTitleYellow: { fontSize: 15, fontWeight: 'bold', color: '#874D00', marginBottom: 2 },
-  achievementSubYellow: { fontSize: 12, color: '#A67C00' },
-  voiceSection: { paddingHorizontal: 24, paddingTop: 18, paddingBottom: 44 },
-  voiceComposer: { backgroundColor: '#ffffff', borderRadius: 18, borderWidth: 1, borderColor: '#e2e8f0', padding: 16, marginBottom: 16, shadowColor: '#0f172a', shadowOffset: { width: 0, height: 5 }, shadowOpacity: 0.05, shadowRadius: 14, elevation: 2 },
-  voiceComposerTop: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 14 },
-  voiceIconCircle: { width: 46, height: 46, borderRadius: 23, backgroundColor: '#1d2b4b', alignItems: 'center', justifyContent: 'center' },
-  voiceComposerTitle: { color: '#1d2b4b', fontSize: 15, fontWeight: '900' },
-  voiceComposerMeta: { color: '#94a3b8', fontSize: 12, marginTop: 3 },
-  voiceTitleInput: { height: 44, borderRadius: 12, backgroundColor: '#f4f7fe', borderWidth: 1, borderColor: '#e2e8f0', paddingHorizontal: 13, color: '#1d2b4b', fontSize: 13, marginBottom: 12 },
-  voiceButtonRow: { flexDirection: 'row', gap: 10 },
-  recordButton: { flex: 1, height: 44, borderRadius: 12, backgroundColor: '#1d2b4b', alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 8 },
-  stopButton: { backgroundColor: '#dc2626' },
-  recordButtonText: { color: '#ffffff', fontSize: 12, fontWeight: '900' },
-  stopButtonText: { color: '#ffffff' },
-  sendVoiceButton: { width: 92, height: 44, borderRadius: 12, backgroundColor: '#fdb813', alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 7 },
-  sendVoiceButtonText: { color: '#1d2b4b', fontSize: 12, fontWeight: '900' },
-  voiceNoteCard: { flexDirection: 'row', alignItems: 'center', gap: 14, backgroundColor: '#ffffff', borderRadius: 18, borderWidth: 1, borderColor: '#e2e8f0', padding: 15, marginBottom: 12 },
-  voiceNoteInfo: { flex: 1, minWidth: 0 },
-  voiceNoteTitle: { color: '#1d2b4b', fontSize: 14, fontWeight: '900' },
-  voiceNoteMeta: { color: '#94a3b8', fontSize: 11, marginTop: 4 },
-  waveRow: { flexDirection: 'row', alignItems: 'center', gap: 2, height: 22, marginTop: 8 },
-  waveBar: { width: 3, borderRadius: 999 },
-  playVoiceButton: { width: 48, height: 48, borderRadius: 14, backgroundColor: '#1d2b4b', alignItems: 'center', justifyContent: 'center' },
-  playVoiceButtonActive: { backgroundColor: '#fdb813' },
-  voiceEmpty: { backgroundColor: '#ffffff', borderRadius: 18, borderWidth: 1, borderColor: '#e2e8f0', paddingVertical: 34, paddingHorizontal: 20, alignItems: 'center' },
-  voiceEmptyTitle: { color: '#1d2b4b', fontSize: 15, fontWeight: '900', marginTop: 12 },
-  voiceEmptyText: { color: '#94a3b8', fontSize: 12, textAlign: 'center', marginTop: 5 },
+  sheetOption: { minHeight: 40, paddingVertical: 9, borderBottomWidth: 0.5, borderBottomColor: COLORS.background, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  sheetOptionText: { color: COLORS.navy, fontSize: 13 },
+  sheetCircle: { width: 20, height: 20, borderRadius: 10, borderWidth: 1.5, borderColor: '#D1D5E0', alignItems: 'center', justifyContent: 'center' },
+  sheetCircleActive: { backgroundColor: COLORS.gold, borderColor: COLORS.gold },
+  sheetApply: { backgroundColor: COLORS.navy, borderRadius: 12, paddingVertical: 11, alignItems: 'center', marginTop: 12 },
+  sheetApplyText: { color: '#FFFFFF', fontSize: 13, fontWeight: '900' },
 });

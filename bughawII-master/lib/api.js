@@ -3,9 +3,6 @@ import Constants from "expo-constants";
 import * as SecureStore from "expo-secure-store";
 import { Platform } from "react-native";
 
-const configuredApiUrl = process.env.EXPO_PUBLIC_API_URL || Constants.expoConfig?.extra?.apiUrl;
-const configuredAuthUrl = process.env.EXPO_PUBLIC_AUTH_BASE_URL || Constants.expoConfig?.extra?.authBaseUrl;
-
 const inferApiUrlFromExpoHost = () => {
   const hostUri =
     Constants.expoConfig?.hostUri ||
@@ -16,14 +13,24 @@ const inferApiUrlFromExpoHost = () => {
   if (Platform.OS === "web" && (!host || host === "localhost")) {
     return "http://127.0.0.1:8000/api";
   }
-
   return host ? `http://${host}:8000/api` : "http://127.0.0.1:8000/api";
 };
 
-export const API_BASE_URL =
-  configuredApiUrl && configuredApiUrl !== "auto"
-    ? configuredApiUrl.replace(/\/+$/, "")
-    : inferApiUrlFromExpoHost();
+export const API_BASE_URL = (() => {
+  // 1. Explicit env var baked in at build time
+  if (process.env.EXPO_PUBLIC_API_URL && process.env.EXPO_PUBLIC_API_URL !== "auto") {
+    return process.env.EXPO_PUBLIC_API_URL.replace(/\/+$/, "");
+  }
+  // 2. app.json extra — always available at runtime, works in dev and prod
+  if (Constants.expoConfig?.extra?.apiUrl) {
+    return Constants.expoConfig.extra.apiUrl.replace(/\/+$/, "");
+  }
+  // 3. Hard fallback
+  return "https://yearbook-myji.onrender.com/api";
+})();
+
+const configuredAuthUrl =
+  process.env.EXPO_PUBLIC_AUTH_BASE_URL || Constants.expoConfig?.extra?.authBaseUrl;
 
 export const AUTH_BASE_URL = (configuredAuthUrl || API_BASE_URL.replace(/\/api\/?$/, "")).replace(/\/+$/, "");
 

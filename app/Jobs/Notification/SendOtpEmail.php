@@ -25,6 +25,8 @@ class SendOtpEmail implements ShouldQueue
 
     public function handle(PHPMailerService $mailer): void
     {
+        Log::info("SendOtpEmail triggered for: {$this->email}");
+
         $user = User::where('email', $this->email)->first();
         $name = $user?->name ?? $this->email;
 
@@ -35,6 +37,8 @@ class SendOtpEmail implements ShouldQueue
             if ($this->attempts() >= $this->tries) {
                 $this->fail(new \RuntimeException("PHPMailer failed after {$this->tries} attempts."));
             }
+        } else {
+            Log::info("OTP email sent successfully to {$this->email}");
         }
     }
 

@@ -276,7 +276,7 @@ export default function AnalyticsScreen() {
                     <View style={styles.bars}>
                       {(statsTrend?.values || myStats?.trend?.values || myStats?.views_trend || [2, 4, 3, 6, 5, 7, 4]).map((value: number, index: number, values: number[]) => {
                         const max = Math.max(...values, 1);
-                        return <View key={String(index)} style={[styles.bar, { height: Math.max(8, (Number(value || 0) / max) * 78) }]} />;
+                        return <View key={`bar-${index}`} style={[styles.bar, { height: Math.max(8, (Number(value || 0) / max) * 78) }]} />;
                       })}
                     </View>
                   </View>
@@ -296,7 +296,10 @@ export default function AnalyticsScreen() {
       <StatusBar style="light" />
       <FlatList
         data={activeList}
-        keyExtractor={(item, index) => String(item?.id || item?.user_id || index)}
+        keyExtractor={(item, index) => {
+          const id = item?.id ?? item?.user_id ?? item?.student_id;
+          return id != null ? String(id) : `analytics-${index}`;
+        }}
         ListHeaderComponent={renderHero}
         renderItem={({ item, index }) => (
           <AlumniRow

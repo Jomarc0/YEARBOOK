@@ -88,6 +88,10 @@ export default function Login() {
   const handleGoogleLogin = async () => {
     try {
       setLoading(true);
+
+      // Wake up Render backend first (free tier spins down after inactivity)
+      await fetch(`${AUTH_BASE_URL}/api/app-config`).catch(() => {});
+
       const redirectUri = Platform.OS === 'web' && typeof window !== 'undefined'
         ? `${window.location.origin}/sso/callback`
         : Linking.createURL('/sso/callback');
