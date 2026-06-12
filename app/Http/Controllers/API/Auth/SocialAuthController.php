@@ -120,7 +120,7 @@ class SocialAuthController extends Controller
             session()->forget('google_oauth_redirect_uri');
         }
 
-        return $this->googleProvider()->redirect();
+        return $this->googleProvider()->stateless()->redirect();
     }
 
     public function mobileRedirectToGoogle(Request $request)
@@ -147,8 +147,10 @@ class SocialAuthController extends Controller
 
     // ── 1. Exchange code for Google user ─────────────────────────────────
     try {
-        $googleUser = $mobileRedirect
-            ? $this->googleProvider()->stateless()->redirectUrl($this->googleCallbackUrl($request, true))->user()
+        $useStatelessProvider = $mobileRedirect || ! $request->filled('state');
+
+        $googleUser = $useStatelessProvider
+            ? $this->googleProvider()->stateless()->redirectUrl($this->googleCallbackUrl($request, (bool) $mobileRedirect))->user()
             : $this->googleProvider()->user();
     } catch (\Laravel\Socialite\Two\InvalidStateException $e) {
         Log::warning('Google OAuth: InvalidStateException — session likely expired or duplicate callback.', [
