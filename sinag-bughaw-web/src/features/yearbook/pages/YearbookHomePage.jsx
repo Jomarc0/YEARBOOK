@@ -6,6 +6,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { getYearbookBatches } from '../../../api/yearbook.api';
 import { useYearbookPdfDownload } from '../hooks/useFlipbook';
+import { useAuth } from '@/features/auth/hooks/useAuth';
 
 const C = {
     navy:  '#1a1a2e',
@@ -20,9 +21,19 @@ const C = {
 
 export default function YearbookHomePage() {
     const navigate = useNavigate();
+    const { user } = useAuth();
     const [batches, setBatches]   = useState([]);
     const [loading, setLoading]   = useState(true);
     const { download, downloading } = useYearbookPdfDownload();
+    const canDownloadPdf = Boolean(
+        user?.is_subscribed ||
+        user?.is_premium ||
+        user?.tier === 'standard' ||
+        user?.tier === 'premium' ||
+        user?.subscription?.status === 'active' ||
+        user?.subscription?.tier === 'standard' ||
+        user?.subscription?.tier === 'premium'
+    );
 
     useEffect(() => {
         getYearbookBatches()
@@ -103,14 +114,15 @@ export default function YearbookHomePage() {
                                         📖 Open Flipbook
                                     </button>
                                     <button
-                                        onClick={() => download(batch.id, batch.year ?? batch.name)}
-                                        disabled={downloading}
+                                        onClick={() => canDownloadPdf && download(batch.id, batch.year ?? batch.name)}
+                                        disabled={downloading || !canDownloadPdf}
+                                        title={canDownloadPdf ? 'Download PDF' : 'Standard or Premium subscription required'}
                                         style={{
                                             background: 'transparent', color: C.gold,
                                             border: `1.5px solid ${C.gold}`, borderRadius: 8,
                                             padding: '8px 0', fontWeight: 700,
-                                            fontSize: 12, cursor: downloading ? 'not-allowed' : 'pointer',
-                                            width: '100%', opacity: downloading ? 0.6 : 1,
+                                            fontSize: 12, cursor: downloading || !canDownloadPdf ? 'not-allowed' : 'pointer',
+                                            width: '100%', opacity: downloading || !canDownloadPdf ? 0.55 : 1,
                                             fontFamily: 'Georgia, serif',
                                         }}
                                     >

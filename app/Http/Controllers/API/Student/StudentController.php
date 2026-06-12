@@ -164,6 +164,16 @@ class StudentController extends Controller
                     'id'              => $student->id,
                     'name'            => $student->name,
                     'profile_picture' => $student->profile_picture,
+                    'avatar'          => $student->avatar,
+                    'course'          => $student->course,
+                    'course_short'    => $student->course_short,
+                    'student_id'      => $student->student_id,
+                    'graduation_year' => $student->graduation_year,
+                    'batch'           => $student->batch,
+                    'section'         => $student->section ? [
+                        'name'       => $student->section->name,
+                        'batch_year' => $student->section->batch_year,
+                    ] : null,
                 ],
             ], 402);
         }

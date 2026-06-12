@@ -33,12 +33,15 @@ export default function FlipbookViewerPage() {
     course: searchParams.get('course') || undefined,
   }), [searchParams]);
 
-  // isPremium: true when the user has an active premium subscription OR
-  // when the platform has disabled subscription gating entirely.
+  // Standard and Premium users can download PDFs; free users can only view.
   const isPremium = !!(
+    currentUser?.is_subscribed ||
     currentUser?.is_premium ||
+    currentUser?.tier === 'standard' ||
     currentUser?.tier === 'premium' ||
-    currentUser?.subscription?.status === 'active'
+    currentUser?.subscription?.status === 'active' ||
+    currentUser?.subscription?.tier === 'standard' ||
+    currentUser?.subscription?.tier === 'premium'
   );
 
   const {

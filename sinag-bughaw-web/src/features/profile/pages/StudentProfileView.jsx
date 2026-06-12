@@ -125,7 +125,8 @@ function RestrictedProfileView({ student, visibility, authUser, onBack, onLogin 
   const sectionName = pickFirst(student?.section?.name, student?.student_record?.section, student?.studentRecord?.section);
   const batch = publicStudentField(student, 'graduation_year', 'batch_year', 'batch') || student?.section?.batch_year || student?.batch?.graduation_year;
   const isBatchmatesOnly = visibility === 'batchmates' || visibility === 'alumni_only';
-  const badge = isBatchmatesOnly ? 'Batchmates Only' : 'Private Profile';
+  const isSubscriptionLimited = visibility === 'subscription';
+  const badge = isSubscriptionLimited ? 'Free Tier' : isBatchmatesOnly ? 'Batchmates Only' : 'Private Profile';
   const metaSeparator = ' · ';
   const details = [rawCourse || course, 'National University Lipa'].filter(Boolean).join(' · ');
   const profileMeta = [details, sectionName].filter(Boolean).join(metaSeparator);
@@ -236,9 +237,13 @@ function RestrictedProfileView({ student, visibility, authUser, onBack, onLogin 
           <div className="mx-auto mb-4 flex h-10 w-10 items-center justify-center rounded-2xl bg-[#fdb813]/15 text-[#fdb813]">
             <i className="fas fa-users text-xl" />
           </div>
-          <h2 className="m-0 text-[18px] font-semibold text-[#1d2b4b]">This profile is private</h2>
+          <h2 className="m-0 text-[18px] font-semibold text-[#1d2b4b]">
+            {isSubscriptionLimited ? 'Profile details locked' : 'This profile is private'}
+          </h2>
           <p className="mx-auto mt-3 mb-0 max-w-[330px] text-sm leading-relaxed text-slate-500">
-            {!loggedIn
+            {isSubscriptionLimited
+              ? 'Full profile details are hidden on free tier. Upgrade to unlock the complete profile, gallery access, and contact details.'
+              : !loggedIn
               ? 'Only students from the same batch can view the full profile. Sign in with your NU Lipa student account to check access.'
               : `You're not in the same batch as ${name}. Only their batchmates can view this profile.`}
           </p>
@@ -394,36 +399,7 @@ export default function StudentProfileView() {
   );
 
   // ── Not found / private ────────────────────────────────────────────────────
-  if (!student && visibility === 'subscription') return (
-    <div className="min-h-screen flex flex-col bg-[#f4f7fe]">
-      <Navbar />
-      <main className="flex-1 flex items-center justify-center px-4 py-12">
-        <div className="w-full max-w-lg rounded-3xl bg-white border border-slate-100 shadow-xl shadow-slate-200/60 p-8 text-center">
-          <div className="mx-auto mb-5 h-14 w-14 rounded-2xl bg-amber-100 text-amber-600 flex items-center justify-center">
-            <i className="fas fa-lock text-xl" />
-          </div>
-          <p className="m-0 mb-2 text-[11px] font-black uppercase tracking-[0.22em] text-amber-600">Full Profile Locked</p>
-          <h2 className="m-0 text-2xl font-black text-[#1d2b4b]">Upgrade to view student profiles</h2>
-          <p className="mx-auto mt-3 max-w-sm text-sm leading-relaxed text-slate-500">
-            Standard unlocks student profiles and gallery access. Premium unlocks complete discovery details, mottos, and contact information.
-          </p>
-          <div className="mt-6 flex flex-col sm:flex-row gap-3 justify-center">
-            <button onClick={() => navigate('/premium')}
-              className="rounded-xl border-none bg-[#fdb813] px-5 py-3 text-sm font-black text-[#1d2b4b] cursor-pointer hover:bg-amber-300 transition">
-              Upgrade access
-            </button>
-            <button onClick={() => navigate(-1)}
-              className="rounded-xl border border-slate-200 bg-white px-5 py-3 text-sm font-bold text-slate-500 cursor-pointer hover:bg-slate-50 transition">
-              Go back
-            </button>
-          </div>
-        </div>
-      </main>
-      <Footer />
-    </div>
-  );
-
-  if (!student && ['private', 'batchmates', 'alumni_only'].includes(visibility)) return (
+  if (!student && ['subscription', 'private', 'batchmates', 'alumni_only'].includes(visibility)) return (
     <RestrictedProfileView
       student={restrictedStudent}
       visibility={visibility}

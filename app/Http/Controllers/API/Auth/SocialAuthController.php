@@ -155,7 +155,7 @@ class SocialAuthController extends Controller
             'message' => $e->getMessage(),
         ]);
         return $this->redirectToMobileOrWeb($request, 'error=sso_failed');
-    } catch (\Exception $e) {
+    } catch (\Throwable $e) {
         Log::error('Google OAuth callback failed', [
             'exception' => get_class($e),
             'message'   => $e->getMessage(),
@@ -204,7 +204,7 @@ class SocialAuthController extends Controller
                 ]);
             }
             User::enableSearchSyncing();
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
             User::enableSearchSyncing();
             Log::error('Google OAuth: failed to upsert user', [
                 'email'     => $email,
@@ -215,31 +215,59 @@ class SocialAuthController extends Controller
         }
 
         // ── 4. Auto-create consent log for new SSO users ──────────────────────
-        if ($user->wasRecentlyCreated) {
-            Consent::create([
-                'user_id'     => $user->id,
-                'type'        => 'privacy_policy',
-                'version'     => '1.0',
-                'accepted'    => true,
-                'ip_address'  => $request->ip(),
-                'user_agent'  => $request->userAgent(),
-                'accepted_at' => now(),
+        try {
+            Consent::updateOrCreate(
+                [
+                    'user_id' => $user->id,
+                    'type'    => 'privacy_policy',
+                ],
+                [
+                    'version'     => '1.0',
+                    'accepted'    => true,
+                    'ip_address'  => $request->ip(),
+                    'user_agent'  => $request->userAgent(),
+                    'accepted_at' => now(),
+                ]
+            );
+        } catch (\Throwable $e) {
+            Log::warning('Google OAuth: failed to store consent log', [
+                'user_id'   => $user->id,
+                'exception' => get_class($e),
+                'message'   => $e->getMessage(),
             ]);
         }
 
         // ── 5. Issue Sanctum token ────────────────────────────────────────────
-        $user->tokens()->where('name', 'google-sso')->delete();
-        $token = $user->createToken('google-sso')->plainTextToken;
-        UserPresence::updateOrCreate(
-            ['user_id' => $user->id],
-            [
-                'is_online'    => true,
-                'last_seen_at' => now(),
-            ]
-        );
+        try {
+            $user->tokens()->where('name', 'google-sso')->delete();
+            $token = $user->createToken('google-sso')->plainTextToken;
+        } catch (\Throwable $e) {
+            Log::error('Google OAuth: failed to issue token', [
+                'user_id'   => $user->id,
+                'exception' => get_class($e),
+                'message'   => $e->getMessage(),
+            ]);
+            return $this->redirectToMobileOrWeb($request, 'error=sso_failed');
+        }
+
+        try {
+            UserPresence::updateOrCreate(
+                ['user_id' => $user->id],
+                [
+                    'is_online'    => true,
+                    'last_seen_at' => now(),
+                ]
+            );
+        } catch (\Throwable $e) {
+            Log::warning('Google OAuth: failed to update presence', [
+                'user_id'   => $user->id,
+                'exception' => get_class($e),
+                'message'   => $e->getMessage(),
+            ]);
+        }
 
         // ── 6. Send token to React via URL param ──────────────────────────────
-        return $this->redirectToMobileOrWeb($request, "token={$token}");
+        return $this->redirectToMobileOrWeb($request, http_build_query(['token' => $token]));
     }
 
     public function mobileHandleGoogleCallback(Request $request)

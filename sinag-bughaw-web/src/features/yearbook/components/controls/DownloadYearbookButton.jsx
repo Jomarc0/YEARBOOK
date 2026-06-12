@@ -4,11 +4,12 @@ import { downloadYearbookPdf } from '../../../../api/yearbook.api';
 const GOLD = '#c9a84c';
 const DARK = '#1a1a2e';
 
-export default function DownloadYearbookButton({ batchId, pdfReady: initialPdfReady, scope = {} }) {
+export default function DownloadYearbookButton({ batchId, pdfReady: initialPdfReady, isPremium = false, scope = {} }) {
   const [phase, setPhase] = useState('idle');
   const [errorMsg, setErrorMsg] = useState(null);
 
   const handleDownload = useCallback(async () => {
+    if (!isPremium) return;
     if (phase === 'downloading') return;
 
     setPhase('downloading');
@@ -31,16 +32,16 @@ export default function DownloadYearbookButton({ batchId, pdfReady: initialPdfRe
         setErrorMsg(err?.response?.data?.message ?? err?.message ?? 'Download failed. Please try again.');
       }
     }
-  }, [phase, batchId, scope]);
+  }, [phase, batchId, scope, isPremium]);
 
-  const { label, icon, disabled, variant } = phaseConfig(phase, initialPdfReady);
+  const { label, icon, disabled, variant } = phaseConfig(phase, initialPdfReady, isPremium);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
       <button
         onClick={handleDownload}
         disabled={disabled}
-        title="Download yearbook PDF"
+        title={isPremium ? 'Download yearbook PDF' : 'Standard or Premium subscription required'}
         style={buttonStyle({ disabled, variant })}
         onMouseEnter={(e) => {
           if (!disabled) {
@@ -76,7 +77,11 @@ export default function DownloadYearbookButton({ batchId, pdfReady: initialPdfRe
   );
 }
 
-function phaseConfig(phase, pdfReady) {
+function phaseConfig(phase, pdfReady, canDownload) {
+  if (!canDownload) {
+    return { label: 'PDF Locked', icon: <LockIcon />, disabled: true, variant: 'locked' };
+  }
+
   switch (phase) {
     case 'downloading':
       return { label: 'Downloading...', icon: <Spinner />, disabled: true, variant: 'outline' };
@@ -116,7 +121,20 @@ function buttonStyle({ disabled, variant }) {
   if (variant === 'green') {
     return { ...base, background: 'rgba(34,197,94,.15)', color: '#22c55e', border: '0.5px solid #22c55e' };
   }
+  if (variant === 'locked') {
+    return { ...base, background: 'rgba(255,255,255,.04)', color: 'rgba(255,255,255,.38)', border: '0.5px solid rgba(255,255,255,.14)' };
+  }
   return { ...base, background: 'rgba(201,168,76,.08)', color: GOLD, border: `0.5px solid ${GOLD}` };
+}
+
+function LockIcon() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <rect x="3" y="11" width="18" height="10" rx="2" />
+      <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+    </svg>
+  );
 }
 
 function DownloadIcon() {

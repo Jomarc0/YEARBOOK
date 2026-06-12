@@ -180,6 +180,7 @@ export default function DiscoveryStudentProfile() {
 
   const photoSrc      = student.photo_url ?? student.photo ?? null;
   const shortCourse   = COURSE_LABELS[student.course] ?? student.course ?? 'Student';
+  const canViewFull   = student.is_premium_viewer === true;
   const honors        = safeArray(student.honors);
   const organizations = safeArray(student.organizations);
   const achievements  = safeArray(student.achievements);
@@ -509,11 +510,11 @@ export default function DiscoveryStudentProfile() {
             </div>
 
             {/* Motto */}
-            {student.motto ? (
+            {canViewFull && student.motto ? (
               <p className="text-sm text-[#172033]/70 leading-relaxed italic m-0 mb-3 pl-3 border-l-[3px] border-[#c89b3c]">
                 "{student.motto}"
               </p>
-            ) : (
+            ) : !canViewFull ? null : (
               <p className="text-sm text-slate-300 italic m-0 mb-3 pl-3 border-l-[3px] border-slate-200">
                 No motto added yet.
               </p>
@@ -530,7 +531,7 @@ export default function DiscoveryStudentProfile() {
                 <i className="fas fa-university text-[#3f51b5] text-[10px]" /> NU Lipa
               </span>
 
-              {hasSocials && (
+              {canViewFull && hasSocials && (
                 <div className="flex items-center gap-2 ml-auto">
                   {student.facebook_url && (
                     <a href={student.facebook_url} target="_blank" rel="noopener noreferrer"
@@ -563,6 +564,7 @@ export default function DiscoveryStudentProfile() {
         </div>
 
         {/* ── TABS ── */}
+        {canViewFull ? (
         <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
           <div className="flex border-b border-slate-100 overflow-x-auto scrollbar-none">
             {TABS.map(tab => (
@@ -588,6 +590,38 @@ export default function DiscoveryStudentProfile() {
             {tabContent[activeTab]}
           </div>
         </div>
+        ) : (
+          <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+            <div className="p-6 sm:p-8 text-center">
+              <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-amber-100 text-amber-600">
+                <i className="fas fa-lock text-lg" />
+              </div>
+              <p className="m-0 mb-2 text-[11px] font-black uppercase tracking-[0.22em] text-amber-600">
+                Full Discovery Locked
+              </p>
+              <h2 className="m-0 text-xl font-black text-[#1d2b4b]">Upgrade to view full profile</h2>
+              <p className="mx-auto mt-3 mb-0 max-w-sm text-sm leading-relaxed text-slate-500">
+                Premium unlocks academic details, yearbook messages, mottos, memories, and contact links.
+              </p>
+              <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:justify-center">
+                <button
+                  type="button"
+                  onClick={() => navigate('/premium')}
+                  className="rounded-xl border-none bg-[#fdb813] px-5 py-3 text-sm font-black text-[#1d2b4b] cursor-pointer transition hover:bg-amber-300"
+                >
+                  Upgrade Now
+                </button>
+                <button
+                  type="button"
+                  onClick={() => navigate('/discover')}
+                  className="rounded-xl border border-slate-200 bg-white px-5 py-3 text-sm font-bold text-slate-500 cursor-pointer transition hover:bg-slate-50"
+                >
+                  Back to Discovery
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
       </main>
       <Footer />

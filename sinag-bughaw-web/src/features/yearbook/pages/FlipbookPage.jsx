@@ -9,6 +9,7 @@ import React, {
 import HTMLFlipBook from 'react-pageflip';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useFlipbook, useYearbookPdfDownload } from '../hooks/useFlipbook';
+import { useAuth } from '@/features/auth/hooks/useAuth';
 
 // ── Icons (inline SVGs — no extra deps) ─────────────────────────────────
 const Icon = {
@@ -258,11 +259,21 @@ const PageNum = ({ num }) => (
 export default function FlipbookPage() {
     const { batchId }          = useParams();
     const navigate             = useNavigate();
+    const { user }             = useAuth();
     const bookRef              = useRef(null);
     const containerRef         = useRef(null);
 
     const { data, loading, error } = useFlipbook(batchId);
     const { download, downloading, progress } = useYearbookPdfDownload();
+    const canDownloadPdf = Boolean(
+        user?.is_subscribed ||
+        user?.is_premium ||
+        user?.tier === 'standard' ||
+        user?.tier === 'premium' ||
+        user?.subscription?.status === 'active' ||
+        user?.subscription?.tier === 'standard' ||
+        user?.subscription?.tier === 'premium'
+    );
 
     const [currentPage, setCurrentPage] = useState(0);
     const [totalPages,  setTotalPages]  = useState(0);
@@ -346,6 +357,8 @@ export default function FlipbookPage() {
 
     // ── PDF download ─────────────────────────────────────────────────
     const handleDownload = async () => {
+        if (!canDownloadPdf) return;
+
         try {
             await download(batchId, data?.batch?.year);
         } catch (e) {
@@ -398,10 +411,19 @@ export default function FlipbookPage() {
                         {Math.round(zoom * 100)}%
                     </span>
                     <button onClick={zoomIn}      style={styles.iconBtn} title="Zoom in"><Icon.ZoomIn/></button>
-                    <button onClick={handleDownload} style={styles.btnGold} title="Download PDF" disabled={downloading}>
+                    <button
+                        onClick={handleDownload}
+                        style={{
+                            ...styles.btnGold,
+                            opacity: downloading || !canDownloadPdf ? 0.55 : 1,
+                            cursor: downloading || !canDownloadPdf ? 'not-allowed' : 'pointer',
+                        }}
+                        title={canDownloadPdf ? 'Download PDF' : 'Standard or Premium subscription required'}
+                        disabled={downloading || !canDownloadPdf}
+                    >
                         <Icon.Download/>
                         <span style={{ fontSize: 12 }}>
-                            {downloading ? `${progress}%` : 'PDF'}
+                            {canDownloadPdf ? (downloading ? `${progress}%` : 'PDF') : 'Locked'}
                         </span>
                     </button>
                     <button onClick={() => setSidebarOpen(v => !v)} style={styles.iconBtn} title="Table of Contents">
@@ -518,9 +540,11 @@ export default function FlipbookPage() {
                         ))}
                     </div>
                     {/* Download in sidebar */}
-                    <button onClick={handleDownload} disabled={downloading} style={{
+                    <button onClick={handleDownload} disabled={downloading || !canDownloadPdf} title={canDownloadPdf ? 'Download PDF' : 'Standard or Premium subscription required'} style={{
                         ...styles.btnGold, marginTop: 16, width: '100%',
                         justifyContent: 'center', padding: '10px 0',
+                        opacity: downloading || !canDownloadPdf ? 0.55 : 1,
+                        cursor: downloading || !canDownloadPdf ? 'not-allowed' : 'pointer',
                     }}>
                         <Icon.Download/>
                         <span style={{ fontSize: 13 }}>
