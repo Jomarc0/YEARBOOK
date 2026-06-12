@@ -43,8 +43,6 @@ class AuthController extends Controller
             'consent_accepted' => 'required|accepted',
         ]);
 
-        // Try to find a matching student record 
-        // Match on student_no + first_name + last_name (case-insensitive)
         $studentRecord = $this->findMatchingStudentRecord($request);
 
         if ($studentRecord && $studentRecord->hasRegistered()) {
@@ -53,11 +51,10 @@ class AuthController extends Controller
             ]);
         }
 
-        // Create user — lean, no yearbook data copied 
-        $course = $studentRecord?->course ?: $request->course;
+        $course         = $studentRecord?->course ?: $request->course;
         $graduationYear = $studentRecord?->graduation_year ?: (int) $request->graduation_year;
-        $batch = (string) ($studentRecord?->graduation_year ?: ($request->batch ?: $request->graduation_year));
-        $batchId = $studentRecord?->batch_id
+        $batch          = (string) ($studentRecord?->graduation_year ?: ($request->batch ?: $request->graduation_year));
+        $batchId        = $studentRecord?->batch_id
             ?: Batch::where('graduation_year', $graduationYear)
                 ->where(function ($query) use ($course) {
                     $query->where('course', $course)->orWhereNull('course');
@@ -72,18 +69,17 @@ class AuthController extends Controller
                 : trim($request->first_name . ' ' . $request->last_name),
             'email'             => $request->email,
             'password'          => Hash::make($request->password),
-            'student_record_id' => $studentRecord?->id,   // null = browse account
-            'student_id'         => $studentRecord?->student_no ?? $request->student_id,
-            'course'             => $course,
-            'graduation_year'    => $graduationYear,
-            'batch'              => $batch,
+            'student_record_id' => $studentRecord?->id,
+            'student_id'        => $studentRecord?->student_no ?? $request->student_id,
+            'course'            => $course,
+            'graduation_year'   => $graduationYear,
+            'batch'             => $batch,
             'section_id'        => $studentRecord?->section_id,
             'batch_id'          => $batchId,
             'profile_picture'   => $studentRecord?->photo,
             'consent_accepted'  => true,
         ]);
 
-        // Consent log
         if ($studentRecord && filled($studentRecord->photo)) {
             ProcessFaceIndexing::dispatch($user->fresh()->load('studentRecord'));
         }
@@ -100,18 +96,16 @@ class AuthController extends Controller
 
         $token = $user->createToken('app-token')->plainTextToken;
 
-        // Load studentRecord so accessors resolve correctly in the response
         $user->load('studentRecord', 'section');
 
         return response()->json([
             'user'         => $this->authUserPayload($user),
             'access_token' => $token,
-            // Tell the frontend whether they were matched as a graduate
             'is_graduate'  => ! is_null($studentRecord),
         ], 201);
     }
 
-    // Login 
+    // Login
 
     public function login(Request $request)
     {
@@ -124,7 +118,7 @@ class AuthController extends Controller
             'password' => 'required',
         ]);
 
-        $email = strtolower(trim((string) $request->input('email')));
+        $email    = strtolower(trim((string) $request->input('email')));
         $password = (string) $request->input('password');
 
         $key      = 'student_login:' . sha1($email . '|' . $request->ip());
@@ -161,9 +155,7 @@ class AuthController extends Controller
         ]);
     }
 
-    // Student lookup 
-    // Checks if name + student_no match a student record.
-    // Returns safe preview data only — no sensitive fields.
+    // Student lookup
 
     public function verifyStudent(Request $request)
     {
@@ -174,12 +166,12 @@ class AuthController extends Controller
         ]);
 
         $typedName = $this->normalizePersonName($request->first_name . ' ' . $request->last_name);
-        $student = Student::where('student_no', trim((string) $request->student_no))
+        $student   = Student::where('student_no', trim((string) $request->student_no))
             ->get()
             ->first(function (Student $student) use ($typedName, $request) {
                 $recordName = $this->normalizePersonName($student->first_name . ' ' . $student->last_name);
                 $exactFirst = strtolower(trim($student->first_name)) === strtolower(trim($request->first_name));
-                $exactLast = strtolower(trim($student->last_name)) === strtolower(trim($request->last_name));
+                $exactLast  = strtolower(trim($student->last_name)) === strtolower(trim($request->last_name));
 
                 return ($exactFirst && $exactLast)
                     || $recordName === $typedName
@@ -191,7 +183,6 @@ class AuthController extends Controller
             return response()->json(['found' => false]);
         }
 
-        // Check if already registered
         if ($student->hasRegistered()) {
             return response()->json([
                 'found'   => false,
@@ -209,81 +200,12 @@ class AuthController extends Controller
                 'honors'          => $student->honors,
                 'graduation_year' => $student->graduation_year,
                 'photo'           => $student->photo_url,
-                // Pre-fill hints for the form (email from student record if set)
                 'email'           => $student->email,
             ],
         ]);
     }
 
-    //OTP 
-
-    private function findMatchingStudentRecord(Request $request): ?Student
-    {
-        $studentNo = trim((string) $request->student_id);
-        $email = strtolower(trim((string) $request->email));
-        $firstName = trim((string) $request->first_name);
-        $lastName = trim((string) $request->last_name);
-        $typedName = $this->normalizePersonName($firstName . ' ' . $lastName);
-
-        $exact = Student::where('student_no', $studentNo)
-            ->whereRaw('LOWER(TRIM(first_name)) = ?', [strtolower($firstName)])
-            ->whereRaw('LOWER(TRIM(last_name)) = ?', [strtolower($lastName)])
-            ->first();
-
-        if ($exact) {
-            return $exact;
-        }
-
-        $nameMatch = Student::where('student_no', $studentNo)
-            ->get()
-            ->first(function (Student $student) use ($typedName) {
-                $recordName = $this->normalizePersonName($student->first_name . ' ' . $student->last_name);
-
-                return $recordName === $typedName
-                    || ($typedName !== '' && str_contains($recordName, $typedName))
-                    || ($recordName !== '' && str_contains($typedName, $recordName));
-            });
-
-        if ($nameMatch) {
-            return $nameMatch;
-        }
-
-        if ($email !== '') {
-            $emailMatch = Student::whereRaw('LOWER(TRIM(email)) = ?', [$email])->first();
-            if ($emailMatch && ($studentNo === '' || $emailMatch->student_no === $studentNo)) {
-                return $emailMatch;
-            }
-        }
-
-        return null;
-    }
-
-    private function normalizePersonName(string $name): string
-    {
-        return preg_replace('/[^a-z0-9]+/', '', strtolower($name)) ?: '';
-    }
-
-    private function authUserPayload(User $user): array
-    {
-        return [
-            'id'                 => $user->id,
-            'first_name'         => $user->first_name,
-            'last_name'          => $user->last_name,
-            'name'               => $user->name,
-            'email'              => $user->email,
-            'role'               => $user->role,
-            'student_record_id'  => $user->student_record_id,
-            'student_id'         => $user->student_id,
-            'course'             => $user->course,
-            'graduation_year'    => $user->graduation_year,
-            'batch'              => $user->batch,
-            'section_id'         => $user->section_id,
-            'batch_id'           => $user->batch_id,
-            'profile_picture'    => $user->profile_picture,
-            'email_verified'     => (bool) $user->email_verified,
-            'consent_accepted'   => (bool) $user->consent_accepted,
-        ];
-    }
+    // OTP
 
     public function sendOtp(Request $request)
     {
@@ -325,10 +247,21 @@ class AuthController extends Controller
 
         $record->update(['used' => true]);
 
-        User::where('email', $request->email)
-            ->update(['email_verified' => true]);
+        $user = User::where('email', $request->email)->first();
 
-        return response()->json(['message' => 'Email verified successfully.']);
+        if (! $user) {
+            return response()->json(['message' => 'User not found.'], 404);
+        }
+
+        $user->update(['email_verified' => true]);
+
+        $token = $user->createToken('app-token')->plainTextToken;
+
+        return response()->json([
+            'message'      => 'Email verified successfully.',
+            'access_token' => $token,
+            'user'         => $this->authUserPayload($user->fresh()->load('studentRecord', 'section')),
+        ]);
     }
 
     // Forgot Password
@@ -435,7 +368,7 @@ class AuthController extends Controller
     {
         $user = $request->user()->load('studentRecord', 'section');
         $this->markPresence($user->id, true);
-        $sub  = \App\Models\Subscription::where('user_id', $user->id)->latest()->first();
+        $sub       = \App\Models\Subscription::where('user_id', $user->id)->latest()->first();
         $activeSub = $sub?->isActive() ? $sub : null;
 
         return response()->json([
@@ -445,6 +378,76 @@ class AuthController extends Controller
             'tier'          => $activeSub?->tier ?? 'free',
             'plan'          => $activeSub?->plan ?? 'free',
         ]);
+    }
+
+    // Private helpers
+
+    private function findMatchingStudentRecord(Request $request): ?Student
+    {
+        $studentNo = trim((string) $request->student_id);
+        $email     = strtolower(trim((string) $request->email));
+        $firstName = trim((string) $request->first_name);
+        $lastName  = trim((string) $request->last_name);
+        $typedName = $this->normalizePersonName($firstName . ' ' . $lastName);
+
+        $exact = Student::where('student_no', $studentNo)
+            ->whereRaw('LOWER(TRIM(first_name)) = ?', [strtolower($firstName)])
+            ->whereRaw('LOWER(TRIM(last_name)) = ?', [strtolower($lastName)])
+            ->first();
+
+        if ($exact) {
+            return $exact;
+        }
+
+        $nameMatch = Student::where('student_no', $studentNo)
+            ->get()
+            ->first(function (Student $student) use ($typedName) {
+                $recordName = $this->normalizePersonName($student->first_name . ' ' . $student->last_name);
+
+                return $recordName === $typedName
+                    || ($typedName !== '' && str_contains($recordName, $typedName))
+                    || ($recordName !== '' && str_contains($typedName, $recordName));
+            });
+
+        if ($nameMatch) {
+            return $nameMatch;
+        }
+
+        if ($email !== '') {
+            $emailMatch = Student::whereRaw('LOWER(TRIM(email)) = ?', [$email])->first();
+            if ($emailMatch && ($studentNo === '' || $emailMatch->student_no === $studentNo)) {
+                return $emailMatch;
+            }
+        }
+
+        return null;
+    }
+
+    private function normalizePersonName(string $name): string
+    {
+        return preg_replace('/[^a-z0-9]+/', '', strtolower($name)) ?: '';
+    }
+
+    private function authUserPayload(User $user): array
+    {
+        return [
+            'id'                => $user->id,
+            'first_name'        => $user->first_name,
+            'last_name'         => $user->last_name,
+            'name'              => $user->name,
+            'email'             => $user->email,
+            'role'              => $user->role,
+            'student_record_id' => $user->student_record_id,
+            'student_id'        => $user->student_id,
+            'course'            => $user->course,
+            'graduation_year'   => $user->graduation_year,
+            'batch'             => $user->batch,
+            'section_id'        => $user->section_id,
+            'batch_id'          => $user->batch_id,
+            'profile_picture'   => $user->profile_picture,
+            'email_verified'    => (bool) $user->email_verified,
+            'consent_accepted'  => (bool) $user->consent_accepted,
+        ];
     }
 
     private function markPresence(int $userId, bool $isOnline): void

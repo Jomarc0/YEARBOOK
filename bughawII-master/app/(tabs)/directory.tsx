@@ -599,7 +599,12 @@ export default function DirectoryScreen() {
       <StatusBar style="dark" />
       <FlatList
         data={students}
-        keyExtractor={(item, index) => String(getStudentId(item) || index)}
+        // FIX 1: Namespace keys so two students sharing the same numeric ID
+        // (e.g. id:1 vs user_id:1) never produce duplicate keys.
+        keyExtractor={(item, index) => {
+          const id = getStudentId(item);
+          return id != null ? `student-${id}` : `student-idx-${index}`;
+        }}
         renderItem={renderStudent}
         ListHeaderComponent={(
           <>
@@ -633,9 +638,10 @@ export default function DirectoryScreen() {
               </View>
                 {showSuggestions && suggestions.length ? (
                   <View style={styles.suggestionBox}>
-                    {suggestions.map((item) => (
+                    {/* FIX 2: Guard against null/undefined id on suggestion items */}
+                    {suggestions.map((item, index) => (
                       <TouchableOpacity
-                        key={String(item.id)}
+                        key={`suggestion-${item.id ?? index}`}
                         style={styles.suggestionRow}
                         onPress={() => {
                           setQuery(item.name || '');
@@ -758,7 +764,8 @@ export default function DirectoryScreen() {
           <Animated.View style={[styles.modalContainer, { transform: [{ translateY: slideAnim }] }]}>
             <FlatList
               data={selectedAchievements}
-              keyExtractor={(item, index) => String(item?.id || index)}
+              // FIX 1 (modal list): same namespaced key pattern for achievements
+              keyExtractor={(item, index) => `achievement-${item?.id ?? index}`}
               ListHeaderComponent={(
                 <View style={styles.profileModalContent}>
                   <View style={styles.blueHeader} />
@@ -853,16 +860,20 @@ export default function DirectoryScreen() {
                     voiceNotes.map((note) => {
                       const playing = playingVoiceId === note.id;
                       return (
-                        <View key={String(note.id)} style={styles.voiceNoteCard}>
+                        <View key={`voice-note-${note.id}`} style={styles.voiceNoteCard}>
                           <View style={styles.voiceNoteInfo}>
                             <Text style={styles.voiceNoteTitle} numberOfLines={1}>{note.title || 'Voice memory'}</Text>
                             <Text style={styles.voiceNoteMeta}>
                               From {note?.sender?.name || 'Classmate'} · {formatDate(note.created_at)}
                               {formatDuration(note.duration_seconds) ? ` · ${formatDuration(note.duration_seconds)}` : ''}
                             </Text>
+                            {/* FIX 3: Namespace wave bar keys per note to avoid .$1 collisions */}
                             <View style={styles.waveRow}>
-                              {Array.from({ length: 18 }, (_, index) => (
-                                <View key={String(index)} style={[styles.waveBar, { height: 7 + Math.abs(Math.sin(index * 0.8)) * 12, backgroundColor: playing ? '#fdb813' : '#e2e8f0' }]} />
+                              {Array.from({ length: 18 }, (_, i) => (
+                                <View
+                                  key={`wave-${note.id}-${i}`}
+                                  style={[styles.waveBar, { height: 7 + Math.abs(Math.sin(i * 0.8)) * 12, backgroundColor: playing ? '#fdb813' : '#e2e8f0' }]}
+                                />
                               ))}
                             </View>
                           </View>
