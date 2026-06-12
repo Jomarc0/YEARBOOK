@@ -4,6 +4,7 @@ import * as SecureStore from "expo-secure-store";
 import { Platform } from "react-native";
 
 const configuredApiUrl = process.env.EXPO_PUBLIC_API_URL || Constants.expoConfig?.extra?.apiUrl;
+const configuredAuthUrl = process.env.EXPO_PUBLIC_AUTH_BASE_URL || Constants.expoConfig?.extra?.authBaseUrl;
 
 const inferApiUrlFromExpoHost = () => {
   const hostUri =
@@ -24,7 +25,7 @@ export const API_BASE_URL =
     ? configuredApiUrl.replace(/\/+$/, "")
     : inferApiUrlFromExpoHost();
 
-export const AUTH_BASE_URL = (process.env.EXPO_PUBLIC_AUTH_BASE_URL || API_BASE_URL.replace(/\/api\/?$/, "")).replace(/\/+$/, "");
+export const AUTH_BASE_URL = (configuredAuthUrl || API_BASE_URL.replace(/\/api\/?$/, "")).replace(/\/+$/, "");
 
 export const STORAGE_BASE_URL = API_BASE_URL.replace(/\/api\/?$/, "");
 

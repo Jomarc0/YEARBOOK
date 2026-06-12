@@ -1,8 +1,14 @@
 import { Stack } from "expo-router";
 import React, { useEffect, useState } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
+import { configureReanimatedLogger, ReanimatedLogLevel } from "react-native-reanimated";
 import MaintenanceNotice from "../components/MaintenanceNotice";
 import { getAppConfig, unwrap } from "../lib/api";
+
+configureReanimatedLogger({
+  level: ReanimatedLogLevel.warn,
+  strict: false,
+});
 
 export default function RootLayout() {
   const [config, setConfig] = useState<any>(null);

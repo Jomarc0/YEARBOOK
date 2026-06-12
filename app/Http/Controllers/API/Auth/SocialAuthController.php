@@ -23,7 +23,7 @@ class SocialAuthController extends Controller
     private function isAllowedMobileRedirect(?string $redirectUri): bool
     {
         return is_string($redirectUri)
-            && preg_match('/^(capstoneapp:\/\/|exp:\/\/|http:\/\/localhost|http:\/\/127\.0\.0\.1|https:\/\/[a-z0-9\-]+\.ngrok-free\.dev|https:\/\/yearbook-myji\.onrender\.com)/', $redirectUri);
+            && preg_match('/^(nuyearbook:\/\/|capstoneapp:\/\/|exp:\/\/|http:\/\/localhost|http:\/\/127\.0\.0\.1|https:\/\/[a-z0-9\-]+\.ngrok-free\.dev|https:\/\/yearbook-myji\.onrender\.com)/', $redirectUri);
     }
 
     private function encodeMobileState(string $redirectUri): string
@@ -33,7 +33,7 @@ class SocialAuthController extends Controller
 
     private function defaultMobileRedirect(): string
     {
-        return 'capstoneapp://sso/callback';
+        return 'nuyearbook://sso/callback';
     }
 
     private function googleCallbackUrl(Request $request, bool $mobile = false): string
@@ -173,6 +173,7 @@ class SocialAuthController extends Controller
         // ── 3. Upsert user record ─────────────────────────────────────────────
         try {
             $nameParts = explode(' ', trim($googleUser->getName()), 2);
+            User::disableSearchSyncing();
 
             $user = User::where('google_id', $googleUser->getId())
                         ->orWhere('email', $email)
@@ -202,7 +203,9 @@ class SocialAuthController extends Controller
                     'password'          => Hash::make(Str::random(32)),
                 ]);
             }
+            User::enableSearchSyncing();
         } catch (\Exception $e) {
+            User::enableSearchSyncing();
             Log::error('Google OAuth: failed to upsert user', [
                 'email'     => $email,
                 'exception' => get_class($e),

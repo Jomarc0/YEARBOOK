@@ -46,7 +46,7 @@ import {
   unwrap,
 } from '../../lib/api';
 
-// ─── Design tokens ────────────────────────────────────────────────────────────
+
 const NAVY   = '#0D1B3E';
 const GOLD   = '#E5A820';
 const GOLDDIM= '#C9A84C';
@@ -61,17 +61,12 @@ const { width: SW, height: SH } = Dimensions.get('window');
 const PAGE_H = Math.max(440, Math.min(580, SH - 290));
 const PAGE_W = SW - 28;
 const TOC_PER_PAGE = 7;
-
-// ─── FIX 1: Remove the 80ms prep delay that caused the flash window ───────────
-// The old FLIP_PREP_MS = 80 created an 80ms window where the target page was
-// mounted and fully visible (opacity:1) before the flip animation even started.
-// Setting it to 0 closes that window entirely.
 const FLIP_PREP_MS = 0;
 
-const FLIP_DURATION_MS = 1350;
-const FLIP_OPEN_DEG = 100;
+const FLIP_DURATION_MS = 1050;
+const FLIP_OPEN_DEG = 90;
 
-// ─── Flip state — single atomic object ───────────────────────────────────────
+// Flip state — single atomic object
 type FlipPhase = 'idle' | 'animating';
 type FlipState = {
   phase: FlipPhase;
@@ -87,11 +82,11 @@ const makeFlipState = (index: number, page: any): FlipState => ({
   currentIndex: index,
   currentPage: page,
   targetIndex: index,
-  targetPage: page,
+  targetPage: null,
   dir: 1,
 });
 
-// ─── Utility helpers ──────────────────────────────────────────────────────────
+// Utility helpers 
 const bid   = (x: any) => x?.id || x?.batch_id;
 const byear = (x: any) => x?.year || x?.graduation_year || x?.batch_year || x?.school_year || x?.name || '';
 const btitle= (x: any) => x?.title || x?.name || `Batch ${byear(x)}`.trim();
@@ -185,7 +180,7 @@ const galCount = (g: any) => g?.photos_count ?? g?.media_count ?? g?.items_count
 const plabel = (p: any, i: number) => p?.label || p?.title || p?.type || `Page ${i + 1}`;
 const pnum   = (p: any, i: number) => p?.pageIndex ?? p?.index ?? i + 1;
 
-// ─── Page builder ─────────────────────────────────────────────────────────────
+// Page builder
 const buildPages = (batch: any, galleries: any[] = []) => {
   const sections = Array.isArray(batch?.sections) ? batch.sections : [];
   const year = byear(batch) || new Date().getFullYear();
@@ -222,7 +217,7 @@ const buildPages = (batch: any, galleries: any[] = []) => {
   return pages.map((p, i) => ({ ...p, id: p.id || `m-${i}`, pageIndex: i+1, index: i+1 }));
 };
 
-// ─── Shared page-shell components ─────────────────────────────────────────────
+// Shared page-shell components
 type Tone = 'dark' | 'cream' | 'paper';
 
 function Shell({ children, tone = 'paper' }: { children: React.ReactNode; tone?: Tone }) {
@@ -259,7 +254,7 @@ function Info({ label, value }: { label: string; value: any }) {
   );
 }
 
-// ─── Page renderers ───────────────────────────────────────────────────────────
+// Page renderers
 function CoverPage({ page, yn }: { page: any; yn: string }) {
   const meta = page?.meta || {};
   const year = meta?.year || page?.year || '';
@@ -559,7 +554,7 @@ function EditPage({ page, index, yn }: { page: any; index: number; yn: string })
   );
 }
 
-// ─── Master page switcher ─────────────────────────────────────────────────────
+// Master page switcher
 const YBPage = React.memo(function YBPage({ page, index, yn }: { page: any; index: number; yn: string }) {
   const t = ptype(page);
   if (t === 'cover' || t === 'back-cover') return <CoverPage page={page} yn={yn} />;
@@ -577,7 +572,7 @@ const YBPage = React.memo(function YBPage({ page, index, yn }: { page: any; inde
   return <EditPage page={page} index={index} yn={yn} />;
 });
 
-// ─── Main screen ──────────────────────────────────────────────────────────────
+// Main screen 
 export default function YearbookScreen() {
   const router = useRouter();
   const { batchId: reqBatchId, pageIndex: reqPageIdx, view: reqView } = useLocalSearchParams();
@@ -602,7 +597,7 @@ export default function YearbookScreen() {
   const [appCfg,     setAppCfg]     = useState<any>(null);
   const [curUser,    setCurUser]    = useState<any>(null);
 
-  // ── Single atomic flip state ───────────────────────────────────────────────
+  // Single atomic flip state 
   const [flip, setFlip] = useState<FlipState>(makeFlipState(0, null));
 
   const flipProg  = useSharedValue(0);
@@ -610,6 +605,7 @@ export default function YearbookScreen() {
   const flipDirSV = useSharedValue<1|-1>(1);
   const isAnim    = useRef(false);
   const flipTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const settleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const autoDone  = useRef(false);
   const manClosed = useRef(false);
 
@@ -630,24 +626,33 @@ export default function YearbookScreen() {
     }
   }, [reqBatchId, reqView, router]);
 
-  // ── finishFlip: called from worklet via runOnJS ───────────────────────────
+  // finishFlip: called from worklet via runOnJS 
   const finishFlip = useCallback(() => {
     setFlip(prev => ({
       phase: 'idle',
       currentIndex: prev.targetIndex,
       currentPage:  prev.targetPage,
       targetIndex:  prev.targetIndex,
-      targetPage:   prev.targetPage,
+      targetPage:   null,
       dir: prev.dir,
     }));
-    flipProg.value = 0;
-    flipAnim.value = false;
-    isAnim.current = false;
+
+    if (settleTimer.current) clearTimeout(settleTimer.current);
+    settleTimer.current = setTimeout(() => {
+      settleTimer.current = null;
+      flipProg.value = 0;
+      flipAnim.value = false;
+      isAnim.current = false;
+    }, 50);
   }, [flipAnim, flipProg]);
 
   // ── startFlip: single setState — one render — no flicker ─────────────────
   const startFlip = useCallback((dir: 1 | -1) => {
     if (isAnim.current) return;
+    if (settleTimer.current) {
+      clearTimeout(settleTimer.current);
+      settleTimer.current = null;
+    }
 
     setFlip(prev => {
       const fromIndex = prev.currentIndex;
@@ -696,6 +701,7 @@ export default function YearbookScreen() {
     setJumpOpen(false);
     setJumpQ('');
     if (flipTimer.current) clearTimeout(flipTimer.current);
+    if (settleTimer.current) clearTimeout(settleTimer.current);
     flipDirSV.value = 1;
     isAnim.current  = false;
     flipAnim.value  = false;
@@ -709,6 +715,7 @@ export default function YearbookScreen() {
     return () => {
       alive = false;
       if (flipTimer.current) clearTimeout(flipTimer.current);
+      if (settleTimer.current) clearTimeout(settleTimer.current);
     };
   }, []);
 
@@ -835,12 +842,15 @@ export default function YearbookScreen() {
 
   // ── Derived display values ─────────────────────────────────────────────────
   const displayIndex = flip.currentIndex;
-  const displayPage  = flip.currentPage || visible[0] || null;
+  const displayPage  = flip.currentPage || visible[flip.currentIndex] || null;
 
-  const stageFromPage  = flip.currentPage  || visible[0] || null;
+  const stageFromPage  = flip.currentPage  || visible[flip.currentIndex] || null;
   const stageFromIndex = flip.currentIndex;
   const stageToPage    = flip.targetPage;
   const stageToIndex   = flip.targetIndex;
+  const stageFromKey   = `${stageFromIndex}-${stageFromPage?.id ?? stageFromPage?.pageIndex ?? ptype(stageFromPage)}`;
+  const stageToKey     = `${stageToIndex}-${stageToPage?.id ?? stageToPage?.pageIndex ?? ptype(stageToPage)}`;
+  const readerBatchTitle = ybMeta?.title || btitle(selBatch) || 'Yearbook Batch';
 
   // ── FIX 2: Current page fades out only in the final 15% of the animation ──
   // Previously the current page had no opacity control — it would snap-disappear
@@ -1052,7 +1062,7 @@ export default function YearbookScreen() {
               <View style={s.rdHeader}>
                 <TouchableOpacity style={s.rdIcon} onPress={closeReader}><FontAwesome name="chevron-left" size={16} color={WHITE} /></TouchableOpacity>
                 <View style={s.rdTitleW}>
-                  <Text style={s.rdKick}>PAGE {displayPage ? pnum(displayPage, displayIndex) : '-'}  ·  {visible.length} total</Text>
+                  <Text style={s.rdKick} numberOfLines={1}>{readerBatchTitle}  ·  PAGE {displayPage ? pnum(displayPage, displayIndex) : '-'} / {visible.length}</Text>
                   <Text style={s.rdTitle} numberOfLines={1}>{displayPage ? plabel(displayPage, displayIndex) : 'Yearbook'}</Text>
                 </View>
                 <TouchableOpacity style={s.rdIcon} onPress={() => displayPage && bmPage(displayPage, displayIndex)}>
@@ -1065,12 +1075,15 @@ export default function YearbookScreen() {
                 <View style={s.stage}>
                   {/* Current (departing) page — always visible, fades out at the end of flip */}
                   <Reanimated.View
-                    renderToHardwareTextureAndroid
-                    shouldRasterizeIOS
-                    style={[s.pageSlot, curStyle]}
+                    key={`from-${stageFromKey}`}
+                    renderToHardwareTextureAndroid={flip.phase === 'animating'}
+                    shouldRasterizeIOS={flip.phase === 'animating'}
+                    style={[s.pageSlot, flip.phase === 'animating' ? curStyle : null]}
                   >
-                    {stageFromPage ? <YBPage page={stageFromPage} index={stageFromIndex} yn={ybName} /> : null}
-                    <Reanimated.View pointerEvents="none" style={[s.pageShadow, curShadowStyle]} />
+                    {stageFromPage ? <YBPage key={stageFromKey} page={stageFromPage} index={stageFromIndex} yn={ybName} /> : null}
+                    {flip.phase === 'animating' ? (
+                      <Reanimated.View pointerEvents="none" style={[s.pageShadow, curShadowStyle]} />
+                    ) : null}
                   </Reanimated.View>
 
                   {/*
@@ -1082,11 +1095,12 @@ export default function YearbookScreen() {
                   */}
                   {flip.phase === 'animating' && stageToPage ? (
                     <Reanimated.View
+                      key={`to-${stageToKey}`}
                       renderToHardwareTextureAndroid
                       shouldRasterizeIOS
                       style={[s.pageSlot, nxtStyle]}
                     >
-                      <YBPage page={stageToPage} index={stageToIndex} yn={ybName} />
+                      <YBPage key={stageToKey} page={stageToPage} index={stageToIndex} yn={ybName} />
                       <Reanimated.View pointerEvents="none" style={[s.pageShadow, nxtShadowStyle]} />
                     </Reanimated.View>
                   ) : null}

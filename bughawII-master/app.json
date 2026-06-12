@@ -1,55 +1,54 @@
 {
   "expo": {
-    "name": "capstoneapp",
-    "slug": "capstoneapp",
+    "name": "NU Interactive Yearbook",
+    "slug": "nu-interactive-yearbook",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/icon.png",
-    "scheme": "capstoneapp",
+    "icon": "./assets/images/NU_logo.png",
+    "scheme": "nuyearbook",
     "userInterfaceStyle": "automatic",
-    "newArchEnabled": true,
-    "ios": {
-      "supportsTablet": true
-    },
+
     "android": {
+      "package": "ph.edu.nu.yearbook",
       "usesCleartextTraffic": true,
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
-        "foregroundImage": "./assets/images/android-icon-foreground.png",
-        "backgroundImage": "./assets/images/android-icon-background.png",
-        "monochromeImage": "./assets/images/android-icon-monochrome.png"
+        "foregroundImage": "./assets/images/NU_logo.png",
+        "backgroundColor": "#003DA5"
       },
-      "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false
+      "edgeToEdgeEnabled": true
     },
+
+    "ios": {
+      "bundleIdentifier": "ph.edu.nu.yearbook",
+      "supportsTablet": true
+    },
+
     "web": {
       "output": "static",
-      "favicon": "./assets/images/favicon.png"
+      "favicon": "./assets/images/NU_logo.png"
     },
+
     "plugins": [
       "expo-router",
       [
         "expo-splash-screen",
         {
-          "image": "./assets/images/splash-icon.png",
-          "imageWidth": 200,
+          "image": "./assets/images/NU_logo.png",
           "resizeMode": "contain",
-          "backgroundColor": "#ffffff",
-          "dark": {
-            "backgroundColor": "#000000"
-          }
+          "backgroundColor": "#003DA5"
         }
       ],
-      "expo-audio",
       "expo-font",
-      "expo-video"
+      "expo-video",
+      "expo-audio"
     ],
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
     },
     "extra": {
-      "apiUrl": "http://192.168.1.98:8000/api"
+      "apiUrl": "http://192.168.1.98:8000/api",
+      "authBaseUrl": "https://yearbook-myji.onrender.com"
     }
   }
 }

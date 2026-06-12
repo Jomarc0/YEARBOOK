@@ -88,7 +88,7 @@ export default function Login() {
   const handleGoogleLogin = async () => {
     try {
       setLoading(true);
-      const redirectUri = 'capstoneapp://sso/callback';
+      const redirectUri = 'nuyearbook://sso/callback';
       const authUrl = `${AUTH_BASE_URL}/auth/google/redirect?client=mobile&redirect_uri=${encodeURIComponent(redirectUri)}`;
       const result = await WebBrowser.openAuthSessionAsync(authUrl, redirectUri);
 
