@@ -212,7 +212,7 @@ return new class extends Migration
         if (! Schema::hasTable('albums')) {
             Schema::create('albums', function (Blueprint $table) {
                 $table->id();
-                $table->foreignId('user_id')->nullable()->constrained('users')->nullOnDelete();
+                $table->unsignedBigInteger('user_id')->nullable();
                 $table->string('title');
                 $table->text('description')->nullable();
                 $table->string('cover_image')->nullable();
@@ -227,7 +227,7 @@ return new class extends Migration
         } else {
             Schema::table('albums', function (Blueprint $table) {
                 if (! Schema::hasColumn('albums', 'user_id')) {
-                    $table->foreignId('user_id')->nullable()->constrained('users')->nullOnDelete();
+                    $table->unsignedBigInteger('user_id')->nullable();
                 }
                 if (! Schema::hasColumn('albums', 'type')) {
                     $table->string('type')->default('general');
@@ -253,8 +253,8 @@ return new class extends Migration
         if (! Schema::hasTable('galleries')) {
             Schema::create('galleries', function (Blueprint $table) {
                 $table->id();
-                $table->foreignId('album_id')->constrained('albums')->cascadeOnDelete();
-                $table->foreignId('user_id')->nullable()->constrained('users')->nullOnDelete();
+                $table->unsignedBigInteger('album_id');
+                $table->unsignedBigInteger('user_id')->nullable();
                 $table->string('caption')->nullable();
                 $table->string('status')->default('pending');
                 $table->string('visibility')->default('public');
@@ -262,9 +262,9 @@ return new class extends Migration
                 $table->unsignedInteger('sort_order')->default(0);
                 $table->string('rejection_reason')->nullable();
                 $table->timestamp('approved_at')->nullable();
-                $table->foreignId('approved_by')->nullable()->constrained('users')->nullOnDelete();
+                $table->unsignedBigInteger('approved_by')->nullable();
                 $table->timestamp('rejected_at')->nullable();
-                $table->foreignId('rejected_by')->nullable()->constrained('users')->nullOnDelete();
+                $table->unsignedBigInteger('rejected_by')->nullable();
                 $table->timestamps();
                 $table->softDeletes();
 
@@ -274,10 +274,10 @@ return new class extends Migration
         } else {
             Schema::table('galleries', function (Blueprint $table) {
                 if (! Schema::hasColumn('galleries', 'album_id')) {
-                    $table->foreignId('album_id')->constrained('albums')->cascadeOnDelete();
+                    $table->unsignedBigInteger('album_id');
                 }
                 if (! Schema::hasColumn('galleries', 'user_id')) {
-                    $table->foreignId('user_id')->nullable()->constrained('users')->nullOnDelete();
+                    $table->unsignedBigInteger('user_id')->nullable();
                 }
                 if (! Schema::hasColumn('galleries', 'caption')) {
                     $table->string('caption')->nullable();
@@ -301,13 +301,13 @@ return new class extends Migration
                     $table->timestamp('approved_at')->nullable();
                 }
                 if (! Schema::hasColumn('galleries', 'approved_by')) {
-                    $table->foreignId('approved_by')->nullable()->constrained('users')->nullOnDelete();
+                    $table->unsignedBigInteger('approved_by')->nullable();
                 }
                 if (! Schema::hasColumn('galleries', 'rejected_at')) {
                     $table->timestamp('rejected_at')->nullable();
                 }
                 if (! Schema::hasColumn('galleries', 'rejected_by')) {
-                    $table->foreignId('rejected_by')->nullable()->constrained('users')->nullOnDelete();
+                    $table->unsignedBigInteger('rejected_by')->nullable();
                 }
                 if (! Schema::hasColumn('galleries', 'deleted_at')) {
                     $table->softDeletes();
@@ -318,7 +318,7 @@ return new class extends Migration
         if (! Schema::hasTable('gallery_media')) {
             Schema::create('gallery_media', function (Blueprint $table) {
                 $table->id();
-                $table->foreignId('gallery_id')->constrained('galleries')->cascadeOnDelete();
+                $table->unsignedBigInteger('gallery_id');
                 $table->string('file_path');
                 $table->string('public_id')->nullable();
                 $table->string('resource_type')->default('image');
@@ -335,7 +335,7 @@ return new class extends Migration
         if (! Schema::hasTable('yearbook_bookmarks')) {
             Schema::create('yearbook_bookmarks', function (Blueprint $table) {
                 $table->id();
-                $table->foreignId('user_id')->constrained('users')->cascadeOnDelete();
+                $table->unsignedBigInteger('user_id');
                 $table->unsignedBigInteger('batch_id');
                 $table->unsignedInteger('page_index');
                 $table->string('label', 120);
