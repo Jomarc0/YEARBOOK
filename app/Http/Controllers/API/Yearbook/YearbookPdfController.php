@@ -188,13 +188,11 @@ class YearbookPdfController extends Controller
     private function watermarkedPdfResponse(Request $request, string $sourcePath, string $filename)
     {
         $user = $request->user();
-        $watermarkedPath = $this->shouldWatermarkPdf($user)
-            ? $this->watermark->apply(
-                sourcePath: $sourcePath,
-                userName: $user?->name ?: 'Sinag-Bughaw Protected Copy',
-                userId: (int) ($user?->id ?? 0),
-            )
-            : $sourcePath;
+        $watermarkedPath = $this->watermark->apply(
+            sourcePath: $sourcePath,
+            userName: $user?->name ?: 'Sinag-Bughaw Protected Copy',
+            userId: (int) ($user?->id ?? 0),
+        );
 
         $bytes = Storage::get($watermarkedPath);
 

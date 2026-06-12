@@ -20,10 +20,6 @@ class WatermarkService
         $outputPath = 'yearbooks/watermarked/' . Str::uuid() . '.pdf';
         Storage::put($outputPath, $outputBytes);
 
-        dispatch(function () use ($outputPath) {
-            Storage::delete($outputPath);
-        })->delay(now()->addMinutes(15));
-
         return $outputPath;
     }
 
@@ -145,18 +141,18 @@ class WatermarkService
 
     private function drawWatermark(\setasign\Fpdi\Fpdi $pdf, float $width, float $height): void
     {
-        $fontSize = min(340, max(220, $width * 1.05));
-        $text = 'NU';
+        $fontSize = min(150, max(82, $width * 0.22));
+        $text = 'NU LIPA';
 
         if (method_exists($pdf, 'setAlpha')) {
-            $pdf->setAlpha(0.22);
+            $pdf->setAlpha(0.18);
         }
 
         $pdf->SetFont('Helvetica', 'B', $fontSize);
         $pdf->SetTextColor(253, 184, 19);
         $textWidth = $pdf->GetStringWidth($text);
         $x = max(0, ($width - $textWidth) / 2);
-        $y = ($height / 2) + (($fontSize * 0.352778) / 3);
+        $y = ($height / 2) - 8;
         $pdf->Text($x, $y, $text);
 
         if (method_exists($pdf, 'setAlpha')) {

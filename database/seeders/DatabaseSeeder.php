@@ -18,6 +18,7 @@ class DatabaseSeeder extends Seeder
         $this->call([
             AdminSeeder::class,
             SettingsSeeder::class,
+            FacultySeeder::class,
         ]);
 
         \App\Models\User::firstOrCreate(

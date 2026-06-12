@@ -47,7 +47,7 @@
       "reactCompiler": true
     },
     "extra": {
-      "apiUrl": "http://192.168.1.98:8000/api",
+      "apiUrl": "https://yearbook-myji.onrender.com/api",
       "authBaseUrl": "https://yearbook-myji.onrender.com"
     }
   }

@@ -66,7 +66,7 @@ const FLIP_PREP_MS = 0;
 const FLIP_DURATION_MS = 1050;
 const FLIP_OPEN_DEG = 90;
 
-// Flip state — single atomic object
+// Flip state â€” single atomic object
 type FlipPhase = 'idle' | 'animating';
 type FlipState = {
   phase: FlipPhase;
@@ -126,7 +126,7 @@ const nameLines = (name: string, maxLen = 14, maxL = 3) => {
     else lines[lines.length - 1] = `${lines[lines.length - 1]} ${w}`;
   });
   return lines.slice(0, maxL).map((l, i) =>
-    i === maxL - 1 && l.length > maxLen + 2 ? `${l.slice(0, maxLen)}…` : l,
+    i === maxL - 1 && l.length > maxLen + 2 ? `${l.slice(0, maxLen)}â€¦` : l,
   );
 };
 
@@ -179,6 +179,13 @@ const galCount = (g: any) => g?.photos_count ?? g?.media_count ?? g?.items_count
 
 const plabel = (p: any, i: number) => p?.label || p?.title || p?.type || `Page ${i + 1}`;
 const pnum   = (p: any, i: number) => p?.pageIndex ?? p?.index ?? i + 1;
+const readerPageLabel = (p: any, i: number) => {
+  const type = ptype(p);
+  if (type === 'cover' || type === 'back-cover') return 'Yearbook Cover';
+  if (type === 'dedication') return 'Dedication';
+  if (type === 'toc') return 'Table of Contents';
+  return plabel(p, i);
+};
 
 // Page builder
 const buildPages = (batch: any, galleries: any[] = []) => {
@@ -249,7 +256,7 @@ function Info({ label, value }: { label: string; value: any }) {
   return (
     <View style={pg.infoBox}>
       <Text style={pg.infoL}>{label}</Text>
-      <Text style={pg.infoV} numberOfLines={2}>{value || '—'}</Text>
+      <Text style={pg.infoV} numberOfLines={2}>{value || 'â€”'}</Text>
     </View>
   );
 }
@@ -392,7 +399,7 @@ function StudentPage({ page }: { page: any }) {
             {cards.map(([l,v]) => (
               <View key={l} style={pg.stCard}>
                 <Text style={pg.kick}>{l}</Text>
-                <Text style={pg.stTxt}>{v || '—'}</Text>
+                <Text style={pg.stTxt}>{v || 'â€”'}</Text>
               </View>
             ))}
           </View>
@@ -413,7 +420,7 @@ function StudentPage({ page }: { page: any }) {
           <View style={pg.stInfo}>
             {st?.honors ? <View style={pg.honor}><Text style={pg.honorT} numberOfLines={1}>{st.honors}</Text></View> : null}
             <View>{nameLines(name).map((l, i) => <Text key={`${l}-${i}`} style={pg.stN} numberOfLines={1}>{l}</Text>)}</View>
-            <Text style={pg.stC} numberOfLines={2}>{scourse(st, sec) || st?.student_id || '—'}</Text>
+            <Text style={pg.stC} numberOfLines={2}>{scourse(st, sec) || st?.student_id || 'â€”'}</Text>
             <View style={pg.qBlock}><View style={pg.qAcc} /><Text style={pg.qTxt} numberOfLines={3}>{`"${quote}"`}</Text></View>
             <View style={pg.facts}>
               <Info label="Nickname" value={st?.nickname} />
@@ -646,7 +653,7 @@ export default function YearbookScreen() {
     }, 50);
   }, [flipAnim, flipProg]);
 
-  // ── startFlip: single setState — one render — no flicker ─────────────────
+  // â”€â”€ startFlip: single setState â€” one render â€” no flicker â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const startFlip = useCallback((dir: 1 | -1) => {
     if (isAnim.current) return;
     if (settleTimer.current) {
@@ -678,7 +685,7 @@ export default function YearbookScreen() {
     });
 
     if (flipTimer.current) clearTimeout(flipTimer.current);
-    // FIX 1: FLIP_PREP_MS is now 0 — animation starts immediately on mount
+    // FIX 1: FLIP_PREP_MS is now 0 â€” animation starts immediately on mount
     // so the target page never has a visible window before animation begins.
     flipTimer.current = setTimeout(() => {
       flipTimer.current = null;
@@ -840,7 +847,7 @@ export default function YearbookScreen() {
     return Array.from(byKey.values()).filter(t => !term || `${t.kind} ${t.label} ${t.subtitle}`.toLowerCase().includes(term)).sort((a,b) => a.pageNumber - b.pageNumber).slice(0,30);
   }, [pages, jumpQ]);
 
-  // ── Derived display values ─────────────────────────────────────────────────
+  // â”€â”€ Derived display values â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const displayIndex = flip.currentIndex;
   const displayPage  = flip.currentPage || visible[flip.currentIndex] || null;
 
@@ -850,10 +857,9 @@ export default function YearbookScreen() {
   const stageToIndex   = flip.targetIndex;
   const stageFromKey   = `${stageFromIndex}-${stageFromPage?.id ?? stageFromPage?.pageIndex ?? ptype(stageFromPage)}`;
   const stageToKey     = `${stageToIndex}-${stageToPage?.id ?? stageToPage?.pageIndex ?? ptype(stageToPage)}`;
-  const readerBatchTitle = ybMeta?.title || btitle(selBatch) || 'Yearbook Batch';
 
-  // ── FIX 2: Current page fades out only in the final 15% of the animation ──
-  // Previously the current page had no opacity control — it would snap-disappear
+  // â”€â”€ FIX 2: Current page fades out only in the final 15% of the animation â”€â”€
+  // Previously the current page had no opacity control â€” it would snap-disappear
   // when backfaceVisibility kicked in, causing a blank-frame flash.
   // Now it gently fades out at the very end, giving a seamless handoff.
   const curStyle = useAnimatedStyle(() => {
@@ -877,11 +883,11 @@ export default function YearbookScreen() {
     };
   });
 
-  // ── FIX 3: Target page starts fully invisible (opacity: 0) ────────────────
+  // â”€â”€ FIX 3: Target page starts fully invisible (opacity: 0) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   // The old code set opacity:1 immediately on mount, causing a flash during
   // the FLIP_PREP_MS window and on the very first render frame.
   // Now the target is invisible at flipProg=0 and only begins revealing itself
-  // after the current page has rotated 45% of the way — by which point it's
+  // after the current page has rotated 45% of the way â€” by which point it's
   // visually behind the rotating page anyway.
   const nxtStyle = useAnimatedStyle(() => {
     'worklet';
@@ -900,14 +906,14 @@ export default function YearbookScreen() {
     return { opacity: Math.max(0, Math.min(0.38, peak * 0.38)) };
   });
 
-  // ── FIX 4: Shadow also keyed to revealProgress — no shadow flash on mount ─
+  // â”€â”€ FIX 4: Shadow also keyed to revealProgress â€” no shadow flash on mount â”€
   const nxtShadowStyle = useAnimatedStyle(() => {
     'worklet';
     const revealProgress = Math.max(0, (flipProg.value - 0.45) / 0.55);
     return { opacity: Math.max(0, 0.18 * revealProgress * (1 - flipProg.value)) };
   });
 
-  // ── Pan gesture ──────────────────────────────────────────────────────────
+  // â”€â”€ Pan gesture â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const pan = useMemo(() => Gesture.Pan()
     .onUpdate(e => {
       if (flipAnim.value) return;
@@ -925,7 +931,7 @@ export default function YearbookScreen() {
     }),
   [flipAnim, flipDirSV, flipProg, flip.currentIndex, startFlip, visible.length]);
 
-  // ── Unavailable ──────────────────────────────────────────────────────────
+  // â”€â”€ Unavailable â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   if (!ybEnabled) return (
     <SafeAreaView style={s.root}>
       <StatusBar style="dark" />
@@ -940,7 +946,7 @@ export default function YearbookScreen() {
     </SafeAreaView>
   );
 
-  // ── Batch list ────────────────────────────────────────────────────────────
+  // â”€â”€ Batch list â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   return (
     <SafeAreaView style={s.root}>
       <StatusBar style="light" />
@@ -969,7 +975,7 @@ export default function YearbookScreen() {
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); loadBatches(); }} />}
       />
 
-      {/* ── Batch detail modal ──────────────────────────────────────────────── */}
+      {/* â”€â”€ Batch detail modal â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       <Modal visible={!!selBatch} animationType="slide" onRequestClose={() => setSelBatch(null)}>
         <SafeAreaView style={s.root}>
           <View style={s.dHeader}>
@@ -979,7 +985,7 @@ export default function YearbookScreen() {
           </View>
 
           <View style={s.searchRow}>
-            <TextInput style={s.searchIn} placeholder="Search flipbook…" value={query} onChangeText={setQuery} onSubmitEditing={runSearch} returnKeyType="search" />
+            <TextInput style={s.searchIn} placeholder="Search flipbookâ€¦" value={query} onChangeText={setQuery} onSubmitEditing={runSearch} returnKeyType="search" />
             <TouchableOpacity style={s.searchBtn} onPress={runSearch}><FontAwesome name="search" size={15} color={WHITE} /></TouchableOpacity>
           </View>
 
@@ -992,7 +998,7 @@ export default function YearbookScreen() {
 
           <TouchableOpacity style={[s.actBtn, s.actBtnPri]} onPress={() => pages.length ? openReader(0) : selBatch && openBatch(selBatch, true)} disabled={dlLoading}>
             {dlLoading ? <ActivityIndicator color={NAVY} size="small" /> : <FontAwesome name="book" size={14} color={NAVY} />}
-            <Text style={s.actBtnPriT}>{dlLoading ? 'Generating…' : 'Open Flipbook'}</Text>
+            <Text style={s.actBtnPriT}>{dlLoading ? 'Generatingâ€¦' : 'Open Flipbook'}</Text>
           </TouchableOpacity>
 
           <FlatList
@@ -1004,7 +1010,7 @@ export default function YearbookScreen() {
                   <View style={s.metaCard}>
                     <Text style={s.metaK}>Digital Yearbook</Text>
                     <Text style={s.metaT}>{ybMeta?.title || btitle(selBatch)}</Text>
-                    <Text style={s.metaSub}>{ybMeta?.school || ybName} · {ybMeta?.year || byear(selBatch)}</Text>
+                    <Text style={s.metaSub}>{ybMeta?.school || ybName} Â· {ybMeta?.year || byear(selBatch)}</Text>
                   </View>
                 ) : null}
                 {galleries.length ? (
@@ -1053,7 +1059,7 @@ export default function YearbookScreen() {
             contentContainerStyle={s.listPad}
           />
 
-          {/* ── Reader modal ────────────────────────────────────────────────── */}
+          {/* â”€â”€ Reader modal â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
           <Modal visible={readerOpen} animationType="slide" onRequestClose={closeReader}>
             <SafeAreaView style={s.rdRoot}>
               <StatusBar style="light" />
@@ -1062,18 +1068,18 @@ export default function YearbookScreen() {
               <View style={s.rdHeader}>
                 <TouchableOpacity style={s.rdIcon} onPress={closeReader}><FontAwesome name="chevron-left" size={16} color={WHITE} /></TouchableOpacity>
                 <View style={s.rdTitleW}>
-                  <Text style={s.rdKick} numberOfLines={1}>{readerBatchTitle}  ·  PAGE {displayPage ? pnum(displayPage, displayIndex) : '-'} / {visible.length}</Text>
-                  <Text style={s.rdTitle} numberOfLines={1}>{displayPage ? plabel(displayPage, displayIndex) : 'Yearbook'}</Text>
+                  <Text style={s.rdKick}>PAGE {displayPage ? pnum(displayPage, displayIndex) : '-'} / {visible.length}</Text>
+                  <Text style={s.rdTitle} numberOfLines={1}>{displayPage ? readerPageLabel(displayPage, displayIndex) : 'Yearbook'}</Text>
                 </View>
                 <TouchableOpacity style={s.rdIcon} onPress={() => displayPage && bmPage(displayPage, displayIndex)}>
                   <FontAwesome name="bookmark-o" size={16} color={GOLD} />
                 </TouchableOpacity>
               </View>
 
-              {/* ── Stage ── */}
+              {/* â”€â”€ Stage â”€â”€ */}
               <GestureDetector gesture={pan}>
                 <View style={s.stage}>
-                  {/* Current (departing) page — always visible, fades out at the end of flip */}
+                  {/* Current (departing) page â€” always visible, fades out at the end of flip */}
                   <Reanimated.View
                     key={`from-${stageFromKey}`}
                     renderToHardwareTextureAndroid={flip.phase === 'animating'}
@@ -1087,7 +1093,7 @@ export default function YearbookScreen() {
                   </Reanimated.View>
 
                   {/*
-                    FIX 5: Target page — mounted only during animating phase.
+                    FIX 5: Target page â€” mounted only during animating phase.
                     Starts at opacity:0 (via nxtStyle) and only becomes visible
                     after the departing page has rotated past 45%.
                     Using flip.phase directly (not the derived `isAnimating` const)
@@ -1144,14 +1150,14 @@ export default function YearbookScreen() {
                   <View style={s.jSheet}>
                     <View style={s.jHandle} />
                     <View style={s.jHd}><Text style={s.jHdT}>Jump to Course or Section</Text><TouchableOpacity style={s.jClose} onPress={() => setJumpOpen(false)}><FontAwesome name="times" size={13} color={MUTED} /></TouchableOpacity></View>
-                    <View style={s.jSearch}><FontAwesome name="search" size={13} color={MUTED} /><TextInput style={s.jIn} value={jumpQ} onChangeText={setJumpQ} placeholder="Search BSA, BSCS, 4-A…" placeholderTextColor={MUTED} /></View>
+                    <View style={s.jSearch}><FontAwesome name="search" size={13} color={MUTED} /><TextInput style={s.jIn} value={jumpQ} onChangeText={setJumpQ} placeholder="Search BSA, BSCS, 4-Aâ€¦" placeholderTextColor={MUTED} /></View>
                     <ScrollView style={{ maxHeight:360 }} showsVerticalScrollIndicator={false}>
                       {jumpTargets.length ? jumpTargets.map(t => (
                         <TouchableOpacity key={`${t.kind}-${t.label}`} style={s.jRow} onPress={() => jumpTo(t)} activeOpacity={0.86}>
                           <View style={s.jIcon}><FontAwesome name={t.kind === 'Course' ? 'graduation-cap' : 'bookmark'} size={11} color={GOLD} /></View>
                           <View style={{ flex:1, minWidth:0 }}>
                             <Text style={s.jRowT} numberOfLines={1}>{t.label}</Text>
-                            <Text style={s.jRowS} numberOfLines={1}>{t.kind} · {t.subtitle} · p.{t.pageNumber}</Text>
+                            <Text style={s.jRowS} numberOfLines={1}>{t.kind} Â· {t.subtitle} Â· p.{t.pageNumber}</Text>
                           </View>
                         </TouchableOpacity>
                       )) : <Text style={s.jEmpty}>No matching course or section found.</Text>}
@@ -1167,7 +1173,7 @@ export default function YearbookScreen() {
   );
 }
 
-// ─── Styles ────────────────────────────────────────────────────────────────────
+// â”€â”€â”€ Styles â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const s = StyleSheet.create({
   root:        { flex:1, backgroundColor:BG },
   centered:    { flex:1, alignItems:'center', justifyContent:'center', padding:28 },
@@ -1273,7 +1279,7 @@ const s = StyleSheet.create({
   jEmpty:  { color:MUTED, textAlign:'center', paddingVertical:24, fontSize:13 },
 });
 
-// ─── Page styles ──────────────────────────────────────────────────────────────
+// â”€â”€â”€ Page styles â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const pg = StyleSheet.create({
   shell:     { flex:1, backgroundColor:PAPER, padding:20, overflow:'hidden', borderRadius:16 },
   shellDark: { backgroundColor:NAVY },
@@ -1389,3 +1395,4 @@ const pg = StyleSheet.create({
   cname: { color:NAVY, fontSize:13, fontWeight:'800' },
   csub:  { color:MUTED, fontSize:11, marginTop:2 },
 });
+

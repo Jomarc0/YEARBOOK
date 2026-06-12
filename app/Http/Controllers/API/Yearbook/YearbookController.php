@@ -337,13 +337,11 @@ class YearbookController extends Controller
         }
 
         $user = Auth::user();
-        $watermarkedPath = $this->shouldWatermarkPdf($user)
-            ? $this->watermark->apply(
-                sourcePath: $yearbook->pdf_path,
-                userName: $user?->name ?: 'Sinag-Bughaw Protected Copy',
-                userId: (int) ($user?->id ?? 0),
-            )
-            : $yearbook->pdf_path;
+        $watermarkedPath = $this->watermark->apply(
+            sourcePath: $yearbook->pdf_path,
+            userName: $user?->name ?: 'Sinag-Bughaw Protected Copy',
+            userId: (int) ($user?->id ?? 0),
+        );
 
         $filename = "yearbook-{$batch->year}.pdf";
 

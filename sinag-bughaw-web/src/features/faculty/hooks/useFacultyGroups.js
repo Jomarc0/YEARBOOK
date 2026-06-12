@@ -1,6 +1,13 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { facultyApi } from '@/api/faculty.api';
 
+function facultyGroupsFromPayload(payload) {
+  if (Array.isArray(payload)) return payload;
+  if (Array.isArray(payload?.data)) return payload.data;
+  if (Array.isArray(payload?.data?.data)) return payload.data.data;
+  return [];
+}
+
 export function useFacultyGroups() {
   const [groups,       setGroups]       = useState([]);
   const [activeDeptId, setActiveDeptId] = useState(null); // null = all
@@ -14,7 +21,7 @@ export function useFacultyGroups() {
     setError(null);
     try {
       const { data } = await facultyApi.byDepartment(q ? { search: q } : {});
-      setGroups(data.data ?? []);
+      setGroups(facultyGroupsFromPayload(data));
     } catch {
       setError('Unable to load faculty. Please try again.');
     } finally {

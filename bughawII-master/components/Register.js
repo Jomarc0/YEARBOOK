@@ -138,8 +138,16 @@ export default function Register() {
   const handleGoogleSignup = async () => {
     try {
       setLoading(true);
-      const redirectUri = 'nuyearbook://sso/callback';
-      const authUrl = `${AUTH_BASE_URL}/auth/google/redirect?client=mobile&redirect_uri=${encodeURIComponent(redirectUri)}`;
+      const redirectUri = Platform.OS === 'web' && typeof window !== 'undefined'
+        ? `${window.location.origin}/sso/callback`
+        : Linking.createURL('/sso/callback');
+      const authUrl = `${AUTH_BASE_URL}/app/auth/google/redirect?client=mobile&redirect_uri=${encodeURIComponent(redirectUri)}`;
+
+      if (Platform.OS === 'web' && typeof window !== 'undefined') {
+        window.location.href = authUrl;
+        return;
+      }
+
       const result = await WebBrowser.openAuthSessionAsync(authUrl, redirectUri);
       if (result.type !== 'success' || !result.url) return;
 
