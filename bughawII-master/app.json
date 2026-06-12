@@ -17,6 +17,8 @@
       "edgeToEdgeEnabled": true,
       "permissions": [
         "android.permission.RECORD_AUDIO",
+        "android.permission.MODIFY_AUDIO_SETTINGS",
+        "android.permission.RECORD_AUDIO",
         "android.permission.MODIFY_AUDIO_SETTINGS"
       ]
     },
@@ -54,6 +56,12 @@
         "projectId": "d8da1a59-b679-4db5-a1d9-d223546b3b93"
       }
     },
-    "owner": "togi012322"
+    "owner": "togi012322",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/d8da1a59-b679-4db5-a1d9-d223546b3b93"
+    }
   }
 }

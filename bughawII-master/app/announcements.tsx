@@ -33,6 +33,20 @@ const listFromPayload = (payload: any) => {
   return [];
 };
 
+// Removes duplicate records (e.g. caused by backend joins returning repeated
+// rows) based on the resolved entity id. Items without a resolvable id are
+// always kept.
+const dedupeById = (list: any[], getId: (item: any) => any) => {
+  const seen = new Set();
+  return list.filter((item) => {
+    const id = getId(item);
+    if (id == null) return true;
+    if (seen.has(id)) return false;
+    seen.add(id);
+    return true;
+  });
+};
+
 const formatDate = (value?: string) => {
   if (!value) return 'Latest';
   const date = new Date(value);
@@ -53,7 +67,7 @@ export default function AnnouncementsScreen() {
       setError('');
       if (!refreshing) setLoading(true);
       const payload = await getAnnouncements();
-      setAnnouncements(listFromPayload(payload));
+      setAnnouncements(dedupeById(listFromPayload(payload), announcementId));
     } catch (requestError: any) {
       setError(getErrorMessage(requestError, 'Unable to load announcements.'));
     } finally {
@@ -117,7 +131,10 @@ export default function AnnouncementsScreen() {
 
       <FlatList
         data={sortedAnnouncements}
-        keyExtractor={(item, index) => String(announcementId(item) || index)}
+        keyExtractor={(item, index) => {
+          const id = announcementId(item);
+          return `${id != null ? id : 'announcement'}-${index}`;
+        }}
         renderItem={({ item }) => (
           <View style={styles.card}>
             <View style={styles.cardTop}>

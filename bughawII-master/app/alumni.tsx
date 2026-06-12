@@ -39,6 +39,23 @@ const flattenBatches = (payload: any) => {
 };
 const firstParam = (value: string | string[] | undefined) => Array.isArray(value) ? value[0] : value;
 
+// Stable identity for an alumni record, used for keys and dedup.
+const alumniEntityId = (item: any) => item?.id ?? item?.user_id ?? item?.alumni_id;
+
+// Removes duplicate records (e.g. caused by backend joins or overlapping
+// pagination) based on the resolved entity id. Items without a resolvable id
+// are always kept.
+const dedupeById = (list: any[], getId: (item: any) => any) => {
+  const seen = new Set();
+  return list.filter((item) => {
+    const id = getId(item);
+    if (id == null) return true;
+    if (seen.has(id)) return false;
+    seen.add(id);
+    return true;
+  });
+};
+
 export default function AlumniScreen() {
   const router = useRouter();
   const routeParams = useLocalSearchParams();
@@ -89,7 +106,10 @@ export default function AlumniScreen() {
       const list = Array.isArray(data) ? data : [];
       const meta = paginationMeta(payload);
 
-      setAlumni((current) => append ? [...current, ...list] : list);
+      setAlumni((current) => {
+        const next = append ? [...current, ...list] : list;
+        return dedupeById(next, alumniEntityId);
+      });
       setPage(meta.currentPage);
       setLastPage(meta.lastPage);
       setTotal(payload?.total ?? payload?.meta?.total ?? list.length);
@@ -319,8 +339,8 @@ export default function AlumniScreen() {
       <FlatList
         data={showDirectory ? alumni : []}
         keyExtractor={(item, index) => {
-          const id = item?.id ?? item?.user_id ?? item?.alumni_id;
-          return id != null ? String(id) : `alumni-${index}`;
+          const id = alumniEntityId(item);
+          return `${id != null ? id : 'alumni'}-${index}`;
         }}
         renderItem={({ item }) => (
           <View style={[styles.card, highlightedAlumniId && String(item?.id) === String(highlightedAlumniId) && styles.cardHighlighted]}>
@@ -469,7 +489,7 @@ export default function AlumniScreen() {
               data={batches}
               keyExtractor={(item, index) => {
                 const id = batchId(item);
-                return id != null ? String(id) : `batch-${index}`;
+                return `${id != null ? id : 'batch'}-${index}`;
               }}
               renderItem={({ item }) => {
                 const active = selectedBatch && String(batchId(selectedBatch)) === String(batchId(item));

@@ -32,6 +32,22 @@ const personMeta = (item: any) => {
   return course || batch || '';
 };
 
+// Stable identity for a profile/analytics entry, used for keys and dedup.
+const getEntityId = (item: any) => item?.id ?? item?.user_id ?? item?.student_id;
+
+// Removes duplicate records (e.g. caused by backend joins returning repeated rows)
+// based on the resolved entity id. Items without a resolvable id are always kept.
+const dedupeById = (list: any[], getId: (item: any) => any) => {
+  const seen = new Set();
+  return list.filter((item) => {
+    const id = getId(item);
+    if (id == null) return true;
+    if (seen.has(id)) return false;
+    seen.add(id);
+    return true;
+  });
+};
+
 const listFromPayload = (payload: any) => {
   const raw = unwrap(payload);
   if (Array.isArray(raw)) return raw;
@@ -158,9 +174,9 @@ export default function AnalyticsScreen() {
 
       if (configResult.status === 'fulfilled') setAppConfig(objectFromPayload(configResult.value));
       if (summaryResult.status === 'fulfilled') setSummary(objectFromPayload(summaryResult.value));
-      if (trendingResult.status === 'fulfilled') setTrending(listFromPayload(trendingResult.value));
-      if (topViewedResult.status === 'fulfilled') setTopViewed(listFromPayload(topViewedResult.value));
-      if (batchmateResult.status === 'fulfilled') setBatchmateStats(listFromPayload(batchmateResult.value));
+      if (trendingResult.status === 'fulfilled') setTrending(dedupeById(listFromPayload(trendingResult.value), getEntityId));
+      if (topViewedResult.status === 'fulfilled') setTopViewed(dedupeById(listFromPayload(topViewedResult.value), getEntityId));
+      if (batchmateResult.status === 'fulfilled') setBatchmateStats(dedupeById(listFromPayload(batchmateResult.value), getEntityId));
       if (statsResult.status === 'fulfilled') setMyStats(objectFromPayload(statsResult.value));
       if (trendResult.status === 'fulfilled') setStatsTrend(objectFromPayload(trendResult.value));
 
@@ -297,8 +313,8 @@ export default function AnalyticsScreen() {
       <FlatList
         data={activeList}
         keyExtractor={(item, index) => {
-          const id = item?.id ?? item?.user_id ?? item?.student_id;
-          return id != null ? String(id) : `analytics-${index}`;
+          const id = getEntityId(item);
+          return `${id != null ? id : 'analytics'}-${index}`;
         }}
         ListHeaderComponent={renderHero}
         renderItem={({ item, index }) => (

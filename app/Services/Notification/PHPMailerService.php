@@ -2,74 +2,95 @@
 
 namespace App\Services\Notification;
 
-use PHPMailer\PHPMailer\PHPMailer;
-use PHPMailer\PHPMailer\Exception;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 
 class PHPMailerService
 {
-    protected PHPMailer $mailer;
+    private string $apiKey;
+    private string $fromAddress;
+    private string $fromName;
+    private string $apiUrl = 'https://api.brevo.com/v3/smtp/email';
 
     public function __construct()
     {
-        $this->mailer = new PHPMailer(true);
-
-        $this->mailer->isSMTP();
-        $this->mailer->Host       = config('phpmailer.host');
-        $this->mailer->SMTPAuth   = true;
-        $this->mailer->Username   = config('phpmailer.username');
-        $this->mailer->Password   = config('phpmailer.password');
-        $this->mailer->SMTPSecure = config('phpmailer.encryption', PHPMailer::ENCRYPTION_STARTTLS);
-        $this->mailer->Port       = config('phpmailer.port', 587);
-        $this->mailer->Timeout    = 10;
-
-        $this->mailer->setFrom(
-            config('phpmailer.from_address'),
-            config('phpmailer.from_name')
-        );
-
-        $this->mailer->isHTML(true);
-        $this->mailer->CharSet = 'UTF-8';
+        $this->apiKey      = config('phpmailer.api_key');
+        $this->fromAddress = config('phpmailer.from_address');
+        $this->fromName    = config('phpmailer.from_name', 'Sinag-Bughaw');
     }
 
+    // -------------------------------------------------------------------------
+    // Core HTTP sender
+    // -------------------------------------------------------------------------
+
+    private function send(
+        string $toEmail,
+        string $toName,
+        string $subject,
+        string $html,
+        string $altBody
+    ): bool {
+        try {
+            $response = Http::withHeaders([
+                'api-key'      => $this->apiKey,
+                'Content-Type' => 'application/json',
+            ])->post($this->apiUrl, [
+                'sender'      => [
+                    'name'  => $this->fromName,
+                    'email' => $this->fromAddress,
+                ],
+                'to'          => [['email' => $toEmail, 'name' => $toName]],
+                'subject'     => $subject,
+                'htmlContent' => $html,
+                'textContent' => $altBody,
+            ]);
+
+            if (! $response->successful()) {
+                Log::error('Brevo API error: ' . $response->status() . ' — ' . $response->body());
+                return false;
+            }
+
+            return true;
+        } catch (\Throwable $e) {
+            Log::error('Brevo HTTP error: ' . $e->getMessage());
+            return false;
+        }
+    }
+
+    // -------------------------------------------------------------------------
     // 1. OTP (login / registration)
+    // -------------------------------------------------------------------------
 
     public function sendOtp(string $toEmail, string $toName, string $otp): bool
     {
-        try {
-            $this->mailer->clearAddresses();
-            $this->mailer->addAddress($toEmail, $toName);
-            $this->mailer->Subject = 'Your Sinag-Bughaw Verification Code';
-            $this->mailer->Body    = $this->otpTemplate($otp);
-            $this->mailer->AltBody = "Your OTP code is: $otp. It expires in 10 minutes.";
-            $this->mailer->send();
-            return true;
-        } catch (Exception $e) {
-            Log::error('PHPMailer OTP error: ' . $e->getMessage());
-            return false;
-        }
+        return $this->send(
+            $toEmail,
+            $toName,
+            'Your Sinag-Bughaw Verification Code',
+            $this->otpTemplate($otp),
+            "Your OTP code is: $otp. It expires in 10 minutes."
+        );
     }
 
-    // 2. Password Reset OTP 
+    // -------------------------------------------------------------------------
+    // 2. Password Reset OTP
+    // -------------------------------------------------------------------------
 
     public function sendPasswordReset(string $toEmail, string $toName, string $otp): bool
     {
-        try {
-            $this->mailer->clearAddresses();
-            $this->mailer->addAddress($toEmail, $toName);
-            $this->mailer->Subject = 'Reset Your Sinag-Bughaw Password';
-            $this->mailer->Body    = $this->passwordResetTemplate($toName, $otp);
-            $this->mailer->AltBody = "Your password reset code is: $otp. It expires in 10 minutes. If you did not request this, ignore this email.";
-            $this->mailer->send();
-            return true;
-        } catch (Exception $e) {
-            Log::error('PHPMailer PasswordReset error: ' . $e->getMessage());
-            return false;
-        }
+        return $this->send(
+            $toEmail,
+            $toName,
+            'Reset Your Sinag-Bughaw Password',
+            $this->passwordResetTemplate($toName, $otp),
+            "Your password reset code is: $otp. It expires in 10 minutes. If you did not request this, ignore this email."
+        );
     }
 
+    // -------------------------------------------------------------------------
     // 3. Announcement
+    // -------------------------------------------------------------------------
 
     public function sendAnnouncement(
         string $toEmail,
@@ -79,21 +100,18 @@ class PHPMailerService
         ?string $actionUrl   = null,
         ?string $actionLabel = null
     ): bool {
-        try {
-            $this->mailer->clearAddresses();
-            $this->mailer->addAddress($toEmail, $toName);
-            $this->mailer->Subject = "[Sinag-Bughaw] $title";
-            $this->mailer->Body    = $this->announcementTemplate($toName, $title, $body, $actionUrl, $actionLabel);
-            $this->mailer->AltBody = "$title\n\n$body";
-            $this->mailer->send();
-            return true;
-        } catch (Exception $e) {
-            Log::error('PHPMailer Announcement error: ' . $e->getMessage());
-            return false;
-        }
+        return $this->send(
+            $toEmail,
+            $toName,
+            "[Sinag-Bughaw] $title",
+            $this->announcementTemplate($toName, $title, $body, $actionUrl, $actionLabel),
+            "$title\n\n$body"
+        );
     }
 
-    // 4. Graduation Reminder 
+    // -------------------------------------------------------------------------
+    // 4. Graduation Reminder
+    // -------------------------------------------------------------------------
 
     public function sendGraduationReminder(
         string $toEmail,
@@ -103,21 +121,18 @@ class PHPMailerService
         string $eventVenue,
         ?string $actionUrl = null
     ): bool {
-        try {
-            $this->mailer->clearAddresses();
-            $this->mailer->addAddress($toEmail, $toName);
-            $this->mailer->Subject = "🎓 Graduation Reminder — $eventName";
-            $this->mailer->Body    = $this->graduationTemplate($toName, $eventName, $eventDate, $eventVenue, $actionUrl);
-            $this->mailer->AltBody = "Reminder: $eventName on $eventDate at $eventVenue.";
-            $this->mailer->send();
-            return true;
-        } catch (Exception $e) {
-            Log::error('PHPMailer Graduation error: ' . $e->getMessage());
-            return false;
-        }
+        return $this->send(
+            $toEmail,
+            $toName,
+            "🎓 Graduation Reminder — $eventName",
+            $this->graduationTemplate($toName, $eventName, $eventDate, $eventVenue, $actionUrl),
+            "Reminder: $eventName on $eventDate at $eventVenue."
+        );
     }
 
+    // -------------------------------------------------------------------------
     // 5. Photo Tagged
+    // -------------------------------------------------------------------------
 
     public function sendTaggedNotification(
         string $toEmail,
@@ -127,22 +142,18 @@ class PHPMailerService
         ?string $actionUrl   = null,
         ?string $actionLabel = null
     ): bool {
-        try {
-            $this->mailer->clearAddresses();
-            $this->mailer->addAddress($toEmail, $toName);
-            $this->mailer->Subject = "📸 {$taggedBy} tagged you in a photo";
-            $this->mailer->Body    = $this->taggedTemplate($toName, $taggedBy, $photoUrl, $actionUrl, $actionLabel);
-            $this->mailer->AltBody = "Hi $toName, $taggedBy tagged you in a photo."
-                . ($actionUrl ? " View it here: $actionUrl" : '');
-            $this->mailer->send();
-            return true;
-        } catch (Exception $e) {
-            Log::error('PHPMailer Tagged error: ' . $e->getMessage());
-            return false;
-        }
+        return $this->send(
+            $toEmail,
+            $toName,
+            "📸 {$taggedBy} tagged you in a photo",
+            $this->taggedTemplate($toName, $taggedBy, $photoUrl, $actionUrl, $actionLabel),
+            "Hi $toName, $taggedBy tagged you in a photo." . ($actionUrl ? " View it here: $actionUrl" : '')
+        );
     }
 
-    // 6. New Message 
+    // -------------------------------------------------------------------------
+    // 6. New Message
+    // -------------------------------------------------------------------------
 
     public function sendNewMessageNotification(
         string $toEmail,
@@ -151,22 +162,18 @@ class PHPMailerService
         string $messagePreview,
         ?string $actionUrl = null
     ): bool {
-        try {
-            $this->mailer->clearAddresses();
-            $this->mailer->addAddress($toEmail, $toName);
-            $this->mailer->Subject = "💬 New message from {$senderName} — Sinag-Bughaw";
-            $this->mailer->Body    = $this->newMessageTemplate($toName, $senderName, $messagePreview, $actionUrl);
-            $this->mailer->AltBody = "Hi $toName, you have a new message from $senderName: \"$messagePreview\""
-                . ($actionUrl ? " Reply here: $actionUrl" : '');
-            $this->mailer->send();
-            return true;
-        } catch (Exception $e) {
-            Log::error('PHPMailer NewMessage error: ' . $e->getMessage());
-            return false;
-        }
+        return $this->send(
+            $toEmail,
+            $toName,
+            "💬 New message from {$senderName} — Sinag-Bughaw",
+            $this->newMessageTemplate($toName, $senderName, $messagePreview, $actionUrl),
+            "Hi $toName, you have a new message from $senderName: \"$messagePreview\"" . ($actionUrl ? " Reply here: $actionUrl" : '')
+        );
     }
 
+    // -------------------------------------------------------------------------
     // 7. Subscription Confirmed
+    // -------------------------------------------------------------------------
 
     public function sendSubscriptionConfirmed(
         string $toEmail,
@@ -175,21 +182,18 @@ class PHPMailerService
         string $expiryDate,
         ?string $actionUrl = null
     ): bool {
-        try {
-            $this->mailer->clearAddresses();
-            $this->mailer->addAddress($toEmail, $toName);
-            $this->mailer->Subject = "🎉 Your Sinag-Bughaw subscription is active!";
-            $this->mailer->Body    = $this->subscriptionConfirmedTemplate($toName, $planName, $expiryDate, $actionUrl);
-            $this->mailer->AltBody = "Hi $toName, your $planName plan is now active until $expiryDate.";
-            $this->mailer->send();
-            return true;
-        } catch (Exception $e) {
-            Log::error('PHPMailer SubscriptionConfirmed error: ' . $e->getMessage());
-            return false;
-        }
+        return $this->send(
+            $toEmail,
+            $toName,
+            "🎉 Your Sinag-Bughaw subscription is active!",
+            $this->subscriptionConfirmedTemplate($toName, $planName, $expiryDate, $actionUrl),
+            "Hi $toName, your $planName plan is now active until $expiryDate."
+        );
     }
 
-    // Templates 
+    // -------------------------------------------------------------------------
+    // Templates
+    // -------------------------------------------------------------------------
 
     private function header(): string
     {
@@ -256,7 +260,7 @@ class PHPMailerService
             <div style="font-size:12px;color:#94a3b8;margin-top:8px">Password reset code</div>
           </div>
           <div class="divider"></div>
-          <p style="font-size:13px">If you did not request a password reset, your account is safe — simply ignore this email and your password will remain unchanged.</p>
+          <p style="font-size:13px">If you did not request a password reset, your account is safe — simply ignore this email.</p>
           <div style="background:#fef2f2;border-left:4px solid #ef4444;border-radius:8px;padding:12px 16px;font-size:12px;color:#991b1b">
             🔒 Never share this code with anyone. NU Lipa staff will never ask for it.
           </div>
@@ -319,9 +323,7 @@ class PHPMailerService
           </div>
           $btn
           <div class='divider'></div>
-          <p style='font-size:12px;color:#94a3b8'>
-            You can manage your tagged photos from your profile settings.
-          </p>
+          <p style='font-size:12px;color:#94a3b8'>You can manage your tagged photos from your profile settings.</p>
         " . $this->footer();
     }
 
@@ -329,9 +331,7 @@ class PHPMailerService
         string $toName, string $senderName,
         string $messagePreview, ?string $actionUrl
     ): string {
-        $btn = $actionUrl
-            ? "<a href=\"$actionUrl\" class=\"btn\">Reply to Message</a>"
-            : '';
+        $btn     = $actionUrl ? "<a href=\"$actionUrl\" class=\"btn\">Reply to Message</a>" : '';
         $preview = htmlspecialchars(Str::limit($messagePreview, 120));
         return $this->header() . "
           <div class='badge' style='background:#e0f2fe;color:#0369a1'>💬 New Message</div>
@@ -344,10 +344,7 @@ class PHPMailerService
           </div>
           $btn
           <div class='divider'></div>
-          <p style='font-size:12px;color:#94a3b8'>
-            You are receiving this because someone sent you a message on Sinag-Bughaw.
-            Log in to view the full conversation.
-          </p>
+          <p style='font-size:12px;color:#94a3b8'>Log in to view the full conversation.</p>
         " . $this->footer();
     }
 
