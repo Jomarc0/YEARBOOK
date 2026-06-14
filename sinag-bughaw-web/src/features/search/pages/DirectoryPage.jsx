@@ -7,6 +7,7 @@ import { faceApi } from '@/api/gallery.api';
 import { useAuth } from '@/features/auth/hooks/useAuth';
 import FaceSearchButton from '@/components/ui/FaceSearchButton';
 import FilterTabStrip from '@/components/ui/FilterTabStrip';
+import LoadingSkeleton from '@/components/ui/LoadingSkeleton';
 import { imageUrl, avatarUrl } from '@/utils/imageUrl';
 import { COURSE_FILTERS, getCourseShort } from '@/utils/courseShort';
 
@@ -384,7 +385,7 @@ export default function DirectoryPage() {
       </header>
 
       {/* ── Course filters ── */}
-      <div className="px-4 sm:px-[8%] pt-8 pb-2">
+      <nav className="border-b border-slate-200 bg-white px-5 py-3 shadow-sm sm:px-[8%]" aria-label="Filter students by program">
         <div className="mx-auto max-w-[1180px]">
           <FilterTabStrip
             ariaLabel="Filter students by program"
@@ -393,7 +394,7 @@ export default function DirectoryPage() {
             tabs={COURSE_FILTERS}
           />
         </div>
-      </div>
+      </nav>
 
       {/* ── Result count ── */}
       {!loading && !isFaceMode && (
@@ -419,10 +420,7 @@ export default function DirectoryPage() {
 
         {/* Loading */}
         {loading ? (
-          <div className="flex flex-col items-center justify-center py-32 text-slate-400 gap-4">
-            <div className="w-10 h-10 rounded-full border-[3px] border-indigo-100 border-t-[#1d2b4b] animate-spin" />
-            <p className="text-sm font-medium">{faceSearching ? 'Scanning faces…' : 'Searching…'}</p>
-          </div>
+          <LoadingSkeleton variant="card" count={8} />
 
         ) : visibleStudents.length === 0 ? (
           /* Empty state */

@@ -279,7 +279,12 @@ export default function DirectoryScreen() {
       const payload = await getStudents(params);
       const data = unwrap(payload);
       const meta = paginationMeta(payload);
-      const nextStudents = (Array.isArray(data) ? data : []).filter((student) => !isOwnDirectoryEntry(student, ownDirectoryIds));
+      const nextStudents = (Array.isArray(data) ? data : [])
+        .filter((student) => !isOwnDirectoryEntry(student, ownDirectoryIds))
+        .filter((student, index, arr) => {
+          const key = `${student?.id}-${student?.user_id}-${student?.student_id}`;
+          return arr.findIndex((s) => `${s?.id}-${s?.user_id}-${s?.student_id}` === key) === index;
+        });
 
       setStudents((current) => (append ? [...current, ...nextStudents] : nextStudents));
       const totalFromApi = Number(payload?.meta?.total || payload?.total || nextStudents.length);
@@ -599,11 +604,10 @@ export default function DirectoryScreen() {
       <StatusBar style="dark" />
       <FlatList
         data={students}
-        // FIX 1: Namespace keys so two students sharing the same numeric ID
-        // (e.g. id:1 vs user_id:1) never produce duplicate keys.
+        // FIX 1: Composite+index key so duplicate records from the API never collide.
         keyExtractor={(item, index) => {
-          const id = getStudentId(item);
-          return id != null ? `student-${id}` : `student-idx-${index}`;
+          const composite = `${item?.id ?? ''}-${item?.user_id ?? ''}-${item?.student_id ?? ''}`;
+          return composite !== '--' ? `student-${composite}-${index}` : `student-idx-${index}`;
         }}
         renderItem={renderStudent}
         ListHeaderComponent={(

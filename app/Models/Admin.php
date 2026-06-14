@@ -20,18 +20,26 @@ class Admin extends Authenticatable
         'name',
         'username',
         'password',
+        'totp_secret',
+        'totp_pending_secret',
         'role',
         'is_active',
         'created_by',
         'last_login_at',
+        'last_seen_at',
+        'totp_enabled_at',
     ];
 
-    protected $hidden = ['password'];
+    protected $hidden = ['password', 'totp_secret', 'totp_pending_secret'];
 
     protected $casts = [
-        'is_active'     => 'boolean',
-        'password'      => 'hashed',
-        'last_login_at' => 'datetime',
+        'is_active'           => 'boolean',
+        'password'            => 'hashed',
+        'totp_secret'         => 'encrypted',
+        'totp_pending_secret' => 'encrypted',
+        'last_login_at'       => 'datetime',
+        'last_seen_at'        => 'datetime',
+        'totp_enabled_at'     => 'datetime',
     ];
 
     // Role helpers 

@@ -1,7 +1,6 @@
 <?php
 
 use App\Http\Controllers\API\Auth\SocialAuthController;
-use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Route;
 
 // WEB Google OAuth
@@ -23,13 +22,6 @@ Route::get('/app/auth/google/redirect', [SocialAuthController::class, 'mobileRed
 
 Route::get('/app/auth/google/callback', [SocialAuthController::class, 'mobileHandleGoogleCallback'])
     ->name('auth.google.mobile.callback');
-
-// Temporary cache clear — REMOVE AFTER USE
-Route::get('/clear-cache', function () {
-    Artisan::call('config:clear');
-    Artisan::call('cache:clear');
-    return 'Cache cleared!';
-});
 
 // SPA catch-all (must be LAST)
 Route::get('/{any}', function () {

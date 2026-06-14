@@ -5,6 +5,7 @@
  */
 
 import { useEffect, useState, useCallback, useRef } from "react";
+import { useSearchParams } from "react-router-dom";
 import api from "../services/api";
 import Icon from "../components/shared/Icon";
 
@@ -140,6 +141,19 @@ function pill(label, color, bg) {
     >
       {label}
     </span>
+  );
+}
+
+function PillButton({ label, color, bg, onClick }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      style={{ color, background: bg }}
+      className="inline-flex whitespace-nowrap rounded-full border-0 px-2 py-0.5 text-xs font-bold leading-6 transition hover:brightness-95 focus:outline-none focus:ring-2 focus:ring-indigo-200"
+    >
+      {label}
+    </button>
   );
 }
 
@@ -341,27 +355,29 @@ const STEPS = [
   { key: "students", icon: "students", label: "Students" },
 ];
 
-function StepBar({ current }) {
+function StepBar({ current, onSelect }) {
   const idx = STEPS.findIndex(s => s.key === current);
   return (
     <div className="mb-6 flex w-fit items-center rounded-xl border border-slate-200 bg-white p-1 shadow-sm">
       {STEPS.map((s, i) => {
         const active = i === idx, done = i < idx;
         return (
-          <div
+          <button
+            type="button"
             key={s.key}
+            onClick={() => onSelect?.(s.key)}
             className={`flex items-center gap-1.5 rounded-lg px-4 py-1.5 text-sm font-bold transition ${
               active
                 ? "bg-indigo-600 text-white"
                 : done
                 ? "bg-indigo-50 text-indigo-600"
-                : "text-slate-400"
+                : "text-slate-400 hover:bg-slate-50 hover:text-slate-600"
             }`}
           >
             <Icon name={s.icon} className="h-4 w-4" />
             <span>{s.label}</span>
             {done && <Icon name="check" className="h-3.5 w-3.5 opacity-70" />}
-          </div>
+          </button>
         );
       })}
     </div>
@@ -805,7 +821,7 @@ function StudentModal({ student, sectionId, onClose, onSaved, toast }) {
 // ═══════════════════════════════════════════════════════════════════
 // VIEW: BATCHES
 // ═══════════════════════════════════════════════════════════════════
-function BatchesView({ toast, onSelect }) {
+function BatchesView({ toast, onSelect, onViewStudents }) {
   const [batches,    setBatches]    = useState([]);
   const [loading,    setLoading]    = useState(true);
   const [search,     setSearch]     = useState("");
@@ -883,10 +899,26 @@ function BatchesView({ toast, onSelect }) {
                 {pill(`Class of ${b.graduation_year}`, C.blue, C.blueBg)}
               </div>
               <div className="mb-2.5 flex flex-wrap gap-1.5">
-                {pill(`${b.sections_count ?? 0} sections`, C.purple, C.purpleBg)}
-                {pill(`${b.students_count ?? 0} students`, C.green, C.greenBg)}
+                <PillButton
+                  label={`${b.sections_count ?? 0} sections`}
+                  color={C.purple}
+                  bg={C.purpleBg}
+                  onClick={e => { e.stopPropagation(); onSelect(b); }}
+                />
+                <PillButton
+                  label={`${b.students_count ?? 0} students`}
+                  color={C.green}
+                  bg={C.greenBg}
+                  onClick={e => { e.stopPropagation(); onViewStudents(b); }}
+                />
               </div>
-              <div className="text-xs font-bold text-indigo-600">Click to manage sections →</div>
+              <button
+                type="button"
+                onClick={e => { e.stopPropagation(); onSelect(b); }}
+                className="bg-transparent p-0 text-left text-xs font-bold text-indigo-600 hover:text-indigo-700"
+              >
+                Click to manage sections →
+              </button>
             </Card>
           ))}
         </CardGrid>
@@ -1134,18 +1166,36 @@ function StudentsView({ batch, section, toast }) {
   const [importing,  setImporting]  = useState(false);
   const fileRef = useRef(null);
   const timer   = useRef(null);
+  const isBatchWide = !section?.id;
 
   const load = useCallback(async (q = search) => {
     setLoading(true);
     try {
-      const res = await api.get(`/admin/sections/${section.id}/students`, { params: { search: q, per_page: 200 } });
-      const raw = res.data;
-      setStudents(Array.isArray(raw) ? raw : Array.isArray(raw.data) ? raw.data : []);
+      if (isBatchWide) {
+        const res = await api.get(`/admin/batches/${batch.id}`);
+        const rawBatch = res.data.data ?? res.data.batch ?? res.data;
+        const allStudents = (rawBatch.sections ?? []).flatMap(sec =>
+          (sec.students ?? []).map(student => ({ ...student, _section: sec }))
+        );
+        const term = q.trim().toLowerCase();
+        setStudents(term
+          ? allStudents.filter(s =>
+              `${s.first_name ?? ""} ${s.last_name ?? ""} ${s.middle_name ?? ""} ${s.student_no ?? ""} ${s.email ?? ""} ${s._section?.name ?? ""}`
+                .toLowerCase()
+                .includes(term)
+            )
+          : allStudents
+        );
+      } else {
+        const res = await api.get(`/admin/sections/${section.id}/students`, { params: { search: q, per_page: 200 } });
+        const raw = res.data;
+        setStudents(Array.isArray(raw) ? raw : Array.isArray(raw.data) ? raw.data : []);
+      }
     } catch { toast("Failed to load students.", "error"); setStudents([]); }
     finally { setLoading(false); }
-  }, [section.id, search]);
+  }, [batch.id, isBatchWide, section?.id, search]);
 
-  useEffect(() => { load(); }, [section.id]);
+  useEffect(() => { load(); }, [batch.id, section?.id]);
 
   const handleSearch = v => {
     setSearch(v);
@@ -1156,7 +1206,8 @@ function StudentsView({ batch, section, toast }) {
   const doDelete = async () => {
     setDelLoading(true);
     try {
-      await api.delete(`/admin/sections/${section.id}/students/${delTarget.id}`);
+      const targetSectionId = section?.id ?? delTarget?._section?.id ?? delTarget?.section_id;
+      await api.delete(`/admin/sections/${targetSectionId}/students/${delTarget.id}`);
       toast("Student removed."); setDelTarget(null); load();
     } catch (err) {
       toast(err.response?.data?.message ?? "Remove failed.", "error");
@@ -1184,17 +1235,19 @@ function StudentsView({ batch, section, toast }) {
   };
 
   const withHonors = students.filter(s => s.honors).length;
-  const color = colorOf(section.department);
-  const bg    = bgOf(section.department);
+  const color = colorOf(section?.department);
+  const bg    = bgOf(section?.department);
 
   return (
     <>
       {/* Section info banner */}
       <div style={{ borderLeftColor: color }} className="mb-4.5 flex flex-wrap items-center gap-2.5 rounded-xl border border-slate-200 border-l-4 bg-white px-4.5 py-3.5 shadow-sm">
         <div className="min-w-[200px] flex-1">
-          <div className="text-base font-extrabold text-slate-800">{section.name}</div>
+          <div className="text-base font-extrabold text-slate-800">{section?.name ?? `${batch.name} Students`}</div>
           <div className="mt-0.5 text-xs text-slate-500">
-            {batch.name} · {section.department} · {section.course}
+            {section
+              ? `${batch.name} · ${section.department} · ${section.course}`
+              : `Class of ${batch.graduation_year} · All sections`}
           </div>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -1207,16 +1260,16 @@ function StudentsView({ batch, section, toast }) {
       <div className="mb-3.5 flex flex-wrap items-center gap-2.5">
         <input value={search} onChange={e => handleSearch(e.target.value)}
           placeholder="Search students…" className="w-full max-w-[360px] min-w-[200px] flex-1 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-800 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-200" />
-        <input type="file" accept=".csv" ref={fileRef} onChange={handleCSV} style={{ display: "none" }} />
-        <Btn variant="ghost" onClick={() => fileRef.current?.click()} disabled={importing}>
+        {!isBatchWide && <input type="file" accept=".csv" ref={fileRef} onChange={handleCSV} style={{ display: "none" }} />}
+        {!isBatchWide && <Btn variant="ghost" onClick={() => fileRef.current?.click()} disabled={importing}>
           {importing ? "Importing…" : "⬆ Import CSV"}
-        </Btn>
-        <Btn onClick={() => setModal({})}>+ Add Student</Btn>
+        </Btn>}
+        {!isBatchWide && <Btn onClick={() => setModal({})}>+ Add Student</Btn>}
       </div>
 
-      <div className="mb-3.5 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs leading-relaxed text-blue-800">
+      {!isBatchWide && <div className="mb-3.5 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs leading-relaxed text-blue-800">
         CSV columns: <strong>first_name, last_name, middle_name, student_no, email, honors</strong> — first row is the header.
-      </div>
+      </div>}
 
       {/* Table */}
       <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
@@ -1224,7 +1277,7 @@ function StudentsView({ batch, section, toast }) {
           <table className="w-full border-collapse">
             <thead>
               <tr className="border-b border-slate-200 bg-slate-50">
-                {["#", "Student", "Student No.", "Email", "Honors", "Actions"].map(h => (
+                {["#", "Student", ...(isBatchWide ? ["Section"] : []), "Student No.", "Email", "Honors", "Actions"].map(h => (
                   <th key={h} className="whitespace-nowrap px-3.5 py-2.5 text-left text-xs font-bold uppercase tracking-[0.05em] text-slate-500">{h}</th>
                 ))}
               </tr>
@@ -1236,7 +1289,7 @@ function StudentsView({ batch, section, toast }) {
                       <td key={j} className="border-b border-slate-200 px-3.5 py-3"><Skeleton w={w} h={13} /></td>
                     ))}</tr>
                   ))
-                : students.length === 0 ? <tr><td colSpan={6} className="px-5 py-12 text-center text-slate-500">
+                : students.length === 0 ? <tr><td colSpan={isBatchWide ? 7 : 6} className="px-5 py-12 text-center text-slate-500">
                       <div className="mb-2 text-4xl font-black text-slate-300">STU</div>
                       <div className="mb-1.5 font-bold text-slate-800">No students yet</div>
                       <div className="text-sm">Add students manually or import a CSV file.</div>
@@ -1260,6 +1313,11 @@ function StudentsView({ batch, section, toast }) {
                             </div>
                           </div>
                         </td>
+                        {isBatchWide && (
+                          <td className="border-b border-slate-200 px-3.5 py-3 text-sm text-slate-500">
+                            {s._section?.name ?? "—"}
+                          </td>
+                        )}
                         <td className="border-b border-slate-200 px-3.5 py-3 font-mono text-sm text-slate-800">{s.student_no ?? "—"}</td>
                         <td className="border-b border-slate-200 px-3.5 py-3 text-sm text-slate-500">{s.email ?? "—"}</td>
                         <td className="border-b border-slate-200 px-3.5 py-3">
@@ -1287,7 +1345,7 @@ function StudentsView({ batch, section, toast }) {
       {modal !== null && (
         <StudentModal
           student={Object.keys(modal).length ? modal : null}
-          sectionId={section.id}
+          sectionId={section?.id ?? modal?._section?.id ?? modal?.section_id}
           onClose={() => setModal(null)}
           onSaved={() => { setModal(null); load(); }}
           toast={toast}
@@ -1295,7 +1353,7 @@ function StudentsView({ batch, section, toast }) {
       )}
       <ConfirmModal
         open={!!delTarget} title="Remove Student"
-        message={`Remove "${delTarget?.first_name} ${delTarget?.last_name}" from ${section.name}?`}
+        message={`Remove "${delTarget?.first_name} ${delTarget?.last_name}" from ${section?.name ?? delTarget?._section?.name ?? batch.name}?`}
         onConfirm={doDelete} onCancel={() => setDelTarget(null)} loading={delLoading}
       />
     </>
@@ -1306,22 +1364,99 @@ function StudentsView({ batch, section, toast }) {
 // ROOT PAGE
 // ═══════════════════════════════════════════════════════════════════
 export default function BatchSectionStudentsPage() {
-  const [view,    setView]    = useState("batches");
+  const [searchParams, setSearchParams] = useSearchParams();
+  const initialView = ["batches", "sections", "students"].includes(searchParams.get("tab"))
+    ? searchParams.get("tab")
+    : "batches";
+  const [view,    setView]    = useState(initialView);
   const [batch,   setBatch]   = useState(null);
   const [section, setSection] = useState(null);
+  const [routeLoading, setRouteLoading] = useState(false);
   const { toasts, push: toast } = useToast();
 
+  const updateRoute = useCallback((nextView, nextBatch = null, nextSection = null, replace = false) => {
+    const params = {};
+    if (nextView && nextView !== "batches") params.tab = nextView;
+    if (nextBatch?.id) params.batch_id = String(nextBatch.id);
+    if (nextSection?.id) params.section_id = String(nextSection.id);
+    setSearchParams(params, { replace });
+  }, [setSearchParams]);
+
   const go = {
-    batches:  ()  => { setView("batches");  setBatch(null); setSection(null); },
-    sections: (b) => { setBatch(b);         setView("sections"); setSection(null); },
-    students: (s) => { setSection(s);       setView("students"); },
+    batches:  ()  => { setView("batches");  setBatch(null); setSection(null); updateRoute("batches"); },
+    sections: (b) => { setBatch(b);         setView("sections"); setSection(null); updateRoute("sections", b); },
+    batchStudents: (b) => { setBatch(b);    setView("students"); setSection(null); updateRoute("students", b); },
+    students: (s) => { setSection(s);       setView("students"); updateRoute("students", batch, s); },
   };
+
+  useEffect(() => {
+    const tab = ["batches", "sections", "students"].includes(searchParams.get("tab"))
+      ? searchParams.get("tab")
+      : "batches";
+    const batchId = searchParams.get("batch_id");
+    const sectionId = searchParams.get("section_id");
+
+    if (tab === "batches" || !batchId) {
+      setView("batches");
+      setBatch(null);
+      setSection(null);
+      return;
+    }
+
+    const loadRouteSection = async () => {
+      if (!sectionId) {
+        setSection(null);
+        return;
+      }
+      try {
+        const res = await api.get(`/admin/sections/${sectionId}`);
+        setSection(res.data.data ?? res.data.section ?? res.data);
+      } catch {
+        setSection(null);
+      }
+    };
+
+    const loadRouteBatch = async () => {
+      if (batch && String(batch.id) === String(batchId)) {
+        setView(tab);
+        if (tab === "students") await loadRouteSection();
+        else setSection(null);
+        return;
+      }
+
+      setRouteLoading(true);
+      try {
+        const res = await api.get(`/admin/batches/${batchId}`);
+        const nextBatch = res.data.data ?? res.data.batch ?? res.data;
+        setBatch(nextBatch);
+        setView(tab);
+        if (tab === "students") await loadRouteSection();
+        else setSection(null);
+      } catch {
+        toast("Failed to open selected batch.", "error");
+        setView("batches");
+        setBatch(null);
+        setSection(null);
+        updateRoute("batches", null, null, true);
+      } finally {
+        setRouteLoading(false);
+      }
+    };
+
+    loadRouteBatch();
+  }, [searchParams, batch, toast, updateRoute]);
 
   const crumbs = [
     { label: "Batches", onClick: view !== "batches" ? go.batches : null },
     ...(batch   ? [{ label: batch.name,   onClick: view !== "sections" ? () => go.sections(batch) : null }] : []),
-    ...(section ? [{ label: section.name }] : []),
+    ...(view === "students" ? [{ label: section?.name ?? "Students" }] : []),
   ];
+
+  const handleStepSelect = key => {
+    if (key === "batches") go.batches();
+    if (key === "sections") batch ? go.sections(batch) : go.batches();
+    if (key === "students") batch ? go.batchStudents(batch) : go.batches();
+  };
 
   return (
     <>
@@ -1343,13 +1478,18 @@ export default function BatchSectionStudentsPage() {
           </p>
         </div>
 
-        <StepBar current={view} />
+        <StepBar current={view} onSelect={handleStepSelect} />
         {crumbs.length > 1 && <Breadcrumb crumbs={crumbs} />}
 
         <div key={view} className="animate-[fadeUp_.2s_ease]">
-          {view === "batches"  && <BatchesView  toast={toast} onSelect={go.sections} />}
+          {routeLoading && (
+            <div className="mb-4 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-500">
+              Loading selected batch...
+            </div>
+          )}
+          {view === "batches"  && <BatchesView  toast={toast} onSelect={go.sections} onViewStudents={go.batchStudents} />}
           {view === "sections" && batch         && <SectionsView batch={batch} toast={toast} onSelect={go.students} />}
-          {view === "students" && batch && section && <StudentsView batch={batch} section={section} toast={toast} />}
+          {view === "students" && batch          && <StudentsView batch={batch} section={section} toast={toast} />}
         </div>
       </div>
 

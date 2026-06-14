@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { transcriptsApi } from '@/api/yearbook.api';
 import Navbar from '@/components/layout/Navbar';
 import Footer from '@/components/layout/Footer';
+import LoadingSkeleton from '@/components/ui/LoadingSkeleton';
 
 // ── API helpers (add these to your yearbook.api.js) ──────────────────────────
 // transcriptsApi.list(params)              → GET /api/transcripts
@@ -337,7 +338,7 @@ export default function TranscriptsPage() {
         )}
       </header>
 
-      <main style={{ maxWidth: '900px', margin: '0 auto', padding: '60px 20px 100px', width: '100%' }}>
+      <main style={{ flex: 1, maxWidth: '900px', margin: '0 auto', padding: '60px 20px 100px', width: '100%' }}>
 
         {/* ── Upload Panel ── */}
         <div className="bg-white mb-8"
@@ -431,10 +432,7 @@ export default function TranscriptsPage() {
         </div>
 
         {loading ? (
-          <div className="flex flex-col items-center py-20" style={{ color: '#94a3b8' }}>
-            <i className="fas fa-spinner fa-spin text-4xl mb-4" style={{ color: '#3f51b5' }} />
-            <p className="text-sm">Loading transcripts…</p>
-          </div>
+          <LoadingSkeleton variant="row" count={5} gridClassName="space-y-4" />
         ) : transcripts.length === 0 ? (
           <div className="text-center bg-white py-20 px-8"
             style={{ borderRadius: 24, boxShadow: '0 10px 25px rgba(0,0,0,0.03)' }}>

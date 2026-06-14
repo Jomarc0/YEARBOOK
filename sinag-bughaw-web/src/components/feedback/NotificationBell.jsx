@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { notificationsApi } from '@/api/yearbook.api';
 import { imageUrl } from '@/utils/imageUrl';
+import LoadingSkeleton from '@/components/ui/LoadingSkeleton';
 
 function timeAgo(dateStr) {
   const diff = Math.floor((Date.now() - new Date(dateStr)) / 1000);
@@ -238,9 +239,8 @@ export default function NotificationBell() {
 
           <div className="max-h-[380px] overflow-y-auto">
             {loading ? (
-              <div className="flex flex-col items-center justify-center gap-3 py-10">
-                <div className="h-6 w-6 animate-spin rounded-full border-2 border-indigo-100 border-t-[#3f51b5]" />
-                <p className="m-0 text-xs text-slate-400">Loading...</p>
+              <div className="p-3">
+                <LoadingSkeleton variant="row" count={3} gridClassName="space-y-3" />
               </div>
             ) : notifications.length === 0 ? (
               <div className="flex flex-col items-center justify-center gap-3 py-12 text-center">

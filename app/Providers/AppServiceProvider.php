@@ -8,7 +8,7 @@ use App\Models\Photo;
 use App\Observers\PhotoObserver;
 use App\Policies\PhotoPolicy;
 use App\Services\AI\AwsRekognitionFaceRecognition;
-use App\Services\Notification\PHPMailerService;
+use App\Services\Notification\BrevoMailService;
 use App\Services\Storage\CloudinaryService;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\ServiceProvider;
@@ -44,8 +44,8 @@ class AppServiceProvider extends ServiceProvider
             return new CloudinaryService();
         });
 
-        // PHPMailer 
-        $this->app->singleton(PHPMailerService::class, fn() => new PHPMailerService());
+        // Brevo email API
+        $this->app->singleton(BrevoMailService::class, fn() => new BrevoMailService());
 
         // WatermarkService (yearbook PDF watermarking) 
         if (class_exists(\App\Services\Yearbook\WatermarkService::class)) {

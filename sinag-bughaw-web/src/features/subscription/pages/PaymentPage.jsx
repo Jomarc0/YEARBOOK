@@ -115,7 +115,7 @@ export default function PaymentPage() {
         </p>
       </header>
 
-      <main style={{ maxWidth: '1050px', margin: '0 auto', padding: '60px 20px 100px', width: '100%' }}>
+      <main style={{ flex: 1, maxWidth: '1050px', margin: '0 auto', padding: '60px 20px 100px', width: '100%' }}>
 
         {/* Active subscription banner */}
         {!loading && (status?.is_premium || status?.is_standard) && (

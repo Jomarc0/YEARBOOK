@@ -12,6 +12,7 @@ use App\Models\TaggedPhoto;
 use App\Models\User;
 use App\Models\UserNotification;
 use App\Notifications\PhotoTaggedNotification;
+use App\Services\Security\PasswordHistoryService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
@@ -257,7 +258,10 @@ class StudentController extends Controller
         ]);
 
         $user = $request->user();
+        app(PasswordHistoryService::class)->assertNotRecentlyUsed($user, (string) $request->password);
+        $previousHash = $user->password;
         $user->update(['password' => Hash::make($request->password)]);
+        app(PasswordHistoryService::class)->remember($user, $previousHash);
 
         AuditLog::record($request, 'API Update Password', 'Changed password for ' . $user->email);
         $this->notifyProfileUpdate($user, 'Your password was updated successfully.');
@@ -312,12 +316,20 @@ class StudentController extends Controller
         $user = User::findOrFail($id);
 
         $photos = $user->taggedPhotos()
-            ->with('uploader:id,name')
+            ->with([
+                'uploader:id,name',
+                'photo.media:id,photo_id,file_path,resource_type,sort_order',
+                'graduationPhoto:id,file_path,resource_type',
+            ])
             ->orderByDesc('created_at')
             ->get()
             ->map(fn($p) => [
                 'id'          => $p->id,
-                'photo_url'   => $p->photo_url,
+                'photo_id'    => $p->photo_id,
+                'photo_path'  => $this->taggedPhotoPath($p),
+                'photo_url'   => $this->taggedPhotoUrl($p),
+                'file_path'   => $this->taggedPhotoPath($p),
+                'image_url'   => $this->taggedPhotoUrl($p),
                 'caption'     => $p->caption,
                 'status'      => $p->status,
                 'uploaded_by' => $p->uploader
@@ -431,7 +443,10 @@ class StudentController extends Controller
             'message' => 'Photo tagged successfully.',
             'data'    => [
                 'id'          => $photo->id,
+                'photo_path'  => $photo->photo_path,
                 'photo_url'   => $photo->photo_url,
+                'file_path'   => $photo->photo_path,
+                'image_url'   => $photo->photo_url,
                 'caption'     => $photo->caption,
                 'uploaded_by' => [
                     'id'   => $request->user()->id,
@@ -440,6 +455,26 @@ class StudentController extends Controller
                 'created_at'  => $photo->created_at->diffForHumans(),
             ],
         ], 201);
+    }
+
+    private function taggedPhotoPath(TaggedPhoto $tag): string
+    {
+        return $tag->photo_path
+            ?: ($tag->photo?->media?->first()?->file_path
+                ?: ($tag->photo?->file_path ?: ($tag->graduationPhoto?->file_path ?: '')));
+    }
+
+    private function taggedPhotoUrl(TaggedPhoto $tag): string
+    {
+        $path = $this->taggedPhotoPath($tag);
+
+        if ($path === '') {
+            return '';
+        }
+
+        return str_starts_with($path, 'http')
+            ? $path
+            : asset('storage/' . ltrim($path, '/'));
     }
 
     // Tagged photos 

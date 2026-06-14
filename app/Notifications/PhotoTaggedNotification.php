@@ -4,7 +4,7 @@ namespace App\Notifications;
 
 use App\Jobs\SendPushNotification;
 use App\Models\User;
-use App\Services\Notification\PHPMailerService;
+use App\Services\Notification\BrevoMailService;
 use Illuminate\Bus\Queueable;
 use Illuminate\Notifications\Notification;
 use Illuminate\Support\Facades\Log;
@@ -61,7 +61,7 @@ class PhotoTaggedNotification extends Notification
 
         // 2. Email notification (only if the user has an email)
         if ($tagged->email) {
-            $sent = app(PHPMailerService::class)->sendTaggedNotification(
+            $sent = app(BrevoMailService::class)->sendTaggedNotification(
                 $tagged->email,
                 $tagged->name ?? $tagged->email,
                 $taggerName,

@@ -10,9 +10,13 @@ use Illuminate\Http\Request;
 
 class FacultyController extends Controller
 {
-    private Cloudinary $cloudinary;
+    private ?Cloudinary $cloudinary = null;
 
     public function __construct()
+    {
+    }
+
+    private function bootCloudinary(): ?Cloudinary
     {
         Configuration::instance([
             'cloud' => [
@@ -23,7 +27,11 @@ class FacultyController extends Controller
             'url' => ['secure' => true],
         ]);
 
-        $this->cloudinary = new Cloudinary();
+        if (! config('cloudinary.cloud_name') || ! config('cloudinary.api_key') || ! config('cloudinary.api_secret')) {
+            return null;
+        }
+
+        return $this->cloudinary ??= new Cloudinary();
     }
 
     public function index()
@@ -93,7 +101,12 @@ class FacultyController extends Controller
         }
 
         try {
-            return (string) $this->cloudinary->image($image)->toUrl();
+            $cloudinary = $this->bootCloudinary();
+            if (! $cloudinary) {
+                return null;
+            }
+
+            return (string) $cloudinary->image($image)->toUrl();
         } catch (\Throwable $e) {
             \Illuminate\Support\Facades\Log::warning('FacultyController: could not resolve image URL', [
                 'image' => $image,

@@ -3,6 +3,7 @@ import DepartmentSection from '../components/DepartmentSection';
 import Navbar from '@/components/layout/Navbar';
 import Footer from '@/components/layout/Footer';
 import FilterTabStrip from '@/components/ui/FilterTabStrip';
+import LoadingSkeleton from '@/components/ui/LoadingSkeleton';
 
 function SearchIcon() {
   return (
@@ -61,7 +62,7 @@ export default function FacultyPage() {
     <div className="flex min-h-screen flex-col bg-[#f4f7fe] font-sans text-[#1d2b4b]">
       <Navbar />
 
-      <header className="min-h-[140px] bg-gradient-to-br from-[#1d2b4b] to-[#2a3d66] px-5 py-8 text-white sm:px-[8%]">
+      <header className="min-h-[140px] bg-gradient-to-br from-[#1d2b4b] to-[#2a3d66] px-5 py-8 text-white sm:px-[8%] rounded-b-[48px]">
         <div className="mx-auto flex max-w-[1180px] flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
           <div className="max-w-xl">
             <span className="inline-flex items-center gap-2 rounded-full border border-[#fdb813]/30 bg-[#fdb813]/15 px-3 py-1 text-[10px] font-black uppercase tracking-widest text-[#fdb813]">
@@ -141,10 +142,7 @@ export default function FacultyPage() {
 
       <main className="mx-auto w-full max-w-[1180px] flex-1 px-5 py-8 sm:px-8">
         {loading ? (
-          <div className="flex flex-col items-center justify-center gap-3 py-20 text-slate-400" aria-live="polite" aria-busy="true">
-            <div className="h-9 w-9 animate-spin rounded-full border-2 border-slate-200 border-t-[#1d2b4b]" />
-            <span className="text-sm font-semibold">Loading faculty...</span>
-          </div>
+          <LoadingSkeleton variant="card" count={6} />
         ) : error ? (
           <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700" role="alert">
             {error}

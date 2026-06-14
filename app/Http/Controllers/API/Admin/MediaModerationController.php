@@ -1354,6 +1354,63 @@ class MediaModerationController extends Controller
 
     // MEDIA LIBRARY — Videos
 
+    public function updatePhotoVisibility(Request $request, int $id): JsonResponse
+    {
+        $data = $request->validate([
+            'visibility' => ['required', 'in:public,batchmates,friends,private'],
+        ]);
+
+        $visibility = $this->normalizeGalleryVisibility($data['visibility']);
+
+        if ($media = GalleryMedia::with('gallery')->find($id)) {
+            $gallery = $media->gallery;
+
+            if (! $gallery) {
+                return response()->json(['message' => 'Gallery record not found.'], 404);
+            }
+
+            $gallery->update(['visibility' => $visibility]);
+
+            return response()->json([
+                'message' => 'Photo visibility updated.',
+                'data' => [
+                    'id' => $media->id,
+                    'gallery_id' => $gallery->id,
+                    'visibility' => $gallery->visibility,
+                ],
+            ]);
+        }
+
+        if ($gallery = Gallery::find($id)) {
+            $gallery->update(['visibility' => $visibility]);
+
+            return response()->json([
+                'message' => 'Photo visibility updated.',
+                'data' => [
+                    'id' => $gallery->id,
+                    'gallery_id' => $gallery->id,
+                    'visibility' => $gallery->visibility,
+                ],
+            ]);
+        }
+
+        $photo = Photo::findOrFail($id);
+        $photo->update(['visibility' => $visibility]);
+
+        return response()->json([
+            'message' => 'Photo visibility updated.',
+            'data' => [
+                'id' => $photo->id,
+                'visibility' => $photo->visibility,
+            ],
+        ]);
+    }
+
+    private function normalizeGalleryVisibility(?string $visibility): string
+    {
+        return $visibility === 'batchmates' ? 'friends' : ($visibility ?: 'public');
+    }
+
     public function mediaVideos(Request $request): JsonResponse
     {
         $source = $request->get('source', 'all');

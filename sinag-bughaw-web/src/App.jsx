@@ -6,6 +6,8 @@ import { AppConfigProvider, useAppConfig } from '@/features/platform/AppConfigPr
 import FeatureRoute from '@/features/platform/FeatureRoute';
 import MaintenancePage from '@/pages/MaintenancePage';
 import AnnouncementsPage from '@/pages/AnnouncementsPage';
+import PrivacyScreen from '@/components/privacy/PrivacyScreen';
+import LoadingSkeleton from '@/components/ui/LoadingSkeleton';
 
 // ── Auth ──────────────────────────────────────────────────────────────────────
 import LandingPage        from '@/pages/LandingPage';
@@ -27,10 +29,6 @@ import FlipbookPage          from '@/features/yearbook/pages/FlipbookPage';
 import YearbookHomePage      from '@/features/yearbook/pages/YearbookHomePage';
 import FlipbookViewerPage    from '@/features/yearbook/pages/FlipbookViewerPage'; // ← FIXED (was pointing to FlipbookViewer component directly)
 import GalleryPage           from '@/features/yearbook/pages/GalleryPage';
-import GalleryShowPage       from '@/features/yearbook/pages/GalleryShowPage';
-import GraduationPage        from '@/features/yearbook/pages/GraduationPage';
-import GraduationArchivePage from '@/features/yearbook/pages/GraduationArchivePage';
-import GraduationSpeechesPage from '@/features/yearbook/pages/GraduationSpeechesPage';
 
 // ── Batch ─────────────────────────────────────────────────────────────────────
 import BatchmatesPage          from '@/features/batch/pages/BatchmatesPage';
@@ -110,20 +108,6 @@ function MaintenanceLayout() {
   return <Outlet />;
 }
 
-function SubscriberRoute({ children }) {
-  const { user, loading }              = useAuth();
-  const { isOn, loading: configLoading } = useAppConfig();
-  if (loading || configLoading) return null;
-  if (!user) return <Navigate to="/login" replace />;
-  if (!isOn('enable_premium_subscription')) {
-    return <ConsentWrapper>{children}</ConsentWrapper>;
-  }
-  if (!(user.is_subscribed || user.is_premium || user.tier === 'standard' || user.tier === 'premium')) {
-    return <Navigate to="/premium" replace />;
-  }
-  return <ConsentWrapper>{children}</ConsentWrapper>;
-}
-
 function OwnProfileRoute({ children }) {
   const { user, loading } = useAuth();
   const { id }            = useParams();
@@ -178,12 +162,8 @@ export default function App() {
 
               {/* ── Gallery ────────────────────────────────────────────── */}
               <Route path="/gallery"     element={<ProtectedRoute><GalleryPage /></ProtectedRoute>} />
-              <Route path="/gallery/:id" element={<ProtectedRoute><GalleryShowPage /></ProtectedRoute>} />
 
               {/* ── Graduation ─────────────────────────────────────────── */}
-              <Route path="/graduation"             element={<ProtectedRoute><GraduationPage /></ProtectedRoute>} />
-              <Route path="/graduation/archive/:id" element={<ProtectedRoute><GraduationArchivePage /></ProtectedRoute>} />
-              <Route path="/graduation/speeches"    element={<SubscriberRoute><GraduationSpeechesPage /></SubscriberRoute>} />
 
               {/* ── Yearbook / Flipbook ─────────────────────────────────── */}
               <Route
@@ -286,6 +266,7 @@ export default function App() {
 
             </Route>
           </Routes>
+          <PrivacyScreen />
         </BrowserRouter>
       </AuthProvider>
     </AppConfigProvider>
@@ -303,10 +284,9 @@ function AnalyticsPageWrapper() {
 
 function FullPageSpinner() {
   return (
-    <div className="min-h-screen flex items-center justify-center bg-[#f4f7fe]">
-      <div>
-        <div className="w-10 h-10 rounded-full border-4 border-indigo-100 border-t-[#3f51b5] mx-auto mb-3 animate-spin" />
-        <p className="text-sm text-center text-slate-400">Loading...</p>
+    <div className="min-h-screen bg-[#f4f7fe] px-4 py-8">
+      <div className="mx-auto w-full max-w-3xl">
+        <LoadingSkeleton variant="page" count={1} />
       </div>
     </div>
   );

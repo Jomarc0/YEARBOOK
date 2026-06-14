@@ -7,6 +7,7 @@ import { faceApi } from '@/api/gallery.api';
 import FaceSearchButton from '@/components/ui/FaceSearchButton';
 import Navbar from '@/components/layout/Navbar';
 import Footer from '@/components/layout/Footer';
+import LoadingSkeleton from '@/components/ui/LoadingSkeleton';
 import { imageUrl } from '@/utils/imageUrl';
 
 // ── Constants ──────────────────────────────────────────────────────────────────
@@ -20,20 +21,11 @@ const VIEW_MODES = [
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
-/**
- * Resolve display name from a Student model record.
- * BatchService adds a computed `name` field, but we fall back to
- * first_name + last_name in case it's missing.
- */
 function studentName(s) {
   if (s.name) return s.name;
   return `${s.first_name ?? ''} ${s.last_name ?? ''}`.trim() || 'Unknown';
 }
 
-/**
- * Resolve photo URL from a Student model record.
- * BatchService normalises to profile_picture but we also accept photo / photo_url.
- */
 function studentPhoto(s) {
   return s.profile_picture ?? s.photo_url ?? s.photo ?? null;
 }
@@ -103,7 +95,10 @@ function GenerateYearbookButton({ batchId, department, course, label }) {
       const params = new URLSearchParams();
       if (department) params.set('department', department);
       if (course) params.set('course', course);
-      navigate(resolvedBatchId ? `/yearbook/${resolvedBatchId}/view${params.toString() ? `?${params.toString()}` : ''}` : `/yearbook?year=${batchId}`);
+      navigate(resolvedBatchId
+        ? `/yearbook/${resolvedBatchId}/view${params.toString() ? `?${params.toString()}` : ''}`
+        : `/yearbook?year=${batchId}`
+      );
     } catch {
       const params = new URLSearchParams({ year: String(batchId) });
       if (department) params.set('department', department);
@@ -119,7 +114,7 @@ function GenerateYearbookButton({ batchId, department, course, label }) {
       onClick={openYearbook}
       disabled={opening}
       title={`Open yearbook for Batch ${batchId}`}
-      className="inline-flex items-center gap-2 shrink-0 px-4 py-2 rounded-xl border border-amber-400/50 text-[0.72rem] font-extrabold tracking-wide whitespace-nowrap bg-amber-400/10 text-amber-400 hover:bg-amber-400 hover:text-[#1d2b4b] hover:border-amber-400 hover:-translate-y-px hover:shadow-[0_6px_20px_rgba(253,184,19,0.3)] transition-all duration-200"
+      className="inline-flex items-center gap-2 shrink-0 px-4 py-2 rounded-xl border border-amber-400/50 text-[0.72rem] font-bold tracking-wide whitespace-nowrap bg-amber-400/10 text-amber-400 hover:bg-amber-400 hover:text-[#1d2b4b] hover:border-amber-400 hover:-translate-y-px hover:shadow-[0_6px_20px_rgba(253,184,19,0.3)] transition-all duration-200"
     >
       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
         <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>
@@ -185,17 +180,14 @@ function FaceResultBanner({ matches, onClear }) {
             />
           ))}
         </div>
-        <span className="text-[0.8rem] font-bold text-amber-700">
+        <span className="text-[0.8rem] font-semibold text-amber-700">
           <i className="fas fa-camera mr-1 text-amber-400" />
           {matches.length} total face match{matches.length > 1 ? 'es' : ''} found
-          {/*
-          {matches.length} face match{matches.length > 1 ? 'es' : ''} — showing matched students only
-          */}
         </span>
       </div>
       <button
         onClick={onClear}
-        className="bg-transparent border border-amber-400/40 rounded-lg text-amber-700 cursor-pointer text-xs font-bold px-2.5 py-1 hover:bg-amber-400/20 transition-colors"
+        className="bg-transparent border border-amber-400/40 rounded-lg text-amber-700 cursor-pointer text-xs font-semibold px-2.5 py-1 hover:bg-amber-400/20 transition-colors"
       >
         <i className="fas fa-times mr-1" /> Clear
       </button>
@@ -211,13 +203,13 @@ function UpgradeBanner() {
       <div className="flex items-center gap-3">
         <i className="fas fa-lock text-xl text-amber-400" />
         <div>
-          <p className="font-extrabold text-sm m-0">Unlock Full Discovery</p>
-          <p className="text-xs m-0 opacity-70">Premium sees all students, full profiles, mottos & contact info.</p>
+          <p className="font-bold text-sm m-0">Unlock Full Discovery</p>
+          <p className="text-xs m-0 opacity-70 font-normal">Premium sees all students, full profiles, mottos & contact info.</p>
         </div>
       </div>
       <Link
         to="/premium"
-        className="no-underline font-bold text-xs px-5 py-3 rounded-xl whitespace-nowrap bg-amber-400 text-[#1d2b4b] hover:bg-amber-300 transition-colors"
+        className="no-underline font-semibold text-xs px-5 py-3 rounded-xl whitespace-nowrap bg-amber-400 text-[#1d2b4b] hover:bg-amber-300 transition-colors"
       >
         Upgrade Now <i className="fas fa-arrow-right ml-1" />
       </Link>
@@ -226,7 +218,6 @@ function UpgradeBanner() {
 }
 
 // ── StudentCard ────────────────────────────────────────────────────────────────
-// Routes to /discover/students/:id which calls the Student model (not User model)
 
 function StudentCard({ student, isPremium, index = 0, isMatched = false, matchSimilarity = null }) {
   const fullName    = studentName(student);
@@ -264,13 +255,13 @@ function StudentCard({ student, isPremium, index = 0, isMatched = false, matchSi
           )}
 
           {student.graduation_year && (
-            <span className="absolute top-2 right-2 text-xs font-bold px-2 py-1 rounded-lg bg-black/50 text-white">
+            <span className="absolute top-2 right-2 text-xs font-semibold px-2 py-1 rounded-lg bg-black/50 text-white">
               '{String(student.graduation_year).slice(-2)}
             </span>
           )}
 
           {isMatched && (
-            <div className="absolute top-2 left-2 flex items-center gap-1 text-[10px] font-black px-2 py-1 rounded-lg bg-amber-400 text-[#1d2b4b]">
+            <div className="absolute top-2 left-2 flex items-center gap-1 text-[10px] font-bold px-2 py-1 rounded-lg bg-amber-400 text-[#1d2b4b]">
               <i className="fas fa-camera" />
               {matchSimilarity != null ? `${matchSimilarity.toFixed(0)}%` : 'Match'}
             </div>
@@ -279,18 +270,18 @@ function StudentCard({ student, isPremium, index = 0, isMatched = false, matchSi
 
         {/* Info */}
         <div className="px-4 pt-3.5 pb-4">
-          <h4 className="font-black truncate m-0 text-[0.9rem] text-[#1d2b4b]">{fullName}</h4>
-          <span className="inline-block text-xs font-bold mt-1 px-2 py-1 rounded-lg bg-indigo-500/10 text-indigo-600">
+          <h4 className="font-bold truncate m-0 text-[0.9rem] text-[#1d2b4b] tracking-tight">{fullName}</h4>
+          <span className="inline-block text-xs font-semibold mt-1 px-2 py-1 rounded-lg bg-indigo-500/10 text-indigo-600">
             {shortCourse}
           </span>
           {studentNum && (
-            <p className="text-xs m-0 mt-1 text-slate-400">{studentNum}</p>
+            <p className="text-xs m-0 mt-1 text-slate-400 font-normal">{studentNum}</p>
           )}
           {isPremium && student.section?.name && (
             <p className="text-xs font-semibold m-0 mt-1 text-indigo-600">Section {student.section.name}</p>
           )}
           {isPremium && student.motto && (
-            <p className="text-xs italic m-0 mt-2 truncate text-slate-500">"{student.motto}"</p>
+            <p className="text-xs italic m-0 mt-2 truncate text-slate-500 font-normal">"{student.motto}"</p>
           )}
         </div>
       </div>
@@ -309,17 +300,14 @@ function StudentGrid({
   faceMatches = [],
 }) {
   if (loading) return (
-    <div className="flex flex-col items-center justify-center py-24 text-slate-400">
-      <i className="fas fa-spinner fa-spin text-4xl mb-4 text-indigo-600" />
-      <p className="text-sm">Loading…</p>
-    </div>
+    <LoadingSkeleton variant="card" count={8} />
   );
 
   if (!students.length) return (
     <div className="text-center py-24 bg-white rounded-3xl shadow-[0_4px_20px_rgba(0,0,0,0.03)]">
       <i className="fas fa-users-slash text-6xl mb-5 block opacity-10 text-[#1d2b4b]" />
-      <h3 className="font-extrabold text-xl mb-2 text-[#1d2b4b]">No Results</h3>
-      <p className="text-sm text-slate-400">{emptyMsg}</p>
+      <h3 className="font-bold text-xl mb-2 text-[#1d2b4b]">No Results</h3>
+      <p className="text-sm text-slate-400 font-normal">{emptyMsg}</p>
     </div>
   );
 
@@ -346,7 +334,7 @@ function StudentGrid({
 // ── FiltersPanel ───────────────────────────────────────────────────────────────
 
 function FiltersPanel({ filters, onChange, showCourse = true, showYear = true, showDept = true }) {
-  const cls = "text-xs font-bold px-4 py-2 rounded-xl border-none outline-none bg-slate-100 text-slate-500 cursor-pointer hover:bg-slate-200 transition-colors";
+  const cls = "text-xs font-semibold px-4 py-2 rounded-xl border-none outline-none bg-slate-100 text-slate-500 cursor-pointer hover:bg-slate-200 transition-colors";
 
   return (
     <div className="flex flex-wrap gap-3 items-center">
@@ -397,9 +385,9 @@ function SearchInput({ value, onChange, placeholder, hasMatch, children }) {
         onChange={onChange}
         placeholder={placeholder}
         className={`
-          w-full text-sm rounded-xl outline-none pl-8 pr-12 py-2.5 border text-[#1d2b4b] bg-white
+          w-full text-sm font-normal rounded-xl outline-none pl-8 pr-12 py-2.5 border text-[#1d2b4b] bg-white
           ${hasMatch ? 'border-amber-400' : 'border-slate-200'}
-          focus:border-indigo-400 transition-colors
+          focus:border-indigo-400 transition-colors placeholder:text-slate-400
         `}
       />
       {children}
@@ -410,21 +398,19 @@ function SearchInput({ value, onChange, placeholder, hasMatch, children }) {
 // ── ResultCount ────────────────────────────────────────────────────────────────
 
 function ResultCount({ matchedSize, total, hasQuery, resultsLength, isPremium, suffix = '' }) {
-  if (matchedSize > 0) {
-    return null;
-  }
+  if (matchedSize > 0) return null;
+
   if (hasQuery) {
     return (
-      <p className="text-sm font-semibold mb-4 text-slate-500">
-        {resultsLength} fuzzy match{resultsLength !== 1 ? 'es' : ''}
-        {suffix}
+      <p className="text-sm font-medium mb-4 text-slate-500">
+        {resultsLength} fuzzy match{resultsLength !== 1 ? 'es' : ''} {suffix}
       </p>
     );
   }
   return (
-    <p className="text-sm font-semibold mb-4 text-slate-500">
+    <p className="text-sm font-medium mb-4 text-slate-500">
       {total} {suffix || 'student'}{total !== 1 ? 's' : ''}
-      {!isPremium && <span className="text-slate-400"> · Public profiles only</span>}
+      {!isPremium && <span className="text-slate-400 font-normal"> · Public profiles only</span>}
     </p>
   );
 }
@@ -459,13 +445,12 @@ function BatchView({ isPremium, userYear, userCourse }) {
     clearFace();
   };
 
-  const displayed  = matchedIds.size > 0 ? results.filter(s => matchedIds.has(studentUserId(s))) : results;
-  const activeYear = filters.year ?? userYear ?? null;
+  const displayed    = matchedIds.size > 0 ? results.filter(s => matchedIds.has(studentUserId(s))) : results;
+  const activeYear   = filters.year ?? userYear ?? null;
   const activeCourse = filters.course ?? userCourse ?? null;
 
   return (
     <div>
-      {/* Toolbar */}
       <div className="flex flex-wrap gap-3 items-center mb-6">
         <SearchInput
           value={query}
@@ -490,7 +475,6 @@ function BatchView({ isPremium, userYear, userCourse }) {
 
       <ResultCount
         matchedSize={matchedIds.size}
-        displayedLength={displayed.length}
         total={students.length}
         hasQuery={hasQuery}
         resultsLength={results.length}
@@ -533,10 +517,9 @@ function SectionView({ isPremium }) {
 
   return (
     <div>
-      {/* Toolbar */}
       <div className="flex items-center gap-4 mb-6 flex-wrap">
         {section && (
-          <div className="px-4 py-2 rounded-xl font-bold text-sm bg-indigo-50 text-indigo-600 shrink-0">
+          <div className="px-4 py-2 rounded-xl font-semibold text-sm bg-indigo-50 text-indigo-600 shrink-0">
             <i className="fas fa-layer-group mr-2" />Section {section.name}
           </div>
         )}
@@ -554,7 +537,6 @@ function SectionView({ isPremium }) {
 
       <ResultCount
         matchedSize={matchedIds.size}
-        displayedLength={displayed.length}
         total={students.length}
         hasQuery={hasQuery}
         resultsLength={results.length}
@@ -618,7 +600,6 @@ function SchoolView({ isPremium }) {
 
   return (
     <div>
-      {/* Toolbar */}
       <div className="flex flex-wrap gap-3 items-center mb-4">
         <SearchInput
           value={serverSearch}
@@ -634,9 +615,9 @@ function SchoolView({ isPremium }) {
       {!isPremium && <UpgradeBanner />}
 
       {pagination && (
-        <p className="text-sm font-semibold mb-4 text-slate-500">
+        <p className="text-sm font-medium mb-4 text-slate-500">
           {pagination.total?.toLocaleString()} student{pagination.total !== 1 ? 's' : ''} in the school
-          {!isPremium && <span className="text-slate-400"> · Public profiles only</span>}
+          {!isPremium && <span className="text-slate-400 font-normal"> · Public profiles only</span>}
         </p>
       )}
 
@@ -652,11 +633,10 @@ function SchoolView({ isPremium }) {
       {/* Pagination */}
       {!matchedIds.size && pagination && pagination.last_page > 1 && (
         <div className="flex items-center justify-center gap-3 mt-10 flex-wrap">
-          {/* Prev */}
           <button
             onClick={() => loadPage(pagination.current_page - 1)}
             disabled={pagination.current_page === 1}
-            className="w-10 h-10 rounded-xl font-bold text-sm transition-all border border-slate-200 cursor-pointer bg-white text-slate-500 hover:border-indigo-300 hover:text-indigo-600 disabled:opacity-30 disabled:cursor-not-allowed"
+            className="w-10 h-10 rounded-xl font-semibold text-sm transition-all border border-slate-200 cursor-pointer bg-white text-slate-500 hover:border-indigo-300 hover:text-indigo-600 disabled:opacity-30 disabled:cursor-not-allowed"
           >
             <i className="fas fa-chevron-left text-xs" />
           </button>
@@ -665,7 +645,7 @@ function SchoolView({ isPremium }) {
             <button
               key={page}
               onClick={() => loadPage(page)}
-              className={`w-10 h-10 rounded-xl font-bold text-sm transition-all border cursor-pointer
+              className={`w-10 h-10 rounded-xl font-semibold text-sm transition-all border cursor-pointer
                 ${page === pagination.current_page
                   ? 'bg-[#1d2b4b] text-white border-[#1d2b4b]'
                   : 'bg-white text-slate-500 border-slate-200 hover:border-indigo-300 hover:text-indigo-600'
@@ -676,14 +656,13 @@ function SchoolView({ isPremium }) {
           ))}
 
           {pagination.last_page > 10 && (
-            <span className="text-sm text-slate-400">… {pagination.last_page} pages</span>
+            <span className="text-sm font-normal text-slate-400">… {pagination.last_page} pages</span>
           )}
 
-          {/* Next */}
           <button
             onClick={() => loadPage(pagination.current_page + 1)}
             disabled={pagination.current_page === pagination.last_page}
-            className="w-10 h-10 rounded-xl font-bold text-sm transition-all border border-slate-200 cursor-pointer bg-white text-slate-500 hover:border-indigo-300 hover:text-indigo-600 disabled:opacity-30 disabled:cursor-not-allowed"
+            className="w-10 h-10 rounded-xl font-semibold text-sm transition-all border border-slate-200 cursor-pointer bg-white text-slate-500 hover:border-indigo-300 hover:text-indigo-600 disabled:opacity-30 disabled:cursor-not-allowed"
           >
             <i className="fas fa-chevron-right text-xs" />
           </button>
@@ -760,8 +739,8 @@ function CrossProgramView({ isPremium }) {
             <div key={s.label} className="flex items-center gap-3 px-5 py-3 rounded-2xl bg-white border border-slate-200 shadow-[0_2px_8px_rgba(0,0,0,0.04)]">
               <i className={`fas ${s.icon} text-amber-400 text-[1.1rem]`} />
               <div>
-                <p className="font-black text-lg m-0 text-[#1d2b4b]">{s.val ?? '—'}</p>
-                <p className="text-xs m-0 text-slate-400">{s.label}</p>
+                <p className="font-bold text-lg m-0 text-[#1d2b4b] tracking-tight">{s.val ?? '—'}</p>
+                <p className="text-xs m-0 text-slate-400 font-normal">{s.label}</p>
               </div>
             </div>
           ))}
@@ -777,7 +756,7 @@ function CrossProgramView({ isPremium }) {
           hasMatch={matchedIds.size > 0}
         >
           {query && !matchedIds.size && (
-            <span className="absolute right-11 top-1/2 -translate-y-1/2 text-xs px-2 py-1 rounded-lg font-bold pointer-events-none bg-amber-400 text-[#1d2b4b]">
+            <span className="absolute right-11 top-1/2 -translate-y-1/2 text-xs px-2 py-1 rounded-lg font-semibold pointer-events-none bg-amber-400 text-[#1d2b4b]">
               Fuse.js
             </span>
           )}
@@ -790,15 +769,12 @@ function CrossProgramView({ isPremium }) {
 
       {/* Content */}
       {loading && allStudents.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-24 text-slate-400">
-          <i className="fas fa-spinner fa-spin text-4xl mb-4 text-indigo-600" />
-          <p className="text-sm">Discovering other programs…</p>
-        </div>
+        <LoadingSkeleton variant="card" count={8} />
       ) : Object.keys(grouped).length === 0 ? (
         <div className="text-center py-24 bg-white rounded-3xl shadow-[0_4px_20px_rgba(0,0,0,0.03)]">
           <i className={`fas ${error ? 'fa-triangle-exclamation text-red-400 opacity-70' : 'fa-shuffle text-[#1d2b4b] opacity-10'} text-6xl mb-5 block`} />
-          <h3 className="font-extrabold text-xl mb-2 text-[#1d2b4b]">{error ? 'Could Not Load Students' : 'No Results'}</h3>
-          <p className="text-sm text-slate-400">
+          <h3 className="font-bold text-xl mb-2 text-[#1d2b4b]">{error ? 'Could Not Load Students' : 'No Results'}</h3>
+          <p className="text-sm text-slate-400 font-normal">
             {error
               ? error
               : hasQuery
@@ -810,22 +786,20 @@ function CrossProgramView({ isPremium }) {
         <div className="space-y-10">
           {Object.entries(grouped).map(([course, courseStudents]) => (
             <div key={course}>
-              {/* Course header */}
               <div className="flex items-center gap-3 mb-4 flex-wrap">
                 <div className="w-9 h-9 rounded-xl flex items-center justify-center bg-[#1d2b4b] text-amber-400 text-[0.8rem] shrink-0">
                   <i className="fas fa-book" />
                 </div>
                 <div className="flex-1">
-                  <h3 className="font-black m-0 text-[1rem] text-[#1d2b4b]">
+                  <h3 className="font-bold m-0 text-[1rem] text-[#1d2b4b] tracking-tight">
                     {COURSE_LABELS[course] ?? course}
                   </h3>
-                  <p className="text-xs m-0 text-slate-400">
+                  <p className="text-xs m-0 text-slate-400 font-normal">
                     {courseStudents.length} student{courseStudents.length !== 1 ? 's' : ''} · {course}
                   </p>
                 </div>
               </div>
 
-              {/* Student grid for this course */}
               <div className="grid gap-[18px]" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(185px, 1fr))' }}>
                 {courseStudents.map((s, i) => {
                   const userId = studentUserId(s);
@@ -853,7 +827,7 @@ function CrossProgramView({ isPremium }) {
           <button
             onClick={loadMore}
             disabled={loading}
-            className="inline-flex items-center gap-2 font-bold text-sm px-8 py-3 rounded-xl bg-[#1d2b4b] text-white border-none cursor-pointer transition-all disabled:opacity-60 hover:bg-[#253563] hover:-translate-y-px"
+            className="inline-flex items-center gap-2 font-semibold text-sm px-8 py-3 rounded-xl bg-[#1d2b4b] text-white border-none cursor-pointer transition-all disabled:opacity-60 hover:bg-[#253563] hover:-translate-y-px"
           >
             {loading
               ? <i className="fas fa-spinner fa-spin" />
@@ -876,33 +850,33 @@ export default function DiscoveryPage() {
   const activeMode              = VIEW_MODES.find(m => m.key === viewMode);
 
   return (
-    <div className="min-h-screen flex flex-col bg-slate-50 font-[Plus_Jakarta_Sans,sans-serif]">
+    <div className="min-h-screen flex flex-col bg-slate-50" style={{ fontFamily: "'Inter', sans-serif" }}>
       <Navbar />
 
       {/* ── Hero ── */}
-      <header className="bg-gradient-to-br from-[#1d2b4b] to-indigo-600 px-[8%] pt-10 pb-16 rounded-b-[28px] text-white text-center relative overflow-hidden">
-        {/* Decorative */}
-        <div className="absolute top-0 right-0 w-[220px] h-[220px] rounded-full bg-white/[0.03] -translate-y-1/2 translate-x-1/3 pointer-events-none" />
-
-        <p className="text-[11px] font-bold uppercase tracking-widest mb-2 opacity-60 relative">
+      <header className="bg-gradient-to-br from-[#1d2b4b] to-[#2a3d66] px-[8%] pt-12 pb-20 rounded-b-[40px] text-white text-center relative overflow-hidden">
+        <p className="text-xs font-semibold uppercase tracking-[0.2em] mb-3 opacity-60 relative">
           National University Lipa
         </p>
-        <h1 className="font-extrabold mb-2 text-3xl sm:text-4xl tracking-tight relative">
-          Student <span className="text-amber-400">Discovery</span>
+        <h1
+          className="font-black mb-3 text-4xl sm:text-5xl relative"
+          style={{ letterSpacing: '-0.5px' }}
+        >
+          The <span className="text-amber-400">Student Discovery</span>
         </h1>
-        <p className="font-light opacity-75 mx-auto text-sm max-w-[500px] relative">
+        <p className="font-normal opacity-75 mx-auto text-sm max-w-[500px] relative leading-relaxed">
           Find classmates, explore other programs, and connect with the NU Lipa community.
         </p>
 
         <div className="flex items-center justify-center gap-3 mt-4 flex-wrap relative">
           {isPremium ? (
-            <span className="inline-flex items-center gap-2 font-bold text-xs px-5 py-2 rounded-full bg-amber-400/15 border border-amber-400/35 text-amber-400">
+            <span className="inline-flex items-center gap-2 font-semibold text-xs px-5 py-2 rounded-full bg-amber-400/15 border border-amber-400/35 text-amber-400">
               <i className="fas fa-crown" /> Premium · Full Access
             </span>
           ) : (
             <Link
               to="/premium"
-              className="no-underline inline-flex items-center gap-2 font-bold text-xs px-5 py-2 rounded-full bg-amber-400/15 border border-amber-400/35 text-amber-400 hover:bg-amber-400/25 transition-colors"
+              className="no-underline inline-flex items-center gap-2 font-semibold text-xs px-5 py-2 rounded-full bg-amber-400/15 border border-amber-400/35 text-amber-400 hover:bg-amber-400/25 transition-colors"
             >
               <i className="fas fa-lock" /> Upgrade to Premium
             </Link>
@@ -918,7 +892,7 @@ export default function DiscoveryPage() {
               key={mode.key}
               onClick={() => setViewMode(mode.key)}
               className={`
-                flex flex-col items-center gap-1 px-5 py-3 rounded-xl transition-all font-bold text-xs
+                flex flex-col items-center gap-1 px-5 py-3 rounded-xl transition-all font-semibold text-xs
                 border-none cursor-pointer min-w-[100px]
                 ${viewMode === mode.key
                   ? 'bg-[#1d2b4b] text-white shadow-[0_4px_14px_rgba(29,43,75,0.25)]'
@@ -943,8 +917,8 @@ export default function DiscoveryPage() {
             <i className={`fas ${activeMode?.icon} text-sm`} />
           </div>
           <div>
-            <h2 className="font-black m-0 text-[1.3rem] text-[#1d2b4b]">{activeMode?.label}</h2>
-            <p className="text-xs m-0 text-slate-400">{activeMode?.desc}</p>
+            <h2 className="font-bold m-0 text-[1.3rem] text-[#1d2b4b] tracking-tight">{activeMode?.label}</h2>
+            <p className="text-xs m-0 text-slate-400 font-normal">{activeMode?.desc}</p>
           </div>
         </div>
 

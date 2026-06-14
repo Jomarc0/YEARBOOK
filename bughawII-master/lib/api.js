@@ -144,7 +144,22 @@ export const getErrorMessage = (error, fallback = "Something went wrong. Please 
 
 export const imageUrl = (path) => {
   if (!path) return null;
-  if (typeof path !== "string") return path;
+  if (typeof path === "number") return path;
+  if (typeof path === "object") {
+    return imageUrl(
+      path.uri ||
+      path.url ||
+      path.file_path ||
+      path.media_url ||
+      path.thumbnail_url ||
+      path.preview_url ||
+      path.image_url ||
+      path.photo_url ||
+      path.path ||
+      path.src
+    );
+  }
+  if (typeof path !== "string") return null;
   if (
     path.startsWith("http://") ||
     path.startsWith("https://") ||

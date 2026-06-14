@@ -308,6 +308,36 @@ class ProfileController extends Controller
         ]);
     }
 
+    // POST /api/profile/posts/{photoId}/report
+    public function reportPost(Request $request, int $photoId): JsonResponse
+    {
+        $request->validate([
+            'reason' => ['nullable', 'string', 'max:255'],
+        ]);
+
+        $photo = Photo::where('id', $photoId)
+            ->where('is_profile_post', true)
+            ->where('user_id', '!=', Auth::id())
+            ->with('media')
+            ->firstOrFail();
+
+        $photo->media()->update(['is_reported' => true]);
+        $photo->load('media');
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Report submitted for review.',
+            'data'    => [
+                'id'          => $photo->id,
+                'is_reported' => true,
+                'media'       => $photo->media->map(fn ($media) => [
+                    'id'          => $media->id,
+                    'is_reported' => (bool) $media->is_reported,
+                ])->values(),
+            ],
+        ]);
+    }
+
     // GET /api/profile/storage-usage
     public function storageUsage(): JsonResponse
     {
@@ -412,11 +442,16 @@ class ProfileController extends Controller
             'ai_metadata'     => $photo->ai_metadata,
             'media_count'     => $media->count(),
             'media'           => $media->map(fn ($m) => [
+                'id'            => is_array($m) ? ($m['id'] ?? null) : $m->id,
                 'file_path'     => is_array($m) ? $m['file_path']     : $m->file_path,
                 'public_id'     => is_array($m) ? $m['public_id']     : $m->public_id,
                 'resource_type' => is_array($m) ? $m['resource_type'] : $m->resource_type,
                 'sort_order'    => is_array($m) ? $m['sort_order']    : $m->sort_order,
+                'is_reported'   => is_array($m) ? (bool) ($m['is_reported'] ?? false) : (bool) $m->is_reported,
             ])->values(),
+            'is_reported'     => $media->contains(fn ($m) => is_array($m)
+                ? (bool) ($m['is_reported'] ?? false)
+                : (bool) $m->is_reported),
             // profile_picture accessor resolves correctly because studentRecord
             // is now eager-loaded with the 'photo' column everywhere this is called.
             'tagged_users'    => $taggedStudents->map(fn ($u) => [

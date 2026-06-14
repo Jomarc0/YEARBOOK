@@ -37,6 +37,8 @@ return Application::configure(basePath: dirname(__DIR__))
 
         $middleware->api(append: [
             \App\Http\Middleware\CheckMaintenanceMode::class,
+            \App\Http\Middleware\SecurityHeaders::class,
+            \App\Http\Middleware\EnsureAccountIsActive::class,
         ]);
 
         $middleware->alias([
@@ -51,6 +53,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'admin.only'          => \App\Http\Middleware\AdminOnly::class,
             'feature'             => \App\Http\Middleware\EnsureFeatureEnabled::class,
             'require.super_admin' => \App\Http\Middleware\RequireSuperAdmin::class,
+            'active.account'      => \App\Http\Middleware\EnsureAccountIsActive::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions) {

@@ -25,6 +25,7 @@ import {
   generateYearbook,
   getVoiceNotesInbox,
   getVoiceNotesForProfile,
+  getFaceStudentPhotos,
   imageUrl,
   updatePassword,
   updateProfileAcademic,
@@ -153,6 +154,41 @@ const trendDirection = (value: any) => {
 void metricValue;
 void trendDirection;
 const taggedTimeLabel = (photo: any) => photo?.time_ago || photo?.created_at_human || photo?.created_at || '2 days ago';
+const taggedPhotoSource = (item: any) => {
+  const photo = item?.photo ?? {};
+  const media = Array.isArray(photo?.media) && photo.media.length
+    ? [...photo.media].sort((a: any, b: any) => Number(a?.sort_order || 0) - Number(b?.sort_order || 0))[0]
+    : null;
+
+  return imageUrl(
+    item?.photo_path ||
+    item?.file_path ||
+    item?.url ||
+    item?.image_url ||
+    item?.photo_url ||
+    media?.file_path ||
+    photo?.file_path ||
+    photo?.photo_url ||
+    photo?.image_url ||
+    photo?.url
+  );
+};
+const taggedPhotoKey = (item: any, index = 0) => String(
+  item?.tag_id ||
+  item?.id ||
+  (item?.graduation_photo_id ? `graduation-${item.graduation_photo_id}` : '') ||
+  (item?.photo_id ? `photo-${item.photo_id}` : '') ||
+  item?.photo?.id ||
+  `tagged-${index}`
+);
+const mergeTaggedPhotos = (...groups: any[][]) => {
+  const byKey = new Map<string, any>();
+  groups.flat().filter(Boolean).forEach((item, index) => {
+    const key = taggedPhotoKey(item, index);
+    if (!byKey.has(key)) byKey.set(key, item);
+  });
+  return Array.from(byKey.values());
+};
 
 const normalizeAchievement = (item: any) => {
   let meta: any = {};
@@ -179,7 +215,7 @@ function Avatar({ user, size = 104 }: { user: any; size?: number }) {
 function TaggedPhotoTile({ photo, highlighted, onLongPress }: { photo: any; highlighted: boolean | string; onLongPress: () => void }) {
   const [loaded, setLoaded] = useState(false);
   const [failed, setFailed] = useState(false);
-  const photoSource = imageUrl(photo?.photo_url || photo?.photo_path || photo?.file_path || photo?.url || photo?.image_url);
+  const photoSource = taggedPhotoSource(photo);
 
   return (
     <TouchableOpacity style={[styles.taggedCell, highlighted && styles.taggedCellHighlighted]} onLongPress={onLongPress} activeOpacity={0.9}>
@@ -411,10 +447,11 @@ export default function ProfileScreen() {
       const profile = { ...(fresh || cached || {}), ...(unwrap(profilePayload) || {}) };
 
       const canLoadCareer = isGraduate(profile);
-      const [postsResult, achievementsResult, taggedResult, voiceResult, inboxVoiceResult, alumniResult] = await Promise.allSettled([
+      const [postsResult, achievementsResult, taggedResult, faceTaggedResult, voiceResult, inboxVoiceResult, alumniResult] = await Promise.allSettled([
         userId ? getStudentPosts(userId) : Promise.resolve([]),
         userId ? getStudentAchievements(userId) : Promise.resolve([]),
         userId ? getTaggedPhotos(userId) : Promise.resolve([]),
+        userId ? getFaceStudentPhotos(userId) : Promise.resolve([]),
         userId ? getVoiceNotesForProfile(userId) : Promise.resolve([]),
         getVoiceNotesInbox(),
         canLoadCareer ? getAlumniMe() : Promise.resolve(null),
@@ -423,6 +460,7 @@ export default function ProfileScreen() {
       const nextPosts = postsResult.status === 'fulfilled' ? listFromPayload(postsResult.value) : [];
       const nextAchievements = achievementsResult.status === 'fulfilled' ? listFromPayload(achievementsResult.value) : [];
       const nextTagged = taggedResult.status === 'fulfilled' ? listFromPayload(taggedResult.value) : [];
+      const nextFaceTagged = faceTaggedResult.status === 'fulfilled' ? listFromPayload(faceTaggedResult.value) : [];
       const profileVoice = voiceResult.status === 'fulfilled' ? listFromPayload(voiceResult.value) : [];
       const inboxVoice = inboxVoiceResult.status === 'fulfilled' ? listFromPayload(inboxVoiceResult.value) : [];
       const voiceById = new Map([...profileVoice, ...inboxVoice].map((note: any) => [String(note?.id), note]));
@@ -433,7 +471,7 @@ export default function ProfileScreen() {
 
       setUser(mergedProfile);
       setPosts(nextPosts.filter(shouldShowProfilePost));
-      setTaggedPhotos(nextTagged);
+      setTaggedPhotos(mergeTaggedPhotos(nextTagged, nextFaceTagged));
       setAchievements(nextAchievements);
       setVoiceNotes(nextVoice);
       hydrateForms(mergedProfile, nextAchievements);
@@ -1083,11 +1121,11 @@ export default function ProfileScreen() {
           )}
           {taggedPhotos.length ? (
             <View style={styles.taggedGrid}>
-              {taggedPhotos.map((photo) => {
+              {taggedPhotos.map((photo, index) => {
                 const highlighted = requestedPhotoId && String(photo?.id || photo?.photo_id) === requestedPhotoId;
                 return (
                   <TaggedPhotoTile
-                    key={String(photo?.id || photo?.photo_id)}
+                    key={taggedPhotoKey(photo, index)}
                     photo={photo}
                     highlighted={highlighted}
                     onLongPress={() => confirmDeleteTaggedPhoto(photo)}

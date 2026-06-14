@@ -17,6 +17,7 @@ import { imageUrl, avatarUrl as makeAvatar } from '@/utils/imageUrl';
 import { recordProfileView } from '@/api/analytics.api';
 import { trackProfileView } from '@/utils/ga4';
 import { getCourseShort } from '@/utils/courseShort';
+import LoadingSkeleton from '@/components/ui/LoadingSkeleton';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 const isGraduate = (student) => !!student?.graduation_year;
@@ -390,11 +391,28 @@ export default function StudentProfileView() {
 
   const handlePostDeleted = (pid) => { setPosts(p => p.filter(x => x.id !== pid)); showToastMsg('Post deleted.', 'error'); setContextMenu(null); };
   const handlePostUpdated = (u)   => { setPosts(p => p.map(x => x.id === u.id ? { ...x, ...u } : x)); showToastMsg('Updated!'); setContextMenu(null); };
+  const handleReportPost = async (post) => {
+    try {
+      await profileApi.reportPost(post.id);
+      setPosts(prev => prev.map(item => item.id === post.id
+        ? {
+            ...item,
+            is_reported: true,
+            media: (item.media ?? []).map(media => ({ ...media, is_reported: true })),
+          }
+        : item));
+      showToastMsg('Report submitted for admin review.');
+    } catch (err) {
+      showToastMsg(err.response?.data?.message ?? 'Failed to report this post.', 'error');
+    }
+  };
 
   // ── Loading ────────────────────────────────────────────────────────────────
   if (loading) return (
-    <div className="min-h-screen flex items-center justify-center bg-[#f4f7fe]">
-      <div className="w-8 h-8 rounded-full border-[3px] border-indigo-100 border-t-[#1d2b4b] animate-spin" />
+    <div className="min-h-screen bg-[#f4f7fe] px-4 py-8">
+      <div className="mx-auto w-full max-w-4xl">
+        <LoadingSkeleton variant="page" count={1} />
+      </div>
     </div>
   );
 
@@ -615,9 +633,7 @@ export default function StudentProfileView() {
             preview={<LockedGrid />}
           >
             {postsLoading ? (
-              <div className="bg-white rounded-2xl py-16 flex items-center justify-center shadow-sm border border-slate-100">
-                <div className="w-6 h-6 rounded-full border-2 border-indigo-100 border-t-[#1d2b4b] animate-spin" />
-              </div>
+              <LoadingSkeleton variant="feed" count={2} />
             ) : posts.length === 0 ? (
               <div className="bg-white rounded-2xl py-20 flex flex-col items-center text-center shadow-sm border border-slate-100 px-6">
                 <div className="w-16 h-16 rounded-full border-2 border-[#1d2b4b]/20 flex items-center justify-center mb-4">
@@ -641,6 +657,22 @@ export default function StudentProfileView() {
                       <span className="text-white text-sm font-bold"><i className="fas fa-heart text-[#fdb813] mr-1" />0</span>
                       <span className="text-white text-sm font-bold"><i className="fas fa-comment text-[#fdb813] mr-1" />0</span>
                     </div>
+                    <button
+                      type="button"
+                      title={post.is_reported || post.media?.some(item => item?.is_reported) ? 'Reported for review' : 'Report this post'}
+                      disabled={post.is_reported || post.media?.some(item => item?.is_reported)}
+                      onClick={e => {
+                        e.stopPropagation();
+                        if (!(post.is_reported || post.media?.some(item => item?.is_reported))) handleReportPost(post);
+                      }}
+                      className={`absolute bottom-2 right-2 z-[4] flex h-7 w-7 items-center justify-center rounded-lg border border-white/10 text-xs text-white backdrop-blur-sm transition ${
+                        post.is_reported || post.media?.some(item => item?.is_reported)
+                          ? 'cursor-default bg-emerald-600/85'
+                          : 'cursor-pointer bg-[#1d2b4b]/75 hover:bg-red-600/85'
+                      }`}
+                    >
+                      <i className={`fas ${post.is_reported || post.media?.some(item => item?.is_reported) ? 'fa-check' : 'fa-flag'}`} />
+                    </button>
                     {post.caption && (
                       <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-[#1d2b4b]/85 to-transparent px-2.5 pb-2 pt-6 text-[11px] text-white font-medium leading-tight">
                         {post.caption.length > 38 ? post.caption.slice(0, 38) + '…' : post.caption}
@@ -861,10 +893,7 @@ export default function StudentProfileView() {
           >
             <ViewCard icon="fas fa-award" label="Achievements">
               {achieveLoading ? (
-                <div className="flex items-center justify-center py-10 gap-2 text-slate-400 text-sm">
-                  <div className="w-5 h-5 rounded-full border-2 border-slate-200 border-t-[#1d2b4b] animate-spin" />
-                  Loading…
-                </div>
+                <LoadingSkeleton variant="row" count={3} gridClassName="space-y-3" />
               ) : achievements.length === 0 ? (
                 <div className="flex flex-col items-center text-center py-12">
                   <div className="w-14 h-14 rounded-full bg-slate-100 border-2 border-slate-200 flex items-center justify-center mb-4">

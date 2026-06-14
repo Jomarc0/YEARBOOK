@@ -126,7 +126,7 @@ const nameLines = (name: string, maxLen = 14, maxL = 3) => {
     else lines[lines.length - 1] = `${lines[lines.length - 1]} ${w}`;
   });
   return lines.slice(0, maxL).map((l, i) =>
-    i === maxL - 1 && l.length > maxLen + 2 ? `${l.slice(0, maxLen)}â€¦` : l,
+    i === maxL - 1 && l.length > maxLen + 2 ? `${l.slice(0, maxLen)}...` : l,
   );
 };
 
@@ -256,7 +256,7 @@ function Info({ label, value }: { label: string; value: any }) {
   return (
     <View style={pg.infoBox}>
       <Text style={pg.infoL}>{label}</Text>
-      <Text style={pg.infoV} numberOfLines={2}>{value || 'â€”'}</Text>
+      <Text style={pg.infoV} numberOfLines={2}>{value || 'Not set'}</Text>
     </View>
   );
 }
@@ -399,7 +399,7 @@ function StudentPage({ page }: { page: any }) {
             {cards.map(([l,v]) => (
               <View key={l} style={pg.stCard}>
                 <Text style={pg.kick}>{l}</Text>
-                <Text style={pg.stTxt}>{v || 'â€”'}</Text>
+                <Text style={pg.stTxt}>{v || 'Not set'}</Text>
               </View>
             ))}
           </View>
@@ -420,7 +420,7 @@ function StudentPage({ page }: { page: any }) {
           <View style={pg.stInfo}>
             {st?.honors ? <View style={pg.honor}><Text style={pg.honorT} numberOfLines={1}>{st.honors}</Text></View> : null}
             <View>{nameLines(name).map((l, i) => <Text key={`${l}-${i}`} style={pg.stN} numberOfLines={1}>{l}</Text>)}</View>
-            <Text style={pg.stC} numberOfLines={2}>{scourse(st, sec) || st?.student_id || 'â€”'}</Text>
+            <Text style={pg.stC} numberOfLines={2}>{scourse(st, sec) || st?.student_id || 'Not set'}</Text>
             <View style={pg.qBlock}><View style={pg.qAcc} /><Text style={pg.qTxt} numberOfLines={3}>{`"${quote}"`}</Text></View>
             <View style={pg.facts}>
               <Info label="Nickname" value={st?.nickname} />
@@ -985,7 +985,7 @@ export default function YearbookScreen() {
           </View>
 
           <View style={s.searchRow}>
-            <TextInput style={s.searchIn} placeholder="Search flipbookâ€¦" value={query} onChangeText={setQuery} onSubmitEditing={runSearch} returnKeyType="search" />
+            <TextInput style={s.searchIn} placeholder="Search flipbook..." value={query} onChangeText={setQuery} onSubmitEditing={runSearch} returnKeyType="search" />
             <TouchableOpacity style={s.searchBtn} onPress={runSearch}><FontAwesome name="search" size={15} color={WHITE} /></TouchableOpacity>
           </View>
 
@@ -998,7 +998,7 @@ export default function YearbookScreen() {
 
           <TouchableOpacity style={[s.actBtn, s.actBtnPri]} onPress={() => pages.length ? openReader(0) : selBatch && openBatch(selBatch, true)} disabled={dlLoading}>
             {dlLoading ? <ActivityIndicator color={NAVY} size="small" /> : <FontAwesome name="book" size={14} color={NAVY} />}
-            <Text style={s.actBtnPriT}>{dlLoading ? 'Generatingâ€¦' : 'Open Flipbook'}</Text>
+            <Text style={s.actBtnPriT}>{dlLoading ? 'Generating...' : 'Open Flipbook'}</Text>
           </TouchableOpacity>
 
           <FlatList
@@ -1150,7 +1150,7 @@ export default function YearbookScreen() {
                   <View style={s.jSheet}>
                     <View style={s.jHandle} />
                     <View style={s.jHd}><Text style={s.jHdT}>Jump to Course or Section</Text><TouchableOpacity style={s.jClose} onPress={() => setJumpOpen(false)}><FontAwesome name="times" size={13} color={MUTED} /></TouchableOpacity></View>
-                    <View style={s.jSearch}><FontAwesome name="search" size={13} color={MUTED} /><TextInput style={s.jIn} value={jumpQ} onChangeText={setJumpQ} placeholder="Search BSA, BSCS, 4-Aâ€¦" placeholderTextColor={MUTED} /></View>
+                    <View style={s.jSearch}><FontAwesome name="search" size={13} color={MUTED} /><TextInput style={s.jIn} value={jumpQ} onChangeText={setJumpQ} placeholder="Search BSA, BSCS, 4-A..." placeholderTextColor={MUTED} /></View>
                     <ScrollView style={{ maxHeight:360 }} showsVerticalScrollIndicator={false}>
                       {jumpTargets.length ? jumpTargets.map(t => (
                         <TouchableOpacity key={`${t.kind}-${t.label}`} style={s.jRow} onPress={() => jumpTo(t)} activeOpacity={0.86}>

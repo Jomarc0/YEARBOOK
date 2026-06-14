@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import Navbar from '@/components/layout/Navbar';
 import Footer from '@/components/layout/Footer';
 import api from '@/api/client';
+import LoadingSkeleton from '@/components/ui/LoadingSkeleton';
 
 const listFromPayload = (payload) => {
   const raw = payload?.data?.data ?? payload?.data ?? [];
@@ -91,9 +92,7 @@ export default function AnnouncementsPage() {
         </div>
 
         {loading ? (
-          <div className="bg-white rounded-2xl border border-slate-200 p-10 text-center shadow-sm">
-            <div className="w-10 h-10 rounded-full border-4 border-indigo-100 border-t-[#1d2b4b] mx-auto animate-spin" />
-          </div>
+          <LoadingSkeleton variant="row" count={4} gridClassName="space-y-4" />
         ) : visibleAnnouncements.length ? (
           <div className="space-y-4">
             {visibleAnnouncements.map((item, index) => {

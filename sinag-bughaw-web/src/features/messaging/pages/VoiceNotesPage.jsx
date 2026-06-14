@@ -3,6 +3,7 @@ import { voiceNotesApi } from '@/api/messaging.api';
 import Navbar from '@/components/layout/Navbar';
 import Footer from '@/components/layout/Footer';
 import { Link, useSearchParams } from 'react-router-dom';
+import LoadingSkeleton from '@/components/ui/LoadingSkeleton';
 
 export default function VoiceNotesPage() {
   const [searchParams] = useSearchParams();
@@ -97,7 +98,7 @@ export default function VoiceNotesPage() {
         </p>
       </header>
 
-      <main style={{ maxWidth: '800px', margin: '0 auto', padding: '60px 20px 100px', width: '100%' }}>
+      <main style={{ flex: 1, maxWidth: '800px', margin: '0 auto', padding: '60px 20px 100px', width: '100%' }}>
 
         {/* Tabs */}
         <div style={{
@@ -150,9 +151,7 @@ export default function VoiceNotesPage() {
 
         {/* List */}
         {loading ? (
-          <div style={{ display: 'flex', justifyContent: 'center', padding: '60px 0', color: '#94a3b8' }}>
-            <i className="fas fa-spinner fa-spin" style={{ fontSize: '2rem', color: '#3f51b5' }} />
-          </div>
+          <LoadingSkeleton variant="row" count={4} gridClassName="space-y-3" />
         ) : notes.length === 0 ? (
           <div style={{
             background: '#fff', borderRadius: '24px', padding: '60px 32px', textAlign: 'center',

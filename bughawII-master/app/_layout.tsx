@@ -3,6 +3,7 @@ import React, { useEffect, useState } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { configureReanimatedLogger, ReanimatedLogLevel } from "react-native-reanimated";
 import MaintenanceNotice from "../components/MaintenanceNotice";
+import PrivacyScreen from "../components/PrivacyScreen";
 import { getAppConfig, unwrap } from "../lib/api";
 
 configureReanimatedLogger({
@@ -41,6 +42,7 @@ export default function RootLayout() {
     return (
       <GestureHandlerRootView style={{ flex: 1 }}>
         <MaintenanceNotice config={config} />
+        <PrivacyScreen />
       </GestureHandlerRootView>
     );
   }
@@ -48,6 +50,7 @@ export default function RootLayout() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <Stack screenOptions={{ headerShown: false }} />
+      <PrivacyScreen />
     </GestureHandlerRootView>
   );
 }

@@ -16,6 +16,7 @@ import PostLightbox from '../components/PostLightbox';
 import MessageModal from '@/components/feedback/MessageModal';
 import { useAppConfig } from '@/features/platform/AppConfigProvider';
 import { getCourseShort } from '@/utils/courseShort';
+import LoadingSkeleton from '@/components/ui/LoadingSkeleton';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 const isGraduate = (student) => !!student?.graduation_year;
@@ -465,6 +466,22 @@ export default function ProfilePage() {
     setContextMenu(null);
   };
 
+  const handleReportPost = async (post) => {
+    try {
+      await profileApi.reportPost(post.id);
+      setPosts(prev => prev.map(item => item.id === post.id
+        ? {
+            ...item,
+            is_reported: true,
+            media: (item.media ?? []).map(media => ({ ...media, is_reported: true })),
+          }
+        : item));
+      showToast('Report submitted for admin review.');
+    } catch (err) {
+      showToast(err.response?.data?.message ?? 'Failed to report this post.', 'error');
+    }
+  };
+
   const handleOpenUpload = () => {
     if (!postsEnabled) return;
     if (premiumBilling && isFree) navigate('/premium');
@@ -472,8 +489,10 @@ export default function ProfilePage() {
   };
 
   if (loading) return (
-    <div className="min-h-screen flex items-center justify-center bg-[#f4f7fe]">
-      <div className="w-8 h-8 rounded-full border-[3px] border-indigo-100 border-t-[#1d2b4b] animate-spin" />
+    <div className="min-h-screen bg-[#f4f7fe] px-4 py-8">
+      <div className="mx-auto w-full max-w-4xl">
+        <LoadingSkeleton variant="page" count={1} />
+      </div>
     </div>
   );
 
@@ -822,9 +841,7 @@ export default function ProfilePage() {
             )}
 
             {postsLoading ? (
-              <div className="bg-white rounded-2xl py-16 flex items-center justify-center shadow-sm border border-slate-100">
-                <div className="w-6 h-6 rounded-full border-2 border-indigo-100 border-t-[#1d2b4b] animate-spin" />
-              </div>
+              <LoadingSkeleton variant="feed" count={2} />
             ) : posts.length === 0 ? (
               <div className="bg-white rounded-2xl py-20 flex flex-col items-center text-center shadow-sm border border-slate-100 px-6">
                 <div className="w-16 h-16 rounded-full border-2 border-[#1d2b4b]/20 flex items-center justify-center mb-4">
@@ -850,6 +867,7 @@ export default function ProfilePage() {
                 {posts.map(post => (
                   <PostCard key={post.id} post={post} isOwn={isOwn}
                     onClick={(p, idx) => setLightbox({ post: p, idx })}
+                    onReportClick={handleReportPost}
                     onMenuClick={(e, p) => {
                       const r = e.currentTarget.getBoundingClientRect();
                       setContextMenu({ post: p, x: r.left, y: r.bottom + 6 });
@@ -1003,10 +1021,7 @@ export default function ProfilePage() {
         {activeTab === 'academic' && (
           <TabCard icon="fas fa-graduation-cap" label="Academic Info">
             {academicLoading ? (
-              <div className="flex items-center justify-center py-10 gap-2 text-slate-400 text-sm">
-                <div className="w-5 h-5 rounded-full border-2 border-slate-200 border-t-[#1d2b4b] animate-spin" />
-                Loading…
-              </div>
+              <LoadingSkeleton variant="row" count={3} gridClassName="space-y-3" />
             ) : academicData ? (
               <>
                 <div className="grid grid-cols-2 gap-3 mb-3">
@@ -1043,10 +1058,7 @@ export default function ProfilePage() {
         {activeTab === 'achievements' && (
           <TabCard icon="fas fa-award" label="Achievements">
             {achieveLoading ? (
-              <div className="flex items-center justify-center py-10 gap-2 text-slate-400 text-sm">
-                <div className="w-5 h-5 rounded-full border-2 border-slate-200 border-t-[#1d2b4b] animate-spin" />
-                Loading…
-              </div>
+              <LoadingSkeleton variant="row" count={3} gridClassName="space-y-3" />
             ) : achievements.length === 0 ? (
               <div className="flex flex-col items-center text-center py-12">
                 <div className="w-14 h-14 rounded-full bg-slate-100 border-2 border-slate-200 flex items-center justify-center mb-4">
@@ -1098,10 +1110,7 @@ export default function ProfilePage() {
             }
           >
             {voiceNotesLoading ? (
-              <div className="flex items-center justify-center py-14 gap-2 text-slate-400 text-sm">
-                <div className="w-5 h-5 rounded-full border-2 border-slate-200 border-t-[#1d2b4b] animate-spin" />
-                Loading voice notes…
-              </div>
+              <LoadingSkeleton variant="row" count={3} gridClassName="space-y-3" />
             ) : voiceNotes.length === 0 ? (
               <div className="flex flex-col items-center text-center py-14">
                 <div className="w-14 h-14 rounded-full bg-slate-100 border-2 border-slate-200 flex items-center justify-center mb-4">

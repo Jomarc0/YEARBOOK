@@ -7,6 +7,7 @@ import { useNavigate } from 'react-router-dom';
 import { getYearbookBatches } from '../../../api/yearbook.api';
 import { useYearbookPdfDownload } from '../hooks/useFlipbook';
 import { useAuth } from '@/features/auth/hooks/useAuth';
+import LoadingSkeleton from '@/components/ui/LoadingSkeleton';
 
 const C = {
     navy:  '#1a1a2e',
@@ -69,7 +70,7 @@ export default function YearbookHomePage() {
                 </h2>
 
                 {loading ? (
-                    <p style={{ color: C.muted }}>Loading batches…</p>
+                    <LoadingSkeleton variant="card" count={4} gridClassName="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4" />
                 ) : batches.length === 0 ? (
                     <p style={{ color: C.muted }}>No batches available yet.</p>
                 ) : (

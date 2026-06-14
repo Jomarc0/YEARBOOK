@@ -12,6 +12,7 @@ use App\Models\User;
 use App\Models\Yearbook;
 use App\Models\YearbookBookmark;
 use App\Services\Yearbook\PageResolverService;
+use App\Services\Security\DownloadAuditService;
 use App\Support\PlatformSettings;
 use App\Services\Yearbook\WatermarkService;
 use Barryvdh\DomPDF\Facade\Pdf;
@@ -28,6 +29,7 @@ class YearbookController extends Controller
     public function __construct(
         private WatermarkService    $watermark,
         private PageResolverService $pageResolver,
+        private readonly DownloadAuditService $downloadAudit,
     ) {}
 
     public function exportStudentPdf(Request $request, int $userId)
@@ -324,7 +326,7 @@ class YearbookController extends Controller
     /**
      * GET /api/yearbooks/{batch}/download  (standard or premium only)
      */
-    public function download(Batch $batch): StreamedResponse|JsonResponse
+    public function download(Request $request, Batch $batch): StreamedResponse|JsonResponse
     {
         if ($denied = PlatformSettings::featureDisabled('enable_yearbook_pdf_download', 'Yearbook PDF download')) {
             return $denied;
@@ -344,6 +346,14 @@ class YearbookController extends Controller
         );
 
         $filename = "yearbook-{$batch->year}.pdf";
+        $this->downloadAudit->record(
+            $request,
+            'yearbook_pdf_download',
+            'yearbook',
+            $batch->id,
+            $filename,
+            ['watermarked_path' => $watermarkedPath]
+        );
 
         return Storage::download($watermarkedPath, $filename, [
             'Content-Type'        => 'application/pdf',

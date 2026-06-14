@@ -8,6 +8,7 @@ use App\Models\Faculty;
 use App\Models\Section;
 use App\Models\Subscription;
 use App\Models\User;
+use App\Services\Security\DownloadAuditService;
 use App\Services\Yearbook\WatermarkService;
 use App\Support\PlatformSettings;
 use Barryvdh\DomPDF\Facade\Pdf;
@@ -19,9 +20,10 @@ class YearbookPdfController extends Controller
 {
     private const EXPORT_CACHE_VERSION = 'premium-fit-page-v6';
 
-    public function __construct(private WatermarkService $watermark)
-    {
-    }
+    public function __construct(
+        private WatermarkService $watermark,
+        private DownloadAuditService $downloadAudit,
+    ) {}
 
     public function export(Request $request, int $batchId)
     {
@@ -195,6 +197,14 @@ class YearbookPdfController extends Controller
         );
 
         $bytes = Storage::get($watermarkedPath);
+        $this->downloadAudit->record(
+            $request,
+            'yearbook_pdf_export',
+            'yearbook_export',
+            null,
+            $filename,
+            ['source_path' => $sourcePath, 'watermarked_path' => $watermarkedPath]
+        );
 
         return $this->withCorsHeaders($request, response($bytes, 200, [
             'Content-Type' => 'application/pdf',

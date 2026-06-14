@@ -18,17 +18,16 @@
  */
 import React, { lazy, Suspense } from 'react';
 import { Route } from 'react-router-dom';
+import LoadingSkeleton from '@/components/ui/LoadingSkeleton';
 
 const YearbookHomePage    = lazy(() => import('../features/yearbook/pages/YearbookHomePage'));
 const FlipbookViewerPage  = lazy(() => import('../features/yearbook/pages/FlipbookViewerPage'));
 
 const Fallback = () => (
-  <div className="flex min-h-screen items-center justify-center bg-[#0a0a14]">
-    <div
-      className="h-8 w-8 animate-spin rounded-full border-2 border-[#c9a84c]/15 border-t-[#c9a84c]"
-      role="status"
-      aria-label="Loading"
-    />
+  <div className="min-h-screen bg-[#f4f7fe] px-4 py-8">
+    <div className="mx-auto w-full max-w-3xl">
+      <LoadingSkeleton variant="page" count={1} />
+    </div>
   </div>
 );
 

@@ -14,9 +14,13 @@ class FacultyAdminController extends Controller
 {
     use AuditsAdminActions;
 
-    private Cloudinary $cloudinary;
+    private ?Cloudinary $cloudinary = null;
 
     public function __construct()
+    {
+    }
+
+    private function bootCloudinary(): ?Cloudinary
     {
         Configuration::instance([
             'cloud' => [
@@ -27,7 +31,11 @@ class FacultyAdminController extends Controller
             'url' => ['secure' => true],
         ]);
 
-        $this->cloudinary = new Cloudinary();
+        if (! config('cloudinary.cloud_name') || ! config('cloudinary.api_key') || ! config('cloudinary.api_secret')) {
+            return null;
+        }
+
+        return $this->cloudinary ??= new Cloudinary();
     }
 
     // GET /api/admin/faculty
@@ -221,7 +229,12 @@ class FacultyAdminController extends Controller
 
     private function uploadToCloudinary(string $filePath, string $folder): string
     {
-        $result = $this->cloudinary->uploadApi()->upload($filePath, [
+        $cloudinary = $this->bootCloudinary();
+        if (! $cloudinary) {
+            abort(422, 'Cloudinary is not configured. Please set CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, and CLOUDINARY_API_SECRET.');
+        }
+
+        $result = $cloudinary->uploadApi()->upload($filePath, [
             'folder'         => $folder,
             'resource_type'  => 'image',
             'transformation' => [
@@ -235,7 +248,7 @@ class FacultyAdminController extends Controller
     private function deleteFromCloudinary(string $publicId): void
     {
         try {
-            $this->cloudinary->uploadApi()->destroy($publicId);
+            $this->bootCloudinary()?->uploadApi()->destroy($publicId);
         } catch (\Throwable $e) {
             \Illuminate\Support\Facades\Log::warning('FacultyAdminController: Cloudinary delete failed', [
                 'public_id' => $publicId,
@@ -253,7 +266,10 @@ class FacultyAdminController extends Controller
         }
 
         try {
-            return (string) $this->cloudinary->image($image)->toUrl();
+            $cloudinary = $this->bootCloudinary();
+            if (! $cloudinary) return null;
+
+            return (string) $cloudinary->image($image)->toUrl();
         } catch (\Throwable $e) {
             \Illuminate\Support\Facades\Log::warning('FacultyAdminController: could not resolve image URL', [
                 'image' => $image,

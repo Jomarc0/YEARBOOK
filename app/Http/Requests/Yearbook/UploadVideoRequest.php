@@ -23,6 +23,7 @@ class UploadVideoRequest extends FormRequest
             'album_id' => ['required', 'integer', 'exists:albums,id'],
             'video'    => ['required', 'file', 'mimes:mp4,mov,avi,webm', 'max:2097152'], // 2 GB HTTP cap
             'caption'  => ['nullable', 'string', 'max:255'],
+            'visibility' => ['nullable', 'in:public,batchmates,friends,private'],
         ];
     }
 

@@ -5,6 +5,7 @@ import { alumniApi } from '@/api/alumni.api';
 import { useAuth } from '@/features/auth/hooks/useAuth';
 import Navbar from '@/components/layout/Navbar';
 import Footer from '@/components/layout/Footer';
+import LoadingSkeleton from '@/components/ui/LoadingSkeleton';
 
 const VISIBILITY_OPTS = [
   { v: 'public',      icon: 'fa-globe',          label: 'Public',      desc: 'Anyone can view your profile'         },
@@ -507,10 +508,7 @@ export default function SettingsPage() {
           <Section id="career" icon="fa-briefcase" iconBg="bg-emerald-50" iconColor="text-emerald-600"
             title="Career Path" desc="Shown in Alumni Tracker so classmates can see where you are now">
             {careerLoading ? (
-              <div className="flex items-center justify-center py-10 gap-2 text-slate-400 text-sm">
-                <div className="w-5 h-5 rounded-full border-2 border-slate-200 border-t-[#1d2b4b] animate-spin" />
-                Loading career profile...
-              </div>
+              <LoadingSkeleton variant="row" count={3} gridClassName="space-y-3" />
             ) : (
               <>
                 <div className="space-y-4 mb-5">
@@ -579,10 +577,7 @@ export default function SettingsPage() {
             title="Achievements" desc="Add or edit the achievements shown on your yearbook profile">
 
             {achieveLoading ? (
-              <div className="flex items-center justify-center py-10 gap-2 text-slate-400 text-sm">
-                <div className="w-5 h-5 rounded-full border-2 border-slate-200 border-t-[#1d2b4b] animate-spin" />
-                Loading…
-              </div>
+              <LoadingSkeleton variant="row" count={3} gridClassName="space-y-3" />
             ) : (
               <>
                 <div className="space-y-3 mb-3">

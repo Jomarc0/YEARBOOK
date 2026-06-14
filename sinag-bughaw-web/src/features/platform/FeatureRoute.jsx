@@ -1,5 +1,6 @@
 import { Navigate } from 'react-router-dom';
 import { useAppConfig } from './AppConfigProvider';
+import LoadingSkeleton from '@/components/ui/LoadingSkeleton';
 
 export default function FeatureRoute({ features, children }) {
   const { loading, isOn } = useAppConfig();
@@ -7,8 +8,10 @@ export default function FeatureRoute({ features, children }) {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50">
-        <p className="text-sm text-slate-500">Loading…</p>
+      <div className="min-h-screen bg-[#f4f7fe] px-4 py-8">
+        <div className="mx-auto w-full max-w-3xl">
+          <LoadingSkeleton variant="page" count={1} />
+        </div>
       </div>
     );
   }

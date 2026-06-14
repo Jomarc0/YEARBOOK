@@ -13,6 +13,7 @@ class PostMedia extends Model
     protected $fillable = [
         'photo_id', 'file_path', 'public_id',
         'resource_type', 'bytes', 'width', 'height', 'sort_order',
+        'is_reported',
     ];
 
     public function photo(): BelongsTo

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { voiceNotesApi } from '@/api/messaging.api';
 import SendVoiceNoteModal from './SendVoiceNoteModal';
+import LoadingSkeleton from '@/components/ui/LoadingSkeleton';
 
 /**
  * VoiceNotesSection
@@ -44,9 +45,7 @@ export default function VoiceNotesSection({ profileUser, isOwnProfile }) {
     : null;
 
   if (loading) return (
-    <div style={{ padding: '20px 0', color: '#94a3b8', textAlign: 'center' }}>
-      <i className="fas fa-spinner fa-spin" style={{ color: '#3f51b5' }} />
-    </div>
+    <LoadingSkeleton variant="row" count={2} gridClassName="space-y-3" />
   );
 
   return (

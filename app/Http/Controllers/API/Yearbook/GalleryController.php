@@ -13,7 +13,6 @@ use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\Cache;
 
 class GalleryController extends Controller
 {
@@ -23,26 +22,21 @@ class GalleryController extends Controller
     {
         $type     = $request->query('type', 'general');
         $category = $request->query('category');
-        $cacheKey = "gallery.albums.api.{$type}." . ($category ?? 'all');
 
-        $result = Cache::remember($cacheKey, 300, function () use ($type, $category) {
-            $query = Album::withCount([
-                'galleries as photos_count' => fn ($q) => $q
-                    ->where('status', 'approved')
-                    ->where('visibility', 'public'),
-            ])->latest('event_date');
+        $query = Album::withCount([
+            'galleries as photos_count' => fn ($q) => $this->applyGalleryVisibility($q, $request->user()),
+        ])->latest('event_date');
 
-            if ($type === 'graduation') {
-                $query->graduation();
-                if ($category) {
-                    $query->where('category', $category);
-                }
-            } else {
-                $query->general();
+        if ($type === 'graduation') {
+            $query->graduation();
+            if ($category) {
+                $query->where('category', $category);
             }
+        } else {
+            $query->general();
+        }
 
-            return $query->get();
-        });
+        $result = $query->get();
 
         return response()->json([
             'success' => true,
@@ -53,20 +47,11 @@ class GalleryController extends Controller
     // GET /api/gallery/{id}
     public function show(int $id): JsonResponse
     {
-        $userId = Auth::id();
+        $viewer = Auth::user();
 
         $album = Album::with([
-            'photos' => function ($q) use ($userId) {
-                $q->where(function ($visibilityQuery) use ($userId) {
-                    $visibilityQuery
-                        ->where(fn ($approved) => $approved
-                            ->where('status', 'approved')
-                            ->where('visibility', 'public'));
-
-                    if ($userId) {
-                        $visibilityQuery->orWhere('user_id', $userId);
-                    }
-                })
+            'photos' => function ($q) use ($viewer) {
+                $this->applyGalleryVisibility($q, $viewer)
                   ->select([
                       'id',
                       'album_id',
@@ -230,15 +215,8 @@ class GalleryController extends Controller
                         }
                     })
                     ->whereHas('gallery', function ($q) {
-                        $q->where('visibility', 'public')
-                          ->where(function ($statusQuery) {
-                              $statusQuery->where('status', 'approved');
-
-                              if (Auth::id()) {
-                                  $statusQuery->orWhere('user_id', Auth::id());
-                              }
-                          })
-                          ->whereHas('album', fn ($aq) => $aq->where('type', 'general'));
+                        $this->applyGalleryVisibility($q, Auth::user())
+                            ->whereHas('album', fn ($aq) => $aq->where('type', 'general'));
                     })
                     ->with([
                         'gallery' => fn ($q) => $q
@@ -306,14 +284,7 @@ class GalleryController extends Controller
             ->where('resource_type', 'image')
             ->where('bytes', $uploadedSize)
             ->whereHas('gallery', function ($q) {
-                $q->where('visibility', 'public')
-                    ->where(function ($statusQuery) {
-                        $statusQuery->where('status', 'approved');
-
-                        if (Auth::id()) {
-                            $statusQuery->orWhere('user_id', Auth::id());
-                        }
-                    })
+                $this->applyGalleryVisibility($q, Auth::user())
                     ->whereHas('album', fn ($aq) => $aq->where('type', 'general'));
             })
             ->with([
@@ -398,8 +369,19 @@ class GalleryController extends Controller
 
     public function destroyMedia(int $mediaId): JsonResponse
     {
-        $media   = GalleryMedia::findOrFail($mediaId);
+        $media   = GalleryMedia::with('gallery.album')->findOrFail($mediaId);
         $gallery = $media->gallery;
+        $actor   = Auth::user();
+
+        abort_unless(
+            $actor && (
+                $actor->role === 'admin' ||
+                $gallery?->user_id === $actor->id ||
+                $gallery?->album?->user_id === $actor->id
+            ),
+            403,
+            'You can only delete media that you uploaded.'
+        );
 
         $media->delete();
 
@@ -414,19 +396,13 @@ class GalleryController extends Controller
     public function listAlbums(Request $request): JsonResponse
     {
         $type     = $request->query('type', 'general');
-        $cacheKey = "gallery.albums.api.{$type}.all";
+        $query = Album::withCount([
+            'galleries as photos_count' => fn ($q) => $this->applyGalleryVisibility($q, $request->user()),
+        ])->latest('event_date');
 
-        $result = Cache::remember($cacheKey, 300, function () use ($type) {
-            $query = Album::withCount([
-                'galleries as photos_count' => fn ($q) => $q
-                    ->where('status', 'approved')
-                    ->where('visibility', 'public'),
-            ])->latest('event_date');
+        $type === 'graduation' ? $query->graduation() : $query->general();
 
-            $type === 'graduation' ? $query->graduation() : $query->general();
-
-            return $query->get();
-        });
+        $result = $query->get();
 
         return response()->json([
             'success' => true,
@@ -460,8 +436,6 @@ class GalleryController extends Controller
         $data['user_id'] = $user->id;
         $data['type']    = $data['type'] ?? 'general';
 
-        Cache::forget("gallery.albums.api.{$data['type']}.all");
-
         $album = Album::create($data);
 
         return response()->json([
@@ -483,8 +457,6 @@ class GalleryController extends Controller
         $data['user_id'] = $actor instanceof User ? $actor->id : null;
         $data['type']    = $data['type'] ?? 'general';
 
-        Cache::forget("gallery.albums.api.{$data['type']}.all");
-
         $album = Album::create($data);
 
         return response()->json([
@@ -496,10 +468,7 @@ class GalleryController extends Controller
     public function destroy(int $id): JsonResponse
     {
         $album = Album::findOrFail($id);
-        $type = $album->type ?? 'general';
-
         $album->delete();
-        Cache::forget("gallery.albums.api.{$type}.all");
 
         return response()->json([
             'success' => true,
@@ -520,6 +489,30 @@ class GalleryController extends Controller
         }
 
         return null;
+    }
+
+    private function applyGalleryVisibility($query, ?User $viewer)
+    {
+        return $query->where(function ($visibilityQuery) use ($viewer) {
+            $visibilityQuery->where(function ($public) {
+                $public->where('status', 'approved')
+                    ->where('visibility', 'public');
+            });
+
+            if (! $viewer) {
+                return;
+            }
+
+            $visibilityQuery->orWhere('user_id', $viewer->id);
+
+            if ($viewer->batch_id) {
+                $visibilityQuery->orWhere(function ($batchmates) use ($viewer) {
+                    $batchmates->where('status', 'approved')
+                        ->whereIn('visibility', ['friends', 'batchmates'])
+                        ->whereHas('user', fn ($user) => $user->where('batch_id', $viewer->batch_id));
+                });
+            }
+        });
     }
 
 }

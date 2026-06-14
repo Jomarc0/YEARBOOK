@@ -137,7 +137,9 @@ export function useMediaUpload(albumId = null, tierKey = 'free', onSuccess = nul
 
   // ── Submit ──────────────────────────────────────────────────────────────────
 
-  const submit = useCallback(async (caption = '') => {
+  const submit = useCallback(async (options = {}) => {
+    const caption = typeof options === 'string' ? options : (options.caption ?? '');
+    const visibility = typeof options === 'object' ? (options.visibility ?? 'public') : 'public';
     const valid = files.filter((f) => f.status !== 'error');
     if (!valid.length || !albumId) {
       setError(!albumId ? 'No album selected.' : 'No valid files to upload.');
@@ -160,13 +162,13 @@ export function useMediaUpload(albumId = null, tierKey = 'free', onSuccess = nul
       };
 
       if (imageFiles.length) {
-        responses.push(await mediaApi.bulkUpload(albumId, imageFiles, stepProgress));
+        responses.push(await mediaApi.bulkUpload(albumId, imageFiles, stepProgress, visibility, caption));
         completedSteps += 1;
         stepProgress(0);
       }
 
       for (const file of videoFiles) {
-        responses.push(await mediaApi.uploadVideo(albumId, file, caption, stepProgress));
+        responses.push(await mediaApi.uploadVideo(albumId, file, caption, stepProgress, visibility));
         completedSteps += 1;
         stepProgress(0);
       }

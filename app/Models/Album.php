@@ -45,7 +45,6 @@ class Album extends Model
     {
         return $this->hasMany(Gallery::class)
                     ->where('status', 'approved')
-                    ->where('visibility', 'public')
                     ->orderBy('sort_order');
     }
 

@@ -8,6 +8,7 @@ use App\Contracts\StorageServiceInterface;
 use App\Exceptions\StorageLimitExceededException;
 use App\Exceptions\StorageUploadException;
 use App\Models\Subscription;
+use App\Services\Security\MalwareScanService;
 use Cloudinary\Cloudinary;
 use Cloudinary\Configuration\Configuration;
 use Cloudinary\Api\Upload\UploadApi;
@@ -20,9 +21,9 @@ use Throwable;
 
 class CloudinaryService implements StorageServiceInterface
 {
-    private Cloudinary $cloudinary;
-    private UploadApi  $uploadApi;
-    private AdminApi   $adminApi;
+    private ?Cloudinary $cloudinary = null;
+    private ?UploadApi  $uploadApi  = null;
+    private ?AdminApi   $adminApi   = null;
 
     private const STORAGE_CACHE_TTL   = 300;
     private const BANDWIDTH_CACHE_TTL = 600;
@@ -31,11 +32,29 @@ class CloudinaryService implements StorageServiceInterface
 
     public function __construct()
     {
+    }
+
+    private function bootCloudinary(): void
+    {
+        if ($this->cloudinary && $this->uploadApi && $this->adminApi) {
+            return;
+        }
+
+        $cloudName = config('cloudinary.cloud_name');
+        $apiKey    = config('cloudinary.api_key');
+        $apiSecret = config('cloudinary.api_secret');
+
+        if (! $cloudName || ! $apiKey || ! $apiSecret) {
+            throw new StorageUploadException(
+                'Cloudinary is not configured. Please set CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, and CLOUDINARY_API_SECRET.'
+            );
+        }
+
         Configuration::instance([
             'cloud' => [
-                'cloud_name' => config('cloudinary.cloud_name'),
-                'api_key'    => config('cloudinary.api_key'),
-                'api_secret' => config('cloudinary.api_secret'),
+                'cloud_name' => $cloudName,
+                'api_key'    => $apiKey,
+                'api_secret' => $apiSecret,
             ],
             'url' => [
                 'secure' => true,
@@ -60,6 +79,9 @@ class CloudinaryService implements StorageServiceInterface
     ): array {
         $tier       = $this->resolveUserTier($userId);
         $tierConfig = $this->getTierConfig($tier);
+        $this->bootCloudinary();
+
+        app(MalwareScanService::class)->assertClean($file);
 
         if (empty($options['skip_mime_check'])) {
             $this->assertMimeTypeAllowed($file, $tierConfig);
@@ -180,6 +202,8 @@ class CloudinaryService implements StorageServiceInterface
     public function deletePhoto(string $publicId, string $resourceType = 'image'): array
     {
         try {
+            $this->bootCloudinary();
+
             $result = $this->uploadApi->destroy($publicId, [
                 'resource_type' => $resourceType,
                 'type'          => 'upload',
@@ -230,6 +254,8 @@ class CloudinaryService implements StorageServiceInterface
         $ttl = $ttl > 0 ? $ttl : (int) config('cloudinary.signed_url_ttl', 3600);
 
         try {
+            $this->bootCloudinary();
+
             $expiresAt = now()->addSeconds($ttl);
 
             $url = $this->cloudinary->image($publicId)->toUrl([
@@ -269,6 +295,8 @@ class CloudinaryService implements StorageServiceInterface
     {
         return Cache::remember('cloudinary:bandwidth_usage', self::BANDWIDTH_CACHE_TTL, function () {
             try {
+                $this->bootCloudinary();
+
                 $usage = $this->adminApi->usage();
 
                 return [
@@ -301,6 +329,8 @@ class CloudinaryService implements StorageServiceInterface
 
         return Cache::remember($cacheKey, self::STORAGE_CACHE_TTL, function () use ($userId) {
             try {
+                $this->bootCloudinary();
+
                 $resources = $this->adminApi->assets([
                     'type'        => 'upload',
                     'tags'        => true,
@@ -365,6 +395,10 @@ class CloudinaryService implements StorageServiceInterface
             'overwrite'       => false,
             'tags'            => $tags,
         ];
+
+        $this->bootCloudinary();
+
+        app(MalwareScanService::class)->assertClean($file);
 
         try {
             $result = $this->uploadApi->upload($file->getRealPath(), $uploadOptions);

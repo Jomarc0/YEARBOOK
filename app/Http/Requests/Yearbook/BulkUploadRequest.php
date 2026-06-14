@@ -22,6 +22,8 @@ class BulkUploadRequest extends FormRequest
     {
         return [
             'album_id'  => ['required', 'integer', 'exists:albums,id'],
+            'caption'   => ['nullable', 'string', 'max:255'],
+            'visibility'=> ['nullable', 'in:public,batchmates,friends,private'],
             'photos'    => ['required', 'array', 'min:1', 'max:50'],
             'photos.*'  => ['file', 'mimes:jpeg,png,webp,gif,heic', 'max:51200'], // 50 MB HTTP cap
         ];

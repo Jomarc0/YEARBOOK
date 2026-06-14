@@ -11,16 +11,15 @@ import {
   trackTopViewedClick,
   trackAnalyticsTabSwitch,
 } from '../../../utils/ga4';
-import { 
-  Flame, 
-  Eye, 
-  BarChart2, 
-  Users, 
-  Image as ImageIcon, 
-  MessageSquare, 
-  Lock, 
-  ChevronRight, 
-  AlertCircle 
+import {
+  Flame,
+  Eye,
+  BarChart2,
+  Users,
+  Image as ImageIcon,
+  MessageSquare,
+  Lock,
+  AlertCircle,
 } from 'lucide-react';
 
 const TABS = [
@@ -33,11 +32,19 @@ function Avatar({ src, name, size = 44 }) {
   const initials = name?.split(' ').slice(0, 2).map(w => w[0]).join('').toUpperCase();
   if (src) {
     return (
-      <img src={src} alt={name} style={{ width: size, height: size }} className="rounded-full object-cover shrink-0 border-2 border-yellow-400/30" />
+      <img
+        src={src}
+        alt={name}
+        style={{ width: size, height: size }}
+        className="rounded-full object-cover shrink-0 border-2 border-yellow-400/30"
+      />
     );
   }
   return (
-    <div style={{ width: size, height: size, fontSize: size * 0.35 }} className="rounded-full shrink-0 bg-slate-900 text-yellow-400 flex items-center justify-center font-extrabold border-2 border-yellow-400/30">
+    <div
+      style={{ width: size, height: size, fontSize: size * 0.35 }}
+      className="rounded-full shrink-0 bg-slate-900 text-yellow-400 flex items-center justify-center font-extrabold border-2 border-yellow-400/30"
+    >
       {initials}
     </div>
   );
@@ -61,9 +68,9 @@ function StatCard({ label, value, icon: Icon, colorClass, bgClass }) {
 
 function Skeleton({ height = 16, radius = 8 }) {
   return (
-    <div 
-      style={{ height, borderRadius: radius }} 
-      className="bg-[linear-gradient(90deg,#f1f5f9_25%,#e2e8f0_50%,#f1f5f9_75%)] bg-[length:200%_100%] animate-pulse" 
+    <div
+      style={{ height, borderRadius: radius }}
+      className="bg-[linear-gradient(90deg,#f1f5f9_25%,#e2e8f0_50%,#f1f5f9_75%)] bg-[length:200%_100%] animate-pulse"
     />
   );
 }
@@ -78,7 +85,11 @@ function AlumniCard({ person, rank, badge, onClick, currentUserId }) {
       onClick={onClick}
       className="group flex items-center gap-3.5 w-full text-left bg-white hover:bg-indigo-50 border-[1.5px] border-slate-100 hover:border-indigo-600 rounded-2xl p-3.5 cursor-pointer transition-all duration-200 shadow-[0_2px_8px_rgba(29,43,75,0.04)] hover:shadow-[0_8px_24px_rgba(63,81,181,0.1)]"
     >
-      <span className={`w-7 shrink-0 text-center font-bold ${rank <= 3 ? 'text-[20px] text-yellow-400' : 'text-[13px] text-slate-400'}`}>
+      <span
+        className={`w-7 shrink-0 text-center font-bold ${
+          rank <= 3 ? 'text-[20px] text-yellow-400' : 'text-[13px] text-slate-400'
+        }`}
+      >
         {rank <= 3 ? medals[rank - 1] : `#${rank}`}
       </span>
 
@@ -115,9 +126,11 @@ function SparkBars({ labels, values }) {
       </p>
       <div className="flex items-end gap-[3px] h-20">
         {values.map((v, i) => (
-          <div key={labels[i]} title={`${labels[i]}: ${v} views`} 
+          <div
+            key={labels[i]}
+            title={`${labels[i]}: ${v} views`}
             className="flex-1 rounded-t-[3px] transition-[height] duration-300 bg-gradient-to-t from-indigo-600 to-indigo-400"
-            style={{ height: `${Math.max(4, (v / max) * 80)}px` }} 
+            style={{ height: `${Math.max(4, (v / max) * 80)}px` }}
           />
         ))}
       </div>
@@ -162,7 +175,7 @@ export default function AnalyticsPage({ isAuthenticated = true }) {
     trackAnalyticsTabSwitch(tabId);
   }
 
-function handleTrendingClick(person) {
+  function handleTrendingClick(person) {
     trackTrendingClick(person);
     if (person.type && person.type !== 'profile') {
       navigate(person.url || '#');
@@ -182,91 +195,133 @@ function handleTrendingClick(person) {
     openProfile(person);
   }
 
-  const topTrending = trending.data?.[0] ?? null;
+  const topTrending      = trending.data?.[0]  ?? null;
   const topViewedProfile = topViewed.data?.[0] ?? null;
-  const currentUserId = user?.id;
-  const topBatchmates = (batchmates.data?.top_profiles ?? [])
-    .filter(person => !currentUserId || String(person.id) !== String(currentUserId));
+  const currentUserId    = user?.id;
+  const topBatchmates    = (batchmates.data?.top_profiles ?? []).filter(
+    person => !currentUserId || String(person.id) !== String(currentUserId)
+  );
 
-  const openProfile = (person) => {
+  const openProfile = person => {
     if (currentUserId && String(person.id) === String(currentUserId)) {
       navigate('/profile');
       return;
     }
     navigate(`/students/${person.id}`);
   };
-  const heroStats = tab === 'trending'
-    ? [
-        { label: 'Total views this week', value: trending.data?.reduce((sum, person) => sum + Number(person.views_this_week ?? 0), 0), icon: Eye },
-        { label: 'Profiles trending', value: trending.data?.length ?? 0, icon: Flame },
-        { label: 'Top viewed count', value: topTrending?.views_this_week ?? 0, icon: BarChart2 },
-      ]
-    : tab === 'top-viewed'
+
+  const heroStats =
+    tab === 'trending'
       ? [
-          { label: 'Top profile', value: topViewedProfile?.name ?? 'No data', icon: Users },
-          { label: 'Profile views', value: topViewedProfile?.views ?? 0, icon: Eye },
-          { label: 'Profiles ranked', value: topViewed.data?.length ?? 0, icon: BarChart2 },
+          {
+            label: 'Total views this week',
+            value: trending.data?.reduce(
+              (sum, person) => sum + Number(person.views_this_week ?? 0),
+              0
+            ),
+            icon: Eye,
+          },
+          { label: 'Profiles trending', value: trending.data?.length ?? 0,        icon: Flame     },
+          { label: 'Top viewed count',  value: topTrending?.views_this_week ?? 0, icon: BarChart2 },
+        ]
+      : tab === 'top-viewed'
+      ? [
+          { label: 'Top profile',     value: topViewedProfile?.name ?? 'No data', icon: Users     },
+          { label: 'Profile views',   value: topViewedProfile?.views ?? 0,        icon: Eye       },
+          { label: 'Profiles ranked', value: topViewed.data?.length ?? 0,         icon: BarChart2 },
         ]
       : [
-          { label: 'Personal profile views', value: myStats.data?.profile_views ?? 0, icon: Eye },
-          { label: 'Photos uploaded', value: myStats.data?.photos_uploaded ?? 0, icon: ImageIcon },
-          { label: 'Messages sent', value: myStats.data?.messages_sent ?? 0, icon: MessageSquare },
+          { label: 'Personal profile views', value: myStats.data?.profile_views ?? 0,   icon: Eye           },
+          { label: 'Photos uploaded',        value: myStats.data?.photos_uploaded ?? 0, icon: ImageIcon     },
+          { label: 'Messages sent',          value: myStats.data?.messages_sent ?? 0,   icon: MessageSquare },
         ];
 
   return (
     <div className="min-h-screen flex flex-col bg-slate-50 font-sans">
       <Navbar />
 
-      {/* ── Hero ── */}
-      <div className="bg-gradient-to-br from-[#1d2b4b] to-[#2a3d66] px-6 py-8 sm:px-10 relative overflow-hidden">
+      {/* ── Hero — Discovery style ── */}
+      <header
+        className="text-white text-center relative overflow-hidden"
+        style={{
+          background:   'linear-gradient(135deg, #1d2b4b 0%, #2a3d66 100%)',
+          padding:      '52px 8% 72px',
+          borderRadius: '0 0 48px 48px',
+        }}
+      >
         {/* Decorative blobs */}
         <div className="absolute -top-20 -right-20 w-[360px] h-[360px] rounded-full bg-indigo-500/10 pointer-events-none blur-3xl" />
         <div className="absolute -bottom-16 -left-10 w-[280px] h-[280px] rounded-full bg-yellow-400/5 pointer-events-none blur-2xl" />
 
-        <div className="max-w-[900px] mx-auto relative z-10">
-          {/* Breadcrumb */}
-          <div className="flex items-center gap-2 mb-3">
-            <span className="text-xs text-white/40 font-semibold tracking-widest uppercase">Sinag-Bughaw</span>
-            <ChevronRight className="w-3 h-3 text-white/25" />
-            <span className="text-xs text-yellow-400 font-bold tracking-widest uppercase">Analytics</span>
-          </div>
+        <div className="relative z-10">
+          {/* Eyebrow */}
+          <p style={{
+            fontSize:      '0.7rem',
+            fontWeight:    800,
+            letterSpacing: '0.15em',
+            textTransform: 'uppercase',
+            opacity:       0.6,
+            marginBottom:  '14px',
+            margin:        '0 0 14px',
+          }}>
+            National University Lipa
+          </p>
 
-          <div className="flex items-end justify-between gap-6 flex-wrap">
-            <div>
-              {/* Badge */}
-              <div className="inline-flex items-center gap-2 mb-3 bg-yellow-400/10 border border-yellow-400/30 rounded-full px-3 py-1">
-                <span className="text-[11px] font-bold text-yellow-400 tracking-widest uppercase">
-                  National University Lipa
-                </span>
-              </div>
+          {/* Title */}
+          <h1 style={{
+            fontSize:      '2.4rem',
+            fontWeight:    900,
+            letterSpacing: '-1.5px',
+            margin:        '0 0 12px',
+            lineHeight:    1.1,
+          }}>
+            Alumni <span style={{ color: '#fdb813' }}>Analytics</span>
+          </h1>
 
-              <h1 className="m-0 mb-2.5 text-[clamp(1.8rem,4vw,2.6rem)] font-black text-white tracking-tight leading-[1.1]">
-                Alumni <span className="text-yellow-400">Analytics</span>
-              </h1>
-              <p className="m-0 text-sm text-white/55 leading-relaxed max-w-md">
-                Discover trending profiles and engagement stats across your batch.
-              </p>
-            </div>
+          {/* Subtitle */}
+          <p style={{
+            fontSize:   '0.92rem',
+            fontWeight: 300,
+            opacity:    0.75,
+            maxWidth:   '480px',
+            margin:     '0 auto 24px',
+            lineHeight: 1.6,
+          }}>
+            Discover trending profiles and engagement stats across your batch.
+          </p>
 
-            {/* Summary stat pills in hero */}
-            {!summary.loading && summary.data && (
-              <div className="flex gap-3 flex-wrap">
-                {heroStats.map(s => (
-                  <div key={s.label} className="bg-white/10 backdrop-blur-md border border-white/10 rounded-2xl px-4 py-3 flex items-center gap-2.5">
-                    <s.icon className="w-4 h-4 text-yellow-400" />
-                    <div className="min-w-0">
-                      <div className="max-w-[160px] truncate text-lg font-extrabold text-white leading-none">
-                        {typeof s.value === 'number' ? s.value.toLocaleString() : (s.value ?? '—')}
-                      </div>
-                      <div className="text-[11px] text-white/45 mt-1">{s.label}</div>
+          {/* Stat pills */}
+          {!summary.loading && summary.data && (
+            <div className="flex items-center justify-center flex-wrap gap-3">
+              {heroStats.map(s => (
+                <div
+                  key={s.label}
+                  style={{
+                    display:      'inline-flex',
+                    alignItems:   'center',
+                    gap:          '8px',
+                    background:   'rgba(255,255,255,0.08)',
+                    border:       '1px solid rgba(255,255,255,0.12)',
+                    backdropFilter: 'blur(12px)',
+                    padding:      '8px 18px',
+                    borderRadius: '50px',
+                  }}
+                >
+                  <s.icon size={14} style={{ color: '#fdb813', flexShrink: 0 }} />
+                  <div className="text-left">
+                    <div style={{ fontSize: '1rem', fontWeight: 800, color: 'white', lineHeight: 1.1 }}>
+                      {typeof s.value === 'number' ? s.value.toLocaleString() : (s.value ?? '—')}
+                    </div>
+                    <div style={{ fontSize: '0.65rem', color: 'rgba(255,255,255,0.45)', marginTop: 2 }}>
+                      {s.label}
                     </div>
                   </div>
-                ))}
-              </div>
-            )}
-          </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
-      </div>
+      </header>
 
       {/* ── Tabs bar ── */}
       <div className="bg-white border-b border-slate-200 shadow-[0_2px_12px_rgba(29,43,75,0.06)] sticky top-16 z-40">
@@ -281,7 +336,9 @@ function handleTrendingClick(person) {
                 title={disabled ? 'Sign in to view your personal stats' : undefined}
                 className={`flex items-center gap-2 px-5 py-4 bg-transparent border-b-2 text-[13px] whitespace-nowrap transition-all duration-150
                   ${disabled ? 'cursor-not-allowed opacity-50 text-slate-300 border-transparent' : 'cursor-pointer'}
-                  ${active ? 'border-slate-900 text-slate-900 font-bold' : 'border-transparent text-slate-500 font-medium hover:text-slate-900'}
+                  ${active
+                    ? 'border-[#1d2b4b] text-[#1d2b4b] font-bold'
+                    : 'border-transparent text-slate-500 font-medium hover:text-slate-900'}
                 `}
               >
                 <t.icon className="w-4 h-4" />
@@ -313,13 +370,25 @@ function handleTrendingClick(person) {
                 {[...Array(6)].map((_, i) => <Skeleton key={i} height={74} radius={16} />)}
               </div>
             ) : trending.error ? (
-              <EmptyState icon={AlertCircle} colorClass="text-red-500" bgClass="bg-red-500/10" title="Failed to load" desc="Could not load trending alumni. Please try again." />
+              <EmptyState
+                icon={AlertCircle} colorClass="text-red-500" bgClass="bg-red-500/10"
+                title="Failed to load"
+                desc="Could not load trending alumni. Please try again."
+              />
             ) : trending.data.length === 0 ? (
-              <EmptyState icon={Flame} colorClass="text-orange-500" bgClass="bg-orange-500/10" title="No trending data yet" desc="Check back later — views are tracked weekly." />
+              <EmptyState
+                icon={Flame} colorClass="text-orange-500" bgClass="bg-orange-500/10"
+                title="No trending data yet"
+                desc="Check back later — views are tracked weekly."
+              />
             ) : (
               <div className="flex flex-col gap-2.5">
                 {trending.data.map((person, i) => (
-                  <AlumniCard key={person.id} person={person} rank={i + 1} badge={person.views_this_week} currentUserId={currentUserId} onClick={() => handleTrendingClick(person)} />
+                  <AlumniCard
+                    key={person.id} person={person} rank={i + 1}
+                    badge={person.views_this_week} currentUserId={currentUserId}
+                    onClick={() => handleTrendingClick(person)}
+                  />
                 ))}
               </div>
             )}
@@ -343,13 +412,25 @@ function handleTrendingClick(person) {
                 {[...Array(6)].map((_, i) => <Skeleton key={i} height={74} radius={16} />)}
               </div>
             ) : topViewed.error ? (
-              <EmptyState icon={AlertCircle} colorClass="text-red-500" bgClass="bg-red-500/10" title="Failed to load" desc="Could not load top viewed alumni. Please try again." />
+              <EmptyState
+                icon={AlertCircle} colorClass="text-red-500" bgClass="bg-red-500/10"
+                title="Failed to load"
+                desc="Could not load top viewed alumni. Please try again."
+              />
             ) : topViewed.data.length === 0 ? (
-              <EmptyState icon={Eye} colorClass="text-slate-500" bgClass="bg-slate-500/10" title="No data yet" desc="Profile views will appear here once alumni start getting visits." />
+              <EmptyState
+                icon={Eye} colorClass="text-slate-500" bgClass="bg-slate-500/10"
+                title="No data yet"
+                desc="Profile views will appear here once alumni start getting visits."
+              />
             ) : (
               <div className="flex flex-col gap-2.5">
                 {topViewed.data.map((person, i) => (
-                  <AlumniCard key={person.id} person={person} rank={i + 1} badge={person.views} currentUserId={currentUserId} onClick={() => handleTopViewedClick(person)} />
+                  <AlumniCard
+                    key={person.id} person={person} rank={i + 1}
+                    badge={person.views} currentUserId={currentUserId}
+                    onClick={() => handleTopViewedClick(person)}
+                  />
                 ))}
               </div>
             )}
@@ -373,15 +454,19 @@ function handleTrendingClick(person) {
                 {[...Array(5)].map((_, i) => <Skeleton key={i} height={100} radius={16} />)}
               </div>
             ) : myStats.error ? (
-              <EmptyState icon={AlertCircle} colorClass="text-red-500" bgClass="bg-red-500/10" title="Failed to load" desc="Could not load your stats. Please try again." />
+              <EmptyState
+                icon={AlertCircle} colorClass="text-red-500" bgClass="bg-red-500/10"
+                title="Failed to load"
+                desc="Could not load your stats. Please try again."
+              />
             ) : (
               <>
                 <div className="grid grid-cols-[repeat(auto-fit,minmax(160px,1fr))] gap-3.5 mb-2">
-                  <StatCard label="Profile views"     value={myStats.data?.profile_views?.toLocaleString()}     icon={Eye}           colorClass="text-indigo-600" bgClass="bg-indigo-600/10" />
+                  <StatCard label="Profile views"     value={myStats.data?.profile_views?.toLocaleString()}     icon={Eye}           colorClass="text-indigo-600"  bgClass="bg-indigo-600/10"  />
                   <StatCard label="Photos uploaded"   value={myStats.data?.photos_uploaded?.toLocaleString()}   icon={ImageIcon}     colorClass="text-emerald-500" bgClass="bg-emerald-500/10" />
-                  <StatCard label="Times tagged"      value={myStats.data?.times_tagged?.toLocaleString()}      icon={Users}         colorClass="text-purple-500" bgClass="bg-purple-500/10" />
-                  <StatCard label="Messages sent"     value={myStats.data?.messages_sent?.toLocaleString()}     icon={MessageSquare} colorClass="text-orange-500" bgClass="bg-orange-500/10" />
-                  <StatCard label="Messages received" value={myStats.data?.messages_received?.toLocaleString()} icon={MessageSquare} colorClass="text-pink-500" bgClass="bg-pink-500/10" />
+                  <StatCard label="Times tagged"      value={myStats.data?.times_tagged?.toLocaleString()}      icon={Users}         colorClass="text-purple-500"  bgClass="bg-purple-500/10"  />
+                  <StatCard label="Messages sent"     value={myStats.data?.messages_sent?.toLocaleString()}     icon={MessageSquare} colorClass="text-orange-500"  bgClass="bg-orange-500/10"  />
+                  <StatCard label="Messages received" value={myStats.data?.messages_received?.toLocaleString()} icon={MessageSquare} colorClass="text-pink-500"    bgClass="bg-pink-500/10"    />
                 </div>
 
                 {trend.loading ? (

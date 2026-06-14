@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import api from '@/api/client';
 import { refreshEchoAuthHeaders } from '@/lib/echo';
+import LoadingSkeleton from '@/components/ui/LoadingSkeleton';
 
 function initials(name = '') {
   return name.trim().split(/\s+/).map((w) => w[0]?.toUpperCase() || '').slice(0, 2).join('');
@@ -228,8 +229,8 @@ export default function MessageModal({ isOpen, onClose, student, authUser }) {
           <>
             <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto bg-[#f4f6fa] px-3 py-3.5">
               {loading && (
-                <div className="flex flex-1 items-center justify-center pt-10">
-                  <div className="h-6 w-6 animate-spin rounded-full border-2 border-slate-200 border-t-[#1d2b4b]" />
+                <div className="flex-1 pt-3">
+                  <LoadingSkeleton variant="row" count={4} gridClassName="space-y-3" />
                 </div>
               )}
 

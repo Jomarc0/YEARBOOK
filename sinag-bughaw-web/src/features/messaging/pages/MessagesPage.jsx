@@ -5,6 +5,7 @@ import { messagesApi } from '@/api/messaging.api';
 import Navbar from '@/components/layout/Navbar';
 import { useMessaging } from '@/features/messaging/hooks/useMessaging';
 import { imageUrl } from '@/utils/imageUrl';
+import LoadingSkeleton from '@/components/ui/LoadingSkeleton';
 
 function formatTime(iso) {
   if (!iso) return '';
@@ -255,7 +256,7 @@ export default function MessagesPage() {
               </div>
 
               <div className="min-h-0 flex-1 overflow-y-auto px-4 py-5">
-                {loading && <p className="text-center text-sm text-slate-400">Loading messages...</p>}
+                {loading && <LoadingSkeleton variant="row" count={5} gridClassName="space-y-3" />}
                 {thread.length > 0 && (
                   <div className="mb-4 flex items-center gap-3 text-center text-[11px] font-bold text-slate-400">
                     <span className="h-px flex-1 bg-slate-200" />

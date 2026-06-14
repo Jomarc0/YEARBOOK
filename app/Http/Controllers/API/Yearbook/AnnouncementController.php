@@ -7,7 +7,7 @@ use App\Jobs\SendPushNotification;
 use App\Models\Announcement;
 use App\Models\Student;
 use App\Models\User;
-use App\Services\Notification\PHPMailerService;
+use App\Services\Notification\BrevoMailService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -54,7 +54,7 @@ class AnnouncementController extends Controller
         $emailCount = 0;
 
         if ($sendEmail) {
-            $mailer = app(PHPMailerService::class);
+            $mailer = app(BrevoMailService::class);
 
             $this->announcementRecipients()
                 ->chunk(100)

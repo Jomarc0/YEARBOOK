@@ -11,14 +11,24 @@ import React, { Suspense } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useYearbook } from '../../hooks/useYearbook';
 import { useAuth } from '@/features/auth/hooks/useAuth';
+import LoadingSkeleton from '@/components/ui/LoadingSkeleton';
 
 // Lazy-load the heavy flipbook engine
 const FlipbookViewer = React.lazy(() =>
   import('../components/flipbook/FlipbookViewer'),
 );
 
-const GOLD = '#c9a84c';
 const BG   = '#0a0a14';
+
+function YearbookLoadingSkeleton() {
+  return (
+    <div className="min-h-screen px-4 py-8" style={{ background: BG }}>
+      <div className="mx-auto w-full max-w-4xl">
+        <LoadingSkeleton variant="page" count={1} />
+      </div>
+    </div>
+  );
+}
 
 export default function FlipbookViewerPage() {
   const { batchId }  = useParams();
@@ -33,31 +43,7 @@ export default function FlipbookViewerPage() {
 
   // ── Loading ────────────────────────────────────────────────────────────────
 
-  if (loading) {
-    return (
-      <div
-        className="min-h-screen flex flex-col items-center justify-center gap-4"
-        style={{ background: BG }}
-      >
-        <div
-          className="rounded-full"
-          style={{
-            width: 40, height: 40,
-            border: `2px solid rgba(201,168,76,.2)`,
-            borderTop: `2px solid ${GOLD}`,
-            animation: 'spin 1s linear infinite',
-          }}
-          role="status"
-          aria-label="Loading yearbook"
-        />
-        <p style={{ fontSize: 12, color: 'rgba(255,255,255,.35)', letterSpacing: '0.15em', textTransform: 'uppercase' }}>
-          Opening yearbook…
-        </p>
-
-        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
-      </div>
-    );
-  }
+  if (loading) return <YearbookLoadingSkeleton />;
 
   // ── Error ──────────────────────────────────────────────────────────────────
 
@@ -141,19 +127,5 @@ export default function FlipbookViewerPage() {
 }
 
 function SpinnerCentered() {
-  return (
-    <div className="flex items-center justify-center py-24">
-      <div
-        style={{
-          width: 32, height: 32,
-          border: '2px solid rgba(201,168,76,.15)',
-          borderTop: `2px solid ${GOLD}`,
-          borderRadius: '50%',
-          animation: 'spin 1s linear infinite',
-        }}
-        role="status"
-        aria-label="Loading flipbook"
-      />
-    </div>
-  );
+  return <YearbookLoadingSkeleton />;
 }

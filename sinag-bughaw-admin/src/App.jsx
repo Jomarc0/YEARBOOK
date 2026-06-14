@@ -12,6 +12,7 @@ import {
 import Sidebar        from "./components/layout/Sidebar";
 import Topbar         from "./components/layout/Topbar";
 import ToastContainer from "./components/shared/Toast";
+import PrivacyScreen  from "./components/privacy/PrivacyScreen";
 
 // ── Pages ─────────────────────────────────────────────────────────────────────
 import LoginPage             from "./pages/LoginPage";
@@ -66,6 +67,7 @@ export default function App() {
       <AuthProvider>
         <BrowserRouter>
           <AppRoutes toasts={toasts} dismiss={dismiss} showToast={showToast} />
+          <PrivacyScreen />
         </BrowserRouter>
       </AuthProvider>
     </>

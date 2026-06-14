@@ -16,10 +16,12 @@ import { Link }                                      from 'react-router-dom';
 import { useAuth }                                   from '@/features/auth/hooks/useAuth';
 import { useAppConfig }                              from '@/features/platform/AppConfigProvider';
 import { searchApi }                                 from '@/api/search.api';
+import { profileApi }                                from '@/api/profile.api';
 import { storageUrl }                                from '@/api/client';
 import axios                                         from '@/api/client';
 import Navbar                                        from '@/components/layout/Navbar';
 import Footer                                        from '@/components/layout/Footer';
+import LoadingSkeleton                               from '@/components/ui/LoadingSkeleton';
 
 // ─── Tier helper ─────────────────────────────────────────────────────────────
 const getTier = (user) => {
@@ -374,7 +376,7 @@ function TagModal({ photoId, existingTags = [], batchmates = [], onClose, onSave
 // FIX: onTagSaved now receives the full tagged_students array from the server,
 // not a list of IDs. Passed straight through to TagModal's onSaved prop.
 // ─────────────────────────────────────────────────────────────────────────────
-function PostCard({ post, currentUser, batchmates, onTagSaved, onViewed }) {
+function PostCard({ post, currentUser, batchmates, onTagSaved, onViewed, onReport }) {
   const [tagOpen, setTagOpen] = useState(false);
   const cardRef = useRef(null);
   const viewedRef = useRef(false);
@@ -386,6 +388,7 @@ function PostCard({ post, currentUser, batchmates, onTagSaved, onViewed }) {
     || `https://ui-avatars.com/api/?name=${encodeURIComponent(posterName)}&background=1d2b4b&color=fdb813&size=64`;
 
   const isOwn = String(post.user_id) === String(currentUser?.id);
+  const isReported = Boolean(post.is_reported || (post.media ?? []).some(item => item?.is_reported));
 
   useEffect(() => {
     if (!post?.id || isOwn || viewedRef.current || !cardRef.current) return;
@@ -485,6 +488,25 @@ function PostCard({ post, currentUser, batchmates, onTagSaved, onViewed }) {
             <i className="fas fa-share text-[11px]" aria-hidden="true" />
             Share
           </Link>
+
+          {!isOwn && (
+            <button
+              type="button"
+              title={isReported ? 'Reported for review' : 'Report this post'}
+              disabled={isReported}
+              onClick={() => {
+                if (!isReported) onReport?.(post);
+              }}
+              className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-[12px] font-medium transition-colors ${
+                isReported
+                  ? 'cursor-default border-emerald-100 bg-emerald-50 text-emerald-600'
+                  : 'cursor-pointer border-red-100 bg-red-50 text-red-500 hover:bg-red-100'
+              }`}
+            >
+              <i className={`fas ${isReported ? 'fa-check' : 'fa-flag'} text-[11px]`} aria-hidden="true" />
+              {isReported ? 'Reported' : 'Report'}
+            </button>
+          )}
 
           <div className="ml-auto flex items-center gap-1 text-[11px] text-slate-400">
             <i className="fas fa-eye text-[11px]" aria-hidden="true" />
@@ -677,8 +699,7 @@ function memoryHref(memory) {
   const id = memory?.content_id || memory?.id || memory?.photo_id || memory?.album_id;
 
   if ((type.includes('on_this_day') || type.includes('tagged_photo') || type.includes('graduation_photo')) && memory?.album_id) {
-    const query = memory?.photo_id || memory?.id ? `?photo=${encodeURIComponent(memory.photo_id || memory.id)}` : '';
-    return `/gallery/${memory.album_id}${query}`;
+    return '/gallery';
   }
   if (type.includes('student') || type.includes('profile') || memory?.user_id) {
     return `/students/${memory?.user_id || id}`;
@@ -824,29 +845,6 @@ function RightSidebar({ batchmates, batchStats, topViewed, currentUser, memories
 }
 
 // ─── Feed skeleton ────────────────────────────────────────────────────────────
-function FeedSkeleton() {
-  return (
-    <div className="flex flex-col gap-4">
-      {[1, 2, 3].map(i => (
-        <div key={i} className="bg-white rounded-2xl border border-slate-100 overflow-hidden animate-pulse">
-          <div className="flex items-center gap-3 px-4 py-3">
-            <div className="w-10 h-10 rounded-xl bg-slate-200 flex-shrink-0" />
-            <div className="flex-1">
-              <div className="h-3 bg-slate-200 rounded w-32 mb-1.5" />
-              <div className="h-2.5 bg-slate-100 rounded w-24" />
-            </div>
-          </div>
-          <div className="h-[320px] bg-slate-100" />
-          <div className="px-4 py-3">
-            <div className="h-3 bg-slate-100 rounded w-3/4 mb-2" />
-            <div className="h-3 bg-slate-100 rounded w-1/2" />
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
-
 // ─── Main page ────────────────────────────────────────────────────────────────
 export default function DashboardPage() {
   const { user }    = useAuth();
@@ -973,6 +971,21 @@ export default function DashboardPage() {
     ));
   }, []);
 
+  const handleReportPost = async (post) => {
+    try {
+      await profileApi.reportPost(post.id);
+      setPosts(prev => prev.map(item => item.id === post.id
+        ? {
+            ...item,
+            is_reported: true,
+            media: (item.media ?? []).map(media => ({ ...media, is_reported: true })),
+          }
+        : item));
+    } catch {
+      window.alert('Failed to report this post.');
+    }
+  };
+
   const FILTERS = [
     { key: 'all',        label: 'All posts'       },
     { key: 'public',     label: 'Public'          },
@@ -1093,7 +1106,7 @@ export default function DashboardPage() {
 
             {/* Posts */}
             {loading ? (
-              <FeedSkeleton />
+              <LoadingSkeleton variant="feed" count={3} />
             ) : posts.length === 0 ? (
               <div className="bg-white rounded-2xl border border-slate-100 py-16 text-center">
                 <i className="fas fa-photo-video text-3xl text-slate-200 block mb-3" aria-hidden="true" />
@@ -1112,6 +1125,7 @@ export default function DashboardPage() {
                     batchmates={batchmates}
                     onTagSaved={handleTagSaved}
                     onViewed={handlePostViewed}
+                    onReport={handleReportPost}
                   />
                 ))}
 

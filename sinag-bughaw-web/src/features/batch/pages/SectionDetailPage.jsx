@@ -2,6 +2,7 @@ import { useParams, Link } from 'react-router-dom';
 import { useSection } from '@/features/batch/hooks/useBatch';
 import Navbar from '@/components/layout/Navbar';
 import Footer from '@/components/layout/Footer';
+import LoadingSkeleton from '@/components/ui/LoadingSkeleton';
 
 // ── Helper: resolve storage URLs from env ─────────────────────────────────────
 const storageUrl = (path) =>
@@ -62,8 +63,10 @@ export default function SectionDetailPage() {
 
   // ── Loading ───────────────────────────────────────────────────────────────
   if (loading) return (
-    <div className="min-h-screen flex items-center justify-center">
-      <i className="fas fa-spinner fa-spin text-3xl" style={{ color: '#3f51b5' }} />
+    <div className="min-h-screen bg-[#f4f7fe] px-4 py-8">
+      <div className="mx-auto w-full max-w-5xl">
+        <LoadingSkeleton variant="page" count={1} />
+      </div>
     </div>
   );
 

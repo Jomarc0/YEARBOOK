@@ -41,6 +41,8 @@ class MediaController extends Controller
         }
 
         $album = Album::findOrFail($request->validated('album_id'));
+        $visibility = $this->normalizeVisibility($request->validated('visibility', 'public'));
+        $caption = $request->validated('caption', null);
 
         try {
             $results = $this->storage->uploadBulk(
@@ -52,14 +54,15 @@ class MediaController extends Controller
             $uploaded = collect($results)->filter(fn ($r) => $r['success']);
             $failed   = collect($results)->filter(fn ($r) => ! $r['success']);
 
-            $savedGalleries = $uploaded->map(function ($result) use ($album) {
+            $savedGalleries = $uploaded->map(function ($result) use ($album, $visibility, $caption) {
 
                 // 1️ Create the Gallery 
                 $gallery = Gallery::create([
                     'album_id'    => $album->id,
                     'user_id'     => Auth::id(),
+                    'caption'     => $caption,
                     'status'      => 'pending',
-                    'visibility'  => 'public',
+                    'visibility'  => $visibility,
                     'sort_order'  => 0,
                     'ai_metadata' => [
                         'resource_type' => $result['resource_type'] ?? 'image',
@@ -114,6 +117,7 @@ class MediaController extends Controller
         }
 
         $album = Album::findOrFail($request->validated('album_id'));
+        $visibility = $this->normalizeVisibility($request->validated('visibility', 'public'));
 
         try {
             $result = $this->storage->uploadPhoto(
@@ -126,8 +130,9 @@ class MediaController extends Controller
             $gallery = Gallery::create([
                 'album_id'    => $album->id,
                 'user_id'     => Auth::id(),
+                'caption'     => $request->validated('caption'),
                 'status'      => 'pending',
-                'visibility'  => 'public',
+                'visibility'  => $visibility,
                 'sort_order'  => 0,
                 'ai_metadata' => [
                     'resource_type' => 'video',
@@ -165,7 +170,7 @@ class MediaController extends Controller
     public function deletePhoto(int $id): JsonResponse
     {
         // Try GalleryMedia first (new architecture)
-        $media = GalleryMedia::with('gallery')->find($id);
+        $media = GalleryMedia::with('gallery.album')->find($id);
 
         if ($media) {
             $gallery = $media->gallery;
@@ -177,10 +182,17 @@ class MediaController extends Controller
                 'gallery_id'      => $gallery?->id,
             ]);
 
-            // Authorize against the parent Gallery
-            if ($gallery) {
-                Gate::authorize('delete', $gallery);
-            }
+            $actor = Auth::user();
+
+            abort_unless(
+                $actor && (
+                    $actor->role === 'admin' ||
+                    $gallery?->user_id === $actor->id ||
+                    $gallery?->album?->user_id === $actor->id
+                ),
+                403,
+                'You can only delete media that you uploaded.'
+            );
 
             try {
                 if ($media->public_id) {
@@ -315,6 +327,11 @@ class MediaController extends Controller
             ],
             status: 422
         );
+    }
+
+    private function normalizeVisibility(?string $visibility): string
+    {
+        return $visibility === 'batchmates' ? 'friends' : ($visibility ?: 'public');
     }
 
     private function success(string $message = 'OK', mixed $data = [], int $status = 200): JsonResponse

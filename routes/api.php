@@ -83,7 +83,7 @@ Route::get('/yearbook/export/mobile-pdf/{batchId}', [YearbookPdfController::clas
 // PROTECTED ROUTES  (auth:sanctum + throttle 120 req/min)
 
 
-Route::middleware(['auth:sanctum', 'throttle:120,1'])->group(function () {
+Route::middleware(['auth:sanctum', 'active.account', 'throttle:120,1'])->group(function () {
 
     // Auth 
     Route::prefix('auth')->group(function () {
@@ -114,6 +114,7 @@ Route::middleware(['auth:sanctum', 'throttle:120,1'])->group(function () {
             ->middleware('feature:allow_student_posts');
         Route::get('/posts/{photoId}',    [ProfileController::class, 'getPost']);
         Route::patch('/posts/{photoId}',  [ProfileController::class, 'updatePost']);
+        Route::post('/posts/{photoId}/report', [ProfileController::class, 'reportPost']);
         Route::delete('/posts/{photoId}', [ProfileController::class, 'deletePost']);
     });
 
@@ -383,9 +384,11 @@ Route::middleware(['auth:sanctum', 'throttle:120,1'])->group(function () {
 
 Route::prefix('admin')->group(function () {
     Route::post('/login', [AdminAuthController::class, 'login']);
+    Route::post('/login/totp', [AdminAuthController::class, 'verifyTotp'])
+        ->middleware('throttle:10,1');
 });
 
-Route::middleware(['auth:sanctum', 'admin.only'])
+Route::middleware(['auth:sanctum', 'active.account', 'admin.only'])
     ->prefix('admin')
     ->group(function () {
 
@@ -506,6 +509,7 @@ Route::middleware(['auth:sanctum', 'admin.only'])
         Route::get('/albums/{id}/photos', [MediaModerationController::class, 'albumPhotos']);
 
         Route::get('/photos',         [MediaModerationController::class, 'mediaPhotos']);
+        Route::patch('/photos/{id}/visibility', [MediaModerationController::class, 'updatePhotoVisibility']);
         Route::delete('/photos/{id}', [MediaModerationController::class, 'destroyPhoto']);
 
         Route::get('/videos',         [MediaModerationController::class, 'mediaVideos']);
@@ -538,6 +542,9 @@ Route::middleware(['auth:sanctum', 'admin.only'])
         Route::post('/invitations', [$gc, 'uploadInvitation']);
         Route::post('/messages',    [$gc, 'uploadMessage']);
         Route::post('/archive',     [$gc, 'uploadArchive']);
+
+        Route::patch('/files/{photo}',  [$gc, 'updatePhoto']);
+        Route::delete('/files/{photo}', [$gc, 'destroyPhoto']);
 
         Route::put('/{album}',          [$gc, 'update']);
         Route::delete('/{album}',       [$gc, 'destroy']);
@@ -600,7 +607,7 @@ Route::middleware(['auth:sanctum', 'admin.only'])
 
 // SUPER ADMIN ROUTES
 
-Route::middleware(['auth:sanctum', 'admin.only', 'require.super_admin'])
+Route::middleware(['auth:sanctum', 'active.account', 'admin.only', 'require.super_admin'])
     ->prefix('admin')
     ->group(function () {
 

@@ -3,7 +3,7 @@
 namespace App\Jobs\Notification;
 
 use App\Models\User;
-use App\Services\Notification\PHPMailerService;
+use App\Services\Notification\BrevoMailService;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -23,7 +23,7 @@ class SendOtpEmail implements ShouldQueue
         public string $otp
     ) {}
 
-    public function handle(PHPMailerService $mailer): void
+    public function handle(BrevoMailService $mailer): void
     {
         Log::info("SendOtpEmail triggered for: {$this->email}");
 
@@ -35,7 +35,7 @@ class SendOtpEmail implements ShouldQueue
         if (! $sent) {
             Log::error("OTP email failed for {$this->email} — attempt {$this->attempts()}");
             if ($this->attempts() >= $this->tries) {
-                $this->fail(new \RuntimeException("PHPMailer failed after {$this->tries} attempts."));
+                $this->fail(new \RuntimeException("Brevo mail failed after {$this->tries} attempts."));
             }
         } else {
             Log::info("OTP email sent successfully to {$this->email}");

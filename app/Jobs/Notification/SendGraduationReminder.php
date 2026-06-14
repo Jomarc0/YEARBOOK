@@ -2,7 +2,7 @@
 
 namespace App\Jobs\Notification;
 
-use App\Services\Notification\PHPMailerService;
+use App\Services\Notification\BrevoMailService;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -26,7 +26,7 @@ class SendGraduationReminder implements ShouldQueue
         public ?string $actionUrl = null,
     ) {}
 
-    public function handle(PHPMailerService $mailer): void
+    public function handle(BrevoMailService $mailer): void
     {
         $sent = $mailer->sendGraduationReminder(
             $this->email, $this->name,

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useAppConfig } from '@/features/platform/AppConfigProvider';
 
-export default function PostCard({ post, onClick, isOwn, onMenuClick }) {
+export default function PostCard({ post, onClick, isOwn, onMenuClick, onReportClick }) {
   const { isOn } = useAppConfig();
   const showReactions = isOn('allow_reactions');
   const showComments = isOn('allow_comments');
@@ -16,6 +16,7 @@ export default function PostCard({ post, onClick, isOwn, onMenuClick }) {
   const isVideo = current.resource_type === 'video'
     || current.file_path?.match(/\.(mp4|mov|webm)(\?|$)/i);
   const isMulti = mediaCount > 1;
+  const isReported = Boolean(post.is_reported || media.some(item => item?.is_reported));
 
   return (
     <div
@@ -90,6 +91,25 @@ export default function PostCard({ post, onClick, isOwn, onMenuClick }) {
           onClick={e => { e.stopPropagation(); onMenuClick?.(e, post); }}
         >
           <i className="fas fa-ellipsis-v" />
+        </button>
+      )}
+
+      {!isOwn && (
+        <button
+          type="button"
+          title={isReported ? 'Reported for review' : 'Report this post'}
+          disabled={isReported}
+          className={`absolute bottom-2 right-2 z-[4] flex h-7 w-7 items-center justify-center rounded-lg border border-white/10 text-xs text-white opacity-100 backdrop-blur-sm transition ${
+            isReported
+              ? 'cursor-default bg-emerald-600/85'
+              : 'cursor-pointer bg-[#1d2b4b]/75 hover:bg-red-600/85'
+          }`}
+          onClick={e => {
+            e.stopPropagation();
+            if (!isReported) onReportClick?.(post);
+          }}
+        >
+          <i className={`fas ${isReported ? 'fa-check' : 'fa-flag'}`} />
         </button>
       )}
 

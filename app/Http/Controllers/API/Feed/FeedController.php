@@ -148,6 +148,7 @@ class FeedController extends Controller
                 'resource_type' => $m->resource_type,
                 'width'         => $m->width,
                 'height'        => $m->height,
+                'is_reported'   => (bool) $m->is_reported,
             ])->values()->toArray()
             : ($photo->file_path ? [[
                 'id'            => null,
@@ -155,6 +156,7 @@ class FeedController extends Controller
                 'resource_type' => $photo->ai_metadata['resource_type'] ?? 'image',
                 'width'         => null,
                 'height'        => null,
+                'is_reported'   => false,
             ]] : []);
 
         // User data 
@@ -192,6 +194,7 @@ class FeedController extends Controller
             'user'   => $userData,
 
             'media'           => $media,
+            'is_reported'     => collect($media)->contains(fn ($m) => (bool) ($m['is_reported'] ?? false)),
 
             'tagged_students' => $taggedStudents,
         ];

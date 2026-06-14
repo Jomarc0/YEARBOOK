@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { faceApi } from '@/api/gallery.api';
 import { imageUrl } from '@/utils/imageUrl';
 import PostLightbox from './PostLightbox';
+import LoadingSkeleton from '@/components/ui/LoadingSkeleton';
 
 function resolvePhotoUrl(item) {
   const photo = item?.photo ?? item ?? {};
@@ -53,8 +54,7 @@ function taggedPhotoLink(item) {
 
   if (ownerId && postId) return `/students/${ownerId}?post=${postId}`;
   if (postId) return `/profile?post=${postId}`;
-  if (albumId) return `/gallery/${albumId}`;
-  if (galleryId) return `/gallery/${galleryId}`;
+  if (albumId || galleryId) return '/gallery';
   return '#';
 }
 
@@ -83,10 +83,7 @@ export default function StudentPhotosSection({ userId, compact = false, openInMo
 
   // ── Loading ────────────────────────────────────────────────────────────────
   if (loading) return (
-    <div className="flex items-center justify-center gap-2 py-8 text-slate-400 text-sm">
-      <i className="fas fa-spinner animate-spin text-xs" />
-      Loading tagged photos…
-    </div>
+    <LoadingSkeleton variant="card" count={compact ? 3 : 6} gridClassName="grid grid-cols-2 gap-3 sm:grid-cols-3" />
   );
 
   // ── Empty ──────────────────────────────────────────────────────────────────

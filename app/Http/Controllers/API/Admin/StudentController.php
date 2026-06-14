@@ -9,7 +9,6 @@ use App\Models\AuditLog;
 use App\Models\Section;
 use App\Models\Student;
 use App\Models\User;
-use App\Services\Storage\CloudinaryService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -18,8 +17,6 @@ use Illuminate\Support\Facades\Log;
 class StudentController extends Controller
 {
     use AuditsAdminActions;
-
-    public function __construct(private CloudinaryService $cloudinary) {}
 
     // GET /api/admin/sections/{section}/students
 
@@ -42,9 +39,8 @@ class StudentController extends Controller
             ->orderBy('first_name')
             ->paginate($request->get('per_page', 200));
 
-        // Append has_registered flag to each student for the admin panel UI
         $students->getCollection()->transform(function (Student $student) {
-            $student->append([]);   // clear default appends
+            $student->append([]);
             return array_merge($student->toArray(), [
                 'has_registered' => ! is_null($student->userAccount),
                 'registered_at'  => $student->userAccount?->created_at?->format('M d, Y'),
@@ -54,13 +50,14 @@ class StudentController extends Controller
         return response()->json($students);
     }
 
-    // POST /api/admin/sections/{section}/students 
+    // POST /api/admin/sections/{section}/students
+
     public function store(Request $request, Section $section): JsonResponse
     {
         $validated = $request->validate($this->rules());
 
         if ($request->hasFile('photo')) {
-            $result = $this->cloudinary->uploadPhoto(
+            $result = app(\App\Services\Storage\CloudinaryService::class)->uploadPhoto(
                 file:   $request->file('photo'),
                 userId: Auth::id(),
                 folder: 'students/photos',
@@ -72,8 +69,10 @@ class StudentController extends Controller
 
         $student = Student::create([
             ...$validated,
-            'section_id' => $section->id,
-            'batch_id'   => $section->batch_id,
+            'section_id'      => $section->id,
+            'batch_id'        => $section->batch_id,
+            'course'          => $section->course,      
+            'graduation_year' => $section->batch_year,  
         ]);
 
         $this->autoLinkUser($student);
@@ -91,7 +90,7 @@ class StudentController extends Controller
         return response()->json(['message' => 'Student added.', 'data' => $student], 201);
     }
 
-    // PUT /api/admin/sections/{section}/students/{student} 
+    // PUT /api/admin/sections/{section}/students/{student}
 
     public function update(Request $request, Section $section, Student $student): JsonResponse
     {
@@ -104,7 +103,7 @@ class StudentController extends Controller
         if ($request->boolean('remove_photo')) {
             if ($student->photo_public_id) {
                 try {
-                    $this->cloudinary->deletePhoto($student->photo_public_id);
+                    app(\App\Services\Storage\CloudinaryService::class)->deletePhoto($student->photo_public_id);
                 } catch (\Throwable $e) {
                     Log::warning('Admin student photo cleanup failed; continuing removal.', [
                         'student_id' => $student->id,
@@ -114,14 +113,14 @@ class StudentController extends Controller
                 }
             }
 
-            $validated['photo'] = null;
+            $validated['photo']           = null;
             $validated['photo_public_id'] = null;
         }
 
         if ($request->hasFile('photo')) {
             if ($student->photo_public_id) {
                 try {
-                    $this->cloudinary->deletePhoto($student->photo_public_id);
+                    app(\App\Services\Storage\CloudinaryService::class)->deletePhoto($student->photo_public_id);
                 } catch (\Throwable $e) {
                     Log::warning('Admin student photo cleanup failed; continuing update.', [
                         'student_id' => $student->id,
@@ -131,7 +130,7 @@ class StudentController extends Controller
                 }
             }
 
-            $result = $this->cloudinary->uploadPhoto(
+            $result = app(\App\Services\Storage\CloudinaryService::class)->uploadPhoto(
                 file:   $request->file('photo'),
                 userId: Auth::id(),
                 folder: 'students/photos',
@@ -157,7 +156,8 @@ class StudentController extends Controller
         return response()->json(['message' => 'Student updated.', 'data' => $student->fresh()]);
     }
 
-    //  DELETE /api/admin/sections/{section}/students/{student}
+    // DELETE /api/admin/sections/{section}/students/{student}
+
     public function destroy(Section $section, Student $student): JsonResponse
     {
         if ((int) $student->section_id !== (int) $section->id) {
@@ -166,8 +166,6 @@ class StudentController extends Controller
 
         $snapshot = "{$student->first_name} {$student->last_name} (No. {$student->student_no})";
 
-        // If a user is linked, unlink them first so they become a browse account
-        // rather than having a dangling FK.
         if ($student->userAccount) {
             $student->userAccount->update([
                 'student_record_id' => null,
@@ -191,7 +189,7 @@ class StudentController extends Controller
         return response()->json(['message' => 'Student moved to trash.']);
     }
 
-    // POST /api/admin/sections/{section}/students/import 
+    // POST /api/admin/sections/{section}/students/import
 
     public function import(Request $request, Section $section): JsonResponse
     {
@@ -207,18 +205,18 @@ class StudentController extends Controller
             $student = Student::updateOrCreate(
                 ['student_no' => $no],
                 [
-                    'first_name'  => trim($row['first_name']  ?? ''),
-                    'last_name'   => trim($row['last_name']   ?? ''),
-                    'middle_name' => trim($row['middle_name'] ?? '') ?: null,
-                    'email'       => trim($row['email']       ?? '') ?: null,
-                    'honors'      => trim($row['honors']      ?? '') ?: null,
-                    'section_id'  => $section->id,
-                    'batch_id'    => $section->batch_id,
+                    'first_name'      => trim($row['first_name']  ?? ''),
+                    'last_name'       => trim($row['last_name']   ?? ''),
+                    'middle_name'     => trim($row['middle_name'] ?? '') ?: null,
+                    'email'           => trim($row['email']       ?? '') ?: null,
+                    'honors'          => trim($row['honors']      ?? '') ?: null,
+                    'section_id'      => $section->id,
+                    'batch_id'        => $section->batch_id,
+                    'course'          => $section->course,      // ← auto-fill from section
+                    'graduation_year' => $section->batch_year,  // ← auto-fill from section
                 ]
             );
 
-            // If a user already registered with this student_no + name,
-            // auto-link them to the newly imported record.
             $this->autoLinkUser($student);
             $this->refreshLinkedUser($student, filled($student->photo));
 
@@ -238,7 +236,8 @@ class StudentController extends Controller
         ]);
     }
 
-    // Helpers 
+    // Helpers
+
     private function autoLinkUser(Student $student): void
     {
         User::whereNull('student_record_id')

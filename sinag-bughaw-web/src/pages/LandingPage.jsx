@@ -144,6 +144,8 @@ export default function LandingPage() {
         )}
       </nav>
 
+      <main className="flex-1">
+
       {/* ── Hero ────────────────────────────────────────────────────────────── */}
       <section
         className="relative min-h-screen flex flex-col items-center justify-center text-center text-white px-5 bg-[linear-gradient(to_bottom,rgba(29,43,75,0.82)_0%,rgba(29,43,75,0.65)_60%,rgba(29,43,75,0.9)_100%),url('/images/NU-building.jpg')] bg-cover bg-center bg-no-repeat"
@@ -338,6 +340,8 @@ export default function LandingPage() {
           </div>
         </div>
       </section>
+
+      </main>
 
       <Footer />
     </div>

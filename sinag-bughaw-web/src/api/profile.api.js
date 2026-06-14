@@ -14,6 +14,9 @@ export const profileApi = {
   updatePost: (photoId, payload) =>
     client.patch(`/profile/posts/${photoId}`, payload),
 
+  reportPost: (photoId, payload = {}) =>
+    client.post(`/profile/posts/${photoId}/report`, payload),
+
   deletePost: (photoId) =>
     client.delete(`/profile/posts/${photoId}`),
 };

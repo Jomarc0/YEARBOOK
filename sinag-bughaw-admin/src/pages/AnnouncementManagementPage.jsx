@@ -1,7 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { announcementsApi } from '@/api/yearbook.api';
-
-// ── Constants ──────────────────────────────────────────────────────────────────
+import api from '@/services/api';
 
 const TYPE_CONFIG = {
   graduation:  { bg: '#fffbeb', color: '#b77905', icon: 'fa-graduation-cap', label: 'Graduation'  },
@@ -17,6 +16,7 @@ const EMPTY_FORM = {
   type:         '',
   send_email:   true,
   send_push:    true,
+  email_batch_id: '',
   action_url:   '',
   action_label: '',
 };
@@ -24,8 +24,6 @@ const EMPTY_FORM = {
 const graduationKeywordPattern = /\b(graduation|commencement|baccalaureate)\b/i;
 const defaultAnnouncementType = ({ title = '', body = '', type = '' }) =>
   type || (graduationKeywordPattern.test(`${title} ${body}`) ? 'graduation' : 'information');
-
-// ── Sub-components ─────────────────────────────────────────────────────────────
 
 function TypeButton({ value, active, onClick }) {
   const cfg = TYPE_CONFIG[value];
@@ -172,8 +170,6 @@ function StatCard({ icon, value, label, color = '#1d2b4b' }) {
   );
 }
 
-// ── Main Component ─────────────────────────────────────────────────────────────
-
 export default function AnnouncementManagementPage({ showToast }) {
   const [form,           setForm]           = useState(EMPTY_FORM);
   const [items,          setItems]          = useState([]);
@@ -182,9 +178,8 @@ export default function AnnouncementManagementPage({ showToast }) {
   const [filterType,     setFilterType]     = useState('all');
   const [searchQuery,    setSearchQuery]    = useState('');
   const [recipientCount, setRecipientCount] = useState(0);
+  const [batches,        setBatches]        = useState([]);
   const [editingId,      setEditingId]      = useState(null);
-
-  // ── Fetch ──────────────────────────────────────────────────────────────────
 
   const fetchAnnouncements = useCallback(() => {
     setLoading(true);
@@ -194,18 +189,26 @@ export default function AnnouncementManagementPage({ showToast }) {
       .finally(() => setLoading(false));
   }, [showToast]);
 
-  const fetchRecipientCount = useCallback(() => {
-    announcementsApi.recipientCount?.()
+  const fetchRecipientCount = useCallback((batchId = '') => {
+    announcementsApi.recipientCount?.(batchId ? { batch_id: batchId } : {})
       .then(({ data }) => setRecipientCount(data.count ?? data))
       .catch(() => {});
   }, []);
 
+  const fetchBatches = useCallback(() => {
+    api.get('/admin/batches', { params: { per_page: 100 } })
+      .then(({ data }) => setBatches(data.data ?? data))
+      .catch(() => showToast?.('Failed to load batches.', 'error'));
+  }, [showToast]);
+
   useEffect(() => {
     fetchAnnouncements();
-    fetchRecipientCount();
-  }, [fetchAnnouncements, fetchRecipientCount]);
+    fetchBatches();
+  }, [fetchAnnouncements, fetchBatches]);
 
-  // ── Derived state ──────────────────────────────────────────────────────────
+  useEffect(() => {
+    fetchRecipientCount(form.email_batch_id);
+  }, [fetchRecipientCount, form.email_batch_id]);
 
   const filtered = items.filter(a => {
     const matchType  = filterType === 'all' || a.type === filterType;
@@ -219,14 +222,19 @@ export default function AnnouncementManagementPage({ showToast }) {
     urgent:   items.filter(a => a.type === 'urgent').length,
     pushSent: items.filter(a => a.send_push).length,
   };
-
-  // ── Handlers ───────────────────────────────────────────────────────────────
+  const selectedEmailBatch = batches.find(b => String(b.id) === String(form.email_batch_id));
 
   const setField = (key, val) => setForm(f => ({ ...f, [key]: val }));
+  const setEmailBatch = (batchId) => {
+    setForm(f => ({ ...f, email_batch_id: batchId }));
+  };
 
   const handleSubmit = async () => {
     if (!form.title.trim()) return showToast?.('Title is required.', 'error');
     if (!form.body.trim())  return showToast?.('Message body is required.', 'error');
+    if (form.send_email && !form.email_batch_id) {
+      return showToast?.('Choose the batch that will receive the email.', 'error');
+    }
 
     const resolvedType = defaultAnnouncementType(form);
 
@@ -238,6 +246,7 @@ export default function AnnouncementManagementPage({ showToast }) {
         type:         resolvedType,
         send_push:    form.send_push,
         send_email:   form.send_email,
+        email_batch_id: form.send_email ? form.email_batch_id : null,
         action_url:   form.action_url.trim()   || null,
         action_label: form.action_label.trim() || null,
       };
@@ -268,6 +277,7 @@ export default function AnnouncementManagementPage({ showToast }) {
       type:         ann.type ?? '',
       send_email:   false,
       send_push:    Boolean(ann.send_push),
+      email_batch_id: '',
       action_url:   ann.action_url ?? '',
       action_label: ann.action_label ?? '',
     });
@@ -289,8 +299,6 @@ export default function AnnouncementManagementPage({ showToast }) {
     }
   };
 
-  // ── Render ─────────────────────────────────────────────────────────────────
-
   return (
     <div style={{ minHeight: '100vh', background: '#f8fafc' }}>
       <style>{`
@@ -301,40 +309,47 @@ export default function AnnouncementManagementPage({ showToast }) {
         .ann-input:focus { border-color:#3f51b5; }
       `}</style>
 
-      {/* ── Top Bar ── */}
-      <header style={{
-        background: 'linear-gradient(135deg, #1d2b4b 0%, #2e3f7a 100%)',
-        padding: '22px 32px', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+      {/* ── Page Title Bar ── */}
+      <div style={{
+        padding: '20px 32px 0',
+        maxWidth: '1280px',
+        margin: '0 auto',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        marginBottom: '4px',
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           <div style={{
             width: '40px', height: '40px', borderRadius: '12px',
-            background: 'rgba(253,184,19,.15)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+            background: '#eef2ff',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
           }}>
-            <i className="fas fa-bullhorn" style={{ color: '#fdb813', fontSize: '18px' }} />
+            <i className="fas fa-bullhorn" style={{ color: '#3f51b5', fontSize: '18px' }} />
           </div>
           <div>
-            <h1 style={{ color: '#fff', fontSize: '18px', fontWeight: 900, letterSpacing: '-0.5px', margin: 0 }}>
+            <h1 style={{ color: '#1d2b4b', fontSize: '18px', fontWeight: 900, letterSpacing: '-0.5px', margin: 0 }}>
               Announcement Management
             </h1>
-            <p style={{ color: 'rgba(255,255,255,0.55)', fontSize: '12px', margin: 0 }}>
+            <p style={{ color: '#94a3b8', fontSize: '12px', margin: 0 }}>
               Sinag-Bughaw · NU Lipa Admin
             </p>
           </div>
         </div>
         {recipientCount > 0 && (
           <div style={{
-            background: 'rgba(255,255,255,0.08)', borderRadius: '12px', padding: '8px 16px',
-            color: 'rgba(255,255,255,0.8)', fontSize: '13px', fontWeight: 600,
+            background: '#eef2ff', borderRadius: '12px', padding: '8px 16px',
+            color: '#3f51b5', fontSize: '13px', fontWeight: 600,
             display: 'flex', alignItems: 'center', gap: '8px',
+            border: '1px solid #c7d2fe',
           }}>
-            <i className="fas fa-users" style={{ color: '#fdb813' }} />
-            {recipientCount.toLocaleString()} enrolled students
+            <i className="fas fa-users" style={{ color: '#3f51b5' }} />
+            {recipientCount.toLocaleString()} {selectedEmailBatch ? `${selectedEmailBatch.name} email recipient${recipientCount === 1 ? '' : 's'}` : 'enrolled students'}
           </div>
         )}
-      </header>
+      </div>
 
-      <div style={{ padding: '28px 32px', maxWidth: '1280px', margin: '0 auto' }}>
+      <div style={{ padding: '20px 32px 28px', maxWidth: '1280px', margin: '0 auto' }}>
 
         {/* ── Stats Row ── */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px', marginBottom: '28px' }}>
@@ -462,9 +477,35 @@ export default function AnnouncementManagementPage({ showToast }) {
               <Toggle
                 checked={form.send_email}
                 onChange={v => setField('send_email', v)}
-                label="Send email to all students"
+                label="Send email to selected batch"
                 icon="fa-envelope"
               />
+              {form.send_email && (
+                <div style={{ margin: '8px 0 12px 28px' }}>
+                  <label style={{ display: 'block', fontSize: '10px', fontWeight: 800, color: '#94a3b8',
+                    textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '6px' }}>
+                    Email recipient batch *
+                  </label>
+                  <select
+                    className="ann-input"
+                    value={form.email_batch_id}
+                    onChange={e => setEmailBatch(e.target.value)}
+                    style={{ cursor: 'pointer', background: '#fff' }}
+                  >
+                    <option value="">Choose batch to email</option>
+                    {batches.map(batch => (
+                      <option key={batch.id} value={batch.id}>
+                        {batch.name} {batch.graduation_year ? `- ${batch.graduation_year}` : ''}
+                      </option>
+                    ))}
+                  </select>
+                  <p style={{ margin: '7px 0 0', fontSize: '11px', color: form.email_batch_id ? '#64748b' : '#dc2626', fontWeight: 700 }}>
+                    {form.email_batch_id
+                      ? `${recipientCount.toLocaleString()} email recipient${recipientCount === 1 ? '' : 's'} in this batch.`
+                      : 'Select a batch so the email will not be sent to all students.'}
+                  </p>
+                </div>
+              )}
               <div style={{ height: '1px', background: '#e2e8f0', margin: '4px 0' }} />
               <Toggle
                 checked={form.send_push}

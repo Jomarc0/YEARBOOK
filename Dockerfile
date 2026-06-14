@@ -12,6 +12,7 @@ RUN apt-get update \
         libjpeg62-turbo-dev \
         libfreetype6-dev \
         libicu-dev \
+        default-libmysqlclient-dev \
     && docker-php-ext-configure gd --with-freetype --with-jpeg \
     && docker-php-ext-install \
         bcmath \
@@ -19,6 +20,7 @@ RUN apt-get update \
         intl \
         opcache \
         pdo \
+        pdo_mysql \
         pdo_pgsql \
         pgsql \
         zip \

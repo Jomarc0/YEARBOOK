@@ -10,6 +10,7 @@ use App\Contracts\TranscriptionServiceInterface;
 use App\Services\AI\AwsRekognitionFaceRecognition;
 use App\Services\AI\TranscriptionService;
 use App\Services\Storage\CloudinaryService;
+use App\Services\Storage\LocalStorageService;
 use Illuminate\Support\ServiceProvider;
 
 class IntegrationServiceProvider extends ServiceProvider
@@ -17,10 +18,13 @@ class IntegrationServiceProvider extends ServiceProvider
     public function register(): void
     {
         // Storage 
-        $this->app->singleton(
-            StorageServiceInterface::class,
-            CloudinaryService::class
-        );
+        $this->app->singleton(StorageServiceInterface::class, function () {
+            if (! config('cloudinary.cloud_name') || ! config('cloudinary.api_key') || ! config('cloudinary.api_secret')) {
+                return new LocalStorageService();
+            }
+
+            return new CloudinaryService();
+        });
 
         //Face Recognition ─
         $this->app->singleton(

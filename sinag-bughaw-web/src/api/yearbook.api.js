@@ -239,7 +239,7 @@ export const mediaApi = {
 
   /**
    * POST /api/media/bulk-upload
-   * Accepts either a pre-built FormData (from GraduationPage)
+   * Accepts either a pre-built FormData (from GalleryPage)
    * or (albumId, files[], onProgress) signature (from GalleryPage).
    */
   bulkUpload: (albumIdOrFd, files = null, onProgress = null) => {
@@ -281,8 +281,8 @@ export const mediaApi = {
     });
   },
 
-  /** DELETE /api/media/photo/:photoId */
-  deletePhoto: (photoId) => api.delete(`/media/photo/${photoId}`),
+  /** DELETE /api/gallery/media/:photoId */
+  deletePhoto: (photoId) => api.delete(`/gallery/media/${photoId}`),
 };
 
 // ─────────────────────────────────────────────────────────────────────────────

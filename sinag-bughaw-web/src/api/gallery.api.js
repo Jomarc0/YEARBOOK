@@ -20,9 +20,11 @@ export const galleryApi = {
 export const mediaApi = {
   storageUsage: () => client.get('/profile/storage-usage'),
 
-  bulkUpload: (albumId, files, onProgress) => {
+  bulkUpload: (albumId, files, onProgress, visibility = 'public', caption = '') => {
     const form = new FormData();
     form.append('album_id', albumId);
+    form.append('visibility', visibility);
+    if (caption) form.append('caption', caption);
     files.forEach((file) => form.append('photos[]', file));
     return client.post('/media/bulk-upload', form, {
       headers: { 'Content-Type': 'multipart/form-data' },
@@ -32,11 +34,12 @@ export const mediaApi = {
     });
   },
 
-  uploadVideo: (albumId, file, caption = '', onProgress) => {
+  uploadVideo: (albumId, file, caption = '', onProgress, visibility = 'public') => {
     const form = new FormData();
     form.append('album_id', albumId);
     form.append('video', file);
     form.append('caption', caption);
+    form.append('visibility', visibility);
     return client.post('/media/upload-video', form, {
       headers: { 'Content-Type': 'multipart/form-data' },
       onUploadProgress: (e) => {
@@ -45,7 +48,7 @@ export const mediaApi = {
     });
   },
 
-  deletePhoto: (photoId) => client.delete(`/media/photo/${photoId}`),
+  deletePhoto: (photoId) => client.delete(`/gallery/media/${photoId}`),
   bandwidth:   ()        => client.get('/profile/storage-usage'),
 };
 

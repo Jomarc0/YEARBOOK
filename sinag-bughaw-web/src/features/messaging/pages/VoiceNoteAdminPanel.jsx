@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { voiceNoteAdminApi } from '@/api/messaging.api';
+import LoadingSkeleton from '@/components/ui/LoadingSkeleton';
 
 /**
  * VoiceNoteAdminPanel
@@ -106,9 +107,7 @@ export default function VoiceNoteAdminPanel() {
 
       {/* List */}
       {loading ? (
-        <div style={{ textAlign: 'center', padding: '48px', color: '#94a3b8' }}>
-          <i className="fas fa-spinner fa-spin" style={{ fontSize: '2rem', color: '#3f51b5' }} />
-        </div>
+        <LoadingSkeleton variant="row" count={4} gridClassName="space-y-3" />
       ) : notes.length === 0 ? (
         <div style={{
           background: '#fff', borderRadius: '20px', padding: '48px', textAlign: 'center',

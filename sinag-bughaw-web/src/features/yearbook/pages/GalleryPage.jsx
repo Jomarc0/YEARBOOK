@@ -12,6 +12,7 @@ import Footer from '@/components/layout/Footer';
 import { imageUrl } from '@/utils/imageUrl';
 import ProtectedImage from '@/components/ui/ProtectedImage';
 import { ContentOwnershipBanner } from '@/components/ui/CopyrightLabel';
+import LoadingSkeleton from '@/components/ui/LoadingSkeleton';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -32,36 +33,54 @@ const TABS = [
   { key: 'graduation:videos',     label: 'Videos',        icon: 'fa-film'               },
   { key: 'graduation:mass',       label: 'Baccalaureate', icon: 'fa-church'             },
   { key: 'graduation:program',    label: 'Program',       icon: 'fa-file-pdf'           },
-  { key: 'graduation:invitation', label: 'Invitation',    icon: 'fa-envelope-open-text' },
   { key: 'graduation:song',       label: 'Grad Song',     icon: 'fa-music'              },
+];
+
+const VISIBILITY_OPTIONS = [
+  { value: 'public', label: 'Public', icon: 'fa-globe', hint: 'Visible to everyone' },
+  { value: 'batchmates', label: 'Batchmates', icon: 'fa-user-group', hint: 'Only your batch' },
+  { value: 'private', label: 'Private', icon: 'fa-lock', hint: 'Only you and admins' },
 ];
 
 const searchText = (value) => String(value ?? '').toLowerCase();
 
 const albumSearchHaystack = (album, tab) => [
   tab?.label,
+  tab?.key,
   album?.title,
+  album?.name,
+  album?.album_title,
+  album?.caption,
   album?.description,
   album?.event_date,
+  album?.event_year,
+  album?.graduation_year,
+  album?.batch_name,
   album?.category,
+  album?.type,
   ...albumMediaFiles(album).flatMap(file => [
-    file?.caption,
     file?.title,
+    file?.name,
+    file?.caption,
     file?.file_name,
+    file?.filename,
     file?.original_name,
+    file?.description,
     file?.mime_type,
+    file?.resource_type,
   ]),
 ].map(searchText).join(' ');
 
 const categoryToTabKey = (category) => {
   const normalized = String(category ?? '').toLowerCase();
   const aliases = {
-    invitations: 'invitation',
+    invitations: 'program',
+    invitation: 'program',
     songs: 'song',
     speeches: 'videos',
   };
   const tabCategory = aliases[normalized] ?? normalized;
-  if (['photos', 'videos', 'program', 'invitation', 'song', 'mass'].includes(tabCategory)) {
+  if (['photos', 'videos', 'program', 'song', 'mass'].includes(tabCategory)) {
     return `graduation:${tabCategory}`;
   }
   return 'general';
@@ -80,6 +99,11 @@ const albumMediaFiles = (album) => {
   if (files.length > 0) return files;
   return album?.photos ?? [];
 };
+const albumMediaTitle = (media, fallback = 'Media') => media?.title
+  ?? media?.caption
+  ?? media?.filename
+  ?? media?.file_name
+  ?? fallback;
 const isApprovedMedia = (item) => {
   const status = String(item?.status || item?.moderation_status || item?.approval_status || item?.pivot?.status || '').toLowerCase();
   if (['rejected', 'denied', 'declined', 'pending', 'unapproved', 'hidden'].includes(status)) return false;
@@ -96,6 +120,30 @@ const mediaFileRef = (file) => file?.url
   || file?.src
   || '';
 const isImageMedia = (url = '') => /\.(jpg|jpeg|png|webp|gif)(\?|$)/i.test(String(url));
+const isVideoMedia = (file) => {
+  const type = String(file?.resource_type ?? file?.file_type ?? file?.mime_type ?? file?.type ?? '').toLowerCase();
+  const ref = mediaFileRef(file);
+  return type.startsWith('video') || /\.(mp4|mov|webm|mkv|avi|m4v)(\?|$)/i.test(String(ref));
+};
+const canDeleteMediaItem = (user, album, item) => {
+  if (!user || !item) return false;
+  if (String(user.role ?? '').toLowerCase() === 'admin' || user.is_admin) return true;
+
+  const ownerIds = [
+    item.user_id,
+    item.uploaded_by,
+    item.gallery?.user_id,
+    item.photo?.user_id,
+    item.user?.id,
+    album?.user_id,
+    album?.owner_id,
+    album?.user?.id,
+  ]
+    .filter(value => value !== null && value !== undefined && value !== '')
+    .map(value => String(value));
+
+  return ownerIds.includes(String(user.id));
+};
 const albumMediaCount = (album) => Number(albumMediaFiles(album).length || album?.file_count || album?.media_count || album?.photos_count || (album?.media_url || album?.file_path ? 1 : 0));
 const primaryAlbumMedia = (album) => mediaFileRef(albumMediaFiles(album).find(isApprovedMedia)) || '';
 const albumCoverMedia = (album) => {
@@ -406,9 +454,7 @@ function TranscriptModal({ photoId, albumId, videoTitle, onClose }) {
         </div>
 
         {loading ? (
-          <div className="flex-1 flex items-center justify-center py-16">
-            <i className="fas fa-spinner fa-spin text-3xl text-[#3f51b5]" />
-          </div>
+          <LoadingSkeleton variant="row" count={3} gridClassName="space-y-3" />
         ) : transcripts.length === 0 ? (
           <div className="flex-1 flex flex-col items-center justify-center py-16 px-8 text-center">
             <i className="fas fa-microphone-slash text-5xl text-slate-200 block mb-4" />
@@ -483,11 +529,7 @@ function TranscriptModal({ photoId, albumId, videoTitle, onClose }) {
                       )
                     )
                   ) : selected.status === 'processing' ? (
-                    <div className="flex flex-col items-center justify-center py-16 gap-4">
-                      <i className="fas fa-spinner fa-spin text-3xl text-[#3f51b5]" />
-                      <p className="text-sm font-semibold text-slate-500">Groq Whisper is transcribing this speech…</p>
-                      <p className="text-xs text-slate-400">This may take a few minutes.</p>
-                    </div>
+                    <LoadingSkeleton variant="page" count={1} />
                   ) : selected.status === 'failed' ? (
                     <div className="flex flex-col items-center justify-center py-16 gap-3">
                       <i className="fas fa-circle-exclamation text-3xl text-red-400" />
@@ -532,9 +574,9 @@ function TranscriptModal({ photoId, albumId, videoTitle, onClose }) {
 }
 
 // ─── Grad content cards ───────────────────────────────────────────────────────
-function GradAlbumCard({ album }) {
+function GradAlbumCard({ album, onClick }) {
   return (
-    <Link to={`/graduation/archive/${album.id}`} className="no-underline block group">
+    <button type="button" onClick={() => onClick(album)} className="text-left w-full border-none bg-transparent p-0 block group cursor-pointer">
       <div className="rounded-3xl overflow-hidden bg-white border border-black/[0.04]
                       shadow-sm transition-all duration-300
                       group-hover:-translate-y-2 group-hover:shadow-xl">
@@ -554,7 +596,220 @@ function GradAlbumCard({ album }) {
           )}
         </div>
       </div>
-    </Link>
+    </button>
+  );
+}
+
+function PhotoLightbox({ photos, startIndex, onClose }) {
+  const [idx, setIdx] = useState(startIndex);
+
+  useEffect(() => {
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = ''; };
+  }, []);
+
+  useEffect(() => {
+    const handler = (e) => {
+      if (e.key === 'Escape') onClose();
+      if (e.key === 'ArrowRight') setIdx(i => Math.min(i + 1, photos.length - 1));
+      if (e.key === 'ArrowLeft') setIdx(i => Math.max(i - 1, 0));
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [photos.length, onClose]);
+
+  const photo = photos[idx];
+  const src = imageUrl(mediaFileRef(photo));
+  const title = albumMediaTitle(photo, `Photo ${idx + 1}`);
+  const isVideo = isVideoMedia(photo);
+
+  return (
+    <div
+      className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/90"
+      onClick={onClose}
+      role="dialog"
+      aria-modal="true"
+      aria-label={title}
+    >
+      <button
+        type="button"
+        onClick={onClose}
+        className="absolute right-4 top-4 z-10 flex h-10 w-10 items-center justify-center rounded-full border-none bg-white/10 text-white transition-colors hover:bg-white/20"
+        aria-label="Close media preview"
+      >
+        <i className="fas fa-times" />
+      </button>
+
+      <span className="absolute left-1/2 top-4 -translate-x-1/2 text-xs font-bold text-white/50">
+        {idx + 1} / {photos.length}
+      </span>
+
+      {idx > 0 && (
+        <button
+          type="button"
+          onClick={e => { e.stopPropagation(); setIdx(i => i - 1); }}
+          className="absolute left-4 z-10 flex h-11 w-11 items-center justify-center rounded-full border-none bg-white/10 text-white transition-colors hover:bg-white/20"
+          aria-label="Previous media"
+        >
+          <i className="fas fa-chevron-left" />
+        </button>
+      )}
+
+      <div
+        className="relative flex h-[82vh] w-[92vw] max-w-[1280px] flex-col items-center gap-3"
+        onClick={e => e.stopPropagation()}
+      >
+        {isVideo ? (
+          <video
+            key={`${src}-${idx}`}
+            src={src}
+            controls
+            autoPlay
+            playsInline
+            className="block h-[calc(100%-34px)] w-full rounded-2xl bg-black object-contain"
+          />
+        ) : (
+        <ProtectedImage
+          src={src}
+          alt={title}
+          watermarkText="© NU Lipa"
+          showCopyright
+          variant="lightbox"
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            width: '100%',
+            height: 'calc(100% - 34px)',
+          }}
+          imgStyle={{
+            width: '100%',
+            height: '100%',
+            objectFit: 'contain',
+            borderRadius: 16,
+          }}
+        />
+        )}
+        {title && <p className="px-4 text-center text-sm font-semibold text-white/70">{title}</p>}
+      </div>
+
+      {idx < photos.length - 1 && (
+        <button
+          type="button"
+          onClick={e => { e.stopPropagation(); setIdx(i => i + 1); }}
+          className="absolute right-4 z-10 flex h-11 w-11 items-center justify-center rounded-full border-none bg-white/10 text-white transition-colors hover:bg-white/20"
+          aria-label="Next media"
+        >
+          <i className="fas fa-chevron-right" />
+        </button>
+      )}
+    </div>
+  );
+}
+
+function AlbumPhotoGrid({ album, label, onBack, currentUser, onDeletePhoto }) {
+  const photos = albumMediaFiles(album).filter(isApprovedMedia);
+  const [lightboxIdx, setLightboxIdx] = useState(null);
+
+  return (
+    <div className="flex flex-col gap-5">
+      <button
+        type="button"
+        onClick={onBack}
+        className="w-fit inline-flex items-center gap-2 text-[13px] font-bold text-slate-500
+                   hover:text-[#1d2b4b] border-none bg-transparent cursor-pointer transition-colors">
+        <i className="fas fa-arrow-left" /> Back to all albums
+      </button>
+
+      <div className="rounded-3xl bg-white border border-slate-100 shadow-sm px-5 py-4">
+        <p className="m-0 text-[11px] font-black uppercase tracking-[0.14em] text-[#fdb813]">{label}</p>
+        <h3 className="m-0 mt-1 text-xl font-extrabold text-[#1d2b4b]">{album?.title ?? 'Album'}</h3>
+        {album?.description && <p className="m-0 mt-2 text-sm text-slate-500">{album.description}</p>}
+      </div>
+
+      {photos.length === 0 ? (
+        <div className="text-center py-16 bg-white rounded-3xl border border-slate-100">
+          <i className="fas fa-images text-5xl text-slate-200 block mb-4" />
+          <p className="text-slate-400 text-sm">No media in this album yet.</p>
+        </div>
+      ) : (
+        <>
+        <div className="grid grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-5">
+          {photos.map((photo, index) => {
+            const src = imageUrl(mediaFileRef(photo));
+            const title = albumMediaTitle(photo, album?.title ?? `Photo ${index + 1}`);
+            const isVideo = isVideoMedia(photo);
+            const canDelete = Boolean(onDeletePhoto) && canDeleteMediaItem(currentUser, album, photo);
+            return (
+              <div
+                key={photo.id ?? `${album?.id}-${index}`}
+                className="group relative overflow-hidden rounded-3xl border border-slate-100 bg-white text-left shadow-sm transition-all hover:-translate-y-1 hover:shadow-xl"
+              >
+                <button
+                  type="button"
+                  onClick={() => setLightboxIdx(index)}
+                  className="block w-full cursor-pointer border-none bg-transparent p-0 text-left"
+                >
+                <div className="relative h-[210px] overflow-hidden bg-slate-100">
+                  {isVideo ? (
+                    <>
+                      <video
+                        src={src}
+                        muted
+                        playsInline
+                        preload="metadata"
+                        className="block h-full w-full bg-black object-cover"
+                      />
+                      <div className="absolute left-3 top-3 inline-flex items-center gap-1.5 rounded-xl bg-black/65 px-2.5 py-1 text-[10px] font-extrabold uppercase tracking-wide text-white">
+                        <i className="fas fa-play text-[#fdb813]" /> Video
+                      </div>
+                    </>
+                  ) : (
+                  <ProtectedImage
+                    src={src}
+                    alt={title}
+                    watermarkText="© NU Lipa"
+                    showCopyright
+                    style={{ width: '100%', height: '100%' }}
+                    imgStyle={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                  />
+                  )}
+                  <div className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 transition-opacity group-hover:opacity-100">
+                    <div className="flex h-11 w-11 items-center justify-center rounded-full bg-white/20 backdrop-blur-sm">
+                      <i className={`fas ${isVideo ? 'fa-play' : 'fa-expand'} text-base text-white`} />
+                    </div>
+                  </div>
+                </div>
+                <div className="px-4 py-3">
+                  <p className="m-0 text-sm font-extrabold text-[#1d2b4b] truncate">{title}</p>
+                  {photo?.caption && photo.caption !== title && (
+                    <p className="m-0 mt-1 text-[12px] text-slate-400 line-clamp-2">{photo.caption}</p>
+                  )}
+                </div>
+                </button>
+                {canDelete && (
+                  <button
+                    type="button"
+                    onClick={() => onDeletePhoto?.(photo)}
+                    className="absolute right-3 top-3 inline-flex items-center gap-1.5 rounded-xl border-none bg-red-500/95 px-3 py-1.5 text-[11px] font-extrabold text-white shadow-lg transition-colors hover:bg-red-600"
+                  >
+                    <i className="fas fa-trash" /> Delete
+                  </button>
+                )}
+              </div>
+            );
+          })}
+        </div>
+        {lightboxIdx !== null && (
+          <PhotoLightbox
+            photos={photos}
+            startIndex={lightboxIdx}
+            onClose={() => setLightboxIdx(null)}
+          />
+        )}
+        </>
+      )}
+    </div>
   );
 }
 
@@ -598,7 +853,7 @@ function VideoAlbumCard({ album, onClick }) {
 }
 
 // ─── GradVideoCard ────────────────────────────────────────────────────────────
-function GradVideoCard({ video, photoId, albumId, albumTitle, badge }) {
+function GradVideoCard({ video, photoId, albumId, albumTitle, badge, onOpen }) {
   const [playing,        setPlaying]        = useState(false);
   const [showTranscript, setShowTranscript] = useState(false);
 
@@ -613,7 +868,7 @@ function GradVideoCard({ video, photoId, albumId, albumTitle, badge }) {
           {playing ? (
             <video src={src} controls autoPlay className="w-full max-h-[240px] block" />
           ) : (
-            <div onClick={() => setPlaying(true)}
+            <div onClick={onOpen ?? (() => setPlaying(true))}
               className="h-[200px] bg-gradient-to-br from-[#0d1b35] to-[#1d2b4b] flex items-center justify-center cursor-pointer relative">
               {badge && (
                 <span className="absolute top-3 left-3 bg-[#fdb813]/95 text-[#1d2b4b] text-[10px] font-extrabold px-2.5 py-1 rounded-xl">
@@ -654,55 +909,285 @@ function GradVideoCard({ video, photoId, albumId, albumTitle, badge }) {
   );
 }
 
-function GradProgramCard({ album, isPremium = false }) {
-  const mediaUrl = primaryAlbumMedia(album);
-  const imageProgram = isImageMedia(mediaUrl);
+function VideoLightbox({ videos, startIndex, onClose }) {
+  const [idx, setIdx] = useState(startIndex);
+  const [showTranscript, setShowTranscript] = useState(false);
+  const current = videos[idx];
+  const video = current?.video ?? {};
+  const src = video.file_path ?? video.media_url ?? video.url ?? '';
+  const title = video.title ?? video.caption ?? current?.albumTitle ?? `Video ${idx + 1}`;
+
+  useEffect(() => {
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = ''; };
+  }, []);
+
+  useEffect(() => {
+    const handler = (e) => {
+      if (e.key === 'Escape') onClose();
+      if (e.key === 'ArrowRight') {
+        setShowTranscript(false);
+        setIdx(i => Math.min(i + 1, videos.length - 1));
+      }
+      if (e.key === 'ArrowLeft') {
+        setShowTranscript(false);
+        setIdx(i => Math.max(i - 1, 0));
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [videos.length, onClose]);
+
+  if (!current) return null;
+
   return (
-    <div className="rounded-3xl bg-white p-6 flex gap-5 items-start border border-black/[0.04] shadow-sm">
-      {imageProgram ? (
-        <div className="w-20 h-20 rounded-2xl overflow-hidden bg-[#1d2b4b] shrink-0">
-          <ProtectedImage
-            src={mediaUrl}
-            alt={album.title}
-            watermarkText="© NU Lipa"
-            style={{ width: '100%', height: '100%' }}
-            imgStyle={{ width: '100%', height: '100%', objectFit: 'cover' }}
-          />
-        </div>
-      ) : (
-        <div className="w-14 h-14 rounded-2xl bg-[#fdb813]/[0.12] flex items-center justify-center shrink-0">
-          <i className="fas fa-file-pdf text-2xl text-[#fdb813]" />
-        </div>
-      )}
-      <div className="flex-1 min-w-0">
-        <h4 className="font-extrabold text-[15px] text-[#1d2b4b] mb-1">{album.title}</h4>
-        {album.description && <p className="text-sm text-slate-500 mb-2.5">{album.description}</p>}
-        {album.event_date && (
-          <p className="text-xs text-slate-400 mb-3 flex items-center gap-1.5">
-            <i className="fas fa-calendar text-[#fdb813]" />
-            {new Date(album.event_date).toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' })}
-          </p>
+    <>
+      <div
+        className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/90 p-4"
+        onClick={onClose}
+        role="dialog"
+        aria-modal="true"
+        aria-label={title}
+      >
+        <button
+          type="button"
+          onClick={onClose}
+          className="absolute right-4 top-4 z-10 flex h-10 w-10 items-center justify-center rounded-full border-none bg-white/10 text-white transition-colors hover:bg-white/20"
+          aria-label="Close video preview"
+        >
+          <i className="fas fa-times" />
+        </button>
+
+        <span className="absolute left-1/2 top-4 -translate-x-1/2 text-xs font-bold text-white/50">
+          {idx + 1} / {videos.length}
+        </span>
+
+        {idx > 0 && (
+          <button
+            type="button"
+            onClick={e => { e.stopPropagation(); setShowTranscript(false); setIdx(i => i - 1); }}
+            className="absolute left-4 z-10 flex h-11 w-11 items-center justify-center rounded-full border-none bg-white/10 text-white transition-colors hover:bg-white/20"
+            aria-label="Previous video"
+          >
+            <i className="fas fa-chevron-left" />
+          </button>
         )}
-        <p className="text-[11px] text-slate-400 mb-3 flex items-center gap-1">
-          <i className="fas fa-copyright text-[#fdb813] text-[10px]" />
-          Property of National University Lipa. All rights reserved.
-        </p>
-        <div className="flex gap-2.5 flex-wrap">
-          <a href={mediaUrl} target="_blank" rel="noreferrer"
-            className="inline-flex items-center gap-1.5 text-sm font-bold text-white no-underline
-                       bg-[#1d2b4b] px-4 py-2 rounded-xl hover:bg-[#3f51b5] transition-colors">
-            <i className="fas fa-eye" /> View
-          </a>
-          <ProtectedDownloadButton href={mediaUrl} label="Download" isPremium={isPremium} />
+
+        <div
+          className="flex h-[82vh] w-[92vw] max-w-[1280px] flex-col overflow-hidden rounded-[24px] bg-[#0b1224] shadow-2xl"
+          onClick={e => e.stopPropagation()}
+        >
+          <div className="flex items-center justify-between gap-4 border-b border-white/10 bg-[#1d2b4b] px-5 py-4">
+            <div className="min-w-0">
+              <p className="m-0 text-[11px] font-black uppercase tracking-[0.14em] text-[#fdb813]">
+                {current.badge ?? 'Video'}
+              </p>
+              <h3 className="m-0 mt-1 truncate text-base font-extrabold text-white sm:text-lg">{title}</h3>
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowTranscript(true)}
+              className="inline-flex shrink-0 items-center gap-1.5 rounded-xl border-none bg-white/10 px-3.5 py-2 text-[12px] font-bold text-white transition-colors hover:bg-white/20"
+            >
+              <i className="fas fa-file-lines text-[#fdb813]" /> Transcript
+            </button>
+          </div>
+
+          <div className="flex min-h-0 flex-1 items-center justify-center bg-black">
+            {src ? (
+              <video
+                key={`${src}-${idx}`}
+                src={src}
+                controls
+                autoPlay
+                className="block h-full w-full bg-black object-contain"
+              />
+            ) : (
+              <div className="py-20 text-sm font-semibold text-white/50">Video file is unavailable.</div>
+            )}
+          </div>
+        </div>
+
+        {idx < videos.length - 1 && (
+          <button
+            type="button"
+            onClick={e => { e.stopPropagation(); setShowTranscript(false); setIdx(i => i + 1); }}
+            className="absolute right-4 z-10 flex h-11 w-11 items-center justify-center rounded-full border-none bg-white/10 text-white transition-colors hover:bg-white/20"
+            aria-label="Next video"
+          >
+            <i className="fas fa-chevron-right" />
+          </button>
+        )}
+      </div>
+
+      {showTranscript && (
+        <TranscriptModal
+          photoId={current.photoId}
+          albumId={current.albumId ?? video.graduation_album_id ?? video.album_id}
+          videoTitle={title}
+          onClose={() => setShowTranscript(false)}
+        />
+      )}
+    </>
+  );
+}
+
+function GraduationMediaPreviewModal({ open, album, mediaUrl, onClose }) {
+  const title = album?.title ?? 'Graduation Content';
+  const isImage = isImageMedia(mediaUrl);
+  const isPdf = /\.pdf(\?|$)/i.test(String(mediaUrl));
+  const [pdfSrc, setPdfSrc] = useState('');
+
+  useEffect(() => {
+    if (!open || !isPdf || !mediaUrl) {
+      setPdfSrc('');
+      return undefined;
+    }
+
+    let cancelled = false;
+    let objectUrl = '';
+    const viewerUrl = `https://mozilla.github.io/pdf.js/web/viewer.html?file=${encodeURIComponent(mediaUrl)}`;
+    setPdfSrc(viewerUrl);
+
+    fetch(mediaUrl)
+      .then(response => {
+        if (!response.ok) throw new Error('PDF fetch failed');
+        return response.blob();
+      })
+      .then(blob => {
+        if (cancelled) return;
+        objectUrl = URL.createObjectURL(blob);
+        setPdfSrc(objectUrl);
+      })
+      .catch(() => {
+        if (!cancelled) setPdfSrc(viewerUrl);
+      });
+
+    return () => {
+      cancelled = true;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [open, isPdf, mediaUrl]);
+
+  if (!open || !mediaUrl) return null;
+
+  return (
+    <div
+      className="fixed inset-0 z-[9999] bg-[#071024]/90 backdrop-blur-sm flex items-center justify-center p-4"
+      onClick={onClose}
+      role="dialog"
+      aria-modal="true"
+      aria-label={title}
+    >
+      <div
+        className="w-full max-w-[980px] max-h-[92vh] bg-white rounded-[24px] overflow-hidden shadow-2xl flex flex-col"
+        onClick={e => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between gap-4 px-5 py-4 border-b border-slate-100 bg-[#1d2b4b]">
+          <div className="min-w-0">
+            <p className="m-0 text-[11px] font-black uppercase tracking-[0.14em] text-[#fdb813]">Preview</p>
+            <h3 className="m-0 mt-1 text-base sm:text-lg font-extrabold text-white truncate">{title}</h3>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="w-10 h-10 rounded-full border border-white/15 bg-white/10 text-white hover:bg-white/20 transition-colors cursor-pointer"
+            aria-label="Close preview"
+          >
+            <i className="fas fa-times" />
+          </button>
+        </div>
+
+        <div className="bg-[#0b1224] flex-1 min-h-[320px] max-h-[74vh] overflow-auto flex items-center justify-center p-4">
+          {isImage ? (
+            <ProtectedImage
+              src={mediaUrl}
+              alt={title}
+              watermarkText="© NU Lipa"
+              showCopyright
+              style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+              imgStyle={{ maxWidth: '100%', maxHeight: '70vh', objectFit: 'contain', borderRadius: 14 }}
+            />
+          ) : isPdf ? (
+            <iframe
+              src={pdfSrc || `https://mozilla.github.io/pdf.js/web/viewer.html?file=${encodeURIComponent(mediaUrl)}`}
+              title={title}
+              className="w-full h-[72vh] rounded-xl bg-white border-0"
+            />
+          ) : (
+            <div className="text-center text-white/70 py-16">
+              <i className="fas fa-file text-5xl text-[#fdb813] mb-4 block" />
+              <p className="font-bold m-0">Preview is not available for this file type.</p>
+            </div>
+          )}
         </div>
       </div>
     </div>
   );
 }
 
+function GradProgramCard({ album, isPremium = false }) {
+  const mediaUrl = primaryAlbumMedia(album);
+  const imageProgram = isImageMedia(mediaUrl);
+  const [previewOpen, setPreviewOpen] = useState(false);
+  return (
+    <>
+    <div className="rounded-3xl overflow-hidden bg-white border border-black/[0.04] shadow-sm
+                    hover:-translate-y-1.5 hover:shadow-xl transition-all duration-300">
+      <div className="h-[240px] bg-gradient-to-br from-[#1d2b4b] to-[#2a3d66] flex items-center justify-center overflow-hidden">
+      {imageProgram ? (
+        <div className="w-full h-full overflow-hidden bg-[#1d2b4b]">
+          <ProtectedImage
+            src={mediaUrl}
+            alt={album.title}
+            watermarkText="© NU Lipa"
+            showCopyright
+            style={{ width: '100%', height: '100%' }}
+            imgStyle={{ width: '100%', height: '100%', objectFit: 'cover' }}
+          />
+        </div>
+      ) : (
+        <div className="flex flex-col items-center gap-2.5">
+          <i className="fas fa-file-pdf text-5xl text-[#fdb813]/70" />
+          <span className="text-[10px] font-bold uppercase tracking-widest text-white/45">Program PDF</span>
+        </div>
+      )}
+      </div>
+      <div className="p-5">
+        <h4 className="font-extrabold text-[15px] text-[#1d2b4b] mb-1.5">{album.title}</h4>
+        {album.event_date && (
+          <p className="text-xs text-slate-400 mb-2.5 flex items-center gap-1.5">
+            <i className="fas fa-calendar text-[#fdb813]" />
+            {new Date(album.event_date).toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' })}
+          </p>
+        )}
+        {album.description && <p className="text-sm text-slate-500 mb-2.5 line-clamp-2">{album.description}</p>}
+        <p className="text-[11px] text-slate-400 mb-2.5 flex items-center gap-1">
+          <i className="fas fa-copyright text-[#fdb813] text-[10px]" />
+          Property of National University Lipa
+        </p>
+        <div className="flex gap-2.5">
+          <button
+            type="button"
+            onClick={() => setPreviewOpen(true)}
+            className="inline-flex items-center gap-1.5 text-xs font-bold text-white border-none
+                       bg-[#1d2b4b] px-3.5 py-2 rounded-xl hover:bg-[#3f51b5] transition-colors cursor-pointer">
+            <i className="fas fa-eye" /> View
+          </button>
+          <ProtectedDownloadButton href={mediaUrl} label="Download" isPremium={isPremium} />
+        </div>
+      </div>
+    </div>
+    <GraduationMediaPreviewModal open={previewOpen} album={album} mediaUrl={mediaUrl} onClose={() => setPreviewOpen(false)} />
+    </>
+  );
+}
+
 function GradInvitationCard({ album, isPremium = false }) {
   const mediaUrl = primaryAlbumMedia(album);
+  const [previewOpen, setPreviewOpen] = useState(false);
   return (
+    <>
     <div className="rounded-3xl overflow-hidden bg-white border border-black/[0.04] shadow-sm
                     hover:-translate-y-1.5 hover:shadow-xl transition-all duration-300">
       <div className="h-[240px] bg-gradient-to-br from-[#1d2b4b] to-[#2a3d66] flex items-center justify-center overflow-hidden">
@@ -723,15 +1208,19 @@ function GradInvitationCard({ album, isPremium = false }) {
           Property of National University Lipa
         </p>
         <div className="flex gap-2.5">
-          <a href={mediaUrl} target="_blank" rel="noreferrer"
-            className="inline-flex items-center gap-1.5 text-xs font-bold text-white no-underline
-                       bg-[#1d2b4b] px-3.5 py-2 rounded-xl hover:bg-[#3f51b5] transition-colors">
+          <button
+            type="button"
+            onClick={() => setPreviewOpen(true)}
+            className="inline-flex items-center gap-1.5 text-xs font-bold text-white border-none
+                       bg-[#1d2b4b] px-3.5 py-2 rounded-xl hover:bg-[#3f51b5] transition-colors cursor-pointer">
             <i className="fas fa-eye" /> View
-          </a>
+          </button>
           <ProtectedDownloadButton href={mediaUrl} label="Save" isPremium={isPremium} />
         </div>
       </div>
     </div>
+    <GraduationMediaPreviewModal open={previewOpen} album={album} mediaUrl={mediaUrl} onClose={() => setPreviewOpen(false)} />
+    </>
   );
 }
 
@@ -830,18 +1319,19 @@ function GradSongCard({ album }) {
 }
 
 // ─── Face Search Results ──────────────────────────────────────────────────────
-function FaceSearchResults({ matches, isGrad }) {
+function FaceSearchResults({ matches, isGrad, onOpenAlbum }) {
   if (!matches.length) return null;
   return (
     <div className="grid grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-5">
       {matches.map(p => {
-        const href = isGrad && p.album_id ? `/graduation/archive/${p.album_id}` : (p.album_id ? `/gallery/${p.album_id}` : '#');
         const title = p.album?.title || p.caption || 'Matched Photo';
 
         return (
-          <Link key={`${p.source_type ?? 'gallery'}-${p.photo_id ?? p.id}`} to={href}
-            className="block rounded-[18px] overflow-hidden border border-slate-200 bg-white
-                       hover:border-[#fdb813] hover:-translate-y-1 transition-all no-underline group shadow-sm">
+          <button key={`${p.source_type ?? 'gallery'}-${p.photo_id ?? p.id}`}
+            type="button"
+            onClick={() => p.album_id && onOpenAlbum?.(p.album ?? { id: p.album_id, title }, isGrad ? 'graduation:photos' : 'general')}
+            className="text-left block rounded-[18px] overflow-hidden border border-slate-200 bg-white
+                       hover:border-[#fdb813] hover:-translate-y-1 transition-all group shadow-sm cursor-pointer p-0">
             <div className="relative">
               <img src={p.file_path} alt={title} className="w-full h-40 object-cover" />
             </div>
@@ -853,7 +1343,7 @@ function FaceSearchResults({ matches, isGrad }) {
                 {isGrad ? 'Graduation Match' : 'Gallery Match'}
               </p>
             </div>
-          </Link>
+          </button>
         );
       })}
     </div>
@@ -882,6 +1372,12 @@ export default function GalleryPage() {
   const [newAlbumName,  setNewAlbumName]  = useState('');
   const [creatingAlbum, setCreatingAlbum] = useState(false);
   const [selectedVideoAlbum, setSelectedVideoAlbum] = useState(null);
+  const [selectedGalleryAlbum, setSelectedGalleryAlbum] = useState(null);
+  const [selectedGradAlbum, setSelectedGradAlbum] = useState(null);
+  const [videoLightboxIdx, setVideoLightboxIdx] = useState(null);
+  const [uploadVisibility, setUploadVisibility] = useState('public');
+  const [deletePhotoTarget, setDeletePhotoTarget] = useState(null);
+  const [deletePhotoLoading, setDeletePhotoLoading] = useState(false);
 
   const isGrad = activeTab !== 'general';
   const tier   = storage.tier;
@@ -907,7 +1403,7 @@ export default function GalleryPage() {
     addFiles:     uploadHook.addFiles,
     removeFile:   uploadHook.removeFile,
     clearQueue:   uploadHook.clearFiles,
-    upload:       () => uploadHook.submit(),
+    upload:       () => uploadHook.submit({ visibility: uploadVisibility }),
     dragHandlers: uploadHook.dragProps,
   };
 
@@ -929,14 +1425,28 @@ export default function GalleryPage() {
     });
   };
 
+  const fetchAlbumsForTab = async (tab) => {
+    if (tab === 'general') {
+      const { data } = await galleryApi.list('general', null);
+      return data.data ?? data ?? [];
+    }
+
+    if (tab === 'graduation:program') {
+      const [programs, invitations] = await Promise.all([
+        graduationApi.list('program').then(({ data }) => (data.data ?? data ?? []).map(album => ({ ...album, __programSection: 'Program' }))).catch(() => []),
+        graduationApi.list('invitations').then(({ data }) => (data.data ?? data ?? []).map(album => ({ ...album, __programSection: 'Invitation' }))).catch(() => []),
+      ]);
+      return [...programs, ...invitations];
+    }
+
+    const { data } = await graduationApi.list(apiCategoryForTab(tab));
+    return data.data ?? data ?? [];
+  };
+
   const loadAlbums = (tab = activeTab) => {
     setLoading(true);
-    const req = tab === 'general'
-      ? galleryApi.list('general', null)
-      : graduationApi.list(apiCategoryForTab(tab));
-    req
-      .then(async ({ data }) => {
-        const list = data.data ?? data ?? [];
+    fetchAlbumsForTab(tab)
+      .then(async list => {
         setAlbums(await hydrateAlbumCovers(list, tab));
       })
       .catch(() => setAlbums([]))
@@ -956,13 +1466,9 @@ export default function GalleryPage() {
     let cancelled = false;
     setSearchLoading(true);
 
-    Promise.all(TABS.filter(tab => !tab.href).map(tab => {
-      const req = tab.key === 'general'
-        ? galleryApi.list('general', null)
-        : graduationApi.list(apiCategoryForTab(tab.key));
-
-      return req
-        .then(({ data }) => (data.data ?? data ?? []).map(album => ({ album, tab })))
+    Promise.all(TABS.map(tab => {
+      return fetchAlbumsForTab(tab.key)
+        .then(list => list.map(album => ({ album, tab })))
         .catch(() => []);
     }))
       .then(groups => {
@@ -987,6 +1493,86 @@ export default function GalleryPage() {
     setActiveAlbum(null);
     setNewAlbumName('');
     setSelectedVideoAlbum(null);
+    setVideoLightboxIdx(null);
+    setSelectedGalleryAlbum(null);
+    setSelectedGradAlbum(null);
+    setDeletePhotoTarget(null);
+  };
+
+  const openInlineAlbum = async (album, tab = activeTab) => {
+    setUploadStep(null);
+    setMatches([]);
+    setSearchQuery('');
+    setSearchResults([]);
+    setSelectedVideoAlbum(null);
+    setVideoLightboxIdx(null);
+
+    const isGeneral = tab === 'general';
+    if (tab !== activeTab) setActiveTab(tab);
+
+    const fallback = { ...album };
+    isGeneral ? setSelectedGalleryAlbum(fallback) : setSelectedGradAlbum(fallback);
+
+    const api = isGeneral ? galleryApi : graduationApi;
+    try {
+      const { data } = await api.show(album.id);
+      const detail = data.data ?? data ?? {};
+      const merged = { ...fallback, ...detail };
+      isGeneral ? setSelectedGalleryAlbum(merged) : setSelectedGradAlbum(merged);
+    } catch {
+      // Keep the album card payload visible if the detail request fails.
+    }
+  };
+
+  const closeInlineAlbum = () => {
+    setSelectedGalleryAlbum(null);
+    setSelectedGradAlbum(null);
+    setVideoLightboxIdx(null);
+    setDeletePhotoTarget(null);
+  };
+
+  const requestDeleteOwnedGalleryPhoto = (photo) => {
+    if (!canDeleteMediaItem(user, selectedGalleryAlbum, photo)) return;
+    setDeletePhotoTarget(photo);
+  };
+
+  const confirmDeleteOwnedGalleryPhoto = async () => {
+    const photo = deletePhotoTarget;
+    if (!canDeleteMediaItem(user, selectedGalleryAlbum, photo)) {
+      setDeletePhotoTarget(null);
+      return;
+    }
+
+    const id = photo?.media_id ?? photo?.mediaId ?? photo?.id;
+    if (!id) return;
+
+    setDeletePhotoLoading(true);
+    try {
+      await mediaApi.deletePhoto(id);
+      setSelectedGalleryAlbum(current => {
+        if (!current) return current;
+        const filterMedia = item => (
+          item?.id !== photo?.id &&
+          item?.media_id !== photo?.media_id &&
+          item?.media_id !== id &&
+          item?.id !== id
+        );
+
+        return {
+          ...current,
+          photos: Array.isArray(current.photos) ? current.photos.filter(filterMedia) : current.photos,
+          media_files: Array.isArray(current.media_files) ? current.media_files.filter(filterMedia) : current.media_files,
+          mediaFiles: Array.isArray(current.mediaFiles) ? current.mediaFiles.filter(filterMedia) : current.mediaFiles,
+          media: Array.isArray(current.media) ? current.media.filter(filterMedia) : current.media,
+        };
+      });
+      setDeletePhotoTarget(null);
+      loadAlbums();
+    } catch {
+      window.alert('Unable to delete this photo.');
+    } finally {
+      setDeletePhotoLoading(false);
+    }
   };
 
   // ── FIX: replaced raw fetch() + safeGetToken() with galleryApi.createAlbum()
@@ -1020,6 +1606,9 @@ export default function GalleryPage() {
     setSearchQuery('');
     setSearchResults([]);
     setSelectedVideoAlbum(null);
+    setVideoLightboxIdx(null);
+    setSelectedGalleryAlbum(null);
+    setSelectedGradAlbum(null);
     try {
       const responses = await Promise.allSettled([
         galleryApi.faceSearch(makeFaceSearchForm(file, 'general')),
@@ -1056,11 +1645,16 @@ export default function GalleryPage() {
     setUploadStep(null);
     setActiveAlbum(null);
     setNewAlbumName('');
+    setUploadVisibility('public');
     uploadHook.clearFiles();
   };
 
   const openUploadFromCard = (albumId) => {
     setActiveAlbum(albumId);
+    setUploadVisibility('public');
+    setSelectedGalleryAlbum(null);
+    setSelectedGradAlbum(null);
+    setVideoLightboxIdx(null);
     setUploadStep('upload');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -1234,6 +1828,29 @@ export default function GalleryPage() {
                   <i className="fas fa-arrow-left" /> Change Album
                 </button>
               </div>
+              <div className="bg-white border border-slate-100 rounded-2xl p-3 shadow-sm">
+                <p className="m-0 mb-2 text-[11px] font-black uppercase tracking-[0.14em] text-slate-400">Visibility</p>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  {VISIBILITY_OPTIONS.map(option => {
+                    const selected = uploadVisibility === option.value;
+                    return (
+                      <button
+                        key={option.value}
+                        type="button"
+                        onClick={() => setUploadVisibility(option.value)}
+                        className={`text-left rounded-xl border px-3 py-2.5 transition-all cursor-pointer bg-white
+                          ${selected ? 'border-[#1d2b4b] ring-2 ring-[#fdb813]/30' : 'border-slate-200 hover:border-[#fdb813]/70'}`}
+                      >
+                        <span className="flex items-center gap-2 text-[13px] font-extrabold text-[#1d2b4b]">
+                          <i className={`fas ${option.icon} ${selected ? 'text-[#fdb813]' : 'text-slate-400'}`} />
+                          {option.label}
+                        </span>
+                        <span className="block mt-1 text-[11px] font-semibold text-slate-400">{option.hint}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
               <BulkUploadZone {...bulkUploadProps} tier={tier} onCancel={cancelUpload} />
             </div>
           )}
@@ -1244,7 +1861,18 @@ export default function GalleryPage() {
       <section className="px-[8%] pt-8 pb-24 flex-1">
         <div className="flex items-center justify-between mb-7">
           <h2 className="text-xl font-extrabold text-[#1d2b4b] m-0 flex items-center gap-2">
-            {isVideoTab && selectedVideoAlbum ? (
+            {(selectedGalleryAlbum || selectedGradAlbum) ? (
+              <>
+                <button onClick={closeInlineAlbum}
+                  className="inline-flex items-center gap-1.5 text-slate-400 hover:text-[#1d2b4b]
+                             border-none bg-transparent cursor-pointer text-xl font-extrabold transition-colors p-0">
+                  <i className="fas fa-chevron-left text-base" />
+                  {TABS.find(t => t.key === activeTab)?.label}
+                </button>
+                <i className="fas fa-chevron-right text-slate-300 text-sm" />
+                <span className="text-[#1d2b4b]">{(selectedGalleryAlbum || selectedGradAlbum)?.title}</span>
+              </>
+            ) : isVideoTab && selectedVideoAlbum ? (
               <>
                 <button onClick={() => setSelectedVideoAlbum(null)}
                   className="inline-flex items-center gap-1.5 text-slate-400 hover:text-[#1d2b4b]
@@ -1264,7 +1892,7 @@ export default function GalleryPage() {
             )}
           </h2>
 
-          {canUpload && !isGrad && !uploadStep && !hasGallerySearch && !hasFaceMatches && (
+          {canUpload && !isGrad && !uploadStep && !hasGallerySearch && !hasFaceMatches && !selectedGalleryAlbum && (
             <button onClick={() => setUploadStep('album')}
               className="flex items-center gap-2 bg-[#1d2b4b] hover:bg-[#3f51b5] text-white border-none
                          px-5 py-2.5 rounded-[14px] text-[13px] font-bold cursor-pointer transition-colors">
@@ -1273,13 +1901,26 @@ export default function GalleryPage() {
           )}
         </div>
 
-        {hasFaceMatches ? (
-          <FaceSearchResults matches={visibleFaceMatches} isGrad={activeTab !== 'general'} />
+        {selectedGalleryAlbum ? (
+          <AlbumPhotoGrid
+            album={selectedGalleryAlbum}
+            label="Gallery Album"
+            onBack={closeInlineAlbum}
+            currentUser={user}
+            onDeletePhoto={requestDeleteOwnedGalleryPhoto}
+          />
+        ) : selectedGradAlbum ? (
+          <AlbumPhotoGrid
+            album={selectedGradAlbum}
+            label="Graduation Album"
+            onBack={closeInlineAlbum}
+            currentUser={user}
+          />
+        ) : hasFaceMatches ? (
+          <FaceSearchResults matches={visibleFaceMatches} isGrad={activeTab !== 'general'} onOpenAlbum={openInlineAlbum} />
         ) : hasGallerySearch ? (
           searchLoading ? (
-            <div className="flex items-center justify-center py-24">
-              <div className="w-10 h-10 rounded-full border-[3px] border-indigo-100 border-t-[#3f51b5] animate-spin" />
-            </div>
+            <LoadingSkeleton variant="card" count={6} />
           ) : searchResults.length === 0 ? (
             <div className="text-center py-20 px-5 bg-white rounded-3xl shadow-sm border border-slate-100">
               <i className="fas fa-search text-5xl text-slate-200 block mb-4" />
@@ -1289,9 +1930,10 @@ export default function GalleryPage() {
           ) : (
             <div className="grid grid-cols-[repeat(auto-fill,minmax(300px,1fr))] gap-7">
               {searchResults.map(({ album, tab }) => (
-                <Link key={`${tab.key}-${album.id}`}
-                  to={tab.key === 'general' ? `/gallery/${album.id}` : `/graduation/archive/${album.id}`}
-                  className="block no-underline text-inherit bg-white rounded-[24px] overflow-hidden border border-slate-100 hover:-translate-y-1.5 hover:shadow-xl transition-all">
+                <button key={`${tab.key}-${album.id}`}
+                  type="button"
+                  onClick={() => openInlineAlbum(album, tab.key)}
+                  className="text-left block text-inherit bg-white rounded-[24px] overflow-hidden border border-slate-100 hover:-translate-y-1.5 hover:shadow-xl transition-all cursor-pointer p-0">
                   <div className="h-[190px] bg-slate-100 relative overflow-hidden">
                     <AlbumCover album={album} alt={album.title} icon={tab.icon} />
                     <span className="absolute top-3 right-3 bg-[#1d2b4b] text-white text-[11px] font-black px-3 py-1.5 rounded-xl">
@@ -1307,14 +1949,12 @@ export default function GalleryPage() {
                         : 'No date'}
                     </p>
                   </div>
-                </Link>
+                </button>
               ))}
             </div>
           )
         ) : loading ? (
-          <div className="flex items-center justify-center py-24">
-            <div className="w-10 h-10 rounded-full border-[3px] border-indigo-100 border-t-[#3f51b5] animate-spin" />
-          </div>
+          <LoadingSkeleton variant="card" count={6} />
         ) : albums.length === 0 ? (
           <div className="text-center py-20 px-5 bg-white rounded-3xl shadow-sm border border-slate-100">
             <i className="fas fa-images text-5xl text-slate-200 block mb-4" />
@@ -1336,8 +1976,10 @@ export default function GalleryPage() {
                 {albums.map(album => (
                   activeTab === 'general' ? (
                     <div key={album.id} className="relative group">
-                      <Link to={`/gallery/${album.id}`}
-                        className="block no-underline text-inherit bg-white rounded-[28px] overflow-hidden
+                      <button
+                        type="button"
+                        onClick={() => openInlineAlbum(album, 'general')}
+                        className="block w-full text-left border-none cursor-pointer text-inherit bg-white rounded-[28px] overflow-hidden
                                    border border-slate-100 hover:-translate-y-2.5 hover:shadow-2xl
                                    transition-all duration-300">
                         <div className="h-[240px] bg-slate-100 relative overflow-hidden">
@@ -1356,7 +1998,7 @@ export default function GalleryPage() {
                               : 'No date'}
                           </p>
                         </div>
-                      </Link>
+                      </button>
                       {canUpload && (
                         <button onClick={() => openUploadFromCard(album.id)}
                           className="absolute bottom-[18px] right-[18px] flex items-center gap-1.5
@@ -1368,7 +2010,7 @@ export default function GalleryPage() {
                       )}
                     </div>
                   ) : (
-                    <GradAlbumCard key={album.id} album={album} />
+                    <GradAlbumCard key={album.id} album={album} onClick={(item) => openInlineAlbum(item, activeTab)} />
                   )
                 ))}
               </div>
@@ -1387,7 +2029,7 @@ export default function GalleryPage() {
 
                 {selectedVideoAlbum && (
                   <>
-                    <button onClick={() => setSelectedVideoAlbum(null)}
+                    <button onClick={() => { setSelectedVideoAlbum(null); setVideoLightboxIdx(null); }}
                       className="mb-5 inline-flex items-center gap-2 text-[13px] font-bold text-slate-500
                                  hover:text-[#1d2b4b] border-none bg-transparent cursor-pointer transition-colors">
                       <i className="fas fa-arrow-left" /> Back to all albums
@@ -1410,8 +2052,16 @@ export default function GalleryPage() {
                               albumId={albumId}
                               albumTitle={albumTitle}
                               badge={badge}
+                              onOpen={() => setVideoLightboxIdx(i)}
                             />
                           ))}
+                          {videoLightboxIdx !== null && (
+                            <VideoLightbox
+                              videos={videoItems}
+                              startIndex={videoLightboxIdx}
+                              onClose={() => setVideoLightboxIdx(null)}
+                            />
+                          )}
                         </div>
                       );
                     })()}
@@ -1422,17 +2072,32 @@ export default function GalleryPage() {
 
             {/* ── Program tab ── */}
             {activeTab === 'graduation:program' && (
-              <div className="flex flex-col gap-4">
-                {albums.map(a => <GradProgramCard key={a.id} album={a} isPremium={isPremium} />)}
+              <div className="flex flex-col gap-8">
+                <div className="flex flex-col gap-4">
+                  <p className="m-0 text-[12px] font-black uppercase tracking-[0.14em] text-slate-500">
+                    <i className="fas fa-file-pdf text-[#fdb813] mr-2" /> Program
+                  </p>
+                  <div className="grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-6">
+                    {albums
+                      .filter(a => (a.__programSection ?? 'Program') === 'Program')
+                      .map(a => <GradProgramCard key={a.id} album={a} isPremium={isPremium} />)}
+                  </div>
+                </div>
+
+                <div className="flex flex-col gap-4">
+                  <p className="m-0 text-[12px] font-black uppercase tracking-[0.14em] text-slate-500">
+                    <i className="fas fa-envelope-open-text text-[#fdb813] mr-2" /> Invitation
+                  </p>
+                  <div className="grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-6">
+                    {albums
+                      .filter(a => a.__programSection === 'Invitation')
+                      .map(a => <GradInvitationCard key={a.id} album={a} isPremium={isPremium} />)}
+                  </div>
+                </div>
               </div>
             )}
 
             {/* ── Invitation tab ── */}
-            {activeTab === 'graduation:invitation' && (
-              <div className="grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-6">
-                {albums.map(a => <GradInvitationCard key={a.id} album={a} isPremium={isPremium} />)}
-              </div>
-            )}
 
             {/* ── Grad Song tab ── */}
             {activeTab === 'graduation:song' && (
@@ -1443,6 +2108,38 @@ export default function GalleryPage() {
           </>
         )}
       </section>
+
+      {deletePhotoTarget && (
+        <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/60 px-4">
+          <div className="w-full max-w-[380px] rounded-[22px] bg-white p-6 shadow-2xl border border-slate-100">
+            <div className="w-12 h-12 rounded-2xl bg-red-50 text-red-600 flex items-center justify-center mb-4">
+              <i className="fas fa-trash" />
+            </div>
+            <h3 className="m-0 text-xl font-black text-[#1d2b4b]">Delete this photo?</h3>
+            <p className="mt-2 mb-5 text-sm leading-6 text-slate-500 font-semibold">
+              Are you sure you want to delete this photo? This removes it from the album and cannot be undone.
+            </p>
+            <div className="flex items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setDeletePhotoTarget(null)}
+                disabled={deletePhotoLoading}
+                className="px-4 py-2.5 rounded-xl border border-slate-200 bg-white text-slate-600 text-sm font-extrabold cursor-pointer disabled:opacity-60"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={confirmDeleteOwnedGalleryPhoto}
+                disabled={deletePhotoLoading}
+                className="px-4 py-2.5 rounded-xl border border-red-600 bg-red-600 text-white text-sm font-extrabold cursor-pointer disabled:opacity-60"
+              >
+                {deletePhotoLoading ? 'Deleting...' : 'Delete'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <Footer />
     </div>

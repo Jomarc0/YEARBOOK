@@ -16,7 +16,8 @@ use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\ValidationException;
 use Laravel\Socialite\Facades\Socialite;
 use Illuminate\Support\Str;
-use App\Services\Notification\PHPMailerService;
+use App\Services\Notification\BrevoMailService;
+use App\Services\Security\PasswordHistoryService;
 use App\Support\PlatformSettings;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\RateLimiter;
@@ -288,7 +289,7 @@ class AuthController extends Controller
         );
 
         try {
-            app(PHPMailerService::class)->sendPasswordReset(
+            app(BrevoMailService::class)->sendPasswordReset(
                 $request->email,
                 $user->name,
                 $otp
@@ -348,7 +349,10 @@ class AuthController extends Controller
             return response()->json(['message' => 'User not found.'], 404);
         }
 
+        app(PasswordHistoryService::class)->assertNotRecentlyUsed($user, (string) $request->password);
+        $previousHash = $user->password;
         $user->update(['password' => Hash::make($request->password)]);
+        app(PasswordHistoryService::class)->remember($user, $previousHash);
         $record->update(['used' => true, 'reset_token' => null]);
         $user->tokens()->delete();
 

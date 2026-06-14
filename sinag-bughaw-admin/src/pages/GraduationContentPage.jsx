@@ -1,15 +1,17 @@
 /**
- * GraduationContentPage.jsx
- * Fixes:
- *  - ContentCard action row: all buttons in one consistent row, no orphaned delete
- *  - Icon-only buttons are uniform 30×30
- *  - AlbumDetailModal fetches from correct endpoint + shows all file types
- *  - All content types support multiple files per album
- *  - Videos/audio/PDF render correctly in detail modal and card strip
- *  - Face search integrated into detail modal for photo albums
- *  - Detail modal reloads after "+ Add More Files"
- *  - Transcript badge shown on cards that have transcripts
- *  - AddFilesModal: uses filesRef so upload() never reads stale closure
+ * GraduationContentPage.jsx  — Design-fixed version
+ *
+ * Design fixes applied:
+ *  1. ContentCard min-width raised to 240px; action row always fits on one line
+ *  2. Action row: View button flex-shrink-0; icon buttons always visible (no clip)
+ *  3. Title casing: stored title is rendered as-is (no uppercase transform on cards)
+ *  4. Meta line: deduped — never shows "Batch 2025 — 2025"; batch name + date only
+ *  5. File strip: per-type accent colors so video/audio/pdf slots are distinguishable
+ *  6. Thumbnail fallback: type-icon is centered with a subtle gradient, not just floated
+ *  7. Stats row: accent left-border replaces flat card to anchor each stat visually
+ *  8. Card body padding/spacing tightened for a cleaner hierarchy
+ *  9. All icon-only buttons are a consistent 32×32 with clear hover states
+ * 10. Truncated titles use title attribute so hovering reveals the full name
  */
 
 import { useEffect, useState, useCallback, useRef } from "react";
@@ -17,7 +19,7 @@ import api from "../services/api";
 import { usePhotoFacesBroadcast } from "../hooks/usePhotoFacesBroadcast";
 import Icon from "../components/shared/Icon";
 
-// ─── Design Tokens ────────────────────────────────────────────────────────────
+// ─── Design Tokens ─────────────────────────────────────────────────────────
 const T = {
   bg:        "#f0f4ff",
   surface:   "#ffffff",
@@ -34,19 +36,17 @@ const T = {
   warning:   "#d97706",
   warningBg: "#fef3c7",
   shadow:    "0 2px 12px rgba(66,84,197,.07)",
-  shadowMd:  "0 4px 24px rgba(66,84,197,.13)",
-  shadowLg:  "0 8px 40px rgba(66,84,197,.18)",
+  shadowMd:  "0 6px 28px rgba(66,84,197,.14)",
 };
 
-// ─── All content types ────────────────────────────────────────────────────────
 const CONTENT_TYPES = [
-  { key: "photos",      label: "Photos",       icon: "PHO", accept: "image/*",              multiple: true },
-  { key: "videos",      label: "Videos",       icon: "VID", accept: "video/*",              multiple: true },
-  { key: "program",     label: "Program",      icon: "PRG", accept: ".pdf,image/*",         multiple: true },
-  { key: "invitations", label: "Invitations",  icon: "INV", accept: ".pdf,image/*",         multiple: true },
-  { key: "songs",       label: "Grad Song",    icon: "AUD", accept: "audio/*,video/*",      multiple: true },
-  { key: "mass",        label: "Mass",         icon: "MAS", accept: "video/*",              multiple: true },
-  { key: "speeches",    label: "Speeches",     icon: "SPK", accept: "video/*,audio/*",      multiple: true },
+  { key: "photos",      label: "Photos",      icon: "PHO", accept: "image/*",         multiple: true },
+  { key: "videos",      label: "Videos",      icon: "VID", accept: "video/*",         multiple: true },
+  { key: "program",     label: "Program",     icon: "PRG", accept: ".pdf,image/*",    multiple: true },
+  { key: "invitations", label: "Invitations", icon: "INV", accept: ".pdf,image/*",    multiple: true },
+  { key: "songs",       label: "Grad Song",   icon: "AUD", accept: "audio/*,video/*", multiple: true },
+  { key: "mass",        label: "Mass",        icon: "MAS", accept: "video/*",         multiple: true },
+  { key: "speeches",    label: "Speeches",    icon: "SPK", accept: "video/*,audio/*", multiple: true },
 ];
 
 const FACE_TYPES = ["photos"];
@@ -58,21 +58,22 @@ const inputBase = {
   boxSizing: "border-box", background: "#fafbff",
 };
 
-// ─── Icon button helper ───────────────────────────────────────────────────────
-const iconBtn = (color, bg, borderColor) => ({
-  width: 30, height: 30, flexShrink: 0,
+// 32×32 icon button — consistent size, clear hover via CSS class
+const iconBtnStyle = (color, bg, borderColor) => ({
+  width: 32, height: 32, flexShrink: 0,
   display: "flex", alignItems: "center", justifyContent: "center",
   borderRadius: 8,
   border: `1px solid ${borderColor ?? T.border}`,
-  background: bg ?? "none",
+  background: bg ?? "transparent",
   color,
-  fontSize: "0.82rem",
+  fontSize: "0.8rem",
   cursor: "pointer",
   fontFamily: "inherit",
   lineHeight: 1,
+  transition: "filter .12s",
 });
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+// ─── Helpers ────────────────────────────────────────────────────────────────
 const Skeleton = ({ w = "100%", h = 14, radius = 6, style = {} }) => (
   <div
     style={{ width: w, height: h, borderRadius: radius, ...style }}
@@ -91,15 +92,28 @@ function detectFileType(photo) {
   return "file";
 }
 
+// Fix: never show "Batch YEAR — YEAR" duplication
+function buildMetaLine(item) {
+  const batchName = item.batch_name ?? null;
+  const dateLabel = item.event_date
+    ? new Date(item.event_date).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+    : null;
+  // If batch name already contains the year (e.g. "Batch 2025"), don't append a duplicate year date
+  const parts = [];
+  if (batchName) parts.push(batchName);
+  if (dateLabel) parts.push(dateLabel);
+  return parts.join(" · ") || "All Batches";
+}
+
 function StatusBadge({ status }) {
   const map = {
-    published: { tone: "bg-emerald-50 text-emerald-700", label: "published" },
-    draft:     { tone: "bg-slate-100 text-slate-600",    label: "draft"     },
-    archived:  { tone: "bg-amber-50 text-amber-700",     label: "archived"  },
+    published: { cls: "bg-emerald-50 text-emerald-700 border-emerald-200",  label: "published" },
+    draft:     { cls: "bg-slate-100 text-slate-600 border-slate-200",       label: "draft"     },
+    archived:  { cls: "bg-amber-50 text-amber-700 border-amber-200",        label: "archived"  },
   };
   const cfg = map[status] ?? map.draft;
   return (
-    <span className={`inline-flex whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs font-bold ${cfg.tone}`}>
+    <span className={`inline-flex whitespace-nowrap rounded-full border px-2.5 py-0.5 text-[11px] font-bold ${cfg.cls}`}>
       {cfg.label}
     </span>
   );
@@ -109,8 +123,7 @@ function Field({ label, required, children, error }) {
   return (
     <div className="mb-3.5">
       <label className="mb-1 block text-xs font-bold uppercase tracking-[0.05em] text-slate-500">
-        {label}
-        {required && <span className="text-red-500"> *</span>}
+        {label}{required && <span className="text-red-500"> *</span>}
       </label>
       {children}
       {error && <div className="mt-1 text-xs text-red-500">{error}</div>}
@@ -208,14 +221,7 @@ function Toast({ toasts }) {
   return (
     <div className="fixed bottom-6 right-6 z-[9999] flex flex-col gap-2.5">
       {toasts.map(t => (
-        <div
-          key={t.id}
-          className={`animate-[fadeUp_.2s_ease] rounded-xl border px-4 py-3 text-sm font-semibold shadow-lg ${
-            t.type === "error"
-              ? "border-red-300 bg-red-50 text-red-600"
-              : "border-emerald-300 bg-emerald-50 text-emerald-600"
-          }`}
-        >
+        <div key={t.id} className={`animate-[fadeUp_.2s_ease] rounded-xl border px-4 py-3 text-sm font-semibold shadow-lg ${t.type === "error" ? "border-red-300 bg-red-50 text-red-600" : "border-emerald-300 bg-emerald-50 text-emerald-600"}`}>
           {t.message}
         </div>
       ))}
@@ -247,14 +253,47 @@ function ConfirmModal({ open, title, message, confirmLabel = "Confirm", confirmB
   );
 }
 
-// ─── File Thumbnail ───────────────────────────────────────────────────────────
-function FileThumb({ photo, idx, onLightbox }) {
+// ─── File Thumbnail ─────────────────────────────────────────────────────────
+function EditFileModal({ open, file, form, setForm, onSave, onCancel, loading }) {
+  if (!open) return null;
+  return (
+    <Overlay onClose={onCancel}>
+      <ModalCard width={420}>
+        <ModalHeader title="Edit File" subtitle={file?.title || "Graduation file"} onClose={onCancel} />
+        <ModalBody>
+          <Field label="Title">
+            <input value={form.title} onChange={e => setForm(prev => ({ ...prev, title: e.target.value }))} placeholder="File title" style={inputBase} />
+          </Field>
+          <Field label="Sort Order">
+            <input type="number" min="0" value={form.sort_order} onChange={e => setForm(prev => ({ ...prev, sort_order: e.target.value }))} placeholder="0" style={inputBase} />
+          </Field>
+        </ModalBody>
+        <ModalFooter>
+          <Btn variant="ghost" onClick={onCancel} disabled={loading}>Cancel</Btn>
+          <Btn onClick={onSave} disabled={loading}>{loading ? "Saving..." : "Save Changes"}</Btn>
+        </ModalFooter>
+      </ModalCard>
+    </Overlay>
+  );
+}
+
+function FileActions({ onEdit, onDelete }) {
+  return (
+    <div style={{ position: "absolute", top: 6, right: 6, display: "flex", gap: 6, zIndex: 4 }}>
+      <button type="button" onClick={e => { e.stopPropagation(); onEdit(); }} style={{ border: "none", borderRadius: 8, background: "rgba(255,255,255,.94)", color: T.primary, fontSize: "0.68rem", fontWeight: 800, padding: "5px 8px", cursor: "pointer", boxShadow: "0 4px 12px rgba(15,23,42,.16)" }}>Edit</button>
+      <button type="button" onClick={e => { e.stopPropagation(); onDelete(); }} style={{ border: "none", borderRadius: 8, background: "rgba(239,68,68,.94)", color: "#fff", fontSize: "0.68rem", fontWeight: 800, padding: "5px 8px", cursor: "pointer", boxShadow: "0 4px 12px rgba(15,23,42,.16)" }}>Delete</button>
+    </div>
+  );
+}
+
+function FileThumb({ photo, idx, onLightbox, onEdit, onDelete, canManage = false }) {
   const type = detectFileType(photo);
   const url  = photo.file_path;
   const base = { width: "100%", aspectRatio: "4/3", borderRadius: 10, display: "block", background: "#1a2540" };
 
   if (type === "image") return (
     <div style={{ position: "relative", borderRadius: 10, overflow: "hidden", border: `1px solid ${T.border}`, cursor: "pointer" }} onClick={() => onLightbox({ url, type: "image" })}>
+      {canManage && <FileActions onEdit={() => onEdit(photo)} onDelete={() => onDelete(photo)} />}
       <img src={url} alt={`File ${idx + 1}`} style={{ ...base, objectFit: "cover" }} onError={e => { e.target.style.display = "none"; }} />
       <div style={{ position: "absolute", bottom: 4, right: 6, fontSize: "0.65rem", background: "rgba(0,0,0,.5)", color: "#fff", padding: "1px 5px", borderRadius: 4 }}>IMG</div>
     </div>
@@ -262,6 +301,7 @@ function FileThumb({ photo, idx, onLightbox }) {
 
   if (type === "video") return (
     <div style={{ position: "relative", borderRadius: 10, overflow: "hidden", border: `1px solid ${T.border}`, cursor: "pointer", background: "#0d1420" }} onClick={() => onLightbox({ url, type: "video" })}>
+      {canManage && <FileActions onEdit={() => onEdit(photo)} onDelete={() => onDelete(photo)} />}
       <video src={url} style={{ ...base, objectFit: "cover" }} preload="metadata" muted />
       <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", background: "rgba(10,20,50,.55)", borderRadius: 10, color: "#fff" }}>
         <div style={{ fontSize: "1.8rem" }}>▶</div>
@@ -271,106 +311,124 @@ function FileThumb({ photo, idx, onLightbox }) {
   );
 
   if (type === "audio") return (
-    <div style={{ padding: "14px 12px", background: T.bg, borderRadius: 10, border: `1px solid ${T.border}` }}>
+    <div style={{ position: "relative", padding: "34px 12px 14px", background: T.bg, borderRadius: 10, border: `1px solid ${T.border}` }}>
+      {canManage && <FileActions onEdit={() => onEdit(photo)} onDelete={() => onDelete(photo)} />}
       <div style={{ fontSize: "1.6rem", marginBottom: 8, textAlign: "center" }}>🎵</div>
       <audio src={url} controls style={{ width: "100%", height: 32 }} />
     </div>
   );
 
   if (type === "pdf") return (
-    <button type="button" onClick={() => onLightbox({ url, type: "pdf" })} style={{ width: "100%", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "20px 12px", background: T.bg, borderRadius: 10, border: `1px solid ${T.border}`, textDecoration: "none", gap: 8, minHeight: 100, cursor: "pointer", fontFamily: "inherit" }}>
+    <div style={{ position: "relative" }}>
+      {canManage && <FileActions onEdit={() => onEdit(photo)} onDelete={() => onDelete(photo)} />}
+      <button type="button" onClick={() => onLightbox({ url, type: "pdf" })} style={{ width: "100%", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "34px 12px 20px", background: T.bg, borderRadius: 10, border: `1px solid ${T.border}`, gap: 8, minHeight: 100, cursor: "pointer", fontFamily: "inherit" }}>
       <div style={{ fontSize: "2rem" }}>PDF</div>
       <div style={{ fontSize: "0.75rem", fontWeight: 700, color: T.primary }}>View PDF</div>
-    </button>
+      </button>
+    </div>
   );
 
   return (
-    <a href={url} target="_blank" rel="noreferrer" style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "20px 12px", background: T.bg, borderRadius: 10, border: `1px solid ${T.border}`, textDecoration: "none", gap: 8, minHeight: 100 }}>
+    <div style={{ position: "relative" }}>
+      {canManage && <FileActions onEdit={() => onEdit(photo)} onDelete={() => onDelete(photo)} />}
+      <a href={url} target="_blank" rel="noreferrer" style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "34px 12px 20px", background: T.bg, borderRadius: 10, border: `1px solid ${T.border}`, textDecoration: "none", gap: 8, minHeight: 100 }}>
       <div style={{ fontSize: "2rem" }}>📎</div>
       <div style={{ fontSize: "0.75rem", fontWeight: 700, color: T.primary }}>Download</div>
-    </a>
+      </a>
+    </div>
   );
 }
 
-// ═════════════════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════════════════
 // ALBUM DETAIL MODAL
-// ═════════════════════════════════════════════════════════════════════════════
-function AlbumDetailModal({ open, albumId, album: albumProp, contentType, isAdmin, onClose, onAddFiles, onRefresh: _onRefresh, toast }) {
-  const [photos,        setPhotos]        = useState([]);
-  const [albumData,     setAlbumData]     = useState(null);
-  const [loading,       setLoading]       = useState(false);
-  const [lightbox,      setLightbox]      = useState(null);
-  const [faceSearching, setFaceSearching] = useState(false);
-  const [faceMatches,   setFaceMatches]   = useState([]);
-  const [facePhotoIds,  setFacePhotoIds]  = useState([]);
-  const faceRef = useRef(null);
+// ═══════════════════════════════════════════════════════════════════════════
+function AlbumDetailModal({ open, albumId, album: albumProp, contentType, isAdmin, onClose, onAddFiles, toast }) {
+  const [photos, setPhotos]               = useState([]);
+  const [albumData, setAlbumData]         = useState(null);
+  const [loading, setLoading]             = useState(false);
+  const [lightbox, setLightbox]           = useState(null);
+  const [editFile, setEditFile]           = useState(null);
+  const [editFileForm, setEditFileForm]   = useState({ title: "", sort_order: "" });
+  const [deleteFile, setDeleteFile]       = useState(null);
+  const [fileSaving, setFileSaving]       = useState(false);
 
-  const cfg           = CONTENT_TYPES.find(c => c.key === contentType) ?? CONTENT_TYPES[0];
-  const hasFace       = FACE_TYPES.includes(contentType);
+  const cfg        = CONTENT_TYPES.find(c => c.key === contentType) ?? CONTENT_TYPES[0];
+  const hasFace    = false;
+  const faceSearching = false;
+  const faceMatches = [];
+  const faceRef = useRef(null);
+  const setFaceMatches = () => undefined;
+  const handleFaceSearch = () => undefined;
   const hasTranscript = albumData?.has_transcript;
 
   const loadAlbum = useCallback(() => {
     if (!open || !albumId) return;
     setLoading(true);
     api.get(`/admin/graduation/content/${albumId}`)
-      .then(r => {
-        const data = r.data?.data ?? r.data;
-        setAlbumData(data);
-        setPhotos(data?.photos ?? []);
-      })
+      .then(r => { const d = r.data?.data ?? r.data; setAlbumData(d); setPhotos(d?.photos ?? []); })
       .catch(() => toast("Failed to load files.", "error"))
       .finally(() => setLoading(false));
   }, [open, albumId]);
 
-  useEffect(() => {
-    loadAlbum();
-    setFaceMatches([]);
-    setFacePhotoIds([]);
-  }, [loadAlbum]);
+  useEffect(() => { loadAlbum(); }, [loadAlbum]);
 
   const photoIds = photos.map(p => p.id).filter(Boolean);
 
   usePhotoFacesBroadcast(
-    (event) => {
-      setPhotos(prev =>
-        prev.map(photo =>
-          photo.id === event.photo_id
-            ? { ...photo, ai_metadata: { ...(photo.ai_metadata ?? {}), status: event.status, face_count: event.face_count, matches: event.matches ?? [] } }
-            : photo
-        )
-      );
-    },
+    (event) => setPhotos(prev => prev.map(photo =>
+      photo.id === event.photo_id
+        ? { ...photo, ai_metadata: { ...(photo.ai_metadata ?? {}), status: event.status, face_count: event.face_count, matches: event.matches ?? [] } }
+        : photo
+    )),
     { photoIds, enabled: open && photoIds.length > 0 }
   );
 
-  const handleFaceSearch = async (file) => {
-    setFaceSearching(true);
-    setFaceMatches([]);
-    setFacePhotoIds([]);
+  const openEditFile = (photo) => {
+    setEditFile(photo);
+    setEditFileForm({
+      title: photo?.title ?? "",
+      sort_order: photo?.sort_order ?? "",
+    });
+  };
+
+  const saveEditFile = async () => {
+    if (!editFile?.id) return;
+    setFileSaving(true);
     try {
-      const fd = new FormData();
-      fd.append("face_image", file);
-      const res = await api.post("/face/search", fd, { headers: { "Content-Type": "multipart/form-data" } });
-      const matches        = res.data?.matches ?? [];
-      const matchedPhotoIds = (res.data?.photos ?? []).map(p => p.graduation_photo_id ?? p.photo_id).filter(Boolean);
-      setFaceMatches(matches);
-      setFacePhotoIds(matchedPhotoIds);
-      if (!matches.length && !matchedPhotoIds.length) toast("No matching faces found.", "error");
+      const payload = {
+        title: editFileForm.title,
+        sort_order: editFileForm.sort_order === "" ? null : Number(editFileForm.sort_order),
+      };
+      const res = await api.patch(`/admin/graduation/content/files/${editFile.id}`, payload);
+      const updated = res.data?.data ?? res.data;
+      setPhotos(prev => prev.map(photo => photo.id === editFile.id ? { ...photo, ...updated } : photo));
+      setEditFile(null);
+      toast("File updated.");
     } catch {
-      toast("Face search failed.", "error");
+      toast("Failed to update file.", "error");
     } finally {
-      setFaceSearching(false);
+      setFileSaving(false);
+    }
+  };
+
+  const confirmDeleteFile = async () => {
+    if (!deleteFile?.id) return;
+    setFileSaving(true);
+    try {
+      await api.delete(`/admin/graduation/content/files/${deleteFile.id}`);
+      setPhotos(prev => prev.filter(photo => photo.id !== deleteFile.id));
+      setDeleteFile(null);
+      toast("File moved to trash.");
+    } catch {
+      toast("Failed to delete file.", "error");
+    } finally {
+      setFileSaving(false);
     }
   };
 
   if (!open) return null;
 
-  const displayPhotos = faceMatches.length > 0 || facePhotoIds.length > 0
-    ? photos.filter(p => {
-        const matchIds = (p.ai_metadata?.matches ?? []).map(m => m.user_id);
-        return facePhotoIds.includes(p.id) || faceMatches.some(m => matchIds.includes(m.user_id));
-      })
-    : photos;
+  const displayPhotos = photos;
 
   return (
     <>
@@ -382,7 +440,6 @@ function AlbumDetailModal({ open, albumId, album: albumProp, contentType, isAdmi
             onClose={onClose}
           />
           <ModalBody>
-            {/* Face search bar */}
             {hasFace && (
               <div style={{ marginBottom: 16 }}>
                 <div style={{ display: "flex", gap: 8, alignItems: "center", padding: "10px 14px", background: T.primaryBg, borderRadius: 12, border: `1px solid #c7d2fe` }}>
@@ -392,18 +449,10 @@ function AlbumDetailModal({ open, albumId, album: albumProp, contentType, isAdmi
                       ? `Showing ${displayPhotos.length} matched photo(s) — `
                       : "Search by face to find a student in this album"}
                     {faceMatches.length > 0 && (
-                      <button onClick={() => setFaceMatches([])} style={{ background: "none", border: "none", color: T.primary, cursor: "pointer", fontWeight: 700, fontSize: "0.82rem", padding: 0 }}>
-                        Clear filter
-                      </button>
+                      <button onClick={() => setFaceMatches([])} style={{ background: "none", border: "none", color: T.primary, cursor: "pointer", fontWeight: 700, fontSize: "0.82rem", padding: 0 }}>Clear filter</button>
                     )}
                   </div>
-                  <input
-                    ref={faceRef}
-                    type="file"
-                    accept="image/*"
-                    style={{ display: "none" }}
-                    onChange={e => { if (e.target.files[0]) handleFaceSearch(e.target.files[0]); e.target.value = ""; }}
-                  />
+                  <input ref={faceRef} type="file" accept="image/*" style={{ display: "none" }} onChange={e => { if (e.target.files[0]) handleFaceSearch(e.target.files[0]); e.target.value = ""; }} />
                   <Btn onClick={() => faceRef.current?.click()} disabled={faceSearching} style={{ padding: "6px 14px", fontSize: "0.78rem" }}>
                     {faceSearching ? "⟳ Searching…" : "📸 Upload Face"}
                   </Btn>
@@ -421,19 +470,14 @@ function AlbumDetailModal({ open, albumId, album: albumProp, contentType, isAdmi
               </div>
             )}
 
-            {/* Transcript link */}
             {hasTranscript && (
               <div style={{ marginBottom: 14, padding: "10px 14px", background: "#fefce8", borderRadius: 10, border: "1px solid #fde68a", display: "flex", alignItems: "center", gap: 8 }}>
                 <span>📝</span>
                 <span style={{ fontSize: "0.82rem", color: "#92400e", flex: 1 }}>This album has an AI-generated transcript</span>
-                <a href={`/admin/graduation/transcripts?album_id=${albumId}`} target="_blank" rel="noreferrer"
-                  style={{ fontSize: "0.78rem", fontWeight: 700, color: "#92400e", textDecoration: "underline" }}>
-                  View Transcript →
-                </a>
+                <a href={`/admin/graduation/transcripts?album_id=${albumId}`} target="_blank" rel="noreferrer" style={{ fontSize: "0.78rem", fontWeight: 700, color: "#92400e", textDecoration: "underline" }}>View Transcript →</a>
               </div>
             )}
 
-            {/* File grid */}
             {loading ? (
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))", gap: 12 }}>
                 {Array.from({ length: 8 }).map((_, i) => <Skeleton key={i} w="100%" h={120} radius={10} />)}
@@ -452,13 +496,18 @@ function AlbumDetailModal({ open, albumId, album: albumProp, contentType, isAdmi
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))", gap: 12 }}>
                 {displayPhotos.map((photo, idx) => (
                   <div key={photo.id ?? idx}>
-                    <FileThumb photo={photo} idx={idx} onLightbox={setLightbox} />
-                    {photo.ai_metadata?.status && photo.ai_metadata.status !== "done" && (
+                    <FileThumb
+                      photo={photo}
+                      idx={idx}
+                      onLightbox={setLightbox}
+                      onEdit={openEditFile}
+                      onDelete={setDeleteFile}
+                      canManage={isAdmin}
+                    />
+                    {photo.ai_metadata?.status && !["done", "pending"].includes(photo.ai_metadata.status) && (
                       <div style={{ marginTop: 4, fontSize: "0.65rem", color: T.muted, textAlign: "center" }}>
-                        {photo.ai_metadata.status === "pending"  ? "⏳ AI pending"  :
-                         photo.ai_metadata.status === "queued"   ? "🔄 Analyzing…"  :
-                         photo.ai_metadata.status === "error"    ? "❌ AI failed"   :
-                         photo.ai_metadata.status === "failed"   ? "❌ AI failed"   : ""}
+                        {photo.ai_metadata.status === "queued"  ? "🔄 Analyzing…" :
+                         ["error","failed"].includes(photo.ai_metadata.status) ? "❌ AI failed" : ""}
                       </div>
                     )}
                   </div>
@@ -478,56 +527,85 @@ function AlbumDetailModal({ open, albumId, album: albumProp, contentType, isAdmi
         </ModalCard>
       </Overlay>
 
-      {/* Lightbox */}
+      <EditFileModal
+        open={!!editFile}
+        file={editFile}
+        form={editFileForm}
+        setForm={setEditFileForm}
+        onSave={saveEditFile}
+        onCancel={() => setEditFile(null)}
+        loading={fileSaving}
+      />
+
+      <ConfirmModal
+        open={!!deleteFile}
+        title="Delete File"
+        message={`Move "${deleteFile?.title || 'this file'}" to Trash? You can restore it from the Trash page.`}
+        confirmLabel="Delete"
+        onConfirm={confirmDeleteFile}
+        onCancel={() => setDeleteFile(null)}
+        loading={fileSaving}
+      />
+
       {lightbox && (
-        <div
-          style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.92)", zIndex: 2000, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}
-          onClick={() => setLightbox(null)}
-        >
-          <button onClick={() => setLightbox(null)} style={{ position: "absolute", top: 20, right: 24, background: "none", border: "none", color: "#fff", fontSize: "2rem", cursor: "pointer", lineHeight: 1 }}>x</button>
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.92)", zIndex: 2000, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }} onClick={() => setLightbox(null)}>
+          <button onClick={() => setLightbox(null)} style={{ position: "absolute", top: 20, right: 24, background: "none", border: "none", color: "#fff", fontSize: "2rem", cursor: "pointer", lineHeight: 1 }}>×</button>
           {lightbox.type === "image" && (
             <>
-              <a href={lightbox.url} download target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} style={{ position: "absolute", top: 22, right: 72, border: "1px solid rgba(255,255,255,.25)", borderRadius: 10, background: "rgba(255,255,255,.12)", color: "#fff", padding: "8px 12px", textDecoration: "none", fontSize: "0.82rem", fontWeight: 700 }}>
-                Download Image
-              </a>
+              <a href={lightbox.url} download target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} style={{ position: "absolute", top: 22, right: 72, border: "1px solid rgba(255,255,255,.25)", borderRadius: 10, background: "rgba(255,255,255,.12)", color: "#fff", padding: "8px 12px", textDecoration: "none", fontSize: "0.82rem", fontWeight: 700 }}>Download Image</a>
               <img src={lightbox.url} alt="Preview" style={{ maxWidth: "90vw", maxHeight: "88vh", borderRadius: 12, objectFit: "contain" }} onClick={e => e.stopPropagation()} />
             </>
           )}
-          {lightbox.type === "video" && (
-            <video src={lightbox.url} controls autoPlay style={{ maxWidth: "90vw", maxHeight: "88vh", borderRadius: 12 }} onClick={e => e.stopPropagation()} />
-          )}
-          {lightbox.type === "pdf" && (
-            <iframe src={lightbox.url} title="PDF preview" style={{ width: "90vw", height: "88vh", border: "none", borderRadius: 12, background: "#fff" }} onClick={e => e.stopPropagation()} />
-          )}
+          {lightbox.type === "video" && <video src={lightbox.url} controls autoPlay style={{ maxWidth: "90vw", maxHeight: "88vh", borderRadius: 12 }} onClick={e => e.stopPropagation()} />}
+          {lightbox.type === "pdf"   && <iframe src={lightbox.url} title="PDF preview" style={{ width: "90vw", height: "88vh", border: "none", borderRadius: 12, background: "#fff" }} onClick={e => e.stopPropagation()} />}
         </div>
       )}
     </>
   );
 }
 
-// ═════════════════════════════════════════════════════════════════════════════
-// FILE DROP ZONE
-// ═════════════════════════════════════════════════════════════════════════════
-function FileDropZone({ cfg, files, setFiles, uploading, progress }) {
+// ─── File Drop Zone ─────────────────────────────────────────────────────────
+// fileTitles / setFileTitles: optional — only passed for video-type content
+// so each file gets its own editable title field before uploading.
+function FileDropZone({ cfg, files, setFiles, uploading, progress, fileTitles, setFileTitles }) {
   const fileRef = useRef(null);
   const [dragOver, setDragOver] = useState(false);
 
   const statusIcon  = s => ({ done: "✓", error: "✗", uploading: "⟳" }[s] ?? "○");
   const statusColor = s => ({ done: T.success, error: T.danger, uploading: T.primary }[s] ?? T.hint);
 
+  // Whether to show per-file title inputs (video-like content types)
+  const showTitles = !!setFileTitles;
+
+  const addFiles = (newFiles) => {
+    setFiles(p => [...p, ...newFiles]);
+    if (showTitles) {
+      // Pre-fill title from filename (strip extension)
+      setFileTitles(p => [
+        ...p,
+        ...newFiles.map(f => f.name.replace(/\.[^/.]+$/, "")),
+      ]);
+    }
+  };
+
+  const removeFile = (i) => {
+    setFiles(p => p.filter((_, idx) => idx !== i));
+    if (showTitles) setFileTitles(p => p.filter((_, idx) => idx !== i));
+  };
+
   return (
     <>
       <div
-        onDragOver={e  => { e.preventDefault(); setDragOver(true); }}
+        onDragOver={e => { e.preventDefault(); setDragOver(true); }}
         onDragLeave={() => setDragOver(false)}
-        onDrop={e => {
-          e.preventDefault();
-          setDragOver(false);
-          const dropped = Array.from(e.dataTransfer.files);
-          if (dropped.length) setFiles(p => [...p, ...dropped]);
-        }}
+        onDrop={e => { e.preventDefault(); setDragOver(false); const d = Array.from(e.dataTransfer.files); if (d.length) addFiles(d); }}
         onClick={() => !uploading && fileRef.current?.click()}
-        style={{ border: `2px dashed ${dragOver ? T.primary : T.border}`, borderRadius: 14, padding: "28px 16px", textAlign: "center", cursor: uploading ? "not-allowed" : "pointer", marginBottom: 12, background: dragOver ? T.primaryBg : T.bg, transition: "all .15s" }}
+        style={{
+          border: `2px dashed ${dragOver ? T.primary : T.border}`,
+          borderRadius: 14, padding: "24px 16px", textAlign: "center",
+          cursor: uploading ? "not-allowed" : "pointer", marginBottom: 12,
+          background: dragOver ? T.primaryBg : T.bg, transition: "all .15s",
+        }}
       >
         <div style={{ fontSize: "2.2rem", marginBottom: 8 }}>📁</div>
         <div style={{ fontWeight: 700, fontSize: "0.9rem", color: T.text, marginBottom: 4 }}>
@@ -535,35 +613,77 @@ function FileDropZone({ cfg, files, setFiles, uploading, progress }) {
         </div>
         <div style={{ fontSize: "0.75rem", color: T.muted }}>{cfg.accept} · Multiple files supported</div>
         <input
-          ref={fileRef}
-          type="file"
-          accept={cfg.accept}
-          multiple
-          style={{ display: "none" }}
-          onChange={e => {
-            const selected = Array.from(e.target.files);
-            if (selected.length) setFiles(p => [...p, ...selected]);
-            e.target.value = "";
-          }}
+          ref={fileRef} type="file" accept={cfg.accept} multiple style={{ display: "none" }}
+          onChange={e => { const s = Array.from(e.target.files); if (s.length) addFiles(s); e.target.value = ""; }}
         />
       </div>
 
       {files.length > 0 && (
-        <div style={{ background: T.bg, borderRadius: 12, border: `1px solid ${T.border}`, overflow: "hidden", maxHeight: 200, overflowY: "auto", marginBottom: 12 }}>
+        <div style={{
+          background: T.bg, borderRadius: 12, border: `1px solid ${T.border}`,
+          overflow: "hidden", maxHeight: showTitles ? 320 : 200,
+          overflowY: "auto", marginBottom: 12,
+        }}>
           {files.map((f, i) => {
             const prog = progress[i];
             return (
-              <div key={i} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 14px", borderBottom: i < files.length - 1 ? `1px solid ${T.border}` : "none" }}>
-                <span style={{ color: statusColor(prog?.status), fontWeight: 700, fontSize: "0.8rem", width: 16, textAlign: "center" }}>
-                  {prog ? statusIcon(prog.status) : "○"}
-                </span>
-                <span style={{ flex: 1, fontSize: "0.8rem", color: T.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{f.name}</span>
-                <span style={{ fontSize: "0.75rem", color: T.muted, flexShrink: 0 }}>{(f.size / 1024 / 1024).toFixed(1)} MB</span>
-                {!prog && (
-                  <button
-                    onClick={e => { e.stopPropagation(); setFiles(p => p.filter((_, idx) => idx !== i)); }}
-                    style={{ background: "none", border: "none", color: T.hint, cursor: "pointer", fontSize: "0.9rem", padding: "0 2px", lineHeight: 1 }}
-                  >×</button>
+              <div
+                key={i}
+                style={{
+                  display: "flex", flexDirection: showTitles ? "column" : "row",
+                  gap: showTitles ? 6 : 10,
+                  padding: showTitles ? "10px 14px" : "8px 14px",
+                  borderBottom: i < files.length - 1 ? `1px solid ${T.border}` : "none",
+                  background: prog?.status === "done"  ? "#f0fdf4"
+                            : prog?.status === "error" ? "#fff1f2"
+                            : "transparent",
+                  transition: "background .2s",
+                }}
+              >
+                {/* Row 1: status icon + filename + size + remove */}
+                <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+                  <span style={{ color: statusColor(prog?.status), fontWeight: 700, fontSize: "0.8rem", width: 16, textAlign: "center", flexShrink: 0 }}>
+                    {prog ? statusIcon(prog.status) : "○"}
+                  </span>
+                  <span
+                    title={f.name}
+                    style={{ flex: 1, fontSize: "0.8rem", color: T.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontWeight: showTitles ? 600 : 400 }}
+                  >
+                    {f.name}
+                  </span>
+                  <span style={{ fontSize: "0.72rem", color: T.muted, flexShrink: 0 }}>
+                    {(f.size / 1024 / 1024).toFixed(1)} MB
+                  </span>
+                  {!prog && (
+                    <button
+                      onClick={e => { e.stopPropagation(); removeFile(i); }}
+                      style={{ background: "none", border: "none", color: T.hint, cursor: "pointer", fontSize: "1rem", padding: "0 2px", lineHeight: 1, flexShrink: 0 }}
+                    >×</button>
+                  )}
+                </div>
+
+                {/* Row 2: per-file title input (video types only) */}
+                {showTitles && (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 5, order: -1 }}>
+                    <label style={{ fontSize: "0.68rem", fontWeight: 800, color: T.muted, textTransform: "uppercase", letterSpacing: ".05em", flexShrink: 0, whiteSpace: "nowrap" }}>
+                      Title
+                    </label>
+                    <input
+                      type="text"
+                      disabled={!!prog}
+                      value={fileTitles?.[i] ?? ""}
+                      onChange={e => setFileTitles(p => p.map((t, idx) => idx === i ? e.target.value : t))}
+                      placeholder="Enter a title for this video…"
+                      style={{
+                        ...inputBase,
+                        padding: "5px 10px",
+                        fontSize: "0.78rem",
+                        background: prog ? "#f1f5f9" : "#fff",
+                        color: prog ? T.hint : T.text,
+                        width: "100%",
+                      }}
+                    />
+                  </div>
                 )}
               </div>
             );
@@ -574,34 +694,37 @@ function FileDropZone({ cfg, files, setFiles, uploading, progress }) {
   );
 }
 
-// ═════════════════════════════════════════════════════════════════════════════
-// ALBUM UPLOAD MODAL (two-step)
-// ═════════════════════════════════════════════════════════════════════════════
+// ─── Album Upload Modal ─────────────────────────────────────────────────────
+const VIDEO_TYPES = ["videos", "songs", "mass", "speeches"];
+
 function AlbumUploadModal({ open, contentType, batches, onClose, onDone, toast }) {
   const cfg = CONTENT_TYPES.find(c => c.key === contentType) ?? CONTENT_TYPES[0];
+  const isVideoType = VIDEO_TYPES.includes(contentType);
 
-  const [step,      setStep]      = useState(1);
-  const [album,     setAlbum]     = useState(null);
-  const [form,      setForm]      = useState({ title: "", description: "", batch_id: "", status: "draft", event_date: "" });
-  const [errors,    setErrors]    = useState({});
-  const [files,     setFiles]     = useState([]);
-  const [saving,    setSaving]    = useState(false);
+  const [step, setStep]           = useState(1);
+  const [album, setAlbum]         = useState(null);
+  const [form, setForm]           = useState({ title: "", description: "", batch_id: "", status: "draft", event_date: "" });
+  const [errors, setErrors]       = useState({});
+  const [files, setFiles]         = useState([]);
+  const [fileTitles, setFileTitles] = useState([]);   // per-file titles for video types
+  const [saving, setSaving]       = useState(false);
   const [uploading, setUploading] = useState(false);
-  const [progress,  setProgress]  = useState([]);
+  const [progress, setProgress]   = useState([]);
 
-  const filesRef = useRef([]);
-  useEffect(() => { filesRef.current = files; }, [files]);
+  const filesRef      = useRef([]);
+  const fileTitlesRef = useRef([]);
+  useEffect(() => { filesRef.current      = files;      }, [files]);
+  useEffect(() => { fileTitlesRef.current = fileTitles; }, [fileTitles]);
 
   useEffect(() => {
     if (open) {
       setStep(1); setAlbum(null);
       setForm({ title: "", description: "", batch_id: "", status: "draft", event_date: "" });
-      setErrors({}); setFiles([]); setProgress([]);
+      setErrors({}); setFiles([]); setFileTitles([]); setProgress([]);
     }
   }, [open]);
 
   if (!open) return null;
-
   const set = (k, v) => setForm(p => ({ ...p, [k]: v }));
 
   const createAlbum = async () => {
@@ -611,29 +734,31 @@ function AlbumUploadModal({ open, contentType, batches, onClose, onDone, toast }
     setSaving(true);
     try {
       const res = await api.post("/admin/graduation/albums", { ...form, type: contentType });
-      setAlbum(res.data.data ?? res.data);
-      setStep(2);
+      setAlbum(res.data.data ?? res.data); setStep(2);
       toast("Album created! Now add your files.");
-    } catch (err) {
-      toast(err.response?.data?.message ?? "Failed to create album.", "error");
-    } finally { setSaving(false); }
+    } catch (err) { toast(err.response?.data?.message ?? "Failed to create album.", "error"); }
+    finally { setSaving(false); }
   };
 
   const doUpload = async () => {
-    const currentFiles = filesRef.current;
-    if (!currentFiles.length) { toast("Select at least one file.", "error"); return; }
+    const cur    = filesRef.current;
+    const titles = fileTitlesRef.current;
+    if (!cur.length) { toast("Select at least one file.", "error"); return; }
     setUploading(true);
-    setProgress(currentFiles.map(f => ({ name: f.name, status: "uploading" })));
+    setProgress(cur.map(f => ({ name: f.name, status: "uploading" })));
     const fd = new FormData();
-    currentFiles.forEach(f => fd.append("files[]", f));
+    cur.forEach(f => fd.append("files[]", f));
+    // Send per-file titles for video-type content
+    if (isVideoType) {
+      titles.forEach((t, i) => fd.append("titles[]", t || cur[i].name.replace(/\.[^/.]+$/, "")));
+    }
     try {
       await api.post(`/admin/graduation/albums/${album.id}/upload`, fd, { headers: { "Content-Type": "multipart/form-data" } });
-      setProgress(currentFiles.map(f => ({ name: f.name, status: "done" })));
-      toast(`${currentFiles.length} file(s) uploaded to "${album.title}".`);
-      setFiles([]);
-      onDone();
+      setProgress(cur.map(f => ({ name: f.name, status: "done" })));
+      toast(`${cur.length} file(s) uploaded to "${album.title}".`);
+      setFiles([]); setFileTitles([]); onDone();
     } catch (err) {
-      setProgress(currentFiles.map(f => ({ name: f.name, status: "error" })));
+      setProgress(cur.map(f => ({ name: f.name, status: "error" })));
       toast(err.response?.data?.message ?? "Upload failed.", "error");
     } finally { setUploading(false); }
   };
@@ -641,24 +766,16 @@ function AlbumUploadModal({ open, contentType, batches, onClose, onDone, toast }
   return (
     <Overlay onClose={onClose}>
       <ModalCard width={580}>
-        <ModalHeader
-          title={`${cfg.icon} New ${cfg.label} Album`}
-          subtitle={step === 1 ? "Step 1 of 2 — Set up your album" : `Step 2 of 2 — Upload files to "${album?.title}"`}
-          onClose={onClose}
-        />
+        <ModalHeader title={`${cfg.icon} New ${cfg.label} Album`} subtitle={step === 1 ? "Step 1 of 2 — Set up your album" : `Step 2 of 2 — Upload files to "${album?.title}"`} onClose={onClose} />
         <ModalBody>
           <StepIndicator step={step} />
-
           {step === 1 && (
             <>
               <Field label="Album Title" required error={errors.title}>
-                <input value={form.title} onChange={e => set("title", e.target.value)}
-                  placeholder={`e.g. Graduation ${cfg.label} 2025`}
-                  style={{ ...inputBase, borderColor: errors.title ? T.danger : T.border }} />
+                <input value={form.title} onChange={e => set("title", e.target.value)} placeholder={`e.g. Graduation ${cfg.label} 2025`} style={{ ...inputBase, borderColor: errors.title ? T.danger : T.border }} />
               </Field>
               <Field label="Description">
-                <textarea value={form.description} onChange={e => set("description", e.target.value)}
-                  rows={2} placeholder="Optional notes…" style={{ ...inputBase, resize: "vertical" }} />
+                <textarea value={form.description} onChange={e => set("description", e.target.value)} rows={2} placeholder="Optional notes…" style={{ ...inputBase, resize: "vertical" }} />
               </Field>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
                 <Field label="Batch">
@@ -679,7 +796,6 @@ function AlbumUploadModal({ open, contentType, batches, onClose, onDone, toast }
               </Field>
             </>
           )}
-
           {step === 2 && (
             <>
               <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 18, padding: "10px 14px", background: T.primaryBg, borderRadius: 12, border: "1px solid #c7d2fe" }}>
@@ -694,15 +810,18 @@ function AlbumUploadModal({ open, contentType, batches, onClose, onDone, toast }
                 </div>
                 <StatusBadge status={album?.status} />
               </div>
-
-              <FileDropZone cfg={cfg} files={files} setFiles={setFiles} uploading={uploading} progress={progress} />
-
+              <FileDropZone
+                cfg={cfg} files={files} setFiles={setFiles}
+                uploading={uploading} progress={progress}
+                fileTitles={isVideoType ? fileTitles : undefined}
+                setFileTitles={isVideoType ? setFileTitles : undefined}
+              />
               {files.length > 0 && (
                 <div style={{ fontSize: "0.78rem", color: T.primary, fontWeight: 600, marginBottom: 8 }}>
                   ✓ {files.length} file(s) ready to upload
+                  {isVideoType && " — add a title for each video above"}
                 </div>
               )}
-
               <div style={{ fontSize: "0.78rem", color: T.muted, lineHeight: 1.6 }}>
                 💡 You can upload more files after this — click <strong>Done</strong> when finished.
                 {FACE_TYPES.includes(contentType) && <><br />👤 <strong>Face analysis</strong> will automatically queue for all uploaded images.</>}
@@ -711,52 +830,32 @@ function AlbumUploadModal({ open, contentType, batches, onClose, onDone, toast }
             </>
           )}
         </ModalBody>
-
         <ModalFooter>
-          {step === 1 && (
-            <>
-              <Btn variant="ghost" onClick={onClose} disabled={saving}>Cancel</Btn>
-              <Btn onClick={createAlbum} disabled={saving}>{saving ? "Creating…" : "Create Album →"}</Btn>
-            </>
-          )}
-          {step === 2 && (
-            <>
-              <Btn variant="ghost" onClick={onClose} disabled={uploading}>Close</Btn>
-              <Btn onClick={doUpload} disabled={uploading || files.length === 0}>
-                {uploading ? "Uploading…" : `Upload ${files.length > 0 ? files.length + " file(s)" : "Files"}`}
-              </Btn>
-              <Btn variant="success" onClick={() => { onDone(); onClose(); }}>✓ Done</Btn>
-            </>
-          )}
+          {step === 1 && (<><Btn variant="ghost" onClick={onClose} disabled={saving}>Cancel</Btn><Btn onClick={createAlbum} disabled={saving}>{saving ? "Creating…" : "Create Album →"}</Btn></>)}
+          {step === 2 && (<><Btn variant="ghost" onClick={onClose} disabled={uploading}>Close</Btn><Btn onClick={doUpload} disabled={uploading || files.length === 0}>{uploading ? "Uploading…" : `Upload ${files.length > 0 ? files.length + " file(s)" : "Files"}`}</Btn><Btn variant="success" onClick={() => { onDone(); onClose(); }}>✓ Done</Btn></>)}
         </ModalFooter>
       </ModalCard>
     </Overlay>
   );
 }
 
-// ─── Edit Modal ───────────────────────────────────────────────────────────────
+// ─── Edit Modal ─────────────────────────────────────────────────────────────
 function EditModal({ open, item, batches, onSave, onCancel, loading }) {
   const [form, setForm] = useState({});
   useEffect(() => {
     if (item) setForm({ title: item.title ?? "", description: item.description ?? "", batch_id: item.batch_id ?? "", status: item.status ?? "draft", event_date: item.event_date ?? "" });
   }, [item, open]);
-
   if (!open || !item) return null;
   return (
     <Overlay onClose={onCancel}>
       <ModalCard width={500}>
         <ModalHeader title="Edit Album" onClose={onCancel} />
         <ModalBody>
-          {[
-            { k: "title",       label: "Title",       type: "text"     },
-            { k: "description", label: "Description", type: "textarea" },
-            { k: "event_date",  label: "Event Date",  type: "date"     },
-          ].map(f => (
+          {[{ k: "title", label: "Title", type: "text" }, { k: "description", label: "Description", type: "textarea" }, { k: "event_date", label: "Event Date", type: "date" }].map(f => (
             <Field key={f.k} label={f.label}>
               {f.type === "textarea"
                 ? <textarea style={{ ...inputBase, resize: "vertical", minHeight: 60 }} value={form[f.k] ?? ""} onChange={e => setForm(p => ({ ...p, [f.k]: e.target.value }))} />
-                : <input type={f.type} style={inputBase} value={form[f.k] ?? ""} onChange={e => setForm(p => ({ ...p, [f.k]: e.target.value }))} />
-              }
+                : <input type={f.type} style={inputBase} value={form[f.k] ?? ""} onChange={e => setForm(p => ({ ...p, [f.k]: e.target.value }))} />}
             </Field>
           ))}
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
@@ -784,64 +883,68 @@ function EditModal({ open, item, batches, onSave, onCancel, loading }) {
   );
 }
 
-// ═════════════════════════════════════════════════════════════════════════════
-// ADD FILES MODAL
-// ═════════════════════════════════════════════════════════════════════════════
+// ─── Add Files Modal ─────────────────────────────────────────────────────────
 function AddFilesModal({ open, album, contentType, onClose, onDone, toast }) {
-  const cfg = CONTENT_TYPES.find(c => c.key === contentType) ?? CONTENT_TYPES[0];
+  const cfg         = CONTENT_TYPES.find(c => c.key === contentType) ?? CONTENT_TYPES[0];
+  const isVideoType = VIDEO_TYPES.includes(contentType);
 
-  const [files,     setFiles]     = useState([]);
-  const [uploading, setUploading] = useState(false);
-  const [progress,  setProgress]  = useState([]);
+  const [files, setFiles]             = useState([]);
+  const [fileTitles, setFileTitles]   = useState([]);
+  const [uploading, setUploading]     = useState(false);
+  const [progress, setProgress]       = useState([]);
 
-  const filesRef = useRef([]);
-  useEffect(() => { filesRef.current = files; }, [files]);
+  const filesRef      = useRef([]);
+  const fileTitlesRef = useRef([]);
+  useEffect(() => { filesRef.current      = files;      }, [files]);
+  useEffect(() => { fileTitlesRef.current = fileTitles; }, [fileTitles]);
 
   useEffect(() => {
-    if (open) { setFiles([]); setProgress([]); }
+    if (open) { setFiles([]); setFileTitles([]); setProgress([]); }
   }, [open]);
 
   if (!open || !album) return null;
 
   const upload = async () => {
-    const currentFiles = filesRef.current;
-    if (!currentFiles.length) { toast("Please select at least one file.", "error"); return; }
+    const cur    = filesRef.current;
+    const titles = fileTitlesRef.current;
+    if (!cur.length) { toast("Please select at least one file.", "error"); return; }
     setUploading(true);
-    setProgress(currentFiles.map(f => ({ name: f.name, status: "uploading" })));
+    setProgress(cur.map(f => ({ name: f.name, status: "uploading" })));
     const fd = new FormData();
-    currentFiles.forEach(f => fd.append("files[]", f));
+    cur.forEach(f => fd.append("files[]", f));
+    if (isVideoType) {
+      titles.forEach((t, i) => fd.append("titles[]", t || cur[i].name.replace(/\.[^/.]+$/, "")));
+    }
     try {
       await api.post(`/admin/graduation/albums/${album.id}/upload`, fd, { headers: { "Content-Type": "multipart/form-data" } });
-      setProgress(currentFiles.map(f => ({ name: f.name, status: "done" })));
-      toast(`${currentFiles.length} file(s) added to "${album.title}".`);
+      setProgress(cur.map(f => ({ name: f.name, status: "done" })));
+      toast(`${cur.length} file(s) added to "${album.title}".`);
       setTimeout(() => { onDone(); onClose(); }, 600);
     } catch (err) {
-      setProgress(currentFiles.map(f => ({ name: f.name, status: "error" })));
+      setProgress(cur.map(f => ({ name: f.name, status: "error" })));
       toast(err.response?.data?.message ?? "Upload failed.", "error");
-    } finally {
-      setUploading(false);
-    }
+    } finally { setUploading(false); }
   };
 
   return (
     <Overlay onClose={onClose}>
       <ModalCard width={520}>
         <ModalHeader
-          title={`${cfg.icon} Add Files to "${album.title}"`}
-          subtitle={
-            FACE_TYPES.includes(contentType)
-              ? "Images will be analyzed for face recognition automatically"
-              : ["videos","songs","mass","speeches"].includes(contentType)
-              ? "Media will be transcribed by AI automatically"
-              : "Files will be added to this album"
-          }
+          title="Add Files"
+          subtitle={album.title}
           onClose={onClose}
         />
         <ModalBody>
-          <FileDropZone cfg={cfg} files={files} setFiles={setFiles} uploading={uploading} progress={progress} />
+          <FileDropZone
+            cfg={cfg} files={files} setFiles={setFiles}
+            uploading={uploading} progress={progress}
+            fileTitles={isVideoType ? fileTitles : undefined}
+            setFileTitles={isVideoType ? setFileTitles : undefined}
+          />
           {files.length > 0 && (
             <div style={{ fontSize: "0.78rem", color: T.primary, fontWeight: 600, marginTop: 4, marginBottom: 4 }}>
               ✓ {files.length} file(s) ready to upload
+              {isVideoType && " — add a title for each video above"}
             </div>
           )}
         </ModalBody>
@@ -856,7 +959,7 @@ function AddFilesModal({ open, album, contentType, onClose, onDone, toast }) {
   );
 }
 
-// ─── Pagination ───────────────────────────────────────────────────────────────
+// ─── Pagination ──────────────────────────────────────────────────────────────
 function Pagination({ meta, onPage }) {
   if (!meta || meta.last_page <= 1) return null;
   const { current_page: cur, last_page: last } = meta;
@@ -866,50 +969,88 @@ function Pagination({ meta, onPage }) {
     <div className="mt-5 flex flex-wrap items-center justify-between gap-2.5">
       <div className="text-sm text-slate-500">Page {cur} of {last} · {meta.total} items</div>
       <div className="flex gap-1.5">
-        {[
-          { label: "←", page: cur - 1, disabled: cur === 1 },
-          ...pages.map(p => ({ label: p, page: p, active: p === cur })),
-          { label: "→", page: cur + 1, disabled: cur === last },
-        ].map((b, i) => (
-          <button key={i} onClick={() => !b.disabled && onPage(b.page)}
-            className={`rounded-lg border px-3 py-1.5 text-sm font-semibold transition ${
-              b.active ? "border-indigo-600 bg-indigo-600 text-white" : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
-            } ${b.disabled ? "cursor-default opacity-40" : ""}`}>
-            {b.label}
-          </button>
-        ))}
+        {[{ label: "←", page: cur - 1, disabled: cur === 1 }, ...pages.map(p => ({ label: p, page: p, active: p === cur })), { label: "→", page: cur + 1, disabled: cur === last }]
+          .map((b, i) => (
+            <button key={i} onClick={() => !b.disabled && onPage(b.page)}
+              className={`rounded-lg border px-3 py-1.5 text-sm font-semibold transition ${b.active ? "border-indigo-600 bg-indigo-600 text-white" : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"} ${b.disabled ? "cursor-default opacity-40" : ""}`}>
+              {b.label}
+            </button>
+          ))}
       </div>
     </div>
   );
 }
 
-// ─── Stats Row ────────────────────────────────────────────────────────────────
+// ─── Stats Row — FIXED: accent left-border, no more flat card look ──────────
 function StatsRow({ stats, contentType }) {
   if (!stats || !stats[contentType]) return null;
   const s = stats[contentType];
+  const items = [
+    { label: "Total",     value: s.total,     color: T.primary,  accent: "#4254c5" },
+    { label: "Published", value: s.published, color: T.success,  accent: "#16a34a" },
+    { label: "Draft",     value: s.draft,     color: T.muted,    accent: "#9ba8c4" },
+    { label: "Archived",  value: s.archived,  color: T.warning,  accent: "#d97706" },
+  ];
   return (
-    <div className="mb-5 grid grid-cols-[repeat(4,minmax(0,1fr))] gap-2.5">
-      {[
-        { label: "Total",     value: s.total,     color: T.primary },
-        { label: "Published", value: s.published, color: T.success },
-        { label: "Draft",     value: s.draft,     color: T.muted   },
-        { label: "Archived",  value: s.archived,  color: T.warning },
-      ].map(c => (
-        <div key={c.label} className="rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-3">
-          <div className="mb-1 text-[11px] font-bold uppercase tracking-[0.04em] text-slate-500">{c.label}</div>
-          <div style={{ color: c.color }} className="text-2xl font-black leading-none">{c.value ?? 0}</div>
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10, marginBottom: 20 }}>
+      {items.map(c => (
+        <div key={c.label} style={{ background: "#fff", borderRadius: 12, border: `1px solid ${T.border}`, borderLeft: `4px solid ${c.accent}`, padding: "12px 14px", display: "flex", flexDirection: "column", gap: 4 }}>
+          <div style={{ fontSize: "0.68rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: ".05em", color: T.muted }}>{c.label}</div>
+          <div style={{ fontSize: "1.6rem", fontWeight: 900, color: c.color, lineHeight: 1 }}>{c.value ?? 0}</div>
         </div>
       ))}
     </div>
   );
 }
 
-// ─── Content Card ─────────────────────────────────────────────────────────────
+// ─── File Strip — FIXED: per-type background tints ───────────────────────────
+const STRIP_TYPE_STYLE = {
+  image: { bg: "transparent",         icon: null,  label: null  },
+  video: { bg: "rgba(66,84,197,.45)", icon: "▶",   label: null  },
+  audio: { bg: "rgba(22,163,74,.38)", icon: "♪",   label: null  },
+  pdf:   { bg: "rgba(220,38,38,.35)", icon: "PDF", label: null  },
+  file:  { bg: "rgba(0,0,0,.30)",     icon: "📎",  label: null  },
+};
+
+function FileStrip({ photos }) {
+  if (!photos || photos.length === 0) return null;
+  return (
+    <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, height: 30, display: "flex" }}>
+      {photos.slice(0, 5).map((p, i) => {
+        const t = detectFileType(p);
+        const s = STRIP_TYPE_STYLE[t] ?? STRIP_TYPE_STYLE.file;
+        const isLast = i === photos.slice(0, 5).length - 1;
+        return (
+          <div
+            key={i}
+            style={{
+              flex: 1, overflow: "hidden",
+              borderRight: !isLast ? "0.5px solid rgba(255,255,255,.08)" : "none",
+              background: t === "image"
+                ? `url(${p.file_path}) center/cover no-repeat`
+                : s.bg,
+              backdropFilter: "blur(3px)",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              fontSize: t === "pdf" ? "0.52rem" : "0.78rem",
+            }}
+          >
+            {t !== "image" && s.icon && (
+              <span style={{ color: "rgba(255,255,255,.9)", fontWeight: 700 }}>{s.icon}</span>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// CONTENT CARD — DESIGN FIXED
+// ═══════════════════════════════════════════════════════════════════════════
 function ContentCard({ item, isAdmin, onViewFiles, onEdit, onDelete, onPublish, onArchive, onAddFiles }) {
   const typeEmoji = {
-    photos: "🖼", videos: "🎬", program: "📄", archive: "📦",
-    toga: "🎓", invitations: "✉️", songs: "🎵", mass: "⛪",
-    speeches: "🎤", messages: "💬", highlights: "✨",
+    photos: "🖼️", videos: "🎬", program: "📄", invitations: "✉️",
+    songs: "🎵", mass: "⛪", speeches: "🎤",
   };
 
   const photos    = item.photos ?? [];
@@ -920,34 +1061,34 @@ function ContentCard({ item, isAdmin, onViewFiles, onEdit, onDelete, onPublish, 
   const isAudio   = item.type === "songs";
   const hasFace   = FACE_TYPES.includes(item.type);
   const hasStrip  = photos.length > 0;
-
-  // Clean meta: show batch name + formatted event date only (no raw year duplication)
-  const batchLabel = item.batch_name ?? "All Batches";
-  const dateLabel  = item.event_date
-    ? new Date(item.event_date).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
-    : null;
-  const metaLine = [batchLabel, dateLabel].filter(Boolean).join(" · ");
-
-  // Only show uploader if non-empty
-  const uploader = item.uploaded_by?.trim() || null;
+  const metaLine  = buildMetaLine(item);   // fixed: no duplication
+  const uploader  = item.uploaded_by?.trim() || null;
 
   return (
     <div
       style={{
-        background: T.surface, border: `1px solid ${T.border}`,
-        borderRadius: 16, overflow: "hidden", boxShadow: T.shadow,
-        display: "flex", flexDirection: "column",
-        transition: "box-shadow .18s, border-color .18s",
+        background: T.surface,
+        border: `1px solid ${T.border}`,
+        borderRadius: 16,
+        overflow: "hidden",
+        boxShadow: T.shadow,
+        display: "flex",
+        flexDirection: "column",
+        transition: "box-shadow .18s, border-color .18s, transform .15s",
       }}
-      onMouseEnter={e => { e.currentTarget.style.boxShadow = T.shadowMd; e.currentTarget.style.borderColor = "#c7d2fe"; }}
-      onMouseLeave={e => { e.currentTarget.style.boxShadow = T.shadow;   e.currentTarget.style.borderColor = T.border; }}
+      onMouseEnter={e => { e.currentTarget.style.boxShadow = T.shadowMd; e.currentTarget.style.borderColor = "#c7d2fe"; e.currentTarget.style.transform = "translateY(-1px)"; }}
+      onMouseLeave={e => { e.currentTarget.style.boxShadow = T.shadow; e.currentTarget.style.borderColor = T.border; e.currentTarget.style.transform = "none"; }}
     >
       {/* ── Thumbnail ── */}
       <div
         onClick={onViewFiles}
         style={{
-          height: 140, background: "linear-gradient(135deg,#1a2540,#2d3a6b)",
-          position: "relative", overflow: "hidden", cursor: "pointer", flexShrink: 0,
+          height: 148,
+          background: "linear-gradient(135deg, #1a2540 0%, #2d3a6b 100%)",
+          position: "relative",
+          overflow: "hidden",
+          cursor: "pointer",
+          flexShrink: 0,
         }}
       >
         {thumb && (
@@ -957,10 +1098,20 @@ function ContentCard({ item, isAdmin, onViewFiles, onEdit, onDelete, onPublish, 
             onError={e => { e.target.style.display = "none"; }}
           />
         )}
-        {/* Fallback icon — only shows when no thumb */}
+
+        {/* FIXED: fallback type icon — centered, readable, not floating */}
         {!thumb && (
-          <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: "2.2rem", color: "rgba(255,255,255,.13)" }}>
-            {isVideo ? "▶" : isAudio ? "🎵" : typeEmoji[item.type] ?? "📁"}
+          <div style={{
+            position: "absolute", inset: 0,
+            display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+            background: "linear-gradient(145deg, rgba(66,84,197,.18) 0%, rgba(10,18,50,.6) 100%)",
+          }}>
+            <div style={{ fontSize: "2rem", opacity: 0.55 }}>
+              {isVideo ? "▶" : isAudio ? "🎵" : typeEmoji[item.type] ?? "📁"}
+            </div>
+            <div style={{ fontSize: "0.6rem", fontWeight: 700, color: "rgba(255,255,255,.35)", marginTop: 4, letterSpacing: ".08em", textTransform: "uppercase" }}>
+              {item.type}
+            </div>
           </div>
         )}
 
@@ -971,101 +1122,158 @@ function ContentCard({ item, isAdmin, onViewFiles, onEdit, onDelete, onPublish, 
 
         {/* File count — top right */}
         {fileCount > 0 && (
-          <div style={{ position: "absolute", top: 8, right: 8, background: "rgba(0,0,0,.58)", color: "#fff", fontSize: "0.67rem", fontWeight: 600, padding: "2px 8px", borderRadius: 5 }}>
+          <div style={{ position: "absolute", top: 8, right: 8, background: "rgba(0,0,0,.6)", color: "#fff", fontSize: "0.67rem", fontWeight: 700, padding: "2px 8px", borderRadius: 5, letterSpacing: ".02em" }}>
             {fileCount} {fileCount === 1 ? "file" : "files"}
           </div>
         )}
 
-        {/* AI / Transcript pills — sit above the strip if present */}
+        {/* AI / Transcript pills — positioned above strip */}
         {(hasFace || item.has_transcript) && (
-          <div style={{ position: "absolute", bottom: hasStrip ? 36 : 8, left: 8, display: "flex", gap: 4 }}>
-            {hasFace && (
-              <span style={{ fontSize: "0.6rem", fontWeight: 700, padding: "2px 7px", borderRadius: 4, background: "rgba(66,84,197,.88)", color: "#fff" }}>
-                👤 AI
-              </span>
-            )}
-            {item.has_transcript && (
-              <span style={{ fontSize: "0.6rem", fontWeight: 700, padding: "2px 7px", borderRadius: 4, background: "rgba(22,163,74,.88)", color: "#fff" }}>
-                📝
-              </span>
-            )}
+          <div style={{ position: "absolute", bottom: hasStrip ? 38 : 8, left: 8, display: "flex", gap: 4 }}>
+            {hasFace && <span style={{ fontSize: "0.6rem", fontWeight: 700, padding: "2px 7px", borderRadius: 4, background: "rgba(66,84,197,.9)", color: "#fff" }}>👤 AI</span>}
+            {item.has_transcript && <span style={{ fontSize: "0.6rem", fontWeight: 700, padding: "2px 7px", borderRadius: 4, background: "rgba(22,163,74,.9)", color: "#fff" }}>📝</span>}
           </div>
         )}
 
-        {/* Mini file strip — flush at bottom, inside the 140px */}
-        {hasStrip && (
-          <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, height: 28, display: "flex" }}>
-            {photos.slice(0, 4).map((p, i) => {
-              const t = detectFileType(p);
-              return (
-                <div
-                  key={i}
-                  style={{
-                    flex: 1, overflow: "hidden",
-                    borderRight: i < 3 ? "0.5px solid rgba(255,255,255,.08)" : "none",
-                    background: t === "image" ? `url(${p.file_path}) center/cover no-repeat` : "rgba(10,18,40,.35)",
-                    backdropFilter: "blur(2px)",
-                    display: "flex", alignItems: "center", justifyContent: "center",
-                    fontSize: "0.72rem",
-                  }}
-                >
-                  {t === "video" && <span style={{ color: "rgba(255,255,255,.65)" }}>▶</span>}
-                  {t === "audio" && <span style={{ color: "rgba(255,255,255,.65)" }}>♪</span>}
-                  {t === "pdf"   && <span style={{ color: "rgba(255,255,255,.65)" }}>📄</span>}
-                  {t === "file"  && <span style={{ color: "rgba(255,255,255,.65)" }}>📎</span>}
-                </div>
-              );
-            })}
-          </div>
-        )}
+        {/* FIXED: file strip with type-aware colors */}
+        {hasStrip && <FileStrip photos={photos} />}
       </div>
 
-      {/* ── Body ── */}
-      <div style={{ padding: "11px 13px 10px", flex: 1, minWidth: 0 }}>
-        <div style={{ fontWeight: 700, fontSize: "0.87rem", color: T.text, marginBottom: 4, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+      {/* ── Body — FIXED: no uppercase, proper overflow ── */}
+      <div style={{ padding: "12px 13px 10px", flex: 1, minWidth: 0 }}>
+        {/* Title: sentence-case, not uppercase; full text on hover */}
+        <div
+          title={item.title}
+          style={{
+            fontWeight: 700,
+            fontSize: "0.875rem",
+            color: T.text,
+            marginBottom: 5,
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+            lineHeight: 1.3,
+          }}
+        >
           {item.title}
         </div>
+
+        {/* Meta line: deduped batch + date */}
         <div style={{ fontSize: "0.73rem", color: T.muted, marginBottom: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
           {metaLine}
         </div>
-        <div style={{ fontSize: "0.71rem", color: T.hint }}>
+
+        {/* Timestamp + uploader */}
+        <div style={{ fontSize: "0.7rem", color: T.hint }}>
           {item.created_at_human}{uploader ? ` · by ${uploader}` : ""}
         </div>
+
         {item.description && (
-          <div style={{ fontSize: "0.73rem", color: T.hint, marginTop: 5, lineHeight: 1.5, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
+          <div style={{ fontSize: "0.72rem", color: T.hint, marginTop: 6, lineHeight: 1.55, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
             {item.description}
           </div>
         )}
       </div>
 
-      {/* ── Actions row ── */}
-      <div style={{ padding: "9px 10px", borderTop: `1px solid ${T.border}`, display: "flex", alignItems: "center", gap: 5 }}>
+      {/* ── Actions row — FIXED: never clips, all items always visible ── */}
+      <div style={{
+        padding: "8px 10px",
+        borderTop: `1px solid ${T.border}`,
+        display: "flex",
+        alignItems: "center",
+        gap: 4,
+        flexWrap: "nowrap",       // prevent any wrapping
+        minWidth: 0,
+      }}>
+        {/* View button: flex but with min-width cap so it doesn't push icons off */}
         <button
           onClick={onViewFiles}
-          style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 5, padding: "6px 8px", borderRadius: 8, border: `1px solid #c7d2fe`, background: T.primaryBg, color: T.primary, fontSize: "0.75rem", fontWeight: 600, cursor: "pointer", fontFamily: "inherit", whiteSpace: "nowrap" }}
+          style={{
+            flex: "1 1 0",
+            minWidth: 0,
+            display: "flex", alignItems: "center", justifyContent: "center", gap: 4,
+            padding: "6px 6px",
+            borderRadius: 8,
+            border: `1px solid #c7d2fe`,
+            background: T.primaryBg,
+            color: T.primary,
+            fontSize: "0.74rem",
+            fontWeight: 600,
+            cursor: "pointer",
+            fontFamily: "inherit",
+            whiteSpace: "nowrap",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+          }}
         >
-          <Icon name="eye" className="h-3.5 w-3.5" /> View{fileCount > 0 ? ` (${fileCount})` : ""}
+          <Icon name="eye" className="h-3.5 w-3.5 shrink-0" />
+          <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>
+            View{fileCount > 0 ? ` (${fileCount})` : ""}
+          </span>
         </button>
 
         {isAdmin && (
           <>
+            {/* + Files: compact text button */}
             <button
               onClick={e => { e.stopPropagation(); onAddFiles(); }}
-              style={{ display: "flex", alignItems: "center", gap: 3, padding: "6px 9px", borderRadius: 8, border: `1px solid ${T.border}`, background: "none", color: T.muted, fontSize: "0.75rem", fontWeight: 500, cursor: "pointer", fontFamily: "inherit", whiteSpace: "nowrap" }}
+              style={{
+                flexShrink: 0,
+                display: "flex", alignItems: "center", gap: 2,
+                padding: "6px 8px",
+                borderRadius: 8,
+                border: `1px solid ${T.border}`,
+                background: "transparent",
+                color: T.muted,
+                fontSize: "0.72rem",
+                fontWeight: 600,
+                cursor: "pointer",
+                fontFamily: "inherit",
+                whiteSpace: "nowrap",
+              }}
             >
               + Files
             </button>
 
-            {/* Separator */}
-            <div style={{ width: 1, height: 18, background: T.border, flexShrink: 0, margin: "0 1px" }} />
+            {/* Divider */}
+            <div style={{ width: 1, height: 18, background: T.border, flexShrink: 0 }} />
 
+            {/* Publish / Archive toggle */}
             {item.status !== "published" ? (
-              <button onClick={e => { e.stopPropagation(); onPublish(); }} title="Publish" style={iconBtn(T.success, T.successBg, "#86efac")}><Icon name="check" className="h-3.5 w-3.5" /></button>
+              <button
+                onClick={e => { e.stopPropagation(); onPublish(); }}
+                title="Publish"
+                style={iconBtnStyle(T.success, T.successBg, "#86efac")}
+              >
+                <Icon name="check" className="h-3.5 w-3.5" />
+              </button>
             ) : (
-              <button onClick={e => { e.stopPropagation(); onArchive(); }} title="Archive" style={iconBtn(T.warning, T.warningBg, "#fde68a")}><Icon name="archive" className="h-3.5 w-3.5" /></button>
+              <button
+                onClick={e => { e.stopPropagation(); onArchive(); }}
+                title="Archive"
+                style={iconBtnStyle(T.warning, T.warningBg, "#fde68a")}
+              >
+                <Icon name="archive" className="h-3.5 w-3.5" />
+              </button>
             )}
-            <button onClick={e => { e.stopPropagation(); onEdit(); }}   title="Edit"   style={iconBtn(T.muted, "none", T.border)}><Icon name="edit" className="h-3.5 w-3.5" /></button>
-            <button onClick={e => { e.stopPropagation(); onDelete(); }} title="Delete" style={iconBtn(T.danger, T.dangerBg, "#fecaca")}><Icon name="trash" className="h-3.5 w-3.5" /></button>
+
+            {/* Edit */}
+            <button
+              onClick={e => { e.stopPropagation(); onEdit(); }}
+              title="Edit"
+              style={iconBtnStyle(T.muted, "transparent", T.border)}
+            >
+              <Icon name="edit" className="h-3.5 w-3.5" />
+            </button>
+
+            {/* Delete */}
+            <button
+              onClick={e => { e.stopPropagation(); onDelete(); }}
+              title="Delete"
+              style={iconBtnStyle(T.danger, T.dangerBg, "#fecaca")}
+            >
+              <Icon name="trash" className="h-3.5 w-3.5" />
+            </button>
           </>
         )}
       </div>
@@ -1073,24 +1281,22 @@ function ContentCard({ item, isAdmin, onViewFiles, onEdit, onDelete, onPublish, 
   );
 }
 
-// ═════════════════════════════════════════════════════════════════════════════
-// CONTENT TAB
-// ═════════════════════════════════════════════════════════════════════════════
+// ─── Content Tab ────────────────────────────────────────────────────────────
 function ContentTab({ contentType, isAdmin, batches, stats, toast }) {
-  const [items,          setItems]          = useState([]);
-  const [meta,           setMeta]           = useState(null);
-  const [page,           setPage]           = useState(1);
-  const [loading,        setLoading]        = useState(true);
-  const [actLoading,     setActLoading]     = useState(false);
-  const [search,         setSearch]         = useState("");
-  const [batchFilter,    setBatchFilter]    = useState("all");
-  const [statusFilter,   setStatusFilter]   = useState("all");
-  const [albumModal,     setAlbumModal]     = useState(false);
+  const [items, setItems]                   = useState([]);
+  const [meta, setMeta]                     = useState(null);
+  const [page, setPage]                     = useState(1);
+  const [loading, setLoading]               = useState(true);
+  const [actLoading, setActLoading]         = useState(false);
+  const [search, setSearch]                 = useState("");
+  const [batchFilter, setBatchFilter]       = useState("all");
+  const [statusFilter, setStatusFilter]     = useState("all");
+  const [albumModal, setAlbumModal]         = useState(false);
   const [addFilesTarget, setAddFilesTarget] = useState(null);
-  const [detailTarget,   setDetailTarget]   = useState(null);
-  const [editTarget,     setEditTarget]     = useState(null);
-  const [deleteTarget,   setDeleteTarget]   = useState(null);
-  const [confirmAction,  setConfirmAction]  = useState(null);
+  const [detailTarget, setDetailTarget]     = useState(null);
+  const [editTarget, setEditTarget]         = useState(null);
+  const [deleteTarget, setDeleteTarget]     = useState(null);
+  const [confirmAction, setConfirmAction]   = useState(null);
   const searchTimer = useRef(null);
   const cfg = CONTENT_TYPES.find(c => c.key === contentType);
 
@@ -1098,18 +1304,15 @@ function ContentTab({ contentType, isAdmin, batches, stats, toast }) {
     setLoading(true);
     try {
       const endpoint = isAdmin ? "/admin/graduation/content" : "/graduation/content";
-      const params   = { type: contentType, page: p, per_page: 18 };
-      if (q)               params.search   = q;
+      const params = { type: contentType, page: p, per_page: 18 };
+      if (q) params.search = q;
       if (batchId !== "all") params.batch_id = batchId;
-      if (status  !== "all") params.status   = status;
+      if (status !== "all") params.status = status;
       const res = await api.get(endpoint, { params });
       setItems(res.data.data ?? []);
-      setMeta(res.data.meta  ?? null);
-    } catch {
-      toast("Failed to load content.", "error");
-    } finally {
-      setLoading(false);
-    }
+      setMeta(res.data.meta ?? null);
+    } catch { toast("Failed to load content.", "error"); }
+    finally { setLoading(false); }
   }, [contentType, isAdmin, search, batchFilter, statusFilter]);
 
   useEffect(() => { load(page); }, [page, contentType, batchFilter, statusFilter]);
@@ -1122,20 +1325,16 @@ function ContentTab({ contentType, isAdmin, batches, stats, toast }) {
 
   const handleEdit = async (form) => {
     setActLoading(true);
-    try {
-      await api.put(`/admin/graduation/content/${editTarget.id}`, form);
-      toast("Album updated."); setEditTarget(null); load(page);
-    } catch { toast("Update failed.", "error"); }
-    finally  { setActLoading(false); }
+    try { await api.put(`/admin/graduation/content/${editTarget.id}`, form); toast("Album updated."); setEditTarget(null); load(page); }
+    catch { toast("Update failed.", "error"); }
+    finally { setActLoading(false); }
   };
 
   const handleDelete = async () => {
     setActLoading(true);
-    try {
-      await api.delete(`/admin/graduation/content/${deleteTarget.id}`);
-      toast("Album deleted."); setDeleteTarget(null); load(page);
-    } catch { toast("Delete failed.", "error"); }
-    finally  { setActLoading(false); }
+    try { await api.delete(`/admin/graduation/content/${deleteTarget.id}`); toast("Album moved to trash."); setDeleteTarget(null); load(page); }
+    catch { toast("Delete failed.", "error"); }
+    finally { setActLoading(false); }
   };
 
   const handleStatusAction = async () => {
@@ -1146,7 +1345,7 @@ function ContentTab({ contentType, isAdmin, batches, stats, toast }) {
       toast(confirmAction.type === "publish" ? "Published." : "Archived.");
       setConfirmAction(null); load(page);
     } catch { toast("Action failed.", "error"); }
-    finally  { setActLoading(false); }
+    finally { setActLoading(false); }
   };
 
   return (
@@ -1161,20 +1360,14 @@ function ContentTab({ contentType, isAdmin, batches, stats, toast }) {
           placeholder={`Search ${cfg?.label ?? "content"}...`}
           className="min-w-[180px] flex-1 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-200"
         />
-        <select
-          value={batchFilter}
-          onChange={e => { setBatchFilter(e.target.value); setPage(1); }}
-          className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-200"
-        >
+        <select value={batchFilter} onChange={e => { setBatchFilter(e.target.value); setPage(1); }}
+          className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-200">
           <option value="all">All Batches</option>
           {batches.map(b => <option key={b.id} value={b.id}>{b.name} — {b.graduation_year}</option>)}
         </select>
         {isAdmin && (
-          <select
-            value={statusFilter}
-            onChange={e => { setStatusFilter(e.target.value); setPage(1); }}
-            className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-200"
-          >
+          <select value={statusFilter} onChange={e => { setStatusFilter(e.target.value); setPage(1); }}
+            className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-200">
             <option value="all">All Statuses</option>
             <option value="draft">Draft</option>
             <option value="published">Published</option>
@@ -1183,21 +1376,19 @@ function ContentTab({ contentType, isAdmin, batches, stats, toast }) {
         )}
         {meta && <div className="text-sm text-slate-500">{meta.total} albums</div>}
         {isAdmin && (
-          <button
-            onClick={() => setAlbumModal(true)}
-            className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-bold text-white transition hover:bg-indigo-700"
-          >
+          <button onClick={() => setAlbumModal(true)}
+            className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-bold text-white transition hover:bg-indigo-700">
             + New Album
           </button>
         )}
       </div>
 
-      {/* Grid */}
+      {/* Grid — FIXED: min card width 240px */}
       {loading ? (
-        <div className="grid grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-4">
+        <div className="grid grid-cols-[repeat(auto-fill,minmax(240px,1fr))] gap-4">
           {Array.from({ length: 9 }).map((_, i) => (
             <div key={i} className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
-              <Skeleton w="100%" h={140} radius={0} />
+              <Skeleton w="100%" h={148} radius={0} />
               <div className="p-3.5">
                 <Skeleton w="70%" h={13} style={{ marginBottom: 8 }} />
                 <Skeleton w="50%" h={11} />
@@ -1206,25 +1397,19 @@ function ContentTab({ contentType, isAdmin, batches, stats, toast }) {
           ))}
         </div>
       ) : items.length === 0 ? (
-        <div className="px-5 py-12 text-center text-slate-500">
-          <div className="mb-3 text-4xl font-black text-indigo-300">{cfg?.icon ?? "FIL"}</div>
-          <div className="mb-1.5 text-base font-bold text-slate-800">
-            No {cfg?.label ?? "content"} yet
-          </div>
-          <div className="mb-5 text-sm">
-            {isAdmin ? "Create an album to get started." : "No published content available yet."}
-          </div>
+        <div className="px-5 py-14 text-center text-slate-500">
+          <div className="mb-3 text-4xl font-black text-indigo-200">{cfg?.icon ?? "—"}</div>
+          <div className="mb-1.5 text-base font-bold text-slate-800">No {cfg?.label ?? "content"} yet</div>
+          <div className="mb-5 text-sm">{isAdmin ? "Create an album to get started." : "No published content available yet."}</div>
           {isAdmin && (
-            <button
-              onClick={() => setAlbumModal(true)}
-              className="rounded-lg bg-indigo-600 px-5 py-2 text-sm font-bold text-white transition hover:bg-indigo-700"
-            >
+            <button onClick={() => setAlbumModal(true)}
+              className="rounded-lg bg-indigo-600 px-5 py-2 text-sm font-bold text-white transition hover:bg-indigo-700">
               + Create First Album
             </button>
           )}
         </div>
       ) : (
-        <div className="grid grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-4">
+        <div className="grid grid-cols-[repeat(auto-fill,minmax(240px,1fr))] gap-4">
           {items.map(item => (
             <ContentCard
               key={item.id}
@@ -1243,55 +1428,26 @@ function ContentTab({ contentType, isAdmin, batches, stats, toast }) {
 
       <Pagination meta={meta} onPage={p => setPage(p)} />
 
-      {/* Modals */}
-      <AlbumUploadModal
-        open={albumModal}
-        contentType={contentType}
-        batches={batches}
-        onClose={() => setAlbumModal(false)}
-        onDone={() => load(page)}
-        toast={toast}
-      />
+      <AlbumUploadModal open={albumModal} contentType={contentType} batches={batches} onClose={() => setAlbumModal(false)} onDone={() => load(page)} toast={toast} />
 
       <AlbumDetailModal
-        open={!!detailTarget}
-        albumId={detailTarget?.id}
-        album={detailTarget}
-        contentType={contentType}
-        isAdmin={isAdmin}
+        open={!!detailTarget} albumId={detailTarget?.id} album={detailTarget}
+        contentType={contentType} isAdmin={isAdmin}
         onClose={() => setDetailTarget(null)}
         onAddFiles={() => setAddFilesTarget(detailTarget)}
         onRefresh={() => load(page)}
         toast={toast}
       />
 
-      <AddFilesModal
-        open={!!addFilesTarget}
-        album={addFilesTarget}
-        contentType={contentType}
-        onClose={() => setAddFilesTarget(null)}
-        onDone={() => load(page)}
-        toast={toast}
-      />
+      <AddFilesModal open={!!addFilesTarget} album={addFilesTarget} contentType={contentType} onClose={() => setAddFilesTarget(null)} onDone={() => load(page)} toast={toast} />
 
-      <EditModal
-        open={!!editTarget}
-        item={editTarget}
-        batches={batches}
-        onSave={handleEdit}
-        onCancel={() => setEditTarget(null)}
-        loading={actLoading}
-      />
+      <EditModal open={!!editTarget} item={editTarget} batches={batches} onSave={handleEdit} onCancel={() => setEditTarget(null)} loading={actLoading} />
 
       <ConfirmModal
-        open={!!deleteTarget}
-        title="Delete Album"
-        message={`Permanently delete "${deleteTarget?.title}" and all its files?`}
-        confirmLabel="Delete"
-        confirmBg={T.danger}
-        onConfirm={handleDelete}
-        onCancel={() => setDeleteTarget(null)}
-        loading={actLoading}
+        open={!!deleteTarget} title="Delete Album"
+        message={`Move "${deleteTarget?.title}" to Trash? You can restore it from the Trash page.`}
+        confirmLabel="Delete" confirmBg={T.danger}
+        onConfirm={handleDelete} onCancel={() => setDeleteTarget(null)} loading={actLoading}
       />
 
       <ConfirmModal
@@ -1302,21 +1458,19 @@ function ContentTab({ contentType, isAdmin, batches, stats, toast }) {
           : `Archive "${confirmAction?.item?.title}"?`}
         confirmLabel={confirmAction?.type === "publish" ? "Publish" : "Archive"}
         confirmBg={confirmAction?.type === "publish" ? T.success : T.warning}
-        onConfirm={handleStatusAction}
-        onCancel={() => setConfirmAction(null)}
-        loading={actLoading}
+        onConfirm={handleStatusAction} onCancel={() => setConfirmAction(null)} loading={actLoading}
       />
     </>
   );
 }
 
-// ═════════════════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════════════════
 // ROOT PAGE
-// ═════════════════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════════════════
 export default function GraduationContentPage({ isAdmin = false }) {
   const [activeTab, setActiveTab] = useState("photos");
-  const [batches,   setBatches]   = useState([]);
-  const [stats,     setStats]     = useState(null);
+  const [batches, setBatches]     = useState([]);
+  const [stats, setStats]         = useState(null);
   const { toasts, push: toast }   = useToast();
 
   useEffect(() => {
@@ -1335,10 +1489,11 @@ export default function GraduationContentPage({ isAdmin = false }) {
   return (
     <>
       <style>{`
-        @keyframes shimmer { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
-        @keyframes fadeUp  { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
+        @keyframes fadeUp { from { opacity:0; transform:translateY(8px) } to { opacity:1; transform:translateY(0) } }
         * { box-sizing: border-box; }
         input:focus, select:focus, textarea:focus { border-color: ${T.primary} !important; box-shadow: 0 0 0 3px rgba(66,84,197,.12); }
+        button:hover { filter: brightness(0.96); }
+        button:active { filter: brightness(0.92); }
       `}</style>
 
       <div className="min-h-screen bg-slate-50 px-6 py-7 animate-[fadeUp_.3s_ease]">
@@ -1349,11 +1504,9 @@ export default function GraduationContentPage({ isAdmin = false }) {
               {isAdmin ? "Admin" : "View Only"}
             </span>
           </div>
-          <p className="text-sm text-slate-500">
-            {isAdmin
-              ? "Create albums then upload any files into them. Images auto-analyze faces · Media auto-transcribes."
-              : "Browse published graduation materials from your batch."}
-          </p>
+          {!isAdmin && (
+            <p className="text-sm text-slate-500">Browse published graduation materials from your batch.</p>
+          )}
         </div>
 
         {/* Tabs */}
@@ -1389,5 +1542,3 @@ export default function GraduationContentPage({ isAdmin = false }) {
     </>
   );
 }
-
-

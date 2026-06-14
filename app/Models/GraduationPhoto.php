@@ -15,6 +15,7 @@ class GraduationPhoto extends Model implements AnalyzablePhoto
 
     protected $fillable = [
         'graduation_album_id',
+        'title',             
         'file_path',
         'cloudinary_public_id',
         'resource_type',
@@ -122,5 +123,10 @@ class GraduationPhoto extends Model implements AnalyzablePhoto
         $meta           = array_merge($meta, $results);
 
         return $this->update(['ai_metadata' => $meta]);
+    }
+    
+    public function getDisplayTitleAttribute(): string
+    {
+        return $this->title ?? $this->album?->title ?? 'Untitled';
     }
 }

@@ -30,7 +30,8 @@ class AnnouncementController extends Controller
 
     public function recipientCount(): JsonResponse
     {
-        $count = $this->emailRecipients()->count();
+        $batchId = request()->integer('batch_id') ?: null;
+        $count = $this->emailRecipients($batchId)->count();
 
         return response()->json(['count' => $count]);
     }
@@ -45,6 +46,7 @@ class AnnouncementController extends Controller
             'type'         => 'nullable|in:graduation,event,reminder,urgent,information',
             'send_push'    => 'boolean',
             'send_email'   => 'boolean',
+            'email_batch_id' => 'nullable|required_if:send_email,true|exists:batches,id',
             'action_url'   => 'nullable|url|max:2048',
             'action_label' => 'nullable|string|max:80',
         ]);
@@ -61,9 +63,10 @@ class AnnouncementController extends Controller
         $sendPush  = $announcement->send_push;
 
         $emailQueued = 0;
+        $emailBatchId = $validated['email_batch_id'] ?? null;
 
         if ($sendEmail) {
-            $this->emailRecipients()->each(function (array $recipient) use ($announcement, $validated, &$emailQueued) {
+            $this->emailRecipients($emailBatchId)->each(function (array $recipient) use ($announcement, $validated, &$emailQueued) {
                 SendAnnouncementEmail::dispatch(
                     email:       $recipient['email'],
                     name:        $recipient['name'],
@@ -136,16 +139,23 @@ class AnnouncementController extends Controller
         return response()->json(['message' => 'Announcement deleted.']);
     }
 
-    private function emailRecipients(): Collection
+    private function emailRecipients(?int $batchId = null): Collection
     {
         $users = User::whereNotNull('email')
-            ->get(['name', 'email'])
+            ->when($batchId, function ($query) use ($batchId) {
+                $query->where(function ($q) use ($batchId) {
+                    $q->where('batch_id', $batchId)
+                        ->orWhereHas('studentRecord', fn ($student) => $student->where('batch_id', $batchId));
+                });
+            })
+            ->get(['id', 'name', 'email', 'batch_id', 'student_record_id'])
             ->map(fn (User $user) => [
                 'email' => strtolower(trim((string) $user->email)),
                 'name'  => $user->name ?: $user->email,
             ]);
 
         $students = Student::whereNotNull('email')
+            ->when($batchId, fn ($query) => $query->where('batch_id', $batchId))
             ->get(['first_name', 'last_name', 'email'])
             ->map(fn (Student $student) => [
                 'email' => strtolower(trim((string) $student->email)),

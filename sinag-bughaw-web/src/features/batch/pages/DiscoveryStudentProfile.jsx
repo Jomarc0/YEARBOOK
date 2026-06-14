@@ -7,6 +7,7 @@ import { imageUrl } from '@/utils/imageUrl';
 import { recordProfileView } from '@/api/analytics.api';
 import { trackProfileView } from '@/utils/ga4';
 import api from '@/services/api';
+import LoadingSkeleton from '@/components/ui/LoadingSkeleton';
 
 const discoveryStudentApi = {
   show: (id) => api.get(`/discover/students/${id}`),
@@ -99,8 +100,10 @@ function EmptyState({ icon, title, subtitle }) {
 
 function PageSkeleton() {
   return (
-    <div className="min-h-screen flex items-center justify-center bg-[#f4f7fe]">
-      <div className="w-8 h-8 rounded-full border-[3px] border-indigo-100 border-t-[#1d2b4b] animate-spin" />
+    <div className="min-h-screen bg-[#f4f7fe] px-4 py-8">
+      <div className="mx-auto w-full max-w-4xl">
+        <LoadingSkeleton variant="page" count={1} />
+      </div>
     </div>
   );
 }

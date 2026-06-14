@@ -6,6 +6,7 @@ import { useAlumniList, useYearbookDeepLink } from '../hooks/useAlumniTracker';
 import { faceApi } from '@/api/gallery.api';
 import FaceSearchButton from '@/components/ui/FaceSearchButton';
 import { imageUrl, avatarUrl } from '@/utils/imageUrl';
+import LoadingSkeleton from '@/components/ui/LoadingSkeleton';
 
 const GOLD = '#fdb813';
 const NAVY = '#1d2b4b';
@@ -512,9 +513,7 @@ export default function AlumniTrackerPage() {
         </div>
 
         {loading && (
-          <div style={{ display: 'flex', justifyContent: 'center', padding: '80px 0' }}>
-            <i className="fas fa-spinner fa-spin" style={{ fontSize: 32, color: '#3f51b5' }} />
-          </div>
+          <LoadingSkeleton variant="card" count={6} />
         )}
 
         {!loading && error && (

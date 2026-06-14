@@ -18,6 +18,7 @@
  */
 
 import { useEffect, useState, useCallback, useRef } from "react";
+import { createPortal } from "react-dom";
 import api from "../services/api";
 
 // ─── Design Tokens ────────────────────────────────────────────────────────────
@@ -270,7 +271,9 @@ function ConfirmModal({ open, title, message, onConfirm, onCancel, loading }) {
 
 function OverflowMenu({ actions = [], align = "right" }) {
   const [open, setOpen] = useState(false);
+  const [pos, setPos] = useState({ top: 0, left: 0 });
   const ref = useRef(null);
+  const buttonRef = useRef(null);
 
   useEffect(() => {
     const handler = e => {
@@ -280,33 +283,69 @@ function OverflowMenu({ actions = [], align = "right" }) {
     return () => document.removeEventListener("mousedown", handler);
   }, []);
 
+  useEffect(() => {
+    if (!open) return undefined;
+    const close = () => setOpen(false);
+    window.addEventListener("scroll", close, true);
+    window.addEventListener("resize", close);
+    return () => {
+      window.removeEventListener("scroll", close, true);
+      window.removeEventListener("resize", close);
+    };
+  }, [open]);
+
+  const toggleMenu = () => {
+    if (open) {
+      setOpen(false);
+      return;
+    }
+
+    const rect = buttonRef.current?.getBoundingClientRect();
+    const menuWidth = 170;
+    const margin = 8;
+    const left = align === "right"
+      ? Math.max(margin, Math.min(window.innerWidth - menuWidth - margin, (rect?.right ?? 0) - menuWidth))
+      : Math.max(margin, Math.min(window.innerWidth - menuWidth - margin, rect?.left ?? margin));
+
+    setPos({ top: (rect?.bottom ?? 0) + 6, left });
+    setOpen(true);
+  };
+
+  const menu = open ? createPortal(
+    <div
+      ref={ref}
+      style={{ position: "fixed", top: pos.top, left: pos.left, zIndex: 2600, minWidth: 170, background: T.surface, border: `1px solid ${T.border}`, borderRadius: 12, boxShadow: T.shadowMd, padding: 6 }}
+      onClick={e => e.stopPropagation()}
+    >
+      {actions.map(action => (
+        <button
+          key={action.label}
+          type="button"
+          onClick={() => { setOpen(false); action.onClick?.(); }}
+          disabled={action.disabled}
+          onMouseEnter={e => { e.currentTarget.style.background = "#f8fafc"; }}
+          onMouseLeave={e => { e.currentTarget.style.background = "transparent"; }}
+          style={{ width: "100%", border: "none", background: "transparent", color: action.destructive ? T.danger : T.text, textAlign: "left", padding: "9px 10px", borderRadius: 8, fontSize: "0.82rem", fontWeight: 700, cursor: action.disabled ? "not-allowed" : "pointer", opacity: action.disabled ? 0.55 : 1, fontFamily: "inherit" }}
+        >
+          {action.label}
+        </button>
+      ))}
+    </div>,
+    document.body
+  ) : null;
+
   return (
-    <div ref={ref} style={{ position: "relative", display: "inline-flex" }} onClick={e => e.stopPropagation()}>
+    <div style={{ position: "relative", display: "inline-flex" }} onClick={e => e.stopPropagation()}>
       <button
+        ref={buttonRef}
         type="button"
-        onClick={() => setOpen(v => !v)}
+        onClick={toggleMenu}
         aria-label="More actions"
         style={{ width: 32, height: 32, borderRadius: 9, border: `1px solid ${T.border}`, background: T.surface, color: T.muted, cursor: "pointer", fontWeight: 900, fontSize: "1.1rem", lineHeight: 1 }}
       >
         ...
       </button>
-      {open && (
-        <div style={{ position: "absolute", top: 36, [align]: 0, zIndex: 80, minWidth: 150, background: T.surface, border: `1px solid ${T.border}`, borderRadius: 12, boxShadow: T.shadowMd, padding: 6 }}>
-          {actions.map(action => (
-            <button
-              key={action.label}
-              type="button"
-              onClick={() => { setOpen(false); action.onClick?.(); }}
-              disabled={action.disabled}
-              onMouseEnter={e => { e.currentTarget.style.background = "#f8fafc"; }}
-              onMouseLeave={e => { e.currentTarget.style.background = "transparent"; }}
-              style={{ width: "100%", border: "none", background: "transparent", color: action.destructive ? T.danger : T.text, textAlign: "left", padding: "9px 10px", borderRadius: 8, fontSize: "0.82rem", fontWeight: 700, cursor: action.disabled ? "not-allowed" : "pointer", opacity: action.disabled ? 0.55 : 1, fontFamily: "inherit" }}
-            >
-              {action.label}
-            </button>
-          ))}
-        </div>
-      )}
+      {menu}
     </div>
   );
 }
@@ -780,15 +819,14 @@ function AlbumDrillPanel({ album, onClose, onApproveAlbum, onRejectAlbum, onAppr
                         ? <MediaPreview item={photo} src={photo.url} alt={photo.caption} />
                         : <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100%", color: "#ffffff44", fontSize: "2rem" }}>🖼</div>
                       }
-                      {photo.ai_metadata && (
-                        <div style={{ position: "absolute", top: 6, right: 6, background: T.warning, color: "#fff", fontSize: "0.65rem", fontWeight: 800, padding: "2px 6px", borderRadius: 5 }}>AI</div>
-                      )}
                     </div>
 
                     <div style={{ padding: "10px 12px" }}>
-                      <div style={{ fontSize: "0.78rem", color: T.muted, marginBottom: 6, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                        {photo.caption || <span style={{ fontStyle: "italic" }}>No caption</span>}
-                      </div>
+                      {photo.caption && (
+                        <div style={{ fontSize: "0.78rem", color: T.muted, marginBottom: 6, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                          {photo.caption}
+                        </div>
+                      )}
                       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 4 }}>
                         {statusBadge(photo.status)}
                         {photo.status === "pending" ? (
@@ -1530,6 +1568,36 @@ function LibraryAlbumDrillPanel({ album, onClose, toast }) {
     { value: "friends", label: "Batchmates" },
     { value: "private", label: "Private" },
   ];
+  const visibilityChoices = visOptions.filter(option => option.value !== "all");
+
+  const handleVisibilityChange = async (photo, visibility) => {
+    setActLoading(true);
+    try {
+      const { data } = await api.patch(`/admin/media/photos/${photo.id}/visibility`, { visibility });
+      const nextVisibility = data?.data?.visibility ?? visibility;
+      const applyVisibility = item => ({ ...item, visibility: nextVisibility });
+
+      setPhotos(current => {
+        if (visFilter !== "all" && nextVisibility !== visFilter) {
+          return current.filter(item => item.id !== photo.id);
+        }
+        return current.map(item => item.id === photo.id ? applyVisibility(item) : item);
+      });
+      setLightbox(current => current?.id === photo.id ? applyVisibility(current) : current);
+      toast(`Photo visibility set to ${visibilityLabel(nextVisibility)}.`);
+    } catch {
+      toast("Visibility update failed.", "error");
+    } finally {
+      setActLoading(false);
+    }
+  };
+
+  const visibilityMenuActions = photo => visibilityChoices
+    .filter(option => option.value !== photo.visibility)
+    .map(option => ({
+      label: `Set ${option.label}`,
+      onClick: () => handleVisibilityChange(photo, option.value),
+    }));
 
   return (
     <>
@@ -1608,10 +1676,6 @@ function LibraryAlbumDrillPanel({ album, onClose, toast }) {
                             {statusBadge(photo.status)}
                           </div>
                         )}
-                        {/* AI badge */}
-                        {photo.ai_metadata && (
-                          <div style={{ position: "absolute", bottom: 6, left: 6, background: T.warning, color: "#fff", fontSize: "0.65rem", fontWeight: 800, padding: "2px 6px", borderRadius: 5 }}>AI</div>
-                        )}
                         {/* Hover overlay */}
                         <div
                           style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0)", display: "flex", alignItems: "center", justifyContent: "center", transition: "background .15s" }}
@@ -1626,11 +1690,14 @@ function LibraryAlbumDrillPanel({ album, onClose, toast }) {
 
                       {/* Caption + delete row */}
                       <div style={{ padding: "8px 10px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
-                        <div style={{ fontSize: "0.75rem", color: T.muted, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 }}>
-                          {photo.caption || <span style={{ fontStyle: "italic" }}>No caption</span>}
-                        </div>
+                        {photo.caption ? (
+                          <div style={{ fontSize: "0.75rem", color: T.muted, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 }}>
+                            {photo.caption}
+                          </div>
+                        ) : <div style={{ flex: 1 }} />}
                         <OverflowMenu
                           actions={[
+                            ...visibilityMenuActions(photo),
                             { label: "Delete photo", destructive: true, onClick: () => setDeleteTarget(photo) },
                           ]}
                         />
@@ -1696,6 +1763,7 @@ function LibraryAlbumDrillPanel({ album, onClose, toast }) {
                 {statusBadge(lightbox.status ?? "approved")}
                 <OverflowMenu
                   actions={[
+                    ...visibilityMenuActions(lightbox),
                     { label: "Delete photo", destructive: true, onClick: () => { setDeleteTarget(lightbox); setLightbox(null); } },
                   ]}
                 />
@@ -1920,6 +1988,36 @@ function LibraryPhotosTab({ toast }) {
 
   const visColor   = { public: { color: T.success, bg: T.successBg }, friends: { color: T.primary, bg: "#edf2ff" }, private: { color: T.muted, bg: T.border } };
   const visOptions = [{ value: "all", label: "All" }, { value: "public", label: "Public" }, { value: "friends", label: "Batchmates" }, { value: "private", label: "Private" }];
+  const visibilityChoices = visOptions.filter(option => option.value !== "all");
+
+  const handleVisibilityChange = async (photo, visibility) => {
+    setActLoading(true);
+    try {
+      const { data } = await api.patch(`/admin/media/photos/${photo.id}/visibility`, { visibility });
+      const nextVisibility = data?.data?.visibility ?? visibility;
+      const applyVisibility = item => ({ ...item, visibility: nextVisibility });
+
+      setItems(current => {
+        if (visFilter !== "all" && nextVisibility !== visFilter) {
+          return current.filter(item => item.id !== photo.id);
+        }
+        return current.map(item => item.id === photo.id ? applyVisibility(item) : item);
+      });
+      setPreview(current => current?.id === photo.id ? applyVisibility(current) : current);
+      toast(`Photo visibility set to ${visibilityLabel(nextVisibility)}.`);
+    } catch {
+      toast("Visibility update failed.", "error");
+    } finally {
+      setActLoading(false);
+    }
+  };
+
+  const visibilityMenuActions = photo => visibilityChoices
+    .filter(option => option.value !== photo.visibility)
+    .map(option => ({
+      label: `Set ${option.label}`,
+      onClick: () => handleVisibilityChange(photo, option.value),
+    }));
 
   return (
     <>
@@ -1940,6 +2038,7 @@ function LibraryPhotosTab({ toast }) {
                 <div style={{ position: "absolute", top: 6, right: 6 }}>
                   <OverflowMenu
                     actions={[
+                      ...visibilityMenuActions(photo),
                       { label: "Delete photo", destructive: true, onClick: () => setDeleteTarget(photo) },
                     ]}
                   />
@@ -1963,6 +2062,7 @@ function LibraryPhotosTab({ toast }) {
               <div style={{ color: "#fff", fontSize: "0.88rem" }}>{preview.caption ?? "No caption"} · <span style={{ color: "#ffffff88" }}>{preview.uploader}</span></div>
               <OverflowMenu
                 actions={[
+                  ...visibilityMenuActions(preview),
                   { label: "Delete photo", destructive: true, onClick: () => { setPreview(null); setDeleteTarget(preview); } },
                 ]}
               />

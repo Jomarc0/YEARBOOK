@@ -10,6 +10,7 @@ use App\Models\AuditLog;
 use App\Models\Batch;
 use App\Models\Faculty;
 use App\Models\GraduationAlbum;
+use App\Models\GraduationPhoto;
 use App\Models\Photo;
 use App\Models\PostMedia;
 use App\Models\Section;
@@ -57,6 +58,19 @@ class TrashController extends Controller
                 'title_col'    => 'title',
                 'subtitle_col' => 'category',
                 'cloudinary'   => fn ($m) => $m->cloudinary_public_id ?? null,
+            ],
+            'graduation_photo' => [
+                'model'        => GraduationPhoto::class,
+                'label'        => 'Graduation Files',
+                'icon'         => 'file',
+                'title_col'    => 'title',
+                'subtitle_col' => 'resource_type',
+                'cloudinary'   => fn ($m) => $m->cloudinary_public_id
+                    ? [
+                        'public_id'     => $m->cloudinary_public_id,
+                        'resource_type' => $this->cloudinaryResourceType($m->resource_type),
+                    ]
+                    : null,
             ],
             'album' => [
                 'model'        => Album::class,
@@ -208,9 +222,9 @@ class TrashController extends Controller
         $item = $cfg['model']::onlyTrashed()->findOrFail($id);
 
         if ($cfg['cloudinary']) {
-            $publicId = ($cfg['cloudinary'])($item);
-            if ($publicId) {
-                $this->purgeCloudinary($publicId, $type);
+            $asset = ($cfg['cloudinary'])($item);
+            if ($asset) {
+                $this->purgeCloudinary($asset, $type);
             }
         }
 
@@ -268,9 +282,9 @@ class TrashController extends Controller
 
         foreach ($items as $item) {
             if ($cfg['cloudinary']) {
-                $publicId = ($cfg['cloudinary'])($item);
-                if ($publicId) {
-                    $this->purgeCloudinary($publicId, $request->type);
+                $asset = ($cfg['cloudinary'])($item);
+                if ($asset) {
+                    $this->purgeCloudinary($asset, $request->type);
                 }
             }
             $item->forceDelete();
@@ -365,6 +379,7 @@ class TrashController extends Controller
             'yearbook'         => $this->maybeUrl($model->cover_image ?? null),
             'faculty'          => $this->resolveCloudinaryUrl($model->image ?? null),
             'graduation_album' => $this->maybeUrl($model->cover_photo_url ?? $model->media_url ?? null),
+            'graduation_photo' => $this->maybeUrl($model->file_path ?? null),
             'album'            => $this->maybeUrl($model->cover_photo_url ?? $model->cover_image ?? $model->media_url ?? null),
             'photo'            => $this->maybeUrl($model->file_path ?? null),
             'post_media'       => $this->maybeUrl($model->file_path ?? null),
@@ -483,17 +498,32 @@ class TrashController extends Controller
         }
     }
 
-    private function purgeCloudinary(string $publicId, string $type): void
+    private function purgeCloudinary(string|array $asset, string $type): void
     {
         try {
-            $resourceType = in_array($type, ['graduation_album', 'post_media', 'voice_note'])
-                ? 'video'
-                : 'image';
+            $publicId = is_array($asset) ? ($asset['public_id'] ?? null) : $asset;
+            if (! $publicId) return;
+
+            $resourceType = is_array($asset)
+                ? ($asset['resource_type'] ?? 'image')
+                : (in_array($type, ['graduation_album', 'post_media', 'voice_note'], true)
+                    ? 'video'
+                    : 'image');
 
             $cloudinary = new \Cloudinary\Cloudinary();
             $cloudinary->uploadApi()->destroy($publicId, ['resource_type' => $resourceType]);
         } catch (Throwable $e) {
+            $publicId = is_array($asset) ? ($asset['public_id'] ?? 'unknown') : $asset;
             Log::warning("[TrashController] Cloudinary purge failed for {$publicId}: {$e->getMessage()}");
         }
+    }
+
+    private function cloudinaryResourceType(?string $resourceType): string
+    {
+        return match ($resourceType) {
+            'video', 'audio' => 'video',
+            'raw' => 'raw',
+            default => 'image',
+        };
     }
 }

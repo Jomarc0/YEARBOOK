@@ -21,6 +21,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Validation\ValidationException;
 use Throwable;
 
 class GraduationContentController extends Controller
@@ -197,18 +198,23 @@ class GraduationContentController extends Controller
     public function uploadToAlbum(Request $request, GraduationAlbum $album): JsonResponse
     {
         $request->validate([
-            'files'   => 'required|array|min:1',
-            'files.*' => 'required|file|max:2097152',
+            'files'    => 'required|array|min:1',
+            'files.*'  => 'required|file|max:2097152',
+            'titles'   => 'nullable|array',      
+            'titles.*' => 'nullable|string|max:255', 
         ]);
 
         $userId   = Auth::id();
         $category = $album->category;
+        $titles   = $request->input('titles', []); 
         $saved    = [];
 
         try {
             DB::transaction(function () use ($request, $album, $userId, $category, &$saved) {
-                foreach ($request->file('files') as $file) {
+                foreach ($request->file('files') as $index => $file) {
+                    $fileTitle = $titles[$index] ?? null; 
                     $mime    = $file->getMimeType() ?? '';
+                    $this->assertFileAllowedForCategory($category, $mime);
                     $isImage = str_starts_with($mime, 'image/');
                     $isVideo = str_starts_with($mime, 'video/');
                     $isAudio = str_starts_with($mime, 'audio/');
@@ -220,7 +226,7 @@ class GraduationContentController extends Controller
                         default              => 'raw',
                     };
 
-                    $options = ['resource_type' => $resourceType, 'skip_mime_check' => true];
+                    $options = ['resource_type' => $resourceType];
                     if ($isVideo || $isAudio) {
                         $options['skip_size_check'] = true;
                         $options['chunk_size']      = 6_000_000;
@@ -229,6 +235,7 @@ class GraduationContentController extends Controller
                     $result = $this->storage->uploadPhoto($file, $userId, $folder, $options);
 
                     $photo = $album->photos()->create([
+                        'title'                => $fileTitle ?? $album->title,
                         'file_path'            => $result['secure_url'],
                         'cloudinary_public_id' => $result['public_id'] ?? null,
                         'resource_type'        => $resourceType,
@@ -257,7 +264,7 @@ class GraduationContentController extends Controller
                     (in_array($category, self::TRANSCRIPT_TYPES) || $category === 'archive')) {
                     $this->maybeQueueTranscription(
                         uploadResult:       $result,
-                        title:              $album->title,
+                        title:              $fileTitle ?? $album->title,
                         userId:             $userId,
                         albumId:            $album->id,
                         graduationPhotoId:  $photo->id, 
@@ -564,6 +571,40 @@ class GraduationContentController extends Controller
         }
     }
 
+    public function updatePhoto(Request $request, GraduationPhoto $photo): JsonResponse
+    {
+        try {
+            $data = $request->validate([
+                'title'      => 'nullable|string|max:255',
+                'sort_order' => 'nullable|integer|min:0',
+            ]);
+
+            $photo->update($data);
+
+            return response()->json([
+                'message' => 'File updated.',
+                'data'    => $photo->fresh(),
+            ]);
+        } catch (ValidationException $e) {
+            throw $e;
+        } catch (Throwable $e) {
+            Log::error('[GradContent] updatePhoto failed', ['id' => $photo->id, 'message' => $e->getMessage()]);
+            return response()->json(['message' => 'File update failed.'], 500);
+        }
+    }
+
+    public function destroyPhoto(GraduationPhoto $photo): JsonResponse
+    {
+        try {
+            $photo->delete();
+
+            return response()->json(['message' => 'File moved to trash.']);
+        } catch (Throwable $e) {
+            Log::error('[GradContent] destroyPhoto failed', ['id' => $photo->id, 'message' => $e->getMessage()]);
+            return response()->json(['message' => 'File delete failed.'], 500);
+        }
+    }
+
     // PUBLISH
     public function publish(GraduationAlbum $album): JsonResponse
     {
@@ -671,5 +712,29 @@ class GraduationContentController extends Controller
             'program'                                    => 'image/jpeg',
             default                                      => 'application/octet-stream',
         };
+    }
+
+    private function assertFileAllowedForCategory(string $category, string $mime): void
+    {
+        $allowed = match ($category) {
+            'photos', 'toga', 'highlights', 'archive' => ['image/'],
+            'videos' => ['video/'],
+            'songs', 'mass', 'speeches', 'messages' => ['audio/', 'video/'],
+            'program', 'invitations' => ['application/pdf', 'image/'],
+            default => ['image/'],
+        };
+
+        foreach ($allowed as $prefix) {
+            if (str_ends_with($prefix, '/') && str_starts_with($mime, $prefix)) {
+                return;
+            }
+            if ($mime === $prefix) {
+                return;
+            }
+        }
+
+        throw ValidationException::withMessages([
+            'files' => ["File type [{$mime}] is not allowed for {$category} content."],
+        ]);
     }
 }
