@@ -8,10 +8,12 @@ use App\Models\Admin;
 use App\Models\AuditLog;
 use App\Services\Security\TotpService;
 use App\Support\PlatformSettings;
+use Illuminate\Contracts\Encryption\DecryptException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Str;
 
@@ -68,11 +70,12 @@ class AdminAuthController extends Controller
 
         $challenge = Str::random(48);
         $cacheKey = "admin_totp_challenge:{$challenge}";
-        $setupRequired = empty($admin->totp_secret);
+        $totpSecret = $this->encryptedAdminValue($admin, 'totp_secret');
+        $setupRequired = empty($totpSecret);
 
         $setup = null;
         if ($setupRequired) {
-            $secret = $admin->totp_pending_secret ?: $this->totp->generateSecret();
+            $secret = $this->encryptedAdminValue($admin, 'totp_pending_secret') ?: $this->totp->generateSecret();
             $admin->forceFill(['totp_pending_secret' => $secret])->save();
             $setup = [
                 'issuer' => config('app.name', 'Sinag-Bughaw'),
@@ -130,7 +133,9 @@ class AdminAuthController extends Controller
         }
 
         $setupRequired = (bool) ($payload['setup_required'] ?? false);
-        $secret = $setupRequired ? $admin->totp_pending_secret : $admin->totp_secret;
+        $secret = $setupRequired
+            ? $this->encryptedAdminValue($admin, 'totp_pending_secret')
+            : $this->encryptedAdminValue($admin, 'totp_secret');
 
         if (! $secret || ! $this->totp->verify($secret, (string) $request->input('code'))) {
             $this->audit(
@@ -196,8 +201,30 @@ class AdminAuthController extends Controller
             'username'       => $admin->username,
             'role'           => $admin->role,
             'is_super_admin' => $admin->isSuperAdmin(),
-            'totp_enabled'   => ! empty($admin->totp_secret),
+            'totp_enabled'   => ! empty($this->encryptedAdminValue($admin, 'totp_secret')),
             'last_login_at'  => $admin->last_login_at?->toISOString(),
         ];
+    }
+
+    private function encryptedAdminValue(Admin $admin, string $attribute): ?string
+    {
+        $raw = $admin->getRawOriginal($attribute);
+
+        if ($raw === null || $raw === '') {
+            return null;
+        }
+
+        try {
+            $value = $admin->getAttribute($attribute);
+        } catch (DecryptException $exception) {
+            Log::warning('Invalid encrypted admin attribute payload.', [
+                'admin_id' => $admin->id,
+                'attribute' => $attribute,
+            ]);
+
+            return null;
+        }
+
+        return is_string($value) && $value !== '' ? $value : null;
     }
 }
