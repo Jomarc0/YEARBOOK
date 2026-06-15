@@ -11,7 +11,7 @@ import LoadingSkeleton from '@/components/ui/LoadingSkeleton';
 import { imageUrl, avatarUrl } from '@/utils/imageUrl';
 import { COURSE_FILTERS, getCourseShort } from '@/utils/courseShort';
 
-// ─── Constants ────────────────────────────────────────────────────────────────
+// Constants
 const faceUserId = (match) => {
   const id = Number(match?.account_user_id ?? match?.user_id);
   return Number.isFinite(id) && id > 0 ? id : null;
@@ -48,7 +48,7 @@ const isUsableStudentPhoto = (photo) => {
   return !['default', 'avatar', 'placeholder', 'cartoon'].some(token => src.includes(token));
 };
 
-// ─── AutocompleteDropdown ─────────────────────────────────────────────────────
+// AutocompleteDropdown
 function AutocompleteDropdown({ suggestions, onSelect, visible }) {
   if (!visible || !suggestions.length) return null;
   return (
@@ -79,7 +79,7 @@ function AutocompleteDropdown({ suggestions, onSelect, visible }) {
   );
 }
 
-// ─── FaceMatchBanner ──────────────────────────────────────────────────────────
+// FaceMatchBanner
 function FaceMatchBanner({ matches, onClear }) {
   if (!matches.length) return null;
   return (
@@ -117,7 +117,7 @@ function FaceMatchBanner({ matches, onClear }) {
   );
 }
 
-// ─── StudentCard ──────────────────────────────────────────────────────────────
+// StudentCard
 function StudentCard({ student, index, isMatched, matchData }) {
   const [imgError, setImgError] = useState(false);
   const batchYear   = student.batch_year || new Date().getFullYear();
@@ -191,7 +191,7 @@ function StudentCard({ student, index, isMatched, matchData }) {
   );
 }
 
-// ─── Main Page ────────────────────────────────────────────────────────────────
+// Main Page
 export default function DirectoryPage() {
   const [searchParams] = useSearchParams();
   const { user } = useAuth();
@@ -221,7 +221,7 @@ export default function DirectoryPage() {
     ? students.filter(student => studentUserId(student) !== currentUserId)
     : students;
 
-  // ── Fetch students ───────────────────────────────────────────────────────
+  // Fetch students
   const fetchStudents = useCallback(async (q = query, c = course, p = 1) => {
     setLoading(true);
     try {
@@ -259,7 +259,7 @@ export default function DirectoryPage() {
 
   useEffect(() => { fetchStudents(); }, []);
 
-  // ── Handlers ─────────────────────────────────────────────────────────────
+  // Handlers
   const clearFaceResults = () => { setFaceMatches([]); setMatchedIds(new Set()); };
 
   const handleSearch = (val) => {
@@ -325,7 +325,7 @@ export default function DirectoryPage() {
 
       <Navbar />
 
-      {/* ── Hero / Search Header ── */}
+      {/* Hero / Search Header */}
       <header
         className="relative min-h-[140px] px-5 sm:px-[8%] py-8 text-center text-white rounded-b-[28px] shadow-lg overflow-hidden"
         style={{ background: "linear-gradient(135deg,rgba(29,43,75,0.95),rgba(63,81,181,0.88)), url('/images/NU-building.jpg') center/cover no-repeat" }}
@@ -384,7 +384,7 @@ export default function DirectoryPage() {
         </div>
       </header>
 
-      {/* ── Course filters ── */}
+      {/* Course filters */}
       <nav className="border-b border-slate-200 bg-white px-5 py-3 shadow-sm sm:px-[8%]" aria-label="Filter students by program">
         <div className="mx-auto max-w-[1180px]">
           <FilterTabStrip
@@ -396,7 +396,7 @@ export default function DirectoryPage() {
         </div>
       </nav>
 
-      {/* ── Result count ── */}
+      {/* Result count */}
       {!loading && !isFaceMode && (
         <p className="text-center text-xs text-slate-400 mt-3 mb-0 px-4">
           {query ? (
@@ -415,7 +415,7 @@ export default function DirectoryPage() {
         </p>
       )}
 
-      {/* ── Main content ── */}
+      {/* Main content */}
       <main className="flex-1 px-4 sm:px-[8%] py-8">
 
         {/* Loading */}

@@ -56,7 +56,7 @@ class MediaController extends Controller
 
             $savedGalleries = $uploaded->map(function ($result) use ($album, $visibility, $caption) {
 
-                // 1️ Create the Gallery 
+                // 1 Create the Gallery
                 $gallery = Gallery::create([
                     'album_id'    => $album->id,
                     'user_id'     => Auth::id(),
@@ -126,7 +126,7 @@ class MediaController extends Controller
                 folder: "albums/{$album->id}/videos",
             );
 
-            // 1️ Create the Gallery 
+            // 1 Create the Gallery
             $gallery = Gallery::create([
                 'album_id'    => $album->id,
                 'user_id'     => Auth::id(),

@@ -111,7 +111,7 @@ class SearchController extends Controller
         return response()->json(['results' => $results, 'query' => $query]);
     }
 
-    // Student search — DB-based with Scout fallback 
+    // Student search DB-based with Scout fallback
     public function students(Request $request): JsonResponse
     {
         if ($denied = PlatformSettings::featureDisabled('enable_student_directory_search', 'Student directory search')) {
@@ -172,7 +172,7 @@ class SearchController extends Controller
                 ],
             ]);
         } catch (\Throwable $e) {
-            // Meilisearch went down mid-request — silently fall back to DB
+            // Meilisearch went down mid-request silently fall back to DB
 
             return $this->studentsViaDatabase(
                 $query, $course, $courseShort, $batchYear, $section, $perPage

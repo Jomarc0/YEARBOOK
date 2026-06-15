@@ -81,12 +81,12 @@ export default function StudentPhotosSection({ userId, compact = false, openInMo
 
   useEffect(() => { if (userId) load(1); }, [userId]);
 
-  // ── Loading ────────────────────────────────────────────────────────────────
+  // Loading
   if (loading) return (
     <LoadingSkeleton variant="card" count={compact ? 3 : 6} gridClassName="grid grid-cols-2 gap-3 sm:grid-cols-3" />
   );
 
-  // ── Empty ──────────────────────────────────────────────────────────────────
+  // Empty
   if (!photos.length) return (
     <div className="text-center py-10">
       {compact ? (
@@ -112,7 +112,7 @@ export default function StudentPhotosSection({ userId, compact = false, openInMo
     </div>
   );
 
-  // ── Compact mode ───────────────────────────────────────────────────────────
+  // Compact mode
   if (compact) {
     return (
       <>
@@ -155,7 +155,7 @@ export default function StudentPhotosSection({ userId, compact = false, openInMo
                     </div>
                   )}
 
-                  {/* AI badge — rekognition only */}
+                  {/* AI badge rekognition only */}
                   {item.source === 'rekognition' && (
                     <div className="absolute top-1.5 left-1.5 bg-indigo-600/85 text-white text-[8px] font-black px-1.5 py-0.5 rounded-md flex items-center gap-1">
                       <i className="fas fa-wand-magic-sparkles text-[7px]" /> AI
@@ -208,7 +208,7 @@ export default function StudentPhotosSection({ userId, compact = false, openInMo
     );
   }
 
-  // ── Full paginated mode ────────────────────────────────────────────────────
+  // Full paginated mode
   return (
     <section>
       {openInModal && viewer && (
@@ -264,7 +264,7 @@ export default function StudentPhotosSection({ userId, compact = false, openInMo
                   </div>
                 )}
 
-                {/* AI badge — rekognition only */}
+                {/* AI badge rekognition only */}
                 {item.source === 'rekognition' && (
                   <div className="absolute top-2 left-2 bg-indigo-600/85 backdrop-blur-sm text-white text-[9px] font-black px-2 py-1 rounded-lg flex items-center gap-1">
                     <i className="fas fa-wand-magic-sparkles text-[8px]" /> AI

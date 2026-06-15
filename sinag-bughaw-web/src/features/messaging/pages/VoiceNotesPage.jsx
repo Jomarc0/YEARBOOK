@@ -124,7 +124,7 @@ export default function VoiceNotesPage() {
           ))}
         </div>
 
-        {/* CTA for outbox — guide user to a profile */}
+        {/* CTA for outbox guide user to a profile */}
         {tab === 'outbox' && !loading && (
           <div style={{
             background: 'linear-gradient(135deg, #1d2b4b, #2a3d66)',
@@ -218,7 +218,7 @@ export default function VoiceNotesPage() {
                     </div>
                   </div>
 
-                  {/* Play — only for approved/inbox */}
+                  {/* Play only for approved/inbox */}
                   {(tab === 'inbox' || note.status === 'approved') && (
                     <button onClick={() => togglePlay(note.id, note.audio_url)} style={{
                       width: '48px', height: '48px', borderRadius: '14px', flexShrink: 0,
@@ -230,7 +230,7 @@ export default function VoiceNotesPage() {
                     </button>
                   )}
 
-                  {/* Pending icon — not playable yet */}
+                  {/* Pending icon not playable yet */}
                   {tab === 'outbox' && note.status === 'pending' && (
                     <div style={{
                       width: '48px', height: '48px', borderRadius: '14px', flexShrink: 0,

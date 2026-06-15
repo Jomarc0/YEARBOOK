@@ -17,7 +17,7 @@
         * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Inter', sans-serif; }
         body { background-color: var(--light-bg); color: #333; overflow-x: hidden; }
 
-        /* --- NAVIGATION --- */
+        /* NAVIGATION */
         nav {
             display: flex; justify-content: space-between; align-items: center;
             padding: 20px 8%; background: rgba(255, 255, 255, 0.1);
@@ -35,7 +35,7 @@
         .btn-register { background: var(--nu-yellow); color: var(--nu-blue); padding: 10px 25px; border-radius: 8px; text-decoration: none; font-weight: 700; font-size: 0.9rem; transition: 0.3s; }
         .btn-register:hover { background: #e5a712; transform: translateY(-2px); }
 
-        /* --- HERO SECTION --- */
+        /* HERO SECTION */
         .hero {
             height: 95vh;
             background: linear-gradient(rgba(29, 43, 75, 0.6), rgba(29, 43, 75, 0.6)), url('/images/NU-building.jpg');
@@ -51,7 +51,7 @@
         .hero-btns .btn-secondary { border: 2px solid white; color: white; padding: 13px 35px; border-radius: 8px; font-weight: 600; text-decoration: none; display: inline-block; transition: 0.3s; }
         .hero-btns .btn-primary:hover, .hero-btns .btn-secondary:hover { transform: translateY(-3px); box-shadow: 0 10px 20px rgba(0,0,0,0.2); }
 
-        /* --- FLOATING STATS --- */
+        /* FLOATING STATS */
         .stats-wrap {
             display: flex; justify-content: center; gap: 30px;
             margin-top: -85px; padding: 0 8%; position: relative; z-index: 10;
@@ -66,7 +66,7 @@
         .stat-text h2 { font-size: 1.8rem; color: #1d2b4b; }
         .stat-text p { font-size: 0.85rem; color: #888; }
 
-        /* --- EXPLORE SECTION --- */
+        /* EXPLORE SECTION */
         .explore { padding: 120px 8%; text-align: center; }
         .explore h2 { font-size: 2.2rem; color: var(--nu-blue); margin-bottom: 15px; }
         .explore p.sub { color: #666; font-size: 1rem; margin-bottom: 50px; }
@@ -83,7 +83,7 @@
         .grid-overlay h3 { font-size: 1.5rem; margin-bottom: 10px; }
         .grid-overlay p { font-size: 0.9rem; opacity: 0.85; line-height: 1.4; }
 
-        /* --- FOOTER --- */
+        /* FOOTER */
         footer { background: #0e1628; color: white; padding: 100px 8% 50px; display: grid; grid-template-columns: 2fr 1fr 1fr 1.5fr; gap: 60px; }
         .f-info h3 { font-size: 1.5rem; margin-bottom: 20px; }
         .f-info p { color: #a0aabf; font-size: 0.9rem; line-height: 1.7; margin-bottom: 25px; }

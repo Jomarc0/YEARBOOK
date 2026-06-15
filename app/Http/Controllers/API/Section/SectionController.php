@@ -57,7 +57,7 @@ class SectionController extends Controller
             ->orderBy('first_name');
 
         if (! $isPremium) {
-            // Free tier: limited columns — no premium yearbook fields
+            // Free tier: limited columns no premium yearbook fields
             $studentQuery->select([
                 'id',
                 'first_name',

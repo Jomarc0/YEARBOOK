@@ -11,7 +11,7 @@ export const galleryApi = {
       headers: { 'Content-Type': 'multipart/form-data' },
     }),
 
-  // ── NEW: create a general album via the axios client so auth headers
+  // : create a general album via the axios client so auth headers
   //         are automatically injected from the axios interceptor.
   createAlbum: (payload) =>
     client.post('/gallery/albums', payload),

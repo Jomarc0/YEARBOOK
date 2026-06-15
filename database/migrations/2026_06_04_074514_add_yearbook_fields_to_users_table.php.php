@@ -10,7 +10,7 @@ return new class extends Migration
 public function up(): void
 {
     Schema::table('users', function (Blueprint $table) {
-        // ── Personal ──────────────────────────────────────────
+        // Personal
         if (!Schema::hasColumn('users', 'nickname'))
             $table->string('nickname')->nullable()->after('last_name');
         if (!Schema::hasColumn('users', 'birthday'))
@@ -18,7 +18,7 @@ public function up(): void
         if (!Schema::hasColumn('users', 'hometown'))
             $table->string('hometown')->nullable()->after('birthday');
 
-        // ── Yearbook profile ──────────────────────────────────
+        // Yearbook profile
         if (!Schema::hasColumn('users', 'honors'))
             $table->string('honors')->nullable()->after('graduation_year');
         if (!Schema::hasColumn('users', 'organizations'))
@@ -26,7 +26,7 @@ public function up(): void
         if (!Schema::hasColumn('users', 'achievements'))
             $table->text('achievements')->nullable()->after('organizations');
 
-        // ── Yearbook quotes ───────────────────────────────────
+        // Yearbook quotes
         if (!Schema::hasColumn('users', 'ambition'))
             $table->text('ambition')->nullable()->after('bio');
         if (!Schema::hasColumn('users', 'future_plans'))
@@ -36,13 +36,13 @@ public function up(): void
         if (!Schema::hasColumn('users', 'most_likely_to'))
             $table->text('most_likely_to')->nullable()->after('fondest_memory');
 
-        // ── Yearbook messages ─────────────────────────────────
+        // Yearbook messages
         if (!Schema::hasColumn('users', 'message_to_batchmates'))
             $table->text('message_to_batchmates')->nullable()->after('most_likely_to');
         if (!Schema::hasColumn('users', 'message_to_parents'))
             $table->text('message_to_parents')->nullable()->after('message_to_batchmates');
 
-        // ── Social links ──────────────────────────────────────
+        // Social links
         if (!Schema::hasColumn('users', 'facebook_url'))
             $table->string('facebook_url')->nullable()->after('avatar');
         if (!Schema::hasColumn('users', 'instagram_url'))

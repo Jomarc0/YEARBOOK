@@ -13,7 +13,7 @@ use Illuminate\Support\Facades\Schema;
  * (race condition on rapid re-uploads or queue retries).
  *
  * public_id is nullable on manually-uploaded transcripts that predate this
- * migration, so we use a partial unique index approach — MySQL/MariaDB allow
+ * migration, so we use a partial unique index approach MySQL/MariaDB allow
  * multiple NULLs in a unique column, so nullable is fine here.
  */
 return new class extends Migration

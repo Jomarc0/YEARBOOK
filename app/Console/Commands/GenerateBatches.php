@@ -30,7 +30,7 @@ class GenerateBatches extends Command
             $this->newLine();
         }
 
-        // Step 1: Generate batch records
+        // Generate batch records
         $this->line('  <fg=blue>📦 Step 1:</> Scanning users for unique batch groups...');
 
         if ($isDryRun) {
@@ -42,7 +42,7 @@ class GenerateBatches extends Command
         $this->info("     ✓ {$created} new batch(es) created.");
         $this->newLine();
 
-        // ── Step 2: Assign users → batch_id ──────────────────────────────
+        // Assign users batch_id
         if ($this->option('assign') || $this->option('sections')) {
             $this->line('  <fg=blue>👤 Step 2:</> Assigning students to batches...');
             $updated = $service->assignUsersToBatches();
@@ -50,7 +50,7 @@ class GenerateBatches extends Command
             $this->newLine();
         }
 
-        // ── Step 3: Generate sections ─────────────────────────────────────
+        // Generate sections
         if ($this->option('sections')) {
             $perSection = (int) $this->option('per-section');
             $this->line("  <fg=blue>🗂  Step 3:</> Generating sections ({$perSection} students/section)...");
@@ -59,7 +59,7 @@ class GenerateBatches extends Command
             $this->newLine();
         }
 
-        // ── Summary table ─────────────────────────────────────────────────
+        // Summary table
         $this->line('  <fg=yellow>📊 Batch Summary:</>');
         $this->newLine();
 

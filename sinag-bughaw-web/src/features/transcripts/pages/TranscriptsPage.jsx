@@ -4,15 +4,15 @@ import Navbar from '@/components/layout/Navbar';
 import Footer from '@/components/layout/Footer';
 import LoadingSkeleton from '@/components/ui/LoadingSkeleton';
 
-// ── API helpers (add these to your yearbook.api.js) ──────────────────────────
-// transcriptsApi.list(params)              → GET /api/transcripts
-// transcriptsApi.upload(formData)          → POST /api/transcripts
-// transcriptsApi.show(id)                  → GET /api/transcripts/{id}
-// transcriptsApi.delete(id)               → DELETE /api/transcripts/{id}
-// transcriptsApi.subtitles(id, format)    → GET /api/transcripts/{id}/subtitles
-// transcriptsApi.regenerateNotes(id)      → POST /api/transcripts/{id}/notes
+// API helpers (add these to your yearbook.api.js)
+// transcriptsApi.list(params) GET /api/transcripts
+// transcriptsApi.upload(formData) POST /api/transcripts
+// transcriptsApi.show(id) GET /api/transcripts/{id}
+// transcriptsApi.delete(id) DELETE /api/transcripts/{id}
+// transcriptsApi.subtitles(id, format) GET /api/transcripts/{id}/subtitles
+// transcriptsApi.regenerateNotes(id) POST /api/transcripts/{id}/notes
 
-// ── Status helpers ────────────────────────────────────────────────────────────
+// Status helpers
 
 const STATUS_STYLE = {
   done:       { background: '#ecfdf5', color: '#059669' },
@@ -28,7 +28,7 @@ const STATUS_ICON = {
   pending:    'fa-clock',
 };
 
-// ── Sub-components ────────────────────────────────────────────────────────────
+// Sub-components
 
 function TranscriptCard({ t, onDelete, onRefreshNotes, onSubtitleDownload }) {
   const [expanded,      setExpanded]      = useState(false);
@@ -54,7 +54,7 @@ function TranscriptCard({ t, onDelete, onRefreshNotes, onSubtitleDownload }) {
       onMouseEnter={e => { e.currentTarget.style.boxShadow = '0 16px 40px rgba(29,43,75,0.08)'; e.currentTarget.style.transform = 'translateY(-3px)'; }}
       onMouseLeave={e => { e.currentTarget.style.boxShadow = '0 8px 24px rgba(0,0,0,0.04)'; e.currentTarget.style.transform = 'none'; }}>
 
-      {/* ── Header row ── */}
+      {/* Header row */}
       <div className="flex items-start justify-between gap-4 mb-3">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
@@ -94,7 +94,7 @@ function TranscriptCard({ t, onDelete, onRefreshNotes, onSubtitleDownload }) {
         </span>
       </div>
 
-      {/* ── Transcript text preview ── */}
+      {/* Transcript text preview */}
       {isDone && t.transcript_text && (
         <div className="mb-4">
           <div className="text-sm leading-relaxed rounded-xl p-4"
@@ -112,7 +112,7 @@ function TranscriptCard({ t, onDelete, onRefreshNotes, onSubtitleDownload }) {
         </div>
       )}
 
-      {/* ── Processing state ── */}
+      {/* Processing state */}
       {t.status === 'processing' && (
         <div className="flex items-center gap-2 mb-4 text-sm" style={{ color: '#94a3b8' }}>
           <i className="fas fa-robot" style={{ color: '#3f51b5' }} />
@@ -120,7 +120,7 @@ function TranscriptCard({ t, onDelete, onRefreshNotes, onSubtitleDownload }) {
         </div>
       )}
 
-      {/* ── Speech Notes ── */}
+      {/* Speech Notes */}
       {isDone && (
         <div className="mb-4">
           <button onClick={() => setNotesOpen(!notesOpen)}
@@ -157,7 +157,7 @@ function TranscriptCard({ t, onDelete, onRefreshNotes, onSubtitleDownload }) {
         </div>
       )}
 
-      {/* ── Action buttons ── */}
+      {/* Action buttons */}
       {isDone && (
         <div className="flex flex-wrap gap-2 pt-3" style={{ borderTop: '1px solid #f1f5f9' }}>
           {/* Subtitle downloads */}
@@ -195,7 +195,7 @@ function TranscriptCard({ t, onDelete, onRefreshNotes, onSubtitleDownload }) {
   );
 }
 
-// ── Main Page ─────────────────────────────────────────────────────────────────
+// Main Page
 
 export default function TranscriptsPage() {
   const [transcripts, setTranscripts] = useState([]);
@@ -207,7 +207,7 @@ export default function TranscriptsPage() {
   const fileRef   = useRef();
   const searchRef = useRef(null);
 
-  // ── Load ────────────────────────────────────────────────────────────────
+  // Load
 
   const load = (q = search) => {
     setLoading(true);
@@ -238,7 +238,7 @@ export default function TranscriptsPage() {
     return () => clearInterval(interval);
   }, [transcripts]);
 
-  // ── Upload ──────────────────────────────────────────────────────────────
+  // Upload
 
   const handleUpload = async (e) => {
     const file = e.target.files[0];
@@ -263,7 +263,7 @@ export default function TranscriptsPage() {
     }
   };
 
-  // ── Delete ──────────────────────────────────────────────────────────────
+  // Delete
 
   const handleDelete = async (id) => {
     if (! confirm('Delete this transcript and its audio file?')) return;
@@ -273,13 +273,13 @@ export default function TranscriptsPage() {
     } catch { alert('Delete failed.'); }
   };
 
-  // ── Refresh notes ───────────────────────────────────────────────────────
+  // Refresh notes
 
   const handleRefreshNotes = (id, notes) => {
     setTranscripts(prev => prev.map(t => t.id === id ? { ...t, notes, has_notes: !!notes } : t));
   };
 
-  // ── Subtitle download ───────────────────────────────────────────────────
+  // Subtitle download
 
   const handleSubtitleDownload = async (id, format) => {
     try {
@@ -296,19 +296,19 @@ export default function TranscriptsPage() {
     } catch { alert(`Failed to download ${format.toUpperCase()} subtitles.`); }
   };
 
-  // ── Stats ───────────────────────────────────────────────────────────────
+  // Stats
 
   const doneCount       = transcripts.filter(t => t.status === 'done').length;
   const processingCount = transcripts.filter(t => ['pending', 'processing'].includes(t.status)).length;
 
-  // ── Render ──────────────────────────────────────────────────────────────
+  // Render
 
   return (
     <div className="min-h-screen flex flex-col"
       style={{ background: '#f8fafc', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
       <Navbar />
 
-      {/* ── Hero ── */}
+      {/* Hero */}
       <header className="text-white text-center"
         style={{ background: 'linear-gradient(135deg, #1d2b4b 0%, #2a3d66 100%)', padding: '80px 8% 120px', borderRadius: '0 0 60px 60px' }}>
         <p className="text-xs font-bold uppercase tracking-widest mb-3 opacity-60">AI-Powered · Groq Whisper</p>
@@ -340,7 +340,7 @@ export default function TranscriptsPage() {
 
       <main style={{ flex: 1, maxWidth: '900px', margin: '0 auto', padding: '60px 20px 100px', width: '100%' }}>
 
-        {/* ── Upload Panel ── */}
+        {/* Upload Panel */}
         <div className="bg-white mb-8"
           style={{ borderRadius: 24, boxShadow: '0 18px 36px rgba(29,43,75,0.08)', padding: 32 }}>
           <div className="flex items-center gap-3 mb-5">
@@ -395,7 +395,7 @@ export default function TranscriptsPage() {
           </div>
         </div>
 
-        {/* ── Search bar ── */}
+        {/* Search bar */}
         <div className="relative mb-6">
           <i className="fas fa-search absolute left-4 top-1/2 -translate-y-1/2"
             style={{ color: '#94a3b8', fontSize: '0.85rem', zIndex: 1 }} />
@@ -417,7 +417,7 @@ export default function TranscriptsPage() {
           )}
         </div>
 
-        {/* ── Transcript list ── */}
+        {/* Transcript list */}
         <div className="flex items-center justify-between mb-5">
           <h2 className="font-extrabold text-xl m-0" style={{ color: '#1d2b4b' }}>
             <i className="fas fa-file-alt mr-2" style={{ color: '#fdb813' }} />

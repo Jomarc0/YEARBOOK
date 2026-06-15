@@ -65,7 +65,7 @@ export default function ShareModal({ isOpen, onClose, student }) {
           <div className="p-5">
             <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 m-0">Share via</p>
 
-            {/* 3×2 grid */}
+            {/* 3 2 grid */}
             <div className="grid grid-cols-3 gap-2 mb-5">
               {SHARE_OPTIONS.map(opt => (
                 <button key={opt.key}

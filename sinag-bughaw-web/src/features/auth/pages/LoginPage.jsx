@@ -110,7 +110,7 @@ export default function LoginPage() {
 
       {showConsent && <ConsentModal onAccepted={() => navigate('/dashboard')} />}
 
-      {/* ── LEFT PANEL ── */}
+      {/* LEFT PANEL */}
       <div
         className="hidden lg:flex lg:w-[45%] flex-col justify-between p-12 animate-[slideLeft_0.6s_ease]"
         style={{ background:"linear-gradient(160deg,rgba(29,43,75,0.93),rgba(63,81,181,0.87)),url('/images/NU-building.jpg') center/cover no-repeat" }}
@@ -146,7 +146,7 @@ export default function LoginPage() {
         <p className="text-white/35 text-xs">© {new Date().getFullYear()} National University Lipa · Sinag-Bughaw</p>
       </div>
 
-      {/* ── RIGHT PANEL ── */}
+      {/* RIGHT PANEL */}
       <div className="relative w-full lg:w-[55%] min-h-screen flex items-center justify-center bg-[#f8fafc] animate-[slideRight_0.6s_ease]">
 
         {/* Top bar */}
@@ -183,7 +183,7 @@ export default function LoginPage() {
 
           <div className="w-full max-w-[400px]">
 
-            {/* ── STEP 1: Login form ── */}
+            {/* Login form */}
             {step === 'form' && (
               <div className="animate-[slideUp_0.35s_ease]">
                 <div className="flex items-center gap-2 mb-5">
@@ -195,7 +195,7 @@ export default function LoginPage() {
 
                 {error && <ErrorBanner message={error} />}
 
-                {/* ── Email + Password form ── */}
+                {/* Email + Password form */}
                 <form onSubmit={handleLoginSubmit} className="space-y-4">
                   {/* Email */}
                   <div>
@@ -260,7 +260,7 @@ export default function LoginPage() {
               </div>
             )}
 
-            {/* ── STEP 2: OTP ── */}
+            {/* OTP */}
             {step === 'otp' && (
               <div className="animate-[slideUp_0.35s_ease]">
 

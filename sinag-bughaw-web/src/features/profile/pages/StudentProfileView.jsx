@@ -19,7 +19,7 @@ import { trackProfileView } from '@/utils/ga4';
 import { getCourseShort } from '@/utils/courseShort';
 import LoadingSkeleton from '@/components/ui/LoadingSkeleton';
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
+// Helpers
 const isGraduate = (student) => !!student?.graduation_year;
 const isMeaningfulText = (value, minLength = 3) => {
   const text = String(value || '').replace(/\s+/g, ' ').trim();
@@ -46,7 +46,7 @@ const isPaidViewer = (viewer) => {
   return Boolean(viewer.is_premium || ['standard', 'premium'].includes(tier) || plan.startsWith('premium'));
 };
 
-// ── Sub-components ────────────────────────────────────────────────────────────
+// Sub-components
 function SkeletonBlock({ w = '60%', h = 11 }) {
   return <div className="rounded-md bg-slate-200 animate-pulse" style={{ width: w, height: h }} />;
 }
@@ -85,7 +85,7 @@ function InfoTile({ icon, label, value }) {
   );
 }
 
-// ── Main component ────────────────────────────────────────────────────────────
+// Main component
 function initialsFor(name = '') {
   return String(name || 'NU')
     .trim()
@@ -292,7 +292,7 @@ export default function StudentProfileView() {
 
   const canViewFull = Boolean(student?.is_subscribed_viewer || isPaidViewer(authUser));
 
-  // Build tabs dynamically — Yearbook only for graduates
+  // Build tabs dynamically Yearbook only for graduates
   const TABS = [
     { key: 'posts',        icon: 'fas fa-th-large',      label: 'Posts'          },
     { key: 'tagged',       icon: 'fas fa-tag',            label: 'Tagged'         },
@@ -304,7 +304,7 @@ export default function StudentProfileView() {
     { key: 'voice',        icon: 'fas fa-microphone',     label: 'Voice Memories' },
   ];
 
-  // ── Fetch student + record view ────────────────────────────────────────────
+  // Fetch student + record view
   useEffect(() => {
     if (!id) return;
     if (parseInt(id) === authUser?.id) {
@@ -317,7 +317,7 @@ export default function StudentProfileView() {
         setStudent(data);
         setRestrictedStudent(null);
         setVisibility(null);
-        // id here is users.id — correct for profile_views table
+        // id here is users.id correct for profile_views table
         recordProfileView(parseInt(id));
         trackProfileView({
           id:     parseInt(id),
@@ -407,7 +407,7 @@ export default function StudentProfileView() {
     }
   };
 
-  // ── Loading ────────────────────────────────────────────────────────────────
+  // Loading
   if (loading) return (
     <div className="min-h-screen bg-[#f4f7fe] px-4 py-8">
       <div className="mx-auto w-full max-w-4xl">
@@ -416,7 +416,7 @@ export default function StudentProfileView() {
     </div>
   );
 
-  // ── Not found / private ────────────────────────────────────────────────────
+  // Not found / private
   if (!student && ['subscription', 'private', 'batchmates', 'alumni_only'].includes(visibility)) return (
     <RestrictedProfileView
       student={restrictedStudent}
@@ -476,7 +476,7 @@ export default function StudentProfileView() {
 
       <main className="flex-1 max-w-[980px] mx-auto w-full px-4 sm:px-6 py-8 animate-[fadeIn_0.25s_ease]">
 
-        {/* ── PROFILE CARD ── */}
+        {/* PROFILE CARD */}
         <div className="bg-white rounded-2xl overflow-hidden mb-3 shadow-sm border border-slate-100">
 
           {/* Cover */}
@@ -557,7 +557,7 @@ export default function StudentProfileView() {
               ))}
             </div>
 
-            {/* Bio — gated */}
+            {/* Bio gated */}
             <SubscriptionGate isSubscribed={canViewFull} variant="inline"
               message="Subscribe to view this student's bio and personal quote."
               preview={
@@ -612,7 +612,7 @@ export default function StudentProfileView() {
           </div>
         </div>
 
-        {/* ── TABS ── */}
+        {/* TABS */}
         <div className="bg-white rounded-2xl mb-3 shadow-sm border border-slate-100 flex overflow-hidden">
           {TABS.map((tab, i) => (
             <button key={tab.key} onClick={() => setActiveTab(tab.key)}
@@ -626,7 +626,7 @@ export default function StudentProfileView() {
           ))}
         </div>
 
-        {/* ── POSTS TAB ── */}
+        {/* POSTS TAB */}
         {activeTab === 'posts' && (
           <SubscriptionGate isSubscribed={!postsRestricted && canViewFull} variant="full"
             message="Subscribe to view this student's posts, photos, and memories."
@@ -685,7 +685,7 @@ export default function StudentProfileView() {
           </SubscriptionGate>
         )}
 
-        {/* ── TAGGED TAB ── */}
+        {/* TAGGED TAB */}
         {activeTab === 'tagged' && (
           <SubscriptionGate isSubscribed={canViewFull} variant="full" message="Subscribe to view tagged photos."
             preview={<div className="bg-white rounded-2xl p-6 space-y-3"><SkeletonBlock /><SkeletonBlock w="40%" /><SkeletonBlock w="70%" /></div>}
@@ -696,7 +696,7 @@ export default function StudentProfileView() {
           </SubscriptionGate>
         )}
 
-        {/* ── YEARBOOK TAB — graduates only ── */}
+        {/* YEARBOOK TAB graduates only */}
         {activeTab === 'yearbook' && graduate && (
           <SubscriptionGate isSubscribed={canViewFull} variant="full"
             message="Subscribe to view this graduate's full yearbook profile."
@@ -843,7 +843,7 @@ export default function StudentProfileView() {
           </SubscriptionGate>
         )}
 
-        {/* ── ACADEMIC TAB ── */}
+        {/* ACADEMIC TAB */}
         {activeTab === 'academic' && (
           <SubscriptionGate isSubscribed={canViewFull} variant="full" message="Subscribe to view academic information."
             preview={
@@ -877,7 +877,7 @@ export default function StudentProfileView() {
           </SubscriptionGate>
         )}
 
-        {/* ── ACHIEVEMENTS TAB ── */}
+        {/* ACHIEVEMENTS TAB */}
         {activeTab === 'achievements' && (
           <SubscriptionGate isSubscribed={canViewFull} variant="full" message="Subscribe to view this student's achievements."
             preview={
@@ -921,7 +921,7 @@ export default function StudentProfileView() {
           </SubscriptionGate>
         )}
 
-        {/* ── VOICE MEMORIES TAB ── */}
+        {/* VOICE MEMORIES TAB */}
         {activeTab === 'voice' && (
           <SubscriptionGate isSubscribed={canViewFull} variant="full" message="Subscribe to listen to voice memories."
             preview={

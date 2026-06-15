@@ -5,7 +5,7 @@ export default function DepartmentSection({ department, isOnly = false }) {
 
   return (
     <section className="mb-10">
-      {/* Department heading — skip if only one dept visible */}
+      {/* Department heading skip if only one dept visible */}
       {!isOnly && (
         <header className="mb-5 flex items-start gap-4 border-b border-slate-200 pb-4">
           <div className="mt-1 h-10 w-1 rounded-full bg-[#fdb813]" />

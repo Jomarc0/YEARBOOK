@@ -26,7 +26,7 @@
             min-height: 100vh;
         }
  
-        /* --- ANIMATIONS --- */
+        /* ANIMATIONS */
         @keyframes fadeInUp {
             from { opacity: 0; transform: translateY(20px); }
             to { opacity: 1; transform: translateY(0); }
@@ -77,7 +77,7 @@
         .register-card h2 { font-size: 2.2rem; color: #111; margin-bottom: 10px; font-weight: 800; }
         .register-card p.subtitle { color: #6c757d; font-size: 1rem; margin-bottom: 40px; }
  
-        /* --- FORM STYLING --- */
+        /* FORM STYLING */
         form { text-align: left; }
         .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px; }
         .form-group { margin-bottom: 20px; }
@@ -102,7 +102,7 @@
             box-shadow: 0 0 0 4px rgba(59, 89, 152, 0.1); transform: translateY(-1px);
         }
  
-        /* --- ERROR MESSAGE --- */
+        /* ERROR MESSAGE */
         .error-msg {
             background: #fff5f5; color: var(--error-red); padding: 15px;
             border-radius: 12px; font-size: 0.9rem; margin-bottom: 25px;
@@ -110,7 +110,7 @@
             animation: shake 0.4s ease-in-out; /* Error Animation */
         }
  
-        /* --- BUTTON & LOADING --- */
+        /* BUTTON & LOADING */
         .btn-create {
             width: 100%; background: var(--nu-blue); color: white; padding: 18px;
             border: none; border-radius: 15px; font-weight: 700; font-size: 1.1rem;
@@ -134,7 +134,7 @@
         .login-link { text-align: center; margin-top: 35px; font-size: 0.95rem; color: #6c757d; }
         .login-link a { color: var(--nu-blue-bright); text-decoration: none; font-weight: 700; }
  
-        /* --- FOOTER --- */
+        /* FOOTER */
         footer { background: #0e1628; color: white; padding: 80px 8% 40px; display: grid; grid-template-columns: 2fr 1fr 1fr 1.5fr; gap: 60px; }
         .f-info h3 { font-size: 1.6rem; margin-bottom: 20px; color: var(--nu-yellow); }
         .f-info p { color: #a0aabf; font-size: 0.9rem; line-height: 1.8; margin-bottom: 25px; }

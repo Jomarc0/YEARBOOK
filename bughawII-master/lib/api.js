@@ -21,7 +21,7 @@ export const API_BASE_URL = (() => {
   if (process.env.EXPO_PUBLIC_API_URL && process.env.EXPO_PUBLIC_API_URL !== "auto") {
     return process.env.EXPO_PUBLIC_API_URL.replace(/\/+$/, "");
   }
-  // 2. app.json extra — always available at runtime, works in dev and prod
+  // 2. app.json extra always available at runtime, works in dev and prod
   if (Constants.expoConfig?.extra?.apiUrl) {
     return Constants.expoConfig.extra.apiUrl.replace(/\/+$/, "");
   }

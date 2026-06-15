@@ -19,10 +19,10 @@ use Throwable;
  * GenerateYearbookPdf
  * app/Jobs/Yearbook/GenerateYearbookPdf.php
  *
- * Queued job — generates the full yearbook PDF from a Blade view.
+ * Queued job generates the full yearbook PDF from a Blade view.
  * Triggered by POST /api/yearbooks/{batch}/generate (admin only).
  *
- * Queue: 'yearbook'  (long-running — use a dedicated worker)
+ * Queue: 'yearbook' (long-running use a dedicated worker)
  *   php artisan queue:work --queue=yearbook --timeout=600
  *
  * Install: composer require barryvdh/laravel-dompdf
@@ -34,7 +34,7 @@ class GenerateYearbookPdf implements ShouldQueue
     /** Max attempts before job is marked failed */
     public int $tries = 3;
 
-    /** Timeout in seconds (10 min — large batches take time) */
+    /** Timeout in seconds (10 min large batches take time) */
     public int $timeout = 600;
 
     /** Retry delays in seconds */
@@ -58,7 +58,7 @@ class GenerateYearbookPdf implements ShouldQueue
 
         Log::info("GenerateYearbookPdf: Starting for batch {$this->batch->id}");
 
-        // Collect data — reuse the same logic as YearbookController@pages
+        // Collect data reuse the same logic as YearbookController@pages
         $sections = $this->batch->sections()
             ->with([
                 'students' => fn ($q) => $q
@@ -75,7 +75,7 @@ class GenerateYearbookPdf implements ShouldQueue
             'year'   => $this->batch->year ?? now()->year,
         ];
 
-        // Render the Blade view → HTML → DOMPDF
+        // Render the Blade view HTML DOMPDF
         $html = view('pdf.yearbook', [
             'meta'     => $meta,
             'batch'    => $this->batch,

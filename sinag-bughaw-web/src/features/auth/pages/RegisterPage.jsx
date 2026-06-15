@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { authApi } from '@/api/auth.api';
 import ConsentModal from '../components/ConsentModal';
 
-// ── Must match backend User::DEPARTMENT_COURSES exactly ──────────────────────
+// Must match backend User::DEPARTMENT_COURSES exactly
 const SCHOOLS = [
   {
     key: 'SACE',
@@ -52,7 +52,7 @@ const BATCH_YEARS = Array.from(
   (_, i) => String(new Date().getFullYear() + 5 - i)
 );
 
-// ── Styles ───────────────────────────────────────────────────────────────────
+// Styles
 const INPUT_CLS =
   'w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-[#1d2b4b] ' +
   'placeholder:text-slate-400 outline-none focus:border-[#3f51b5] focus:ring-4 ' +
@@ -74,7 +74,7 @@ function useDebounce(fn, delay) {
 export default function RegisterPage() {
   const navigate = useNavigate();
 
-  // Steps: 'form' → 'otp'
+  // Steps: 'form' 'otp'
   const [step, setStep] = useState('form');
 
   const [form, setForm] = useState({
@@ -109,11 +109,11 @@ export default function RegisterPage() {
     return () => clearTimeout(t);
   }, [resendTimer]);
 
-  // ── Derived intent from verify state ────────────────────────────────────────
+  // Derived intent from verify state
   // 'graduate' only when yearbook match found; else 'browse'
   const intent = verifyState === 'found' ? 'graduate' : 'browse';
 
-  // ── Field change ─────────────────────────────────────────────────────────────
+  // Field change
   const handleChange = (e) => {
     const { name, value } = e.target;
     setForm((prev) => ({
@@ -129,7 +129,7 @@ export default function RegisterPage() {
     }
   };
 
-  // ── Student look-up ──────────────────────────────────────────────────────────
+  // Student look-up
   const runVerify = useCallback(async (current) => {
     const { student_id, first_name, last_name } = current;
     if (!student_id.trim() || !first_name.trim() || !last_name.trim()) return;
@@ -166,7 +166,7 @@ export default function RegisterPage() {
 
   const handleIdentityBlur = () => debouncedVerify();
 
-  // ── Register submit ──────────────────────────────────────────────────────────
+  // Register submit
   const handleSubmit = async (e) => {
     e.preventDefault();
     setSubmitError('');
@@ -219,7 +219,7 @@ export default function RegisterPage() {
     }
   };
 
-  // ── OTP ──────────────────────────────────────────────────────────────────────
+  // OTP
   const handleOtpChange = (i, value) => {
     if (!/^\d?$/.test(value)) return;
     const next = [...otp];
@@ -272,7 +272,7 @@ export default function RegisterPage() {
 
   const fieldCls = (name) => [INPUT_CLS, errors[name] ? ERROR_CLS : ''].join(' ');
 
-  // ── Verify status badge ──────────────────────────────────────────────────────
+  // Verify status badge
   const VerifyBadge = () => {
     const hasAll =
       form.student_id.trim() && form.first_name.trim() && form.last_name.trim();
@@ -305,7 +305,7 @@ export default function RegisterPage() {
     return null;
   };
 
-  // ── Render ───────────────────────────────────────────────────────────────────
+  // Render
   return (
     <div className="min-h-screen flex font-sans">
       <style>{`
@@ -318,7 +318,7 @@ export default function RegisterPage() {
 
       {showConsent && <ConsentModal onAccepted={() => navigate('/dashboard')} />}
 
-      {/* ── LEFT PANEL ── */}
+      {/* LEFT PANEL */}
       <div
         className="hidden lg:flex lg:w-[38%] flex-col justify-between p-12 animate-[slideLeft_0.6s_ease]"
         style={{
@@ -367,7 +367,7 @@ export default function RegisterPage() {
         <p className="text-white/35 text-xs">© {new Date().getFullYear()} National University Lipa · Sinag-Bughaw</p>
       </div>
 
-      {/* ── RIGHT PANEL ── */}
+      {/* RIGHT PANEL */}
       <div className="w-full lg:w-[62%] flex flex-col bg-[#f8fafc] animate-[slideRight_0.6s_ease]">
 
         {/* Top bar */}
@@ -409,7 +409,7 @@ export default function RegisterPage() {
 
           <div className="w-full max-w-[480px]">
 
-            {/* ── REGISTRATION FORM ── */}
+            {/* REGISTRATION FORM */}
             {step === 'form' && (
               <div className="animate-[slideUp_0.35s_ease]">
                 {/* Header */}
@@ -440,7 +440,7 @@ export default function RegisterPage() {
 
                 <form onSubmit={handleSubmit} className="space-y-4" noValidate>
 
-                  {/* ── Identity section ── */}
+                  {/* Identity section */}
                   <div className="rounded-2xl border border-slate-100 bg-slate-50/60 p-4 space-y-3">
                     <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-widest">
                       Identity
@@ -529,7 +529,7 @@ export default function RegisterPage() {
                     )}
                   </div>
 
-                  {/* ── Account section ── */}
+                  {/* Account section */}
                   <div className="rounded-2xl border border-slate-100 bg-slate-50/60 p-4 space-y-3">
                     <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-widest">Account Details</p>
 
@@ -653,7 +653,7 @@ export default function RegisterPage() {
               </div>
             )}
 
-            {/* ── OTP STEP ── */}
+            {/* OTP STEP */}
             {step === 'otp' && (
               <div className="animate-[slideUp_0.35s_ease]">
                 <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center text-xl mb-5 shadow-sm">
@@ -725,7 +725,7 @@ export default function RegisterPage() {
   );
 }
 
-// ── Sub-components ────────────────────────────────────────────────────────────
+// Sub-components
 function ErrorBanner({ message }) {
   return (
     <div className="flex items-center gap-3 bg-red-50 text-red-600 border-l-4 border-red-500 rounded-xl px-4 py-3 text-sm mb-5 animate-[shake_0.4s_ease]">

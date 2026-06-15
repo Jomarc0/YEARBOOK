@@ -17,6 +17,11 @@ class User extends Authenticatable
 {
     use HasFactory, Notifiable, HasApiTokens, Searchable, SoftDeletes;
 
+    public const ROLE_STUDENT = 'student';
+    public const ROLE_ALUMNI = 'alumni';
+    public const ROLE_FACULTY = 'faculty';
+    public const ROLE_ADMIN = 'admin';
+
 
     public const DEPARTMENT_COURSES = [
         'SACE' => [
@@ -394,7 +399,7 @@ class User extends Authenticatable
         return [
             'id'              => $this->id,
             'name'            => $this->name,
-            'student_id'      => $this->student_id,          // via accessor → student_no
+            'student_id'      => $this->student_id,          // via accessor student_no
             'email'           => $this->email,
             'course'          => $this->course,               // via accessor
             'course_short'    => self::COURSE_SHORT[$this->course ?? ''] ?? $this->course,
@@ -412,7 +417,12 @@ class User extends Authenticatable
 
     public function shouldBeSearchable(): bool
     {
-        return $this->role === 'student';
+        return in_array($this->role, [self::ROLE_STUDENT, self::ROLE_ALUMNI], true);
+    }
+
+    public function isAlumni(): bool
+    {
+        return $this->role === self::ROLE_ALUMNI;
     }
 
     public function getPostsCountAttribute(): int

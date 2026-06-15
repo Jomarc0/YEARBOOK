@@ -240,7 +240,7 @@ export default function AnalyticsPage({ isAuthenticated = true }) {
     <div className="min-h-screen flex flex-col bg-slate-50 font-sans">
       <Navbar />
 
-      {/* ── Hero — Discovery style ── */}
+      {/* Hero Discovery style */}
       <header
         className="text-white text-center relative overflow-hidden"
         style={{
@@ -323,7 +323,7 @@ export default function AnalyticsPage({ isAuthenticated = true }) {
         </div>
       </header>
 
-      {/* ── Tabs bar ── */}
+      {/* Tabs bar */}
       <div className="bg-white border-b border-slate-200 shadow-[0_2px_12px_rgba(29,43,75,0.06)] sticky top-16 z-40">
         <div className="max-w-[900px] mx-auto px-10 flex gap-1">
           {TABS.map(t => {
@@ -350,10 +350,10 @@ export default function AnalyticsPage({ isAuthenticated = true }) {
         </div>
       </div>
 
-      {/* ── Content ── */}
+      {/* Content */}
       <main className="flex-1 max-w-[900px] mx-auto w-full px-10 py-9 pb-16 box-border">
 
-        {/* ── Trending Tab ── */}
+        {/* Trending Tab */}
         {tab === 'trending' && (
           <section className="fade-in-up">
             <div className="mb-5">
@@ -395,7 +395,7 @@ export default function AnalyticsPage({ isAuthenticated = true }) {
           </section>
         )}
 
-        {/* ── Most Viewed Tab ── */}
+        {/* Most Viewed Tab */}
         {tab === 'top-viewed' && (
           <section className="fade-in-up">
             <div className="mb-5">
@@ -437,7 +437,7 @@ export default function AnalyticsPage({ isAuthenticated = true }) {
           </section>
         )}
 
-        {/* ── My Stats Tab ── */}
+        {/* My Stats Tab */}
         {tab === 'my-stats' && isAuthenticated && (
           <section className="fade-in-up">
             <div className="mb-5">

@@ -4,7 +4,7 @@ import Navbar from '@/components/layout/Navbar';
 import Footer from '@/components/layout/Footer';
 import LoadingSkeleton from '@/components/ui/LoadingSkeleton';
 
-// ── Helper: resolve storage URLs from env ─────────────────────────────────────
+// Helper: resolve storage URLs from env
 const storageUrl = (path) =>
   path ? `${import.meta.env.VITE_API_URL}/storage/${path}` : null;
 
@@ -56,12 +56,12 @@ export default function SectionDetailPage() {
   } = useSection(id);
 
   // useSection may return students as a Laravel paginator ({ data: [...] })
-  // or as a plain array — normalise to always be an array.
+  // or as a plain array normalise to always be an array.
   const studentList = Array.isArray(students)
     ? students
     : (students?.data ?? []);
 
-  // ── Loading ───────────────────────────────────────────────────────────────
+  // Loading
   if (loading) return (
     <div className="min-h-screen bg-[#f4f7fe] px-4 py-8">
       <div className="mx-auto w-full max-w-5xl">
@@ -70,7 +70,7 @@ export default function SectionDetailPage() {
     </div>
   );
 
-  // ── Not found ─────────────────────────────────────────────────────────────
+  // Not found
   if (error || !section) return (
     <div className="min-h-screen flex flex-col items-center justify-center gap-4"
       style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
@@ -105,7 +105,7 @@ export default function SectionDetailPage() {
 
       <Navbar />
 
-      {/* ── Hero Header ──────────────────────────────────────────────────── */}
+      {/* Hero Header */}
       <header style={{
         background:   'linear-gradient(135deg, #1d2b4b, #3f51b5)',
         padding:      '60px 8% 80px',
@@ -162,7 +162,7 @@ export default function SectionDetailPage() {
         </div>
       </header>
 
-      {/* ── Access Notice ─────────────────────────────────────────────────── */}
+      {/* Access Notice */}
       {!isPremium ? (
         <div className="mx-[8%] mt-6 flex flex-wrap items-center justify-between gap-4 rounded-2xl px-6 py-4"
           style={{
@@ -203,7 +203,7 @@ export default function SectionDetailPage() {
         </div>
       )}
 
-      {/* ── Students Grid ─────────────────────────────────────────────────── */}
+      {/* Students Grid */}
       <main style={{ padding: '40px 8% 80px', flex: 1 }}>
         <h2 className="font-black mb-6" style={{ fontSize: '1.15rem', color: '#1d2b4b' }}>
           {isPremium ? 'All Classmates' : 'Public Profiles'}
@@ -251,7 +251,7 @@ export default function SectionDetailPage() {
                           onError={e => { e.target.style.display = 'none'; e.target.nextSibling.style.display = 'flex'; }}
                         />
                       ) : null}
-                      {/* Fallback initials — shown when no photo or photo fails to load */}
+                      {/* Fallback initials shown when no photo or photo fails to load */}
                       <div
                         className="w-full h-full items-center justify-center"
                         style={{
@@ -274,13 +274,13 @@ export default function SectionDetailPage() {
 
                     {/* Info */}
                     <div style={{ padding: '14px 16px 16px' }}>
-                      {/* FIX: use first_name + last_name — NOT student.name */}
+                      {/* FIX: use first_name + last_name NOT student.name */}
                       <h4 className="font-black truncate m-0"
                         style={{ fontSize: '0.92rem', color: '#1d2b4b', lineHeight: 1.3 }}>
                         {name}
                       </h4>
 
-                      {/* FIX: use student_no — NOT student_id */}
+                      {/* FIX: use student_no NOT student_id */}
                       <p className="text-xs m-0 mt-1" style={{ color: '#94a3b8' }}>
                         {student.student_no ?? 'N/A'}
                       </p>
@@ -327,7 +327,7 @@ export default function SectionDetailPage() {
             }
           </div>
         ) : (
-          /* ── Empty State ─────────────────────────────────────────────────── */
+          /* Empty State */
           <div className="text-center py-24"
             style={{ background: 'white', borderRadius: '24px', boxShadow: '0 4px 20px rgba(0,0,0,0.03)' }}>
             <i className="fas fa-users text-6xl mb-5 block opacity-10" style={{ color: '#1d2b4b' }} />

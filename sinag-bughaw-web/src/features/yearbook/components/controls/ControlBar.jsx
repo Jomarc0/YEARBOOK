@@ -16,7 +16,7 @@ export default function ControlBar({
   onToggleFullscreen,
   onToggleTOC, onToggleSearch, onToggleBookmarks,
   onBookmark,
-  // ── New props for download ──────────────────────────────────
+  // Download props
   batchId,
   pdfReady,
   isPremium,
@@ -126,7 +126,7 @@ export default function ControlBar({
         </CtrlBtn>
       </div>
 
-      {/* Download — replaced with smart DownloadYearbookButton */}
+      {/* Download replaced with smart DownloadYearbookButton */}
       <DownloadYearbookButton
         batchId={batchId}
         pdfReady={pdfReady}
@@ -137,7 +137,7 @@ export default function ControlBar({
   );
 }
 
-// ── Sub-components ────────────────────────────────────────────────────────────
+// Sub-components
 
 function CtrlBtn({ children, onClick, disabled, active, 'aria-label': label, title }) {
   return (

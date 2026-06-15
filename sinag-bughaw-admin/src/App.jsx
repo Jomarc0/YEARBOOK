@@ -14,7 +14,7 @@ import Topbar         from "./components/layout/Topbar";
 import ToastContainer from "./components/shared/Toast";
 import PrivacyScreen  from "./components/privacy/PrivacyScreen";
 
-// ── Pages ─────────────────────────────────────────────────────────────────────
+// Pages
 import LoginPage             from "./pages/LoginPage";
 import DashboardPage         from "./pages/DashboardPage";
 import FacultyPage           from "./pages/FacultyPage";
@@ -30,7 +30,7 @@ import SubscriptionsPage     from "./pages/SubscriptionsPage";
 import UsersPage             from "./pages/UsersPage";
 import AdminManagementPage   from "./pages/AdminManagementPage";
 
-// ── Toast hook ────────────────────────────────────────────────────────────────
+// Toast hook
 function useToast() {
   const [toasts, setToasts] = useState([]);
   const show = useCallback((message, type = "info") => {
@@ -42,7 +42,7 @@ function useToast() {
   return { toasts, show, dismiss };
 }
 
-// ── Authenticated Layout ──────────────────────────────────────────────────────
+// Authenticated Layout
 function AdminLayout({ children, toasts, onDismiss }) {
   const { handleLogout } = useAuth();
   return (
@@ -57,7 +57,7 @@ function AdminLayout({ children, toasts, onDismiss }) {
   );
 }
 
-// ── Root App ──────────────────────────────────────────────────────────────────
+// Root App
 export default function App() {
   const { toasts, show: showToast, dismiss } = useToast();
 
@@ -125,7 +125,7 @@ function AppRoutes({ toasts, dismiss, showToast }) {
   );
 }
 
-// ── Global CSS ────────────────────────────────────────────────────────────────
+// Global CSS
 function GlobalStyles() {
   return (
     <style>{`

@@ -1,20 +1,20 @@
 // src/utils/ga4.js
-// ─────────────────────────────────────────────────────────────────────────────
+
 // Lightweight GA4 helper using the free gtag.js snippet.
-//
+
 // SETUP (do this once in index.html or main.jsx):
-//
-//   <!-- index.html <head> -->
+
+// index.html head snippet
 //   <script async src="https://www.googletagmanager.com/gtag/js?id=G-XXXXXXXXXX"></script>
 //   <script>
-//     window.dataLayer = window.dataLayer || [];
+// window.dataLayer initialization
 //     function gtag(){ dataLayer.push(arguments); }
-//     gtag('js', new Date());
+// gtag bootstrap call
 //     gtag('config', 'G-XXXXXXXXXX');
 //   </script>
-//
+
 //   Replace G-XXXXXXXXXX with your GA4 Measurement ID (free, from analytics.google.com).
-// ─────────────────────────────────────────────────────────────────────────────
+
 
 const GA_ID = import.meta.env.VITE_GA4_MEASUREMENT_ID ?? '';
 
@@ -27,7 +27,7 @@ function gtag(...args) {
   }
 }
 
-// ─── Page tracking ────────────────────────────────────────────────────────────
+// Page tracking
 
 /**
  * Send a manual page_view event.
@@ -46,11 +46,11 @@ export function trackPageView(path, title) {
   });
 }
 
-// ─── Profile view tracking ────────────────────────────────────────────────────
+// Profile view tracking
 
 /**
  * Fire a custom `profile_view` GA4 event when a student profile is opened.
- * Also shows up under Events → profile_view in your GA4 dashboard.
+ * Also shows up under Events profile_view in your GA4 dashboard.
  *
  * @param {{ id: number, name: string, course: string, batch: string }} profile
  */
@@ -64,7 +64,7 @@ export function trackProfileView(profile) {
   });
 }
 
-// ─── Analytics dashboard interaction tracking ─────────────────────────────────
+// Analytics dashboard interaction tracking
 
 /**
  * Track when a user clicks on a trending alumni card.

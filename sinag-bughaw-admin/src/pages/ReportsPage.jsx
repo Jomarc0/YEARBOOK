@@ -3,7 +3,7 @@
  * NU Lipa / Sinag-Bughaw — Admin Panel
  *
  * Single file for: Audit Logs + Upload Logs + Consent Logs tabs
- * All audit log logic consolidated here — AuditLogsPage.jsx is removed.
+ * All audit log logic consolidated here AuditLogsPage.jsx is removed.
  *
  * API (all routed through ReportsController):
  *   GET /api/admin/reports/stats
@@ -33,7 +33,7 @@ function Icon({ name, className = "h-6 w-6" }) {
   );
 }
 
-// ─── Shared UI primitives ─────────────────────────────────────────────────────
+// Shared UI primitives
 
 /** Animated skeleton loader */
 function Skeleton({ className = "", style }) {
@@ -169,7 +169,7 @@ function TableCard({ children }) {
   );
 }
 
-// ─── Audit Logs Tab ───────────────────────────────────────────────────────────
+// Audit Logs Tab
 function AuditLogsTab() {
   const [logs,    setLogs]    = useState([]);
   const [meta,    setMeta]    = useState(null);
@@ -189,7 +189,7 @@ function AuditLogsTab() {
       setLogs(res.data.data ?? []);
       setMeta(res.data.meta ?? null);
     } catch {
-      // silently fail — you can add a toast here
+      // silently fail you can add a toast here
     } finally {
       setLoading(false);
     }
@@ -292,7 +292,7 @@ function AuditLogsTab() {
   );
 }
 
-// ─── Upload Logs Tab ──────────────────────────────────────────────────────────
+// Upload Logs Tab
 function UploadLogsTab() {
   const [logs,    setLogs]    = useState([]);
   const [meta,    setMeta]    = useState(null);
@@ -311,7 +311,7 @@ function UploadLogsTab() {
       setLogs(res.data.data ?? []);
       setMeta(res.data.meta ?? null);
     } catch {
-      // silently fail — add toast if needed
+      // silently fail add toast if needed
     } finally {
       setLoading(false);
     }
@@ -405,7 +405,7 @@ function UploadLogsTab() {
   );
 }
 
-// ─── Consent Logs Tab ─────────────────────────────────────────────────────────
+// Consent Logs Tab
 function ConsentLogsTab() {
   const [logs, setLogs] = useState([]);
   const [meta, setMeta] = useState(null);
@@ -526,7 +526,7 @@ function ConsentLogsTab() {
   );
 }
 
-// ─── Stat card ────────────────────────────────────────────────────────────────
+// Stat card
 function StatCard({ icon, label, value, loading, colorClass = "text-indigo-600", bgClass = "bg-indigo-50" }) {
   return (
     <div className="bg-white border border-slate-200 rounded-2xl px-5 py-4 flex items-center gap-4 shadow-sm">
@@ -544,14 +544,14 @@ function StatCard({ icon, label, value, loading, colorClass = "text-indigo-600",
   );
 }
 
-// ─── Tab definitions ──────────────────────────────────────────────────────────
+// Tab definitions
 const TABS = [
   { key: "audit", label: "Audit Logs" },
   { key: "uploads", label: "Upload Logs" },
   { key: "consents", label: "Consent Logs" },
 ];
 
-// ─── Main Page ────────────────────────────────────────────────────────────────
+// Main Page
 export default function ReportsPage() {
   const [tab,          setTab]          = useState("audit");
   const [stats,        setStats]        = useState(null);

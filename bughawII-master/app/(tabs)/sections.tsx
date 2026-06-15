@@ -23,7 +23,7 @@ const COLORS = {
   muted:      '#888888',
 };
 
-// ── Data helpers (unchanged) ──────────────────────────────────────────────────
+// Data helpers
 const batchId         = (b: any) => b?.id || b?.batch_id;
 const batchYear       = (b: any) => b?.graduation_year || b?.year || '2025';
 const batchCourse     = (b: any) => b?.course || b?.program || 'Graduation batch';
@@ -87,7 +87,7 @@ const flattenBatches = (payload: any) => {
   return Object.values(data).flatMap((g: any) => Array.isArray(g) ? g : []);
 };
 
-// ── Bottom-sheet filter (unchanged) ──────────────────────────────────────────
+// Bottom-sheet filter
 function BottomSheetFilter({ visible, title = 'Filter', options, selected, onSelect, onApply, onClose }: {
   visible: boolean; title?: string;
   options: { label: string; value: string }[];
@@ -123,7 +123,7 @@ function BottomSheetFilter({ visible, title = 'Filter', options, selected, onSel
   );
 }
 
-// ── Breadcrumb ────────────────────────────────────────────────────────────────
+// Breadcrumb
 function Breadcrumb({ department, course, section, onResetDept, onResetCourse }: {
   department: string | null; course: string | null; section: string | null;
   onResetDept: () => void; onResetCourse: () => void;
@@ -162,7 +162,7 @@ function Breadcrumb({ department, course, section, onResetDept, onResetCourse }:
   );
 }
 
-// ── Department card (drill level 0) ──────────────────────────────────────────
+// Department card (drill level 0)
 function DepartmentCard({ name, studentCount, courses, onPress }: {
   name: string; studentCount: number;
   courses: { course: string; sections: any[] }[];
@@ -199,7 +199,7 @@ function DepartmentCard({ name, studentCount, courses, onPress }: {
   );
 }
 
-// ── Course card (drill level 1) ───────────────────────────────────────────────
+// Course card (drill level 1)
 function CourseCard({ name, studentCount, sections, onPress }: {
   name: string; studentCount: number; sections: any[]; onPress: () => void;
 }) {
@@ -234,7 +234,7 @@ function CourseCard({ name, studentCount, sections, onPress }: {
   );
 }
 
-// ── Section card (drill level 2) ─────────────────────────────────────────────
+// Section card (drill level 2)
 function SectionCard({ section, onPress }: { section: any; onPress: () => void }) {
   const students = sectionStudents(section);
   const preview  = students.slice(0, 6);
@@ -272,7 +272,7 @@ function SectionCard({ section, onPress }: { section: any; onPress: () => void }
   );
 }
 
-// ── Student card (drill level 3) ─────────────────────────────────────────────
+// Student card (drill level 3)
 function StudentCard({ student, batchYearVal, router }: { student: any; batchYearVal: string; router: any }) {
   const photo = studentPhoto(student);
   return (
@@ -301,7 +301,7 @@ function StudentCard({ student, batchYearVal, router }: { student: any; batchYea
   );
 }
 
-// ── Main screen ───────────────────────────────────────────────────────────────
+// Main screen
 export default function SectionsScreen() {
   const router = useRouter();
   const [batches,      setBatches]      = useState<any[]>([]);
@@ -311,7 +311,7 @@ export default function SectionsScreen() {
   const [error,        setError]        = useState('');
   const [selectedBatch, setSelectedBatch] = useState<any>(null);
 
-  // — Drill state (inside batch detail) —
+  // Drill state (inside batch detail)
   const [drillDept,    setDrillDept]    = useState<string | null>(null);
   const [drillCourse,  setDrillCourse]  = useState<string | null>(null);
   const [drillSection, setDrillSection] = useState<string | null>(null);
@@ -319,12 +319,12 @@ export default function SectionsScreen() {
   // Drill level: 0=depts, 1=courses, 2=sections, 3=students
   const drillLevel = drillSection ? 3 : drillCourse ? 2 : drillDept ? 1 : 0;
 
-  // — Search & face inside detail —
+  // Search & face inside detail
   const [detailQuery,        setDetailQuery]        = useState('');
   const [detailFaceMatchedIds, setDetailFaceMatchedIds] = useState<Set<string>>(new Set());
   const [detailFaceSearching,  setDetailFaceSearching]  = useState(false);
 
-  // — Batch list filter —
+  // Batch list filter
   const [activeDepartment, setActiveDepartment] = useState('All Departments');
   const [deptSheetOpen,    setDeptSheetOpen]    = useState(false);
 
@@ -401,7 +401,7 @@ export default function SectionsScreen() {
     }
   };
 
-  // ── Batch list item ─────────────────────────────────────────────────────────
+  // Batch list item
   const renderBatch = ({ item }: { item: any }) => {
     const sections     = normalizedBatchSections(item);
     const preview      = sections.slice(0, 3);
@@ -458,7 +458,7 @@ export default function SectionsScreen() {
     );
   };
 
-  // ── Batch detail (drill-down view) ──────────────────────────────────────────
+  // Batch detail (drill-down view)
   const renderBatchDetail = () => {
     const detailSearch = detailQuery.trim().toLowerCase();
     const faceActive   = detailFaceMatchedIds.size > 0;
@@ -475,7 +475,7 @@ export default function SectionsScreen() {
         return textMatch && faceMatch;
       });
 
-    // ── Level 0: Department cards ───────────────────────────────────────────
+    // Level 0: Department cards
     const renderDepartments = () => (
       <ScrollView contentContainerStyle={styles.detailContent} showsVerticalScrollIndicator={false}>
         {renderSearchBar()}
@@ -496,7 +496,7 @@ export default function SectionsScreen() {
       </ScrollView>
     );
 
-    // ── Level 1: Course cards for active department ─────────────────────────
+    // Level 1: Course cards for active department
     const renderCourses = () => {
       const deptGroup = allGroups.find((g) => g.department === drillDept);
       const courses   = deptGroup?.courses ?? [];
@@ -529,7 +529,7 @@ export default function SectionsScreen() {
       );
     };
 
-    // ── Level 2: Section cards for active course ────────────────────────────
+    // Level 2: Section cards for active course
     const renderSections = () => {
       const deptGroup   = allGroups.find((g) => g.department === drillDept);
       const courseGroup = deptGroup?.courses.find((c) => c.course === drillCourse);
@@ -563,7 +563,7 @@ export default function SectionsScreen() {
       );
     };
 
-    // ── Level 3: Students for active section ────────────────────────────────
+    // Level 3: Students for active section
     const renderStudents = () => {
       const deptGroup   = allGroups.find((g) => g.department === drillDept);
       const courseGroup = deptGroup?.courses.find((c) => c.course === drillCourse);
@@ -694,7 +694,7 @@ export default function SectionsScreen() {
     );
   };
 
-  // ── Batch list screen ─────────────────────────────────────────────────────
+  // Batch list screen
   if (selectedBatch) return renderBatchDetail();
 
   return (
@@ -778,7 +778,7 @@ export default function SectionsScreen() {
   );
 }
 
-// ── Styles ────────────────────────────────────────────────────────────────────
+// Styles
 const styles = StyleSheet.create({
   container:    { flex: 1, backgroundColor: COLORS.background },
   scrollContent: { paddingBottom: 0 },

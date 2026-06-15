@@ -1,6 +1,6 @@
 // sinag-bughaw-web/src/features/yearbook/pages/FlipbookPage.jsx
-//
-// Interactive Digital Yearbook — PageFlip Integration
+
+// Interactive Digital Yearbook PageFlip Integration
 // Integrates with existing auth, routing, and yearbook API infrastructure.
 
 import React, {
@@ -11,7 +11,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useFlipbook, useYearbookPdfDownload } from '../hooks/useFlipbook';
 import { useAuth } from '@/features/auth/hooks/useAuth';
 
-// ── Icons (inline SVGs — no extra deps) ─────────────────────────────────
+// Icons (inline SVGs no extra deps)
 const Icon = {
     ChevLeft:  () => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}><path d="M15 18l-6-6 6-6"/></svg>,
     ChevRight: () => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}><path d="M9 18l6-6-6-6"/></svg>,
@@ -25,7 +25,7 @@ const Icon = {
     ArrowBack: () => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M19 12H5M12 5l-7 7 7 7"/></svg>,
 };
 
-// ── Palette ───────────────────────────────────────────────────────────────
+// Palette
 const C = {
     navy:   '#1a1a2e',
     indigo: '#302b63',
@@ -38,11 +38,11 @@ const C = {
     white:  '#ffffff',
 };
 
-// ═══════════════════════════════════════════════════════════════════════════
-// PAGE COMPONENTS
-// ═══════════════════════════════════════════════════════════════════════════
 
-// ── Cover Page ──────────────────────────────────────────────────────────
+// PAGE COMPONENTS
+
+
+// Cover Page
 const CoverPage = React.forwardRef(({ school, batchYear }, ref) => (
     <div ref={ref} style={{
         width: '100%', height: '100%',
@@ -89,7 +89,7 @@ const CoverPage = React.forwardRef(({ school, batchYear }, ref) => (
 ));
 CoverPage.displayName = 'CoverPage';
 
-// ── Section Divider Page ────────────────────────────────────────────────
+// Section Divider Page
 const DividerPage = React.forwardRef(({ label, title, subtitle, index }, ref) => (
     <div ref={ref} style={{
         width: '100%', height: '100%',
@@ -118,7 +118,7 @@ const DividerPage = React.forwardRef(({ label, title, subtitle, index }, ref) =>
 ));
 DividerPage.displayName = 'DividerPage';
 
-// ── Faculty Grid Page ───────────────────────────────────────────────────
+// Faculty Grid Page
 const FacultyPage = React.forwardRef(({ faculty, pageNum, schoolName }, ref) => (
     <div ref={ref} style={{
         width: '100%', height: '100%',
@@ -166,7 +166,7 @@ const FacultyPage = React.forwardRef(({ faculty, pageNum, schoolName }, ref) => 
 ));
 FacultyPage.displayName = 'FacultyPage';
 
-// ── Student Grid Page ───────────────────────────────────────────────────
+// Student Grid Page
 const StudentPage = React.forwardRef(({ students, sectionName, batchYear, pageNum }, ref) => (
     <div ref={ref} style={{
         width: '100%', height: '100%',
@@ -214,7 +214,7 @@ const StudentPage = React.forwardRef(({ students, sectionName, batchYear, pageNu
 ));
 StudentPage.displayName = 'StudentPage';
 
-// ── Closing Page ────────────────────────────────────────────────────────
+// Closing Page
 const ClosingPage = React.forwardRef(({ school, batchYear, pageNum }, ref) => (
     <div ref={ref} style={{
         width: '100%', height: '100%',
@@ -245,7 +245,7 @@ const ClosingPage = React.forwardRef(({ school, batchYear, pageNum }, ref) => (
 ));
 ClosingPage.displayName = 'ClosingPage';
 
-// ── Page Number stamp ────────────────────────────────────────────────────
+// Page Number stamp
 const PageNum = ({ num }) => (
     <div style={{
         position: 'absolute', bottom: 10, width: '100%',
@@ -253,9 +253,9 @@ const PageNum = ({ num }) => (
     }}>{num}</div>
 );
 
-// ═══════════════════════════════════════════════════════════════════════════
+
 // MAIN FLIPBOOK PAGE
-// ═══════════════════════════════════════════════════════════════════════════
+
 export default function FlipbookPage() {
     const { batchId }          = useParams();
     const navigate             = useNavigate();
@@ -288,15 +288,15 @@ export default function FlipbookPage() {
         return () => window.removeEventListener('resize', handler);
     }, []);
 
-    // ── Build page manifest from API data ─────────────────────────────
+    // Build page manifest from API data
     const pages = useMemo(() => {
         if (!data) return [];
         const list = [];
 
-        // 0 — Cover
+        // 0 Cover
         list.push({ type: 'cover' });
 
-        // 1 — Faculty divider
+        // 1 Faculty divider
         list.push({ type: 'divider', label: 'Our Mentors', title: 'Faculty', subtitle: 'The guides behind every graduate', index: 0 });
 
         // Faculty grid pages (7 per page)
@@ -310,7 +310,7 @@ export default function FlipbookPage() {
             sChunks.forEach(chunk => list.push({ type: 'students', students: chunk, sectionName: section.name }));
         });
 
-        // Last — Closing
+        // Last Closing
         list.push({ type: 'closing' });
 
         return list;
@@ -318,7 +318,7 @@ export default function FlipbookPage() {
 
     useEffect(() => { setTotalPages(pages.length); }, [pages]);
 
-    // ── TOC entries for sidebar ───────────────────────────────────────
+    // TOC entries for sidebar
     const toc = useMemo(() => {
         if (!pages.length) return [];
         const entries = [{ label: 'Cover', pageIdx: 0 }];
@@ -329,7 +329,7 @@ export default function FlipbookPage() {
         return entries;
     }, [pages]);
 
-    // ── Navigation ────────────────────────────────────────────────────
+    // Navigation
     const goTo = useCallback((idx) => {
         bookRef.current?.pageFlip()?.turnToPage(idx);
         setSidebarOpen(false);
@@ -340,7 +340,7 @@ export default function FlipbookPage() {
 
     const onFlip = useCallback((e) => setCurrentPage(e.data), []);
 
-    // ── Keyboard nav ─────────────────────────────────────────────────
+    // Keyboard nav
     useEffect(() => {
         const handler = (e) => {
             if (e.key === 'ArrowRight') next();
@@ -351,11 +351,11 @@ export default function FlipbookPage() {
         return () => window.removeEventListener('keydown', handler);
     }, [next, prev]);
 
-    // ── Zoom helpers ─────────────────────────────────────────────────
+    // Zoom helpers
     const zoomIn  = () => setZoom(z => Math.min(z + 0.2, 2));
     const zoomOut = () => setZoom(z => Math.max(z - 0.2, 0.5));
 
-    // ── PDF download ─────────────────────────────────────────────────
+    // PDF download
     const handleDownload = async () => {
         if (!canDownloadPdf) return;
 
@@ -366,11 +366,11 @@ export default function FlipbookPage() {
         }
     };
 
-    // ── Computed book dimensions ─────────────────────────────────────
+    // Computed book dimensions
     const bookW = isMobile ? Math.floor((window.innerWidth - 32) / 2) : 460;
     const bookH = Math.floor(bookW * 1.38);
 
-    // ── Loading / error states ────────────────────────────────────────
+    // Loading / error states
     if (loading) return (
         <div style={styles.fullCenter}>
             <div style={styles.spinner}/>
@@ -388,13 +388,13 @@ export default function FlipbookPage() {
     return (
         <div style={{ minHeight: '100vh', background: '#1a1820', position: 'relative', overflow: 'hidden' }}>
 
-            {/* ── Background texture ──────────────────────────────── */}
+            {/* Background texture */}
             <div style={{
                 position: 'fixed', inset: 0, pointerEvents: 'none',
                 background: 'radial-gradient(ellipse at 50% 30%, rgba(48,43,99,0.5) 0%, transparent 70%)',
             }}/>
 
-            {/* ── Top bar ─────────────────────────────────────────── */}
+            {/* Top bar */}
             <div style={styles.topBar}>
                 <button onClick={() => navigate(-1)} style={styles.iconBtn} title="Back">
                     <Icon.ArrowBack/>
@@ -432,7 +432,7 @@ export default function FlipbookPage() {
                 </div>
             </div>
 
-            {/* ── Flipbook area ────────────────────────────────────── */}
+            {/* Flipbook area */}
             <div ref={containerRef} style={{
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                 paddingTop: 72, paddingBottom: 64, minHeight: '100vh',
@@ -491,7 +491,7 @@ export default function FlipbookPage() {
                 </div>
             </div>
 
-            {/* ── Bottom navigation ────────────────────────────────── */}
+            {/* Bottom navigation */}
             <div style={styles.bottomNav}>
                 <button onClick={prev} style={styles.navBtn} title="Previous page (←)">
                     <Icon.ChevLeft/>
@@ -506,7 +506,7 @@ export default function FlipbookPage() {
                 </button>
             </div>
 
-            {/* ── Sidebar / TOC ────────────────────────────────────── */}
+            {/* Sidebar / TOC */}
             <>
                 {/* Backdrop */}
                 {sidebarOpen && (
@@ -562,14 +562,14 @@ export default function FlipbookPage() {
     );
 }
 
-// ─── Helpers ────────────────────────────────────────────────────────────
+// Helpers
 function chunkArray(arr, size) {
     const chunks = [];
     for (let i = 0; i < arr.length; i += size) chunks.push(arr.slice(i, i + size));
     return chunks;
 }
 
-// ─── Styles ─────────────────────────────────────────────────────────────
+// Styles
 const styles = {
     fullCenter: {
         minHeight: '100vh', display: 'flex', flexDirection: 'column',

@@ -118,7 +118,7 @@ class ProfileController extends Controller
 
         $user = Auth::user();
 
-        // ── Subscription gate (skipped when premium billing is disabled globally) ──
+        // Subscription gate (skipped when premium billing is disabled globally)
         if (\App\Support\PlatformSettings::bool('enable_premium_subscription')) {
             $subscription = \App\Models\Subscription::where('user_id', $user->id)
                 ->where('status', 'active')
@@ -419,7 +419,7 @@ class ProfileController extends Controller
     {
         $media = $photo->relationLoaded('media') ? $photo->media : $photo->media()->get();
 
-        // Backward compat: old posts have no PostMedia rows — use file_path directly
+        // Backward compat: old posts have no PostMedia rows use file_path directly
         if ($media->isEmpty()) {
             $media = collect([[
                 'file_path'     => $photo->file_path,

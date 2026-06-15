@@ -6,7 +6,7 @@ import { useState, useRef, useEffect } from 'react';
 import { messagesApi }                 from '@/api/messaging.api';
 import { useAppConfig }                from '@/features/platform/AppConfigProvider';
 
-// ─── tier helper (shared logic) ───────────────────────────────────────────────
+// tier helper (shared logic)
 const getTier = (user) => {
   if (!user) return 'free';
   if (user.tier === 'premium' || user.is_premium) return 'premium';
@@ -14,7 +14,7 @@ const getTier = (user) => {
   return 'free';
 };
 
-// ─── hook: live unread message count ─────────────────────────────────────────
+// hook: live unread message count
 function useUnreadMessages() {
   const [count, setCount] = useState(0);
   const location = useLocation();
@@ -43,7 +43,7 @@ function useUnreadMessages() {
   return count;
 }
 
-// ─── tiny badge ───────────────────────────────────────────────────────────────
+// tiny badge
 function UnreadBadge({ count }) {
   if (!count || count < 1) return null;
   return (
@@ -55,7 +55,7 @@ function UnreadBadge({ count }) {
   );
 }
 
-// ─── tier badge ───────────────────────────────────────────────────────────────
+// tier badge
 function TierBadge({ tier }) {
   if (tier === 'premium') return (
     <span className="inline-flex items-center gap-1 bg-gradient-to-r from-[#fdb813] to-[#e5a70e] text-[#1d2b4b] text-[9px] font-black px-1.5 py-0.5 rounded leading-none">
@@ -74,7 +74,7 @@ function TierBadge({ tier }) {
   );
 }
 
-// ─── nav links config ─────────────────────────────────────────────────────────
+// nav links config
 const NAV_LINKS = [
   { to: '/dashboard', label: 'Home'      },
   { to: '/directory', label: 'Directory' },
@@ -83,6 +83,7 @@ const NAV_LINKS = [
   { to: '/sections',  label: 'Batch'     },
   { to: '/discover',  label: 'Discovery' },
   { to: '/analytics', label: 'Analytics' },
+  { to: '/alumni', label: 'Alumni' },
 ];
 
 const BASE_DROP_ITEMS = [
@@ -101,7 +102,7 @@ const getPremiumDropItem = (tier) => {
   };
 };
 
-// ─── component ────────────────────────────────────────────────────────────────
+// component
 export default function Navbar() {
   const { user, logout } = useAuth();
   const { isOn }         = useAppConfig();
@@ -149,7 +150,7 @@ export default function Navbar() {
       <nav className="sticky top-0 z-[1000] h-16 bg-[#1d2b4b] shadow-[0_2px_24px_rgba(0,0,0,0.2)]
                       flex items-center justify-between px-4 sm:px-6 lg:px-10">
 
-        {/* ── Logo ── */}
+        {/* Logo */}
         <Link to="/dashboard" className="no-underline flex items-center gap-2.5 shrink-0">
           <img src="/images/NU_logo.png" alt="NU Lipa" className="w-9 h-9 object-contain" />
           <div className="hidden sm:flex flex-col gap-0.5 leading-none">
@@ -160,7 +161,7 @@ export default function Navbar() {
           </div>
         </Link>
 
-        {/* ── Desktop nav links ── */}
+        {/* Desktop nav links */}
         <div className="hidden lg:flex items-center gap-0.5">
           {navLinks.map(({ to, label }) => (
             <Link
@@ -176,7 +177,7 @@ export default function Navbar() {
           ))}
         </div>
 
-        {/* ── Right side ── */}
+        {/* Right side */}
         <div className="flex items-center gap-1.5">
 
           {/* Notification bell */}
@@ -222,7 +223,7 @@ export default function Navbar() {
                 )}
               </div>
 
-              {/* Name + tier — hidden on small screens */}
+              {/* Name + tier hidden on small screens */}
               <div className="hidden sm:flex flex-col gap-0.5 text-left">
                 <span className="text-white text-[13px] font-semibold leading-none">{firstName}</span>
                 <TierBadge tier={userTier} />
@@ -306,7 +307,7 @@ export default function Navbar() {
         </div>
       </nav>
 
-      {/* ── Mobile drawer ── */}
+      {/* Mobile drawer */}
       {mobileOpen && (
         <div className="lg:hidden fixed top-16 left-0 right-0 z-[999] bg-[#1d2b4b]/98 backdrop-blur-lg
                         border-b border-white/10 px-4 py-3 shadow-xl">

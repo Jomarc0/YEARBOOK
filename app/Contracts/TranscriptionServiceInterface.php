@@ -10,10 +10,10 @@ use App\Models\Transcript;
  * Current implementation: Groq Whisper (free, fast).
  *
  * Features:
- *   1. isEnabled()         → check if service is configured
- *   2. transcribe()        → generate transcript + notes from audio
- *   3. generateSubtitles() → convert segments to SRT / VTT
- *   4. generateNotes()     → AI speech notes via Groq LLM
+ * 1. isEnabled() check if service is configured
+ * 2. transcribe() generate transcript + notes from audio
+ * 3. generateSubtitles() convert segments to SRT / VTT
+ * 4. generateNotes() AI speech notes via Groq LLM
  */
 interface TranscriptionServiceInterface
 {

@@ -44,7 +44,7 @@ class VoiceNote extends Model
         return $this->belongsTo(User::class, 'reviewed_by');
     }
 
-    // ── Scopes ────────────────────────────────────────────────────────────────
+    // Scopes
 
     public function scopeApproved($query)
     {
@@ -71,7 +71,7 @@ class VoiceNote extends Model
         return $query->where('sender_id', $userId);
     }
 
-    // ── Helpers ───────────────────────────────────────────────────────────────
+    // Helpers
 
     public function isPending(): bool   { return $this->status === 'pending'; }
     public function isApproved(): bool  { return $this->status === 'approved'; }

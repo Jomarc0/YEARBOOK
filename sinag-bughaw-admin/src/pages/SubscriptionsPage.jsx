@@ -14,7 +14,7 @@ import api from "../services/api";
 
 const cx = (...v) => v.filter(Boolean).join(" ");
 
-// ─── Skeleton ─────────────────────────────────────────────────────────────────
+// Skeleton
 const Skeleton = ({ className = "", style }) => (
   <div
     style={style}
@@ -25,7 +25,7 @@ const Skeleton = ({ className = "", style }) => (
   />
 );
 
-// ─── Badge ────────────────────────────────────────────────────────────────────
+// Badge
 function Badge({ label, tone = "default" }) {
   const tones = {
     success:    "bg-emerald-50 text-emerald-700 border border-emerald-200",
@@ -63,7 +63,7 @@ function statusBadge(status) {
   return <Badge {...s} />;
 }
 
-// ─── Toast ────────────────────────────────────────────────────────────────────
+// Toast
 function useToast() {
   const [toasts, setToasts] = useState([]);
   const push = useCallback((message, type = "success") => {
@@ -94,7 +94,7 @@ function Toast({ toasts }) {
   );
 }
 
-// ─── Pagination ───────────────────────────────────────────────────────────────
+// Pagination
 function Pagination({ meta, onPage }) {
   if (!meta || meta.last_page <= 1) return null;
   const { current_page: cur, last_page: last } = meta;
@@ -130,7 +130,7 @@ function Pagination({ meta, onPage }) {
   );
 }
 
-// ─── Detail Modal ─────────────────────────────────────────────────────────────
+// Detail Modal
 function SubDetailModal({ sub, onClose, onCancel, loading }) {
   if (!sub) return null;
 
@@ -229,7 +229,7 @@ function SubDetailModal({ sub, onClose, onCancel, loading }) {
   );
 }
 
-// ─── Storage Tier Overview ────────────────────────────────────────────────────
+// Storage Tier Overview
 function StorageOverview({ stats, loading }) {
   const tiers = [
     {
@@ -283,7 +283,7 @@ function StorageOverview({ stats, loading }) {
   );
 }
 
-// ─── Stat Cards ───────────────────────────────────────────────────────────────
+// Stat Cards
 function StatCards({ stats, loading }) {
   const cards = [
     {
@@ -346,7 +346,7 @@ function StatCards({ stats, loading }) {
   );
 }
 
-// ─── Main Page ────────────────────────────────────────────────────────────────
+// Main Page
 export default function SubscriptionsPage() {
   const [subs,       setSubs]       = useState([]);
   const [meta,       setMeta]       = useState(null);

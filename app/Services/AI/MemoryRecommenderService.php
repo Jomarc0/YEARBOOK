@@ -253,7 +253,7 @@ class MemoryRecommenderService
             ->get()
             ->keyBy('peer_id');
 
-        // Merge and score: messages weighted 2×, tags 1×
+        // Merge and score: messages weighted 2 , tags 1
         $allPeerIds = $messagePartners->keys()
             ->merge($tagPartners->keys())
             ->unique();

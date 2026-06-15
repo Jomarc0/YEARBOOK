@@ -1,8 +1,8 @@
 // src/features/analytics/hooks/useAnalytics.js
-// ─────────────────────────────────────────────────────────────────────────────
+
 // Single hook that exposes all analytics data your page needs.
-// Uses plain fetch state (loading / error / data) — no Redux or Zustand required.
-// ─────────────────────────────────────────────────────────────────────────────
+// Uses plain fetch state (loading / error / data) no Redux or Zustand required.
+
 
 import { useState, useEffect, useCallback } from 'react';
 import {
@@ -40,7 +40,7 @@ function useAsync(fetchFn) {
   return { data, loading, error, refetch: run };
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
+
 
 /**
  * Platform summary counts.
@@ -112,9 +112,9 @@ export function useBatchmates(enabled = true) {
   return useAsync(fn);
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
+
 // Convenience: load everything the AnalyticsPage needs in one call.
-// ─────────────────────────────────────────────────────────────────────────────
+
 
 /**
  * @param {{ isAuthenticated: boolean }} options

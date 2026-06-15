@@ -1,6 +1,6 @@
 import client from './client';
 
-// ── NU Lipa constants (mirrors BatchService) ──────────────────────────────────
+// NU Lipa constants (mirrors BatchService)
 
 export const DEPARTMENTS = ['SACE', 'SAHS', 'SABM', 'SHS'];
 
@@ -41,7 +41,7 @@ export const YEAR_OPTIONS = Array.from(
   (_, i) => new Date().getFullYear() - i
 );
 
-// ── Batch API ─────────────────────────────────────────────────────────────────
+// Batch API
 
 export const batchApi = {
   /** GET /api/batchmates?course=&year= */
@@ -81,7 +81,7 @@ export const batchApi = {
     client.get(`/discover/department/${encodeURIComponent(department)}`, { params }),
 };
 
-// ── Sections API ──────────────────────────────────────────────────────────────
+// Sections API
 
 export const sectionsApi = {
   /** GET /api/sections */

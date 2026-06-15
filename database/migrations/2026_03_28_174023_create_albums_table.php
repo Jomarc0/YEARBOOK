@@ -6,10 +6,10 @@ use Illuminate\Support\Facades\Schema;
 
 /**
  * Adds missing columns to the albums table:
- *  - user_id            → owner of the album
- *  - type               → 'general' | 'graduation' | 'profile'
- *  - category           → 'photos' | 'videos' | 'program' | 'archive'
- *  - media_url          → for single-media albums (video/PDF)
+ * user_id owner of the album
+ * type 'general' | 'graduation' | 'profile'
+ * category 'photos' | 'videos' | 'program' | 'archive'
+ * media_url for single-media albums (video/PDF)
  *  - cloudinary_public_id
  *  - cover_image made nullable (was NOT NULL in original migration)
  */

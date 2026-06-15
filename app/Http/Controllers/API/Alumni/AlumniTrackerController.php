@@ -10,6 +10,7 @@ use App\Services\Yearbook\PageResolverService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Validation\ValidationException;
 
 class AlumniTrackerController extends Controller
 {
@@ -22,15 +23,18 @@ class AlumniTrackerController extends Controller
     public function index(Request $request): JsonResponse
     {
         $query = User::query()
-            ->with(['section', 'batchRecord', 'careerProfile'])
-            ->where('role', 'student');
+            ->with(['section', 'batchRecord', 'careerProfile', 'studentRecord.section', 'studentRecord.batch'])
+            ->where('role', User::ROLE_ALUMNI);
 
         if ($q = $request->string('q')->trim()->value()) {
             $query->where('name', 'like', "%{$q}%");
         }
 
         if ($batchId = $request->integer('batch_id', 0)) {
-            $query->where('batch_id', $batchId);
+            $query->where(function ($batchQuery) use ($batchId) {
+                $batchQuery->where('batch_id', $batchId)
+                    ->orWhereHas('studentRecord', fn ($student) => $student->where('batch_id', $batchId));
+            });
         }
 
         if ($field = $request->string('field')->trim()->value()) {
@@ -52,8 +56,8 @@ class AlumniTrackerController extends Controller
 
     public function show(int $id): JsonResponse
     {
-        $user = User::with(['section', 'batchRecord', 'careerProfile'])
-            ->where('role', 'student')
+        $user = User::with(['section', 'batchRecord', 'careerProfile', 'studentRecord.section', 'studentRecord.batch'])
+            ->where('role', User::ROLE_ALUMNI)
             ->findOrFail($id);
 
         return response()->json([
@@ -66,7 +70,7 @@ class AlumniTrackerController extends Controller
 
     public function me(): JsonResponse
     {
-        $user = User::with(['section', 'batchRecord', 'careerProfile'])
+        $user = User::with(['section', 'batchRecord', 'careerProfile', 'studentRecord.section', 'studentRecord.batch'])
             ->findOrFail(Auth::id());
 
         return response()->json([
@@ -89,6 +93,12 @@ class AlumniTrackerController extends Controller
         /** @var User $user */
         $user = Auth::user();
 
+        if (! $user?->isAlumni()) {
+            throw ValidationException::withMessages([
+                'role' => 'Career profiles are available after your batch is archived and your account is marked as alumni.',
+            ]);
+        }
+
         $user->careerProfile()->updateOrCreate(
             ['user_id' => $user->id],
             $validated
@@ -104,9 +114,12 @@ class AlumniTrackerController extends Controller
 
     public function byBatch(int $batchId): JsonResponse
     {
-        $users = User::with(['section', 'batchRecord', 'careerProfile'])
-            ->where('role', 'student')
-            ->where('batch_id', $batchId)
+        $users = User::with(['section', 'batchRecord', 'careerProfile', 'studentRecord.section', 'studentRecord.batch'])
+            ->where('role', User::ROLE_ALUMNI)
+            ->where(function ($query) use ($batchId) {
+                $query->where('batch_id', $batchId)
+                    ->orWhereHas('studentRecord', fn ($student) => $student->where('batch_id', $batchId));
+            })
             ->orderBy('name')
             ->get();
 
@@ -126,8 +139,8 @@ class AlumniTrackerController extends Controller
             return response()->json(['success' => true, 'data' => []]);
         }
 
-        $results = User::with(['section', 'batchRecord', 'careerProfile'])
-            ->where('role', 'student')
+        $results = User::with(['section', 'batchRecord', 'careerProfile', 'studentRecord.section', 'studentRecord.batch'])
+            ->where('role', User::ROLE_ALUMNI)
             ->where('name', 'like', "%{$q}%")
             ->orderBy('name')
             ->limit(10)
@@ -137,7 +150,7 @@ class AlumniTrackerController extends Controller
         return response()->json(['success' => true, 'data' => $results]);
     }
 
-    // DEEP LINK: Alumni Tracker → Yearbook 
+    // DEEP LINK: Alumni Tracker Yearbook
 
     public function yearbookEntry(int $id): JsonResponse
     {
@@ -166,7 +179,7 @@ class AlumniTrackerController extends Controller
         ]);
     }
 
-    // DEEP LINK: Yearbook → Alumni Tracker 
+    // DEEP LINK: Yearbook Alumni Tracker
 
     public function fromYearbookPage(Request $request): JsonResponse
     {
@@ -211,8 +224,8 @@ class AlumniTrackerController extends Controller
     private function formatAlumni(User $user, bool $detailed = false): array
     {
         $career  = $user->careerProfile;
-        $batch   = $user->batchRecord;
-        $section = $user->section;
+        $batch   = $user->batchRecord ?? $user->studentRecord?->batch;
+        $section = $user->section ?? $user->studentRecord?->section;
 
         return [
             'id'              => $user->id,

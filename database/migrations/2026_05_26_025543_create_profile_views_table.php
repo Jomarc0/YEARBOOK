@@ -16,7 +16,7 @@ return new class extends Migration
                   ->constrained('users')
                   ->cascadeOnDelete();
 
-            // The visitor — nullable for unauthenticated guests
+            // The visitor nullable for unauthenticated guests
             $table->foreignId('viewer_user_id')
                   ->nullable()
                   ->constrained('users')

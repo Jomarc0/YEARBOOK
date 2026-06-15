@@ -18,7 +18,7 @@
         * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Plus Jakarta Sans', sans-serif; }
         body { background-color: var(--bg-canvas); color: var(--nu-blue); overflow-x: hidden; }
 
-        /* --- SECURITY SHIELD --- */
+        /* SECURITY SHIELD */
         #security-shield {
             display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
             background: rgba(29, 43, 75, 0.98); color: var(--nu-gold); z-index: 99999;
@@ -26,14 +26,14 @@
             backdrop-filter: blur(10px);
         }
 
-        /* --- ENTRANCE ANIMATIONS --- */
+        /* ENTRANCE ANIMATIONS */
         @keyframes fadeInUp {
             from { opacity: 0; transform: translateY(30px); }
             to { opacity: 1; transform: translateY(0); }
         }
         .animate-up { opacity: 0; animation: fadeInUp 0.8s cubic-bezier(0.22, 1, 0.36, 1) forwards; }
 
-        /* --- NAVIGATION (REFINED) --- */
+        /* NAVIGATION (REFINED) */
         nav {
             display: flex; justify-content: space-between; align-items: center;
             padding: 15px 8%; background: white; position: sticky; top: 0; z-index: 1000;
@@ -53,7 +53,7 @@
         .user-info span { font-size: 0.65rem; color: #94a3b8; display: block; font-weight: 500; }
         .profile-img { width: 40px; height: 40px; border-radius: 50%; object-fit: cover; border: 2px solid var(--nu-gold); }
 
-        /* --- GALLERY HEADER --- */
+        /* GALLERY HEADER */
         .gallery-hero {
             background: linear-gradient(135deg, var(--nu-blue) 0%, var(--nu-blue-light) 100%);
             padding: 80px 8% 120px; color: white; border-radius: 0 0 60px 60px;
@@ -63,7 +63,7 @@
         .gallery-hero h1 span { color: var(--nu-gold); }
         .gallery-hero p { opacity: 0.8; font-size: 1rem; max-width: 600px; margin: 0 auto; font-weight: 300; }
 
-        /* --- SEARCH & FILTERS --- */
+        /* SEARCH & FILTERS */
         .gallery-controls { max-width: 1000px; margin: -35px auto 40px; padding: 0 20px; display: flex; gap: 15px; }
         .search-wrap { flex: 1; position: relative; }
         .search-bar {
@@ -92,7 +92,7 @@
         .gallery-match-item { border-radius: 20px; overflow: hidden; position: relative; height: 180px; box-shadow: 0 10px 20px rgba(0,0,0,0.05); }
         .gallery-match-item img { width: 100%; height: 100%; object-fit: cover; }
 
-        /* --- PHOTO GRID --- */
+        /* PHOTO GRID */
         .gallery-section { padding: 20px 8% 100px; }
         .photo-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 30px; }
         
@@ -107,7 +107,7 @@
         .img-container img { width: 100%; height: 100%; object-fit: cover; transition: 0.6s; }
         .album-card:hover .img-container img { transform: scale(1.08); }
 
-        /* --- CNN SCANNING ANIMATION --- */
+        /* CNN SCANNING ANIMATION */
         .ai-scanner {
             position: absolute; top: 0; left: 0; width: 100%; height: 3px;
             background: var(--nu-gold); box-shadow: 0 0 15px var(--nu-gold);
@@ -135,7 +135,7 @@
         .album-details h4 { font-size: 1.2rem; font-weight: 800; color: var(--nu-blue); margin-bottom: 5px; }
         .album-date { font-size: 0.8rem; color: #94a3b8; font-weight: 500; display: flex; align-items: center; gap: 6px; }
 
-        /* --- FOOTER --- */
+        /* FOOTER */
         footer { background: var(--nu-blue); color: white; padding: 80px 8% 40px; display: grid; grid-template-columns: 2fr 1fr 1fr 1.5fr; gap: 40px; }
         .footer-logo h3 { font-size: 1.5rem; font-weight: 800; margin-bottom: 20px; }
         .footer-logo span { color: var(--nu-gold); }
@@ -301,13 +301,13 @@
     </footer>
 
     <script>
-        // --- PREVENT INSPECT & RIGHT CLICK ---
+        // PREVENT INSPECT & RIGHT CLICK
         document.addEventListener('contextmenu', e => e.preventDefault());
         document.onkeydown = function(e) {
             if(e.keyCode == 123 || (e.ctrlKey && e.shiftKey && (e.keyCode == 73 || e.keyCode == 74 || e.keyCode == 67))) return false;
         };
 
-        // --- SECURITY BLUR ---
+        // SECURITY BLUR
         window.addEventListener('blur', () => document.getElementById('security-shield').style.display = 'flex');
         window.addEventListener('focus', () => document.getElementById('security-shield').style.display = 'none');
     </script>

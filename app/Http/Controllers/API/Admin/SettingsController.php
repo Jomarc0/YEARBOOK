@@ -126,14 +126,26 @@ class SettingsController extends Controller
         $sectionIds = $batch->sections()->pluck('id');
 
         User::query()
-          ->where('role', 'student')
+          ->with('studentRecord:id,batch_id,section_id')
+          ->where('role', User::ROLE_STUDENT)
           ->where(function ($query) use ($batch, $sectionIds) {
-            $query->where('batch_id', $batch->id);
+            $query->where('batch_id', $batch->id)
+              ->orWhereHas('studentRecord', fn ($student) => $student->where('batch_id', $batch->id));
+
             if ($sectionIds->isNotEmpty()) {
-              $query->orWhereIn('section_id', $sectionIds);
+              $query->orWhereIn('section_id', $sectionIds)
+                ->orWhereHas('studentRecord', fn ($student) => $student->whereIn('section_id', $sectionIds));
             }
           })
-          ->update(['role' => 'alumni']);
+          ->chunkById(100, function ($users) use ($batch) {
+            foreach ($users as $user) {
+              $user->forceFill([
+                'role'       => User::ROLE_ALUMNI,
+                'batch_id'   => $user->batch_id ?: ($user->studentRecord?->batch_id ?: $batch->id),
+                'section_id' => $user->section_id ?: $user->studentRecord?->section_id,
+              ])->save();
+            }
+          });
 
         foreach (PlatformSettings::GRADUATION_KEYS as $key) {
           Setting::putValue($key, (string) (PlatformSettings::DEFAULTS[$key] ?? ''));

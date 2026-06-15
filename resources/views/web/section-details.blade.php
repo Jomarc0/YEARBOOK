@@ -18,14 +18,14 @@
         * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Inter', sans-serif; }
         body { background-color: #f8fafc; color: #1e293b; min-height: 100vh; }
 
-        /* --- NAVIGATION --- */
+        /* NAVIGATION */
         nav {
             display: flex; justify-content: space-between; align-items: center;
             padding: 15px 8%; background: white; border-bottom: 1px solid #e2e8f0;
         }
         .logo h3 { color: var(--nu-blue); font-weight: 800; letter-spacing: -1px; }
 
-        /* --- HEADER SECTION --- */
+        /* HEADER SECTION */
         .detail-header {
             background: white; padding: 40px 8%; border-bottom: 1px solid #e2e8f0;
             display: flex; justify-content: space-between; align-items: flex-end;
@@ -39,7 +39,7 @@
             font-size: 0.85rem; font-weight: 600; color: #475569;
         }
 
-        /* --- TABLE STYLE --- */
+        /* TABLE STYLE */
         .content-wrap { padding: 40px 8%; max-width: 1400px; margin: 0 auto; }
         
         .table-container {
@@ -74,7 +74,7 @@
         }
         .action-btn:hover { background: var(--nu-blue); color: white; border-color: var(--nu-blue); }
 
-        /* --- EMPTY STATE --- */
+        /* EMPTY STATE */
         .empty-state { padding: 100px; text-align: center; color: #94a3b8; }
         .empty-state i { font-size: 3rem; margin-bottom: 20px; opacity: 0.3; }
 

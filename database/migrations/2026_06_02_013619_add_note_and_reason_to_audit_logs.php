@@ -24,7 +24,7 @@ return new class extends Migration
     {
         Schema::table('audit_logs', function (Blueprint $table) {
             if (! Schema::hasColumn('audit_logs', 'note')) {
-                $table->text('note')->nullable()->after('details');  // ← was 'description'
+                $table->text('note')->nullable()->after('details');  // was 'description'
             }
 
             if (! Schema::hasColumn('audit_logs', 'reason')) {

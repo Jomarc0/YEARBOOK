@@ -9,7 +9,7 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('voice_notes', function (Blueprint $table) {
-            // Rename user_id → sender_id
+            // Rename user_id sender_id
             $table->renameColumn('user_id', 'sender_id');
 
             // Add recipient

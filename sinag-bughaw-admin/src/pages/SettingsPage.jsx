@@ -393,6 +393,9 @@ export default function SettingsPage() {
         setSettings({ ...DEFAULTS, ...(res.data?.data ?? {}) });
         toast("Settings reset to defaults.");
       } else if (modal.type === "archive") {
+        await api.post("/admin/settings", {
+          graduation_batch: settings.graduation_batch ?? "",
+        });
         await api.post("/admin/settings/archive-batch");
         const res = await api.get("/admin/settings");
         setSettings({ ...DEFAULTS, ...(res.data?.data ?? {}) });
@@ -465,22 +468,27 @@ export default function SettingsPage() {
             <Sk h={14} />
           ) : (
             <>
-              <SettingRow label="Academic Year" description="Shown on generated yearbook pages and PDF exports.">
-                <input value={settings.academic_year ?? ""} onChange={(e) => set("academic_year", e.target.value)} style={inputStyle} />
-              </SettingRow>
               <SettingRow label="Graduation Batch" description="Used by Archive Batch to choose which batch will become alumni.">
                 <input value={settings.graduation_batch ?? ""} onChange={(e) => set("graduation_batch", e.target.value)} style={inputStyle} />
               </SettingRow>
-              <SettingRow label="Graduation Date" description="Shown in the generated yearbook and PDF export.">
-                <input type="date" value={settings.graduation_date ?? ""} onChange={(e) => set("graduation_date", e.target.value)} style={{ ...inputStyle, width: 180 }} />
+              <SettingRow label="Archive Batch" description="Promotes this graduation batch to alumni and clears the yearbook generation fields." last>
+                <button
+                  type="button"
+                  disabled={saving}
+                  style={{ ...dangerBtn, border: "none", background: T.primary, color: "#fff" }}
+                  onClick={() =>
+                    setModal({
+                      type: "archive",
+                      title: "Archive graduation batch?",
+                      message: `This will archive "${settings.graduation_batch || "(not set)"}", promote linked students to alumni, and reset graduation fields. This cannot be undone easily.`,
+                      confirmLabel: "Archive Batch",
+                      danger: true,
+                    })
+                  }
+                >
+                  Archive Batch
+                </button>
               </SettingRow>
-              <SettingRow label="Graduation Theme" description="Theme label used by the yearbook preview and PDF export.">
-                <input value={settings.graduation_theme ?? ""} onChange={(e) => set("graduation_theme", e.target.value)} style={inputStyle} />
-              </SettingRow>
-              <SettingRow label="Publish Yearbook" description="Allows students to open and download the published yearbook." last>
-                <Toggle value={bool("publish_yearbook")} onChange={() => toggleSetting("publish_yearbook")} label="Publish yearbook" />
-              </SettingRow>
-              <SaveBtn keys={["academic_year", "graduation_batch", "graduation_date", "graduation_theme", "publish_yearbook"]} />
             </>
           )}
         </SectionCard>
@@ -636,40 +644,6 @@ export default function SettingsPage() {
             <span style={{ fontWeight: 800, fontSize: "1rem", color: T.danger }}>Danger Zone</span>
           </div>
           <div style={{ padding: "20px 24px" }}>
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-                gap: 20,
-                paddingBottom: 18,
-                borderBottom: `1px solid ${T.border}`,
-              }}
-            >
-              <div>
-                <div style={{ fontSize: "0.9rem", fontWeight: 700, color: T.text, marginBottom: 3 }}>Archive Batch</div>
-                <div style={{ fontSize: "0.8rem", color: T.muted }}>
-                  Archives the batch matching Graduation Batch, promotes students to alumni, and clears graduation settings.
-                </div>
-              </div>
-              <button
-                type="button"
-                disabled={saving}
-                style={{ ...dangerBtn, border: `1px solid ${T.danger}`, background: "none", color: T.danger }}
-                onClick={() =>
-                  setModal({
-                    type: "archive",
-                    title: "Archive graduation batch?",
-                    message: `This will archive "${settings.graduation_batch || "(not set)"}", promote linked students to alumni, and reset graduation fields. This cannot be undone easily.`,
-                    confirmLabel: "Archive Batch",
-                    danger: true,
-                  })
-                }
-              >
-                Archive Batch
-              </button>
-            </div>
-
             <div
               style={{
                 display: "flex",

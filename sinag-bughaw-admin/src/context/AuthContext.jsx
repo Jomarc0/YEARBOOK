@@ -26,8 +26,8 @@ export function AuthProvider({ children }) {
 
   /**
    * Call after a successful POST /api/admin/login.
-   * @param {object} adminData  — the `admin` object from the API response
-   * @param {string} token      — the plain-text Sanctum token
+   * @param {object} adminData the `admin` object from the API response
+   * @param {string} token the plain-text Sanctum token
    */
   const handleLogin = useCallback((adminData, token) => {
     // Always clear first to prevent bleed-over from previous session

@@ -6,10 +6,10 @@ use Illuminate\Support\Facades\Schema;
 
 /**
  * Adds missing columns to the photos table:
- *  - user_id         → uploader / profile owner
- *  - public_id       → Cloudinary public_id (replaces URL-parsing regex)
- *  - visibility      → public | friends | private
- *  - is_profile_post → true = uploaded from Profile page
+ * user_id uploader / profile owner
+ * public_id Cloudinary public_id (replaces URL-parsing regex)
+ * visibility public | friends | private
+ * is_profile_post true = uploaded from Profile page
  */
 return new class extends Migration
 {

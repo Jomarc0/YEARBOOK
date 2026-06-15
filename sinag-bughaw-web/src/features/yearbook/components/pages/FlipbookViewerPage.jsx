@@ -41,11 +41,11 @@ export default function FlipbookViewerPage() {
     search, addBookmark, removeBookmark, downloadPdf,
   } = useYearbook(batchId);
 
-  // ── Loading ────────────────────────────────────────────────────────────────
+  // Loading
 
   if (loading) return <YearbookLoadingSkeleton />;
 
-  // ── Error ──────────────────────────────────────────────────────────────────
+  // Error
 
   if (error) {
     return (
@@ -64,7 +64,7 @@ export default function FlipbookViewerPage() {
     );
   }
 
-  // ── Viewer ─────────────────────────────────────────────────────────────────
+  // Viewer
 
   return (
     <div className="min-h-screen" style={{ background: BG }}>

@@ -223,7 +223,7 @@ export default function SearchPanel({ results, onSearch, onJump }) {
   );
 }
 
-// ── Result row ────────────────────────────────────────────────────────────────
+// Result row
 
 function ResultRow({ result, query, onJump, index }) {
   const [hovered, setHovered] = useState(false);
@@ -310,7 +310,7 @@ function ResultRow({ result, query, onJump, index }) {
   );
 }
 
-// ── Highlight matching text ───────────────────────────────────────────────────
+// Highlight matching text
 
 function Highlight({ text = '', query = '' }) {
   if (!query.trim() || !text) return <>{text}</>;
@@ -329,7 +329,7 @@ function Highlight({ text = '', query = '' }) {
   );
 }
 
-// ── Inline SVG icons ──────────────────────────────────────────────────────────
+// Inline SVG icons
 
 function SearchIcon() {
   return (

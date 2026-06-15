@@ -1,7 +1,7 @@
 /**
  * BatchSectionStudentsPage.jsx
  * NU Lipa / Sinag-Bughaw — Admin Panel
- * Simplified: Batch → Sections (grouped) → Students
+ * Simplified: Batch Sections (grouped) Students
  */
 
 import { useEffect, useState, useCallback, useRef } from "react";
@@ -9,7 +9,7 @@ import { useSearchParams } from "react-router-dom";
 import api from "../services/api";
 import Icon from "../components/shared/Icon";
 
-// ─── Theme ────────────────────────────────────────────────────────────────────
+// Theme
 const C = {
   bg:       "#f3f4f8", surface:  "#ffffff", border:   "#e4e7f0",
   text:     "#18213a", muted:    "#6b7590", hint:     "#9ba3bc",
@@ -23,7 +23,7 @@ const C = {
   shadowLg: "0 8px 40px rgba(30,58,138,.16)",
 };
 
-// ─── School → Course Map (single source of truth) ────────────────────────────
+// School Course Map (single source of truth)
 const SCHOOL_MAP = {
   SACE: {
     label: "School of Architecture, Computing, and Engineering",
@@ -125,7 +125,7 @@ function groupSectionsByCourse(dept, sections) {
   }, {});
 }
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+// Helpers
 const Skeleton = ({ w = "100%", h = 14, radius = 6, style = {} }) => (
   <div
     style={{ width: w, height: h, borderRadius: radius, ...style }}
@@ -177,7 +177,7 @@ function Avatar({ name = "?", photo, size = 36 }) {
   );
 }
 
-// ─── Toast ────────────────────────────────────────────────────────────────────
+// Toast
 function useToast() {
   const [toasts, setToasts] = useState([]);
   const push = useCallback((message, type = "success") => {
@@ -207,7 +207,7 @@ function Toast({ toasts }) {
   );
 }
 
-// ─── Confirm Modal ────────────────────────────────────────────────────────────
+// Confirm Modal
 function ConfirmModal({ open, title, message, onConfirm, onCancel, loading }) {
   if (!open) return null;
   return (
@@ -226,7 +226,7 @@ function ConfirmModal({ open, title, message, onConfirm, onCancel, loading }) {
   );
 }
 
-// ─── UI Primitives ────────────────────────────────────────────────────────────
+// UI Primitives
 const inputBase = {
   width: "100%", padding: "9px 12px", borderRadius: 10,
   border: `1.5px solid ${C.border}`, fontSize: "0.875rem",
@@ -348,7 +348,7 @@ function SmallBtn({ onClick, children, danger }) {
   );
 }
 
-// ─── Step Bar (3 steps now) ───────────────────────────────────────────────────
+// Step Bar (3 steps now)
 const STEPS = [
   { key: "batches", icon: "graduation", label: "Batches" },
   { key: "sections", icon: "book", label: "Sections" },
@@ -399,7 +399,7 @@ function Breadcrumb({ crumbs }) {
   );
 }
 
-// ─── Batch Modal ──────────────────────────────────────────────────────────────
+// Batch Modal
 function BatchModal({ batch, onClose, onSaved, toast }) {
   const isEdit = !!batch?.id;
   const [form, setForm] = useState({
@@ -457,7 +457,7 @@ function BatchModal({ batch, onClose, onSaved, toast }) {
   );
 }
 
-// ─── Section Modal (smart: dept filters courses) ──────────────────────────────
+// Section Modal (smart: dept filters courses)
 function SectionModal({ section, batchId, onClose, onSaved, toast }) {
   const isEdit = !!section?.id;
   const [form, setForm] = useState({
@@ -501,7 +501,7 @@ function SectionModal({ section, batchId, onClose, onSaved, toast }) {
         <ModalHeader title={isEdit ? "Edit Section" : "Add New Section"} onClose={onClose} />
         <ModalBody>
 
-          {/* Step 1 — School */}
+          {/* Step 1 School */}
           <Field label="School / Department" required error={errors.department}>
             <select value={form.department} onChange={e => setDept(e.target.value)}
               style={{ ...inputBase, cursor: "pointer", borderColor: errors.department ? C.red : C.border }}>
@@ -512,7 +512,7 @@ function SectionModal({ section, batchId, onClose, onSaved, toast }) {
             </select>
           </Field>
 
-          {/* Step 2 — Course (only shows options for chosen school) */}
+          {/* Step 2 Course (only shows options for chosen school) */}
           <Field label="Course / Program" required error={errors.course}>
             <select
               value={form.course}
@@ -524,7 +524,7 @@ function SectionModal({ section, batchId, onClose, onSaved, toast }) {
             </select>
           </Field>
 
-          {/* Step 3 — Section details */}
+          {/* Step 3 Section details */}
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
             <Field label="Section Name" required error={errors.name}>
               <input value={form.name} onChange={e => set("name", e.target.value)}
@@ -561,7 +561,7 @@ function SectionModal({ section, batchId, onClose, onSaved, toast }) {
   );
 }
 
-// ─── Sample Student Data ──────────────────────────────────────────────────────
+// Sample Student Data
 const SAMPLE_STUDENT = {
   first_name: "Juan", last_name: "Dela Cruz", middle_name: "Santos", nickname: "JD",
   student_no: "2025-00011", email: "juan@student.nu-lipa.edu.ph",
@@ -582,7 +582,7 @@ const SAMPLE_STUDENT = {
   github_url: "https://github.com/juandelacruz",
 };
 
-// ─── Student Modal ────────────────────────────────────────────────────────────
+// Student Modal
 function StudentModal({ student, sectionId, onClose, onSaved, toast }) {
   const isEdit = !!student?.id;
   const [form, setForm] = useState({
@@ -796,16 +796,16 @@ function StudentModal({ student, sectionId, onClose, onSaved, toast }) {
           <Divider label="Social Links (Optional)" />
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
             <Field label="Facebook">
-              <input value={form.facebook_url} onChange={e => set("facebook_url", e.target.value)} placeholder="https://facebook.com/…" style={inputBase} />
+              <input value={form.facebook_url} onChange={e => set("facebook_url", e.target.value)} placeholder="https:// facebook.com/ " style={inputBase} />
             </Field>
             <Field label="Instagram">
-              <input value={form.instagram_url} onChange={e => set("instagram_url", e.target.value)} placeholder="https://instagram.com/…" style={inputBase} />
+              <input value={form.instagram_url} onChange={e => set("instagram_url", e.target.value)} placeholder="https:// instagram.com/ " style={inputBase} />
             </Field>
             <Field label="LinkedIn">
-              <input value={form.linkedin_url} onChange={e => set("linkedin_url", e.target.value)} placeholder="https://linkedin.com/in/…" style={inputBase} />
+              <input value={form.linkedin_url} onChange={e => set("linkedin_url", e.target.value)} placeholder="https:// linkedin.com/in/ " style={inputBase} />
             </Field>
             <Field label="GitHub">
-              <input value={form.github_url} onChange={e => set("github_url", e.target.value)} placeholder="https://github.com/…" style={inputBase} />
+              <input value={form.github_url} onChange={e => set("github_url", e.target.value)} placeholder="https:// github.com/ " style={inputBase} />
             </Field>
           </div>
         </ModalBody>
@@ -818,9 +818,9 @@ function StudentModal({ student, sectionId, onClose, onSaved, toast }) {
   );
 }
 
-// ═══════════════════════════════════════════════════════════════════
+
 // VIEW: BATCHES
-// ═══════════════════════════════════════════════════════════════════
+
 function BatchesView({ toast, onSelect, onViewStudents }) {
   const [batches,    setBatches]    = useState([]);
   const [loading,    setLoading]    = useState(true);
@@ -941,9 +941,9 @@ function BatchesView({ toast, onSelect, onViewStudents }) {
   );
 }
 
-// ═══════════════════════════════════════════════════════════════════
+
 // VIEW: SECTIONS (flat list, grouped by school, filterable)
-// ═══════════════════════════════════════════════════════════════════
+
 function SectionsView({ batch, toast, onSelect }) {
   const [sections,   setSections]   = useState([]);
   const [loading,    setLoading]    = useState(true);
@@ -1153,9 +1153,9 @@ function SectionsView({ batch, toast, onSelect }) {
   );
 }
 
-// ═══════════════════════════════════════════════════════════════════
+
 // VIEW: STUDENTS
-// ═══════════════════════════════════════════════════════════════════
+
 function StudentsView({ batch, section, toast }) {
   const [students,   setStudents]   = useState([]);
   const [loading,    setLoading]    = useState(true);
@@ -1360,9 +1360,9 @@ function StudentsView({ batch, section, toast }) {
   );
 }
 
-// ═══════════════════════════════════════════════════════════════════
+
 // ROOT PAGE
-// ═══════════════════════════════════════════════════════════════════
+
 export default function BatchSectionStudentsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const initialView = ["batches", "sections", "students"].includes(searchParams.get("tab"))

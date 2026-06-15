@@ -629,11 +629,11 @@ class GraduationContentController extends Controller
         }
     }
 
-    // DESTROY — soft delete only
+    // DESTROY soft delete only
     public function destroy(GraduationAlbum $album): JsonResponse
     {
         try {
-            $album->delete(); // soft delete — sets deleted_at
+            $album->delete(); // soft delete sets deleted_at
 
             return response()->json(['message' => 'Content moved to trash.']);
         } catch (Throwable $e) {

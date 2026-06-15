@@ -10,7 +10,7 @@ class AdminSeeder extends Seeder
 {
     public function run(): void
     {
-        // ── Super Admin ───────────────────────────────────────────────────────
+        // Super Admin
         $super = Admin::updateOrCreate(
             ['username' => 'superadmin'],
             [
@@ -21,7 +21,7 @@ class AdminSeeder extends Seeder
             ]
         );
 
-        // ── Regular Admin ─────────────────────────────────────────────────────
+        // Regular Admin
         Admin::updateOrCreate(
             ['username' => 'admin'],
             [

@@ -35,7 +35,7 @@ function formatDate(str) {
   return new Date(str).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
 }
 
-// ── Sub-components ────────────────────────────────────────────────────────────
+// Sub-components
 
 function Section({ icon, label, children }) {
   return (
@@ -108,7 +108,7 @@ function PageSkeleton() {
   );
 }
 
-// ── Tab definitions ───────────────────────────────────────────────────────────
+// Tab definitions
 const TABS = [
   { key: 'profile',  label: 'Profile',  icon: 'fas fa-user'               },
   { key: 'academic', label: 'Academic', icon: 'fas fa-graduation-cap'     },
@@ -116,7 +116,7 @@ const TABS = [
   { key: 'messages', label: 'Messages', icon: 'fas fa-envelope-open-text' },
 ];
 
-// ── Main Page ─────────────────────────────────────────────────────────────────
+// Main Page
 export default function DiscoveryStudentProfile() {
   const { id }   = useParams();
   const navigate = useNavigate();
@@ -173,7 +173,7 @@ export default function DiscoveryStudentProfile() {
     </div>
   );
 
-  // ── Derived values ─────────────────────────────────────────────────────────
+  // Derived values
   const firstName   = student.first_name  ?? '';
   const lastName    = student.last_name   ?? '';
   const displayName = `${firstName} ${lastName}`.trim();
@@ -204,7 +204,7 @@ export default function DiscoveryStudentProfile() {
     </div>
   );
 
-  // ── Tab content ────────────────────────────────────────────────────────────
+  // Tab content
   const tabContent = {
 
     profile: (
@@ -376,7 +376,7 @@ export default function DiscoveryStudentProfile() {
       )}
 
       <main className="flex-1 max-w-[980px] mx-auto w-full px-4 sm:px-6 py-8 flex flex-col gap-3 animate-[fadeIn_0.25s_ease]">
-        {/* ── PROFILE CARD ── */}
+        {/* PROFILE CARD */}
         <div className="bg-white overflow-hidden shadow-[0_24px_60px_rgba(7,26,51,0.12)] border border-[#d8c7a2]/50">
 
           {/* Cover */}
@@ -566,7 +566,7 @@ export default function DiscoveryStudentProfile() {
           </div>
         </div>
 
-        {/* ── TABS ── */}
+        {/* TABS */}
         {canViewFull ? (
         <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
           <div className="flex border-b border-slate-100 overflow-x-auto scrollbar-none">

@@ -212,8 +212,8 @@ class StudentController extends Controller
                     'honors'          => trim($row['honors']      ?? '') ?: null,
                     'section_id'      => $section->id,
                     'batch_id'        => $section->batch_id,
-                    'course'          => $section->course,      // ← auto-fill from section
-                    'graduation_year' => $section->batch_year,  // ← auto-fill from section
+                    'course'          => $section->course,      // auto-fill from section
+                    'graduation_year' => $section->batch_year,  // auto-fill from section
                 ]
             );
 

@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import api from "../services/api";
 
-// ─── Design tokens (matches existing admin panel palette) ────────────────────
+// Design tokens (matches existing admin panel palette)
 const T = {
   bg:         "#f0f4ff",
   surface:    "#ffffff",
@@ -39,7 +39,7 @@ function Icon({ name, className = "h-4 w-4", style }) {
   );
 }
 
-// ─── Tiny helpers ─────────────────────────────────────────────────────────────
+// Tiny helpers
 const Sk = ({ w = "100%", h = 14, r = 6, style = {} }) => (
   <div style={{
     width: w, height: h, borderRadius: r,
@@ -131,7 +131,7 @@ function Pagination({ meta, onPage }) {
   );
 }
 
-// ─── Type sidebar tab ─────────────────────────────────────────────────────────
+// Type sidebar tab
 function TypeTab({ slug, label, count, active, onClick }) {
   const iconName = slug === "faculty" ? "faculty" : slug === "student" ? "student" : slug === "user" ? "user" : "trash";
 
@@ -160,7 +160,7 @@ function TypeTab({ slug, label, count, active, onClick }) {
   );
 }
 
-// ─── Single trash item card ───────────────────────────────────────────────────
+// Single trash item card
 function TrashCard({ item, selected, onSelect, onRestore, onForce, busy }) {
   const isBusy = busy === `${item.type}-${item.id}`;
   const mediaType = String(item.media_type || "").toLowerCase();
@@ -270,7 +270,7 @@ function TrashCard({ item, selected, onSelect, onRestore, onForce, busy }) {
   );
 }
 
-// ─── Empty state ─────────────────────────────────────────────────────────────
+// Empty state
 function EmptyBin({ filtered }) {
   return (
     <div className="trash-empty-state" style={{ textAlign:"center", padding:"64px 20px", color:T.muted }}>
@@ -288,7 +288,7 @@ function EmptyBin({ filtered }) {
   );
 }
 
-// ─── Main Page ────────────────────────────────────────────────────────────────
+// Main Page
 const inputStyle = {
   padding:"9px 14px", borderRadius:10, border:`1px solid ${T.border}`,
   fontSize:"0.88rem", color:T.text, background:T.surface,
@@ -309,7 +309,7 @@ export default function TrashPage() {
   const { toasts, push: toast }        = useToast();
   const searchTimer                    = useRef(null);
 
-  // ── Fetch counts ────────────────────────────────────────────────────────────
+  // Fetch counts
   const fetchCounts = useCallback(async () => {
     try {
       const res = await api.get("/admin/trash/counts");
@@ -317,7 +317,7 @@ export default function TrashPage() {
     } catch { /* silent */ }
   }, []);
 
-  // ── Fetch items ─────────────────────────────────────────────────────────────
+  // Fetch items
   const fetchItems = useCallback(async (p = 1, q = search, type = activeType) => {
     setLoading(true);
     setSelected(new Set());
@@ -361,7 +361,7 @@ export default function TrashPage() {
     fetchItems(page);
   }, [page, activeType]);
 
-  // ── Search debounce ─────────────────────────────────────────────────────────
+  // Search debounce
   const handleSearch = v => {
     setSearch(v);
     clearTimeout(searchTimer.current);
@@ -371,14 +371,14 @@ export default function TrashPage() {
     }, 380);
   };
 
-  // ── Type tab switch ─────────────────────────────────────────────────────────
+  // Type tab switch
   const handleTypeChange = type => {
     setActiveType(type);
     setPage(1);
     setSelected(new Set());
   };
 
-  // ── Selection helpers ───────────────────────────────────────────────────────
+  // Selection helpers
   const toggleSelect = item => {
     setSelected(prev => {
       const next = new Set(prev);
@@ -407,7 +407,7 @@ export default function TrashPage() {
     return map;
   };
 
-  // ── Single restore ──────────────────────────────────────────────────────────
+  // Single restore
   const doRestore = async (item) => {
     setBusy(`${item.type}-${item.id}`);
     try {
@@ -422,7 +422,7 @@ export default function TrashPage() {
     }
   };
 
-  // ── Single force delete ──────────────────────────────────────────────────────
+  // Single force delete
   const doForce = async () => {
     if (!confirm?.item) return;
     const { item } = confirm;
@@ -440,7 +440,7 @@ export default function TrashPage() {
     }
   };
 
-  // ── Bulk restore ────────────────────────────────────────────────────────────
+  // Bulk restore
   const doBulkRestore = async () => {
     const groups = groupSelected();
     setConfirm(null);
@@ -458,7 +458,7 @@ export default function TrashPage() {
     }
   };
 
-  // ── Bulk force delete ────────────────────────────────────────────────────────
+  // Bulk force delete
   const doBulkForce = async () => {
     const groups = groupSelected();
     setConfirm(null);
@@ -476,7 +476,7 @@ export default function TrashPage() {
     }
   };
 
-  // ── Sidebar counts ──────────────────────────────────────────────────────────
+  // Sidebar counts
   const totalCount = counts._total ?? 0;
 
   const sidebarTypes = [
@@ -512,7 +512,7 @@ export default function TrashPage() {
 
         <div style={{ display:"flex", gap:20, alignItems:"flex-start" }}>
 
-          {/* ── Sidebar ── */}
+          {/* Sidebar */}
           <div style={{
             width: 220, flexShrink:0,
             background: T.surface,
@@ -531,7 +531,7 @@ export default function TrashPage() {
             ))}
           </div>
 
-          {/* ── Main content ── */}
+          {/* Main content */}
           <div style={{ flex:1, minWidth:0 }}>
 
             {/* Search + Bulk actions bar */}
@@ -615,7 +615,7 @@ export default function TrashPage() {
         </div>
       </div>
 
-      {/* ── Confirm modals ── */}
+      {/* Confirm modals */}
       <ConfirmModal
         open={confirm?.mode === "force"}
         title="Permanently Delete"

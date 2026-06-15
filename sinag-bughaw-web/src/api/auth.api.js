@@ -8,7 +8,7 @@ export const authApi = {
   sendOtp:        (email)           => api.post('/auth/otp/send',          { email }),
   verifyOtp:      (email, otp)      => api.post('/auth/otp/verify',        { email, otp }),
 
-  // ── Forgot password flow ──────────────────────────────────────────
+  // Forgot password flow
   forgotPassword: (email)           => api.post('/auth/forgot-password',   { email }),
   verifyResetOtp: (email, otp)      => api.post('/auth/otp/verify-reset',  { email, otp }),
   resetPassword:  (data)            => api.post('/auth/reset-password',    data),

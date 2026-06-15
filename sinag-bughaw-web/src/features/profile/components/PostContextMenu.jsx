@@ -76,7 +76,7 @@ export default function PostContextMenu({ post, onClose, onDelete, onUpdated }) 
           style={{ animation: 'sheetUp 0.22s cubic-bezier(0.34,1.2,0.64,1)' }}
         >
 
-          {/* ── MAIN MENU ── */}
+          {/* MAIN MENU */}
           {view === 'menu' && (
             <>
               {/* Header */}
@@ -123,7 +123,7 @@ export default function PostContextMenu({ post, onClose, onDelete, onUpdated }) 
             </>
           )}
 
-          {/* ── EDIT VIEW ── */}
+          {/* EDIT VIEW */}
           {view === 'edit' && (
             <>
               <SubHeader title="Edit Post" onBack={back} onAction={saveEdit} actionLabel={saving ? 'Saving…' : 'Save'} saving={saving} />
@@ -151,7 +151,7 @@ export default function PostContextMenu({ post, onClose, onDelete, onUpdated }) 
             </>
           )}
 
-          {/* ── TAG VIEW ── */}
+          {/* TAG VIEW */}
           {view === 'tag' && (
             <>
               <SubHeader title="Tag People" onBack={back} onAction={saveEdit} actionLabel={saving ? 'Saving…' : 'Done'} saving={saving} />
@@ -167,7 +167,7 @@ export default function PostContextMenu({ post, onClose, onDelete, onUpdated }) 
             </>
           )}
 
-          {/* ── CONFIRM DELETE ── */}
+          {/* CONFIRM DELETE */}
           {view === 'confirm_delete' && (
             <>
               <div className="px-8 py-7 text-center border-b border-[#f0f0f0]">

@@ -14,15 +14,15 @@ export const getSummary = () =>
 
 /**
  * Top-viewed alumni by all-time profile views (public).
- * @param {number} limit - max results (1–50, default 10)
+ * @param {number} limit - max results (1 50, default 10)
  * @returns {{ data: AlumniRecord[] }}
  */
 export const getTopViewed = (limit = 10) =>
   client.get(`${BASE}/top-viewed`, { params: { limit } }).then((r) => r.data);
 
 /**
- * Trending alumni — most views in the last 7 days (public).
- * @param {number} limit - max results (1–50, default 10)
+ * Trending alumni most views in the last 7 days (public).
+ * @param {number} limit - max results (1 50, default 10)
  * @returns {{ data: TrendingRecord[] }}
  */
 export const getTrending = (limit = 10) =>
@@ -37,7 +37,7 @@ export const getMyStats = () =>
 
 /**
  * Daily view counts for the logged-in student's profile (auth required).
- * @param {number} days - lookback window (7–90, default 30)
+ * @param {number} days - lookback window (7 90, default 30)
  * @returns {{ data: Record<string, number> }}  e.g. { "2024-05-01": 4, "2024-05-02": 7 }
  */
 export const getMyStatsTrend = (days = 30) =>
@@ -88,7 +88,7 @@ export const recordContentView = (payload = {}) => {
   }).then((r) => r.data);
 };
 
-// ─── JSDoc type stubs ─────────────────────────────────────────────────────────
+// JSDoc type stubs
 
 /**
  * @typedef {Object} AlumniRecord

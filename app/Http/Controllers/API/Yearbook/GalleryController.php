@@ -180,7 +180,7 @@ class GalleryController extends Controller
                     });
 
             } else {
-                // General gallery: search via GalleryMedia → Gallery → Album
+                // General gallery: search via GalleryMedia Gallery Album
                 $directMediaSimilarity = $rawMatches
                     ->mapWithKeys(function ($match) {
                         $externalId = (string) ($match['external_image_id'] ?? '');

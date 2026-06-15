@@ -1,5 +1,5 @@
 // src/features/profile/hooks/useProfileUpload.js
-//
+
 // Handles all upload state for ProfileUploadModal.
 // Now includes: tagged users, premium gate check.
 
@@ -29,11 +29,11 @@ export function useProfileUpload(onSuccess, tierKey = 'free') {
   const [progress,   setProgress]   = useState(0);
   const [error,      setError]      = useState(null);
 
-  // ── Tier gate ──────────────────────────────────────────────────────────────
-  // Free users cannot upload — only premium_standard and premium can
+  // Tier gate
+  // Free users cannot upload only premium_standard and premium can
   const canUpload = tierKey === 'premium_standard' || tierKey === 'premium';
 
-  // ── File selection ─────────────────────────────────────────────────────────
+  // File selection
   const handleFileChange = (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -51,7 +51,7 @@ export function useProfileUpload(onSuccess, tierKey = 'free') {
     setPreview({ url: URL.createObjectURL(file), name: file.name, file });
   };
 
-  // ── Tag a user ─────────────────────────────────────────────────────────────
+  // Tag a user
   const tagUser = (user) => {
     if (taggedUsers.find(u => u.id === user.id)) return; // already tagged
     setTaggedUsers(prev => [...prev, user]);
@@ -61,7 +61,7 @@ export function useProfileUpload(onSuccess, tierKey = 'free') {
     setTaggedUsers(prev => prev.filter(u => u.id !== userId));
   };
 
-  // ── Upload ─────────────────────────────────────────────────────────────────
+  // Upload
   const upload = async () => {
     if (!preview || !canUpload) return;
 
@@ -96,7 +96,7 @@ export function useProfileUpload(onSuccess, tierKey = 'free') {
     }
   };
 
-  // ── Reset ──────────────────────────────────────────────────────────────────
+  // Reset
   const reset = () => {
     if (preview?.url) URL.revokeObjectURL(preview.url);
     setPreview(null);

@@ -17,7 +17,7 @@ export default function AdminManagementPage({ showToast }) {
   const [saving,  setSaving]  = useState(false);
   const [errors,  setErrors]  = useState({});
 
-  // ── Fetch ─────────────────────────────────────────────────────────────────
+  // Fetch
   const fetch = useCallback(async () => {
     setLoading(true);
     try {
@@ -35,7 +35,7 @@ export default function AdminManagementPage({ showToast }) {
 
   useEffect(() => { fetch(); }, [fetch]);
 
-  // ── Modal helpers ─────────────────────────────────────────────────────────
+  // Modal helpers
   const openCreate = () => { setForm(EMPTY_FORM); setErrors({}); setModal({ mode: "create" }); };
   const openEdit   = (a) => {
     setForm({ name: a.name, username: a.username, password: "", password_confirmation: "", role: a.role });
@@ -50,7 +50,7 @@ export default function AdminManagementPage({ showToast }) {
     setErrors(e => ({ ...e, [name]: undefined }));
   };
 
-  // ── Submit ────────────────────────────────────────────────────────────────
+  // Submit
   const handleSubmit = async (e) => {
     e.preventDefault();
     setSaving(true);
@@ -75,7 +75,7 @@ export default function AdminManagementPage({ showToast }) {
     }
   };
 
-  // ── Delete ────────────────────────────────────────────────────────────────
+  // Delete
   const handleDelete = async (admin) => {
     if (!window.confirm(`Delete "${admin.name}"? This cannot be undone.`)) return;
     try {
@@ -87,7 +87,7 @@ export default function AdminManagementPage({ showToast }) {
     }
   };
 
-  // ── Toggle status ─────────────────────────────────────────────────────────
+  // Toggle status
   const handleToggle = async (admin) => {
     try {
       const { data } = await api.patch(`/admin/admins/${admin.id}/toggle-status`);
@@ -100,7 +100,7 @@ export default function AdminManagementPage({ showToast }) {
     }
   };
 
-  // ─────────────────────────────────────────────────────────────────────────
+
   return (
     <div style={{ padding: "28px 32px", maxWidth: 1100, margin: "0 auto" }}>
 
@@ -297,7 +297,7 @@ export default function AdminManagementPage({ showToast }) {
   );
 }
 
-// ── Sub-components ────────────────────────────────────────────────────────────
+// Sub-components
 
 function TinyBtn({ label, color, onClick }) {
   return (
@@ -329,7 +329,7 @@ function ModalField({ label, error, children }) {
   );
 }
 
-// ── Style helpers ─────────────────────────────────────────────────────────────
+// Style helpers
 
 const emptyState = {
   padding: "56px 0", textAlign: "center",

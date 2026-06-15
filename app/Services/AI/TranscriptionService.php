@@ -25,7 +25,7 @@ class TranscriptionService implements TranscriptionServiceInterface
         $this->notesModel   = (string) config('services.groq.notes_model', 'llama-3.3-70b-versatile');
     }
 
-    // ── Contract: isEnabled ───────────────────────────────────────────────
+    // Contract: isEnabled
 
     public function isEnabled(): bool
     {
@@ -212,11 +212,11 @@ PROMPT;
         return $response->json('choices.0.message.content');
     }
 
-    // Private: ffmpeg audio extraction─
+    // Private: ffmpeg audio extraction
 
     /**
      * Extract a mono 16 kHz MP3 audio track from a video file using ffmpeg.
-     * Returns [tmpAudioPath, filename] — caller must unlink tmpAudioPath.
+     * Returns [tmpAudioPath, filename] caller must unlink tmpAudioPath.
      *
      */
     private function extractAudio(string $videoPath): array

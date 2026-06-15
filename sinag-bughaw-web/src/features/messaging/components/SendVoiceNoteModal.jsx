@@ -4,12 +4,12 @@ import { voiceNotesApi } from '@/api/messaging.api';
 
 /**
  * SendVoiceNoteModal
- * Drop this anywhere you want a "Send Voice Memory" button —
+ * Drop this anywhere you want a "Send Voice Memory" button
  * currently used on StudentProfileView.jsx
  *
  * Props:
- *   recipient  — { id, name } of the student being viewed
- *   onClose()  — called when modal should close
+ * recipient { id, name } of the student being viewed
+ * onClose() called when modal should close
  */
 export default function SendVoiceNoteModal({ recipient, onClose }) {
   const [title,     setTitle]     = useState('');
@@ -40,7 +40,7 @@ export default function SendVoiceNoteModal({ recipient, onClose }) {
   };
 
   return (
-    // Faux overlay — uses min-height so iframe sizes correctly
+    // Faux overlay uses min-height so iframe sizes correctly
     <div style={{
       minHeight: '520px',
       background: 'rgba(0,0,0,0.55)',
@@ -70,7 +70,7 @@ export default function SendVoiceNoteModal({ recipient, onClose }) {
           }}>✕</button>
         </div>
 
-        {/* ── Record step ─────────────────────────────────────────────── */}
+        {/* Record step */}
         {step === 'record' && (
           <>
             <input
@@ -92,7 +92,7 @@ export default function SendVoiceNoteModal({ recipient, onClose }) {
           </>
         )}
 
-        {/* ── Sending step ─────────────────────────────────────────────── */}
+        {/* Sending step */}
         {step === 'sending' && (
           <div style={{ textAlign: 'center', padding: '40px 0' }}>
             <i className="fas fa-spinner fa-spin" style={{ fontSize: '2.5rem', color: '#3f51b5', marginBottom: '16px', display: 'block' }} />
@@ -101,7 +101,7 @@ export default function SendVoiceNoteModal({ recipient, onClose }) {
           </div>
         )}
 
-        {/* ── Done step ────────────────────────────────────────────────── */}
+        {/* Done step */}
         {step === 'done' && (
           <div style={{ textAlign: 'center', padding: '32px 0' }}>
             <div style={{
@@ -127,7 +127,7 @@ export default function SendVoiceNoteModal({ recipient, onClose }) {
           </div>
         )}
 
-        {/* ── Error step ───────────────────────────────────────────────── */}
+        {/* Error step */}
         {step === 'error' && (
           <div style={{ textAlign: 'center', padding: '32px 0' }}>
             <div style={{

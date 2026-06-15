@@ -29,7 +29,7 @@ class PhotoTaggedNotification extends Notification
         return [];
     }
 
-    // Dispatch helpers — call this instead of Notification::send()
+    // Dispatch helpers call this instead of Notification::send()
 
     public static function dispatchFor(
         User    $tagged,

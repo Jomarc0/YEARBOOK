@@ -42,7 +42,7 @@ class MemoryReminderNotification extends Notification implements ShouldQueue
         ];
     }
 
-    // Broadcast (Reverb → NotificationBell.jsx) 
+    // Broadcast (Reverb NotificationBell.jsx)
 
     public function toBroadcast(object $notifiable): BroadcastMessage
     {

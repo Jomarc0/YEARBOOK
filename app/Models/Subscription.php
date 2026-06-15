@@ -47,9 +47,9 @@ class Subscription extends Model
     //Cloudinary storage tier resolution
 
     /**
-     * plan=free,    tier=standard → 'free'
-     * plan=premium, tier=standard → 'premium_standard'
-     * plan=premium, tier=premium  → 'premium'
+     * plan=free, tier=standard 'free'
+     * plan=premium, tier=standard 'premium_standard'
+     * plan=premium, tier=premium 'premium'
      *
      * @return string 'free' | 'premium_standard' | 'premium'
      */

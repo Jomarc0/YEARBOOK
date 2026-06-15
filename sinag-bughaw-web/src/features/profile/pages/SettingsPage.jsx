@@ -31,7 +31,7 @@ const ACHIEVEMENT_COLOR_OPTIONS = [
   '#8b5cf6', '#ec4899', '#06b6d4', '#f97316', '#1d2b4b',
 ];
 
-// ─── No DEFAULT_ACHIEVEMENTS here — we always load from the real DB ───────────
+// No DEFAULT_ACHIEVEMENTS here we always load from the real DB
 
 const NAV_SECTIONS = [
   { id: 'visibility',   icon: 'fa-eye',           label: 'Visibility'   },
@@ -76,15 +76,15 @@ export default function SettingsPage() {
       : NAV_SECTIONS
   ), [canEditCareer]);
 
-  // ── Visibility ────────────────────────────────────────────────────────────
+  // Visibility
   const [visibility, setVis] = useState(user?.profile_visibility === 'alumni_only' ? 'batchmates' : (user?.profile_visibility ?? 'public'));
   const [visibilitySaving, setVisibilitySaving] = useState(false);
 
-  // ── Motto ─────────────────────────────────────────────────────────────────
+  // Motto
   const [motto, setMotto] = useState(user?.motto ?? '');
   const [mottoSaving, setMottoSaving] = useState(false);
 
-  // ── Password ──────────────────────────────────────────────────────────────
+  // Password
   const [loading,     setLoading]     = useState(false);
   const [showCurrent, setShowCurrent] = useState(false);
   const [showNew,     setShowNew]     = useState(false);
@@ -94,7 +94,7 @@ export default function SettingsPage() {
   });
   const [pwErrors, setPwErrors] = useState({});
 
-  // ── Academic ──────────────────────────────────────────────────────────────
+  // Academic
   const [academicForm, setAcademicForm] = useState({
     student_id:      user?.student_id      ?? '',
     course:          user?.course          ?? '',
@@ -103,20 +103,20 @@ export default function SettingsPage() {
   });
   const [academicSaving, setAcademicSaving] = useState(false);
 
-  // ── Career / Alumni Tracker ────────────────────────────────────────────────
+  // Career / Alumni Tracker
   const [careerForm, setCareerForm] = useState({
     job_title: '', company: '', location: '', field: '', bio: '',
   });
   const [careerLoading, setCareerLoading] = useState(false);
   const [careerSaving, setCareerSaving] = useState(false);
 
-  // ── Achievements ──────────────────────────────────────────────────────────
+  // Achievements
   const [achievements,   setAchievements]   = useState([]);
   const [achieveLoading, setAchieveLoading] = useState(false);
   const [achieveSaving,  setAchieveSaving]  = useState(false);
   const [showIconPicker, setShowIconPicker] = useState(null);
 
-  // ── Toast ─────────────────────────────────────────────────────────────────
+  // Toast
   const [toast, setToast] = useState(null);
   const [activeSection, setActiveSection] = useState(navSections[0].id);
   const showToast = (msg, type = 'success') => {
@@ -125,8 +125,8 @@ export default function SettingsPage() {
     setTimeout(() => setToast(null), 3000);
   };
 
-  // ── Load achievements from API on mount ───────────────────────────────────
-  // FIX: removed DEFAULT_ACHIEVEMENTS fallback — empty list is correct when
+  // Load achievements from API on mount
+  // FIX: removed DEFAULT_ACHIEVEMENTS fallback empty list is correct when
   //      the user has no achievements yet; fake ids 1/2/3 caused the controller
   //      to silently skip creates and delete everything on save.
   useEffect(() => {
@@ -147,7 +147,7 @@ export default function SettingsPage() {
             };
           }));
         } else {
-          // User genuinely has no achievements yet — start empty, not with fake data
+          // User genuinely has no achievements yet start empty, not with fake data
           setAchievements([]);
         }
       })
@@ -190,7 +190,7 @@ export default function SettingsPage() {
     return () => window.removeEventListener('scroll', onScroll);
   }, [navSections]);
 
-  // ── Handlers ──────────────────────────────────────────────────────────────
+  // Handlers
   const saveVisibility = async () => {
     setVisibilitySaving(true);
     try {
@@ -288,7 +288,7 @@ export default function SettingsPage() {
 
   const addAchievement = () =>
     setAchievements(prev => [...prev, { id: null, t: '', s: '', icon: 'fa-star', color: '#fdb813' }]);
-    // FIX: use null instead of Date.now() — Date.now() produces a large numeric
+    // FIX: use null instead of Date.now() Date.now() produces a large numeric
     //      id that fools the controller into treating it as an existing record.
 
   const removeAchievement = (idx) =>
@@ -358,7 +358,7 @@ export default function SettingsPage() {
 
       <div className="flex-1 max-w-[960px] mx-auto w-full px-4 sm:px-6 py-10 flex gap-8 items-start">
 
-        {/* ── Sticky sidebar nav ── */}
+        {/* Sticky sidebar nav */}
         <aside className="hidden lg:flex flex-col gap-1 w-52 shrink-0 sticky top-24">
           <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-3 mb-2">Settings</p>
           {navSections.map(s => (
@@ -373,7 +373,7 @@ export default function SettingsPage() {
           ))}
         </aside>
 
-        {/* ── Main content ── */}
+        {/* Main content */}
         <main className="flex-1 min-w-0 max-w-2xl mx-auto w-full flex flex-col gap-4 animate-[fadeUp_0.35s_ease]">
 
           {/* Page header */}
@@ -387,7 +387,7 @@ export default function SettingsPage() {
             </h1>
           </div>
 
-          {/* ── 1. Profile Visibility ── */}
+          {/* 1. Profile Visibility */}
           <Section id="visibility" icon="fa-eye" iconBg="bg-indigo-50" iconColor="text-[#3f51b5]"
             title="Profile Visibility" desc="Control who can see your profile">
             <div className="space-y-2 mb-5">
@@ -418,7 +418,7 @@ export default function SettingsPage() {
             <SaveButton onClick={saveVisibility} loading={visibilitySaving} label="Save Visibility" loadingLabel="Saving..." />
           </Section>
 
-          {/* ── 2. Personal Motto ── */}
+          {/* 2. Personal Motto */}
           <Section id="motto" icon="fa-quote-left" iconBg="bg-amber-50" iconColor="text-[#fdb813]"
             title="Personal Motto" desc="Appears on your yearbook profile">
             <textarea
@@ -437,7 +437,7 @@ export default function SettingsPage() {
             <SaveButton onClick={saveMotto} loading={mottoSaving} label="Save Motto" loadingLabel="Saving..." />
           </Section>
 
-          {/* ── 3. Academic Info ── */}
+          {/* 3. Academic Info */}
           <Section id="academic" icon="fa-graduation-cap" iconBg="bg-blue-50" iconColor="text-[#3f51b5]"
             title="Academic Info" desc="Your graduation details shown on your yearbook profile">
             <div className="space-y-4 mb-5">
@@ -572,7 +572,7 @@ export default function SettingsPage() {
           </Section>
           )}
 
-          {/* ── 4. Achievements ── */}
+          {/* 4. Achievements */}
           <Section id="achievements" icon="fa-award" iconBg="bg-amber-50" iconColor="text-amber-500"
             title="Achievements" desc="Add or edit the achievements shown on your yearbook profile">
 
@@ -693,7 +693,7 @@ export default function SettingsPage() {
             )}
           </Section>
 
-          {/* ── 5. Change Password ── */}
+          {/* 5. Change Password */}
           <Section id="password" icon="fa-lock" iconBg="bg-slate-100" iconColor="text-slate-600"
             title="Change Password" desc="Use a strong password with letters and numbers">
             <form onSubmit={handlePasswordChange} className="space-y-4">
@@ -747,7 +747,7 @@ export default function SettingsPage() {
             </form>
           </Section>
 
-          {/* ── Data Privacy Notice ── */}
+          {/* Data Privacy Notice */}
           <div className="bg-indigo-50 border border-indigo-100 rounded-2xl px-5 py-4 flex items-start gap-3">
             <i className="fas fa-shield-alt text-[#3f51b5] mt-0.5 shrink-0" />
             <div>
@@ -768,7 +768,7 @@ export default function SettingsPage() {
   );
 }
 
-// ── Reusable section card ──────────────────────────────────────────────────────
+// Reusable section card
 function Section({ id, icon, iconBg, iconColor, title, desc, children }) {
   return (
     <section id={id} className="bg-white rounded-2xl p-6 sm:p-7 shadow-sm border border-slate-100 scroll-mt-24">
@@ -786,7 +786,7 @@ function Section({ id, icon, iconBg, iconColor, title, desc, children }) {
   );
 }
 
-// ── Save button ────────────────────────────────────────────────────────────────
+// Save button
 function SaveButton({ onClick, label, loading = false, loadingLabel = 'Saving...', icon, type = 'button' }) {
   return (
     <button type={type} onClick={onClick} disabled={loading}

@@ -31,7 +31,7 @@ export const presenceApi = {
 export const voiceNotesApi = {
   // Received (approved) notes
   inbox:      ()         => api.get('/voice-notes/inbox'),
-  // Sent notes (all statuses — pending / approved / rejected)
+  // Sent notes (all statuses pending / approved / rejected)
   outbox:     ()         => api.get('/voice-notes/outbox'),
   // Notes shown on a student's public profile
   forProfile: (userId)   => api.get(`/voice-notes/profile/${userId}`),

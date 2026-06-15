@@ -24,7 +24,7 @@ use Illuminate\Support\Facades\RateLimiter;
 
 class AuthController extends Controller
 {
-    // Register ─
+    // Register
 
     public function register(Request $request)
     {

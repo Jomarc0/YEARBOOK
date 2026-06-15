@@ -43,7 +43,7 @@ class GraduationAlbum extends Model
 
     /**
      * All media files in this album.
-     * FK: graduation_album_id (GraduationPhoto.graduation_album_id → graduation_albums.id)
+     * FK: graduation_album_id (GraduationPhoto.graduation_album_id graduation_albums.id)
      */
     public function photos(): HasMany
     {

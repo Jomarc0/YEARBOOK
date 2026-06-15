@@ -1,6 +1,6 @@
 /**
- * BatchmatesPage.jsx — Drill-down accordion pattern
- * Department → Courses → Sections → Students
+ * BatchmatesPage.jsx Drill-down accordion pattern
+ * Department Courses Sections Students
  */
 
 import { useState, useEffect } from 'react';
@@ -28,7 +28,12 @@ function faceUserId(match) {
 }
 
 function studentUserId(student) {
-  const id = Number(student?.id ?? student?.user_id ?? student?.account_user_id);
+  const id = Number(student?.account_user_id ?? student?.user_id ?? student?.id);
+  return Number.isFinite(id) && id > 0 ? id : null;
+}
+
+function studentRecordId(student) {
+  const id = Number(student?.student_record_id ?? student?.id);
   return Number.isFinite(id) && id > 0 ? id : null;
 }
 
@@ -85,7 +90,7 @@ function usableFaceMatches(matches = []) {
   return Array.from(new Map(source.map(m => [m.user_id, m])).values());
 }
 
-// ── Drill-down breadcrumb ──────────────────────────────────────────────────────
+// Drill-down breadcrumb
 function Breadcrumb({ department, course, section, onClickDept, onClickCourse }) {
   if (!department) return null;
   return (
@@ -130,7 +135,7 @@ function Breadcrumb({ department, course, section, onClickDept, onClickCourse })
   );
 }
 
-// ── Chip button ───────────────────────────────────────────────────────────────
+// Chip button
 function Chip({ label, active, onClick, count }) {
   return (
     <button
@@ -152,7 +157,7 @@ function Chip({ label, active, onClick, count }) {
   );
 }
 
-// ── Yearbook helpers ──────────────────────────────────────────────────────────
+// Yearbook helpers
 async function findYearbookBatchId(year, course = null) {
   if (!year) return null;
   const { data } = await batchApi.index();
@@ -301,7 +306,7 @@ function FaceResultBanner({ matches, onClear }) {
   );
 }
 
-// ── Department card (shown at level 0) ────────────────────────────────────────
+// Department card (shown at level 0)
 function DepartmentCard({ name, totalStudents, courses, onClick }) {
   return (
     <button
@@ -343,7 +348,7 @@ function DepartmentCard({ name, totalStudents, courses, onClick }) {
   );
 }
 
-// ── Course card (shown at level 1) ────────────────────────────────────────────
+// Course card (shown at level 1)
 function CourseCard({ name, sections, onClick }) {
   const totalStudents = Object.values(sections).flat().length;
   return (
@@ -386,7 +391,7 @@ function CourseCard({ name, sections, onClick }) {
   );
 }
 
-// ── Section card (shown at level 2) ───────────────────────────────────────────
+// Section card (shown at level 2)
 function SectionCard({ name, students, onClick }) {
   return (
     <button
@@ -434,11 +439,13 @@ function SectionCard({ name, students, onClick }) {
   );
 }
 
-// ── Student card ──────────────────────────────────────────────────────────────
+// Student card
 function StudentCard({ student, activeYear, isMatched, matchData }) {
+  const profileId = studentRecordId(student);
+
   return (
     <Link
-      to={`/profile/${student.id}`}
+      to={`/discover/students/${profileId}`}
       className={`relative flex items-center gap-3 rounded-2xl border bg-white p-3 no-underline transition hover:-translate-y-0.5 hover:shadow-md
         ${isMatched ? 'border-[#fdb813]' : 'border-slate-200'}`}
     >
@@ -471,7 +478,7 @@ function StudentCard({ student, activeYear, isMatched, matchData }) {
   );
 }
 
-// ── Main Page ─────────────────────────────────────────────────────────────────
+// Main Page
 export default function BatchmatesPage() {
   const [searchParams, setSearchParams] = useSearchParams();
 
@@ -655,7 +662,7 @@ export default function BatchmatesPage() {
       );
     }
 
-    // Level 0 — show department cards
+    // Level 0 show department cards
     if (drillLevel === 0) {
       return (
         <div className="space-y-4">
@@ -675,7 +682,7 @@ export default function BatchmatesPage() {
       );
     }
 
-    // Level 1 — show course cards for active department
+    // Level 1 show course cards for active department
     if (drillLevel === 1) {
       const deptData = groupedBatchmates[departmentFilter] ?? {};
       return (
@@ -703,7 +710,7 @@ export default function BatchmatesPage() {
       );
     }
 
-    // Level 2 — show section cards for active course
+    // Level 2 show section cards for active course
     if (drillLevel === 2) {
       const sectionData = groupedBatchmates[departmentFilter]?.[courseFilter] ?? {};
       return (
@@ -731,7 +738,7 @@ export default function BatchmatesPage() {
       );
     }
 
-    // Level 3 — show student grid for active section
+    // Level 3 show student grid for active section
     const students = groupedBatchmates[departmentFilter]?.[courseFilter]?.[sectionFilter] ?? [];
     return (
       <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
@@ -773,7 +780,7 @@ export default function BatchmatesPage() {
     <div className="min-h-screen flex flex-col bg-[#f8fafc] font-['Plus_Jakarta_Sans',sans-serif]">
       <Navbar />
 
-      {/* ── Hero ── */}
+      {/* Hero */}
       <header className="text-white text-center bg-gradient-to-br from-[#1d2b4b] to-[#2a3d66] px-[8%] pt-12 pb-14 rounded-b-[48px]">
         <p className="text-[10px] font-bold uppercase tracking-[0.15em] mb-2 text-[#fdb813]">
           National University Lipa
@@ -795,7 +802,7 @@ export default function BatchmatesPage() {
         </div>
       </header>
 
-      {/* ── Sticky Filters ── */}
+      {/* Sticky Filters */}
       <div className="bg-white px-[8%] py-[18px] shadow-sm border-b border-slate-200 sticky top-0 z-20 flex flex-wrap gap-3 items-center justify-between">
         {/* Search + face */}
         <div className="relative min-w-[240px] flex-1 max-w-[320px]">
@@ -811,7 +818,7 @@ export default function BatchmatesPage() {
           <FaceSearchButton onFile={handleFaceFile} loading={faceSearching} />
         </div>
 
-        {/* Drill-down chips — row 1: departments */}
+        {/* Drill-down chips row 1: departments */}
         <div className="flex flex-col gap-2">
           <div className="flex flex-wrap gap-2 items-center">
             <Chip
@@ -885,7 +892,7 @@ export default function BatchmatesPage() {
         </div>
       </div>
 
-      {/* ── Count Pill ── */}
+      {/* Count Pill */}
       {!loading && (
         <div className="flex justify-center mt-6 relative z-10">
           <div className="font-bold text-sm flex items-center gap-2 bg-white px-7 py-3 rounded-full shadow-[0_10px_25px_rgba(0,0,0,0.08)] text-slate-600">
@@ -898,14 +905,14 @@ export default function BatchmatesPage() {
         </div>
       )}
 
-      {/* ── Face Banner ── */}
+      {/* Face Banner */}
       {faceMatches.length > 0 && (
         <div className="mt-3">
           <FaceResultBanner matches={faceMatches} onClear={clearFace} />
         </div>
       )}
 
-      {/* ── Upgrade Banner ── */}
+      {/* Upgrade Banner */}
       {!isPremium && !loading && batchmates.length > 0 && (
         <div className="mx-[8%] mt-6 flex items-center justify-between gap-4 rounded-2xl px-6 py-4 bg-gradient-to-br from-[#1d2b4b] to-[#3f51b5] text-white">
           <div className="flex items-center gap-3">
@@ -923,7 +930,7 @@ export default function BatchmatesPage() {
         </div>
       )}
 
-      {/* ── Main Content ── */}
+      {/* Main Content */}
       <main className="flex-1 px-[8%] pt-8 pb-20">
         {/* Breadcrumb */}
         <Breadcrumb

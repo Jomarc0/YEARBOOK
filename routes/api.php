@@ -67,7 +67,7 @@ Route::get('/announcements',        [AnnouncementController::class, 'index']);
 Route::get('/analytics/top-viewed', [AnalyticsController::class,   'topViewed']);
 Route::post('/analytics/record-view/{userId}', [AnalyticsController::class, 'recordView']);
 
-//  Faculty (public — no login required) 
+// Faculty (public no login required)
 Route::prefix('faculty')->group(function () {
     Route::get('/',              [FacultyController::class, 'index']);
     Route::get('/by-department', [FacultyController::class, 'byDepartment']);
@@ -80,7 +80,7 @@ Route::get('/yearbook/export/mobile-pdf/{batchId}', [YearbookPdfController::clas
     ->middleware(['throttle:60,1', 'content.security', 'feature:enable_yearbook_pdf_download'])
     ->name('yearbook.export.mobile-pdf');
 
-// PROTECTED ROUTES  (auth:sanctum + throttle 120 req/min)
+// PROTECTED ROUTES (auth:sanctum + throttle 120 req/min)
 
 
 Route::middleware(['auth:sanctum', 'active.account', 'throttle:120,1'])->group(function () {
@@ -221,7 +221,7 @@ Route::middleware(['auth:sanctum', 'active.account', 'throttle:120,1'])->group(f
         Route::delete('/{id}',          [VoiceNoteController::class, 'destroy']);
     });
 
-    // ─Admin: Voice Note Moderation 
+    // Admin: Voice Note Moderation
     Route::middleware('can:admin')->prefix('admin/voice-notes')->group(function () {
         Route::get('/',              [VoiceNoteAdminController::class, 'index']);
         Route::get('/stats',         [VoiceNoteAdminController::class, 'stats']);
@@ -367,7 +367,7 @@ Route::middleware(['auth:sanctum', 'active.account', 'throttle:120,1'])->group(f
     // STANDARD/PREMIUM YEARBOOK PDF DOWNLOADS
     Route::middleware('standard')->group(function () {
 
-        // Bumped from throttle:5,1 → throttle:60,1 for development
+        // Bumped from throttle:5,1 throttle:60,1 for development
         Route::get('/yearbook/export/pdf/{batchId}', [YearbookPdfController::class, 'export'])
             ->middleware(['throttle:60,1', 'content.security', 'feature:enable_yearbook_pdf_download'])
             ->name('yearbook.export.pdf');
@@ -379,7 +379,7 @@ Route::middleware(['auth:sanctum', 'active.account', 'throttle:120,1'])->group(f
     });
 });
 
-// ADMIN ROUTES — Admin model + admin-token, fully separate from user auth
+// ADMIN ROUTES Admin model + admin-token, fully separate from user auth
 
 
 Route::prefix('admin')->group(function () {

@@ -178,7 +178,11 @@ class BatchService
     public function baseQuery(bool $isPremium)
     {
         return Student::select($this->cols($isPremium))
-            ->with(['section:id,name', 'batch:id,name,graduation_year,department']);
+            ->with([
+                'section:id,name',
+                'batch:id,name,graduation_year,department',
+                'userAccount:id,student_record_id',
+            ]);
     }
 
     // Helpers 
@@ -469,7 +473,7 @@ class BatchService
             ->map(fn ($s) => $this->formatStudent($s));
     }
 
-    // ── Static Helpers ─────────────────────────────────────────────────────
+    // Static Helpers
 
     public static function getDepartment(string $course): string
     {
@@ -497,13 +501,16 @@ class BatchService
         return array_keys(self::DEPARTMENT_MAP);
     }
 
-    // ── Formatter ──────────────────────────────────────────────────────────
+    // Formatter
 
     private function formatStudent(Student $student): array
     {
         $data = $student->toArray();
 
         $data['name']            = trim("{$student->first_name} {$student->last_name}");
+        $data['student_record_id'] = $student->id;
+        $data['account_user_id'] = $student->userAccount?->id;
+        $data['user_id']         = $student->userAccount?->id;
         $data['profile_picture'] = $student->photo_url ?? $student->photo;
         $data['department']      = $student->batch?->department
             ?: self::getDepartment((string) $student->course);

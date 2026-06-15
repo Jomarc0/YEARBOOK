@@ -1,19 +1,19 @@
 import { useEffect, useRef, useState } from 'react';
 
 /**
- * VoiceRecorder — in-browser audio recorder component.
+ * VoiceRecorder in-browser audio recorder component.
  * Usage:
  *   <VoiceRecorder onSave={(blob, durationSec) => { ... }} />
  *
  * Props:
- *   onSave(blob, duration) — called when user clicks "Use Recording"
- *   maxSeconds            — recording limit in seconds (default 300 = 5 min)
+ * onSave(blob, duration) called when user clicks "Use Recording"
+ * maxSeconds recording limit in seconds (default 300 = 5 min)
  */
 export default function VoiceRecorder({ onSave, maxSeconds = 300 }) {
   const [status,   setStatus]   = useState('idle');   // idle | recording | paused | done
   const [seconds,  setSeconds]  = useState(0);
   const [audioUrl, setAudioUrl] = useState(null);
-  const [volume,   setVolume]   = useState(0);        // 0–100 visualizer level
+  const [volume,   setVolume]   = useState(0);        // 0 100 visualizer level
 
   const mediaRef    = useRef(null);
   const chunksRef   = useRef([]);

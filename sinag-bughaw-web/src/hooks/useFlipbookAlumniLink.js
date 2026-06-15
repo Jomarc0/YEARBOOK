@@ -14,7 +14,7 @@
  *
  * API calls:
  *   GET /api/yearbook/alumni-from-page?batch_id=&page=N
- *     → { id, name, batch_year, career: { job_title, company, location, field } }
+ * { id, name, batch_year, career: { job_title, company, location, field } }
  *       or 404 if no alumni record exists for that page
  */
 import { useState, useCallback, useRef } from 'react';
@@ -28,7 +28,7 @@ export function useFlipbookAlumniLink() {
   /**
    * lookup(batchId, pageIndex)
    * Fetches alumni data for whoever appears on `pageIndex` in `batchId`.
-   * Safe to call multiple times — cancels the previous request automatically.
+   * Safe to call multiple times cancels the previous request automatically.
    */
   const lookup = useCallback(async (batchId, pageIndex) => {
     if (!batchId || pageIndex == null) return;
@@ -53,7 +53,7 @@ export function useFlipbookAlumniLink() {
       });
     } catch (err) {
       if (err?.name === 'AbortError' || err?.code === 'ERR_CANCELED') return;
-      // 404 = no alumni record for this page — silently clear
+      // 404 = no alumni record for this page silently clear
       // Any other error = also clear so popup doesn't show broken state
       setAlumniData(null);
     } finally {

@@ -43,7 +43,7 @@ class PageResolverService
             }
         }
 
-        return 0; // fallback → cover
+        return 0; // fallback cover
     }
 
     /**

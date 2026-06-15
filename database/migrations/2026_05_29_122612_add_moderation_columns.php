@@ -6,7 +6,7 @@ use Illuminate\Support\Facades\Schema;
 
 /**
  * Adds moderation columns to photos and post_media tables.
- * VoiceNote and TaggedPhoto already have status columns — no migration needed for them.
+ * VoiceNote and TaggedPhoto already have status columns no migration needed for them.
  *
  * Run: php artisan migrate
  */
@@ -14,7 +14,7 @@ return new class extends Migration
 {
     public function up(): void
     {
-        // ── photos ────────────────────────────────────────────────────────────
+        // photos
         Schema::table('photos', function (Blueprint $table) {
             $table->enum('status', ['pending', 'approved', 'rejected'])
                   ->default('pending')
@@ -26,7 +26,7 @@ return new class extends Migration
             $table->foreignId('rejected_by')->nullable()->constrained('users')->nullOnDelete()->after('rejected_at');
         });
 
-        // ── post_media ────────────────────────────────────────────────────────
+        // post_media
         Schema::table('post_media', function (Blueprint $table) {
             $table->enum('status', ['pending', 'approved', 'rejected'])
                   ->default('pending')

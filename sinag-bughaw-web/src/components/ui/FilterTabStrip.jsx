@@ -9,7 +9,7 @@ import { createPortal } from 'react-dom';
  *  - activeValue:  any
  *  - onChange:     (value) => void
  *  - ariaLabel:    string
- *  - visibleCount: number  — pills shown before "more" (default: 5)
+ * visibleCount: number pills shown before "more" (default: 5)
  */
 export default function FilterTabStrip({
   tabs = [],
@@ -106,7 +106,7 @@ export default function FilterTabStrip({
                     : 'bg-transparent text-[#6b7a99] hover:bg-white/60 hover:text-[#1d2b4b]',
                 ].join(' ')}
               >
-                {/* Active dot — dark navy on yellow fill */}
+                {/* Active dot dark navy on yellow fill */}
                 <span
                   aria-hidden="true"
                   className={[
@@ -153,9 +153,9 @@ export default function FilterTabStrip({
                   'inline-flex items-center gap-1.5 shrink-0 whitespace-nowrap rounded-[9px] px-3.5 py-[7px]',
                   'text-xs font-semibold cursor-pointer border-none outline-none transition-all duration-150 font-inherit',
                   'focus-visible:ring-2 focus-visible:ring-[#fdb813] focus-visible:ring-offset-1',
-                  // active overflow item → full yellow fill (same as active pill)
-                  // open but no active overflow → subtle yellow tint
-                  // default → light yellow tint, clearly secondary
+                  // active overflow item full yellow fill (same as active pill)
+                  // open but no active overflow subtle yellow tint
+                  // default light yellow tint, clearly secondary
                   activeInOverflow
                     ? 'bg-[#fdb813] text-[#12163A] font-bold shadow-[0_1px_4px_rgba(29,43,75,0.18)]'
                     : open
@@ -165,7 +165,7 @@ export default function FilterTabStrip({
               >
                 {activeInOverflow ? (
                   <>
-                    {/* Dark dot on yellow fill — matches visible pills */}
+                    {/* Dark dot on yellow fill matches visible pills */}
                     <span aria-hidden="true" className="w-1.5 h-1.5 rounded-full bg-[#12163A] shrink-0" />
                     {activeOverflow.label}
                     {activeOverflow.count != null && (
@@ -190,7 +190,7 @@ export default function FilterTabStrip({
                 </svg>
               </button>
 
-              {/* Dropdown — white surface so it reads as elevated above dark cards */}
+              {/* Dropdown white surface so it reads as elevated above dark cards */}
               {open && createPortal(
                 <div
                   ref={dropdownRef}
@@ -220,7 +220,7 @@ export default function FilterTabStrip({
                           className={[
                             'flex w-full items-center justify-between gap-4 border-none px-4 py-2.5',
                             'text-left text-xs cursor-pointer outline-none transition-all duration-[120ms] font-inherit',
-                            // yellow fill for active — dark navy text on top (WCAG AAA)
+                            // yellow fill for active dark navy text on top (WCAG AAA)
                             active
                               ? 'bg-[#fdb813] text-[#12163A] font-bold'
                               : 'bg-transparent text-[#4a5568] font-medium hover:bg-[#fdb813]/10 hover:text-[#1d2b4b]',
@@ -252,7 +252,7 @@ export default function FilterTabStrip({
                                 {tab.count}
                               </span>
                             )}
-                            {/* Checkmark — dark navy on yellow fill */}
+                            {/* Checkmark dark navy on yellow fill */}
                             {active && (
                               <svg
                                 className="h-3.5 w-3.5 text-[#12163A]"

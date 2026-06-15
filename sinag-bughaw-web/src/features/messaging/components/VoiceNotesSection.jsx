@@ -5,12 +5,12 @@ import LoadingSkeleton from '@/components/ui/LoadingSkeleton';
 
 /**
  * VoiceNotesSection
- * Drop into StudentProfileView.jsx — shows approved notes for that student
+ * Drop into StudentProfileView.jsx shows approved notes for that student
  * and a button so the viewer can send one.
  *
  * Props:
- *   profileUser  — { id, name } of the profile being viewed
- *   isOwnProfile — boolean, hides the "Send" button on your own profile
+ * profileUser { id, name } of the profile being viewed
+ * isOwnProfile boolean, hides the "Send" button on your own profile
  */
 export default function VoiceNotesSection({ profileUser, isOwnProfile }) {
   const [notes,       setNotes]       = useState([]);
@@ -158,7 +158,7 @@ export default function VoiceNotesSection({ profileUser, isOwnProfile }) {
         </div>
       )}
 
-      {/* Modal — inline faux overlay */}
+      {/* Modal inline faux overlay */}
       {showModal && (
         <div style={{ marginTop: '16px' }}>
           <SendVoiceNoteModal

@@ -3,25 +3,25 @@
  * NU Lipa / Sinag-Bughaw — Admin Panel
  *
  * Single unified page with two modes:
- *   Moderation  → Photos (album-grouped) | Videos | Voice Notes | Reported
- *   Media Library → Albums (CRUD) | Photos (browse) | Videos | Voice Notes
+ * Moderation Photos (album-grouped) | Videos | Voice Notes | Reported
+ * Media Library Albums (CRUD) | Photos (browse) | Videos | Voice Notes
  *
  * Features:
  *   Approve / Reject with reason modal
  *   Bulk approve / reject
  *   Album drill-down panel with lightbox
  *   Generic preview modal (video / voice)
- *   Revert Status — flip any approved/rejected item back to pending or opposite
- *   Status History — full audit trail in a slide-out drawer
- *   Media Library — Albums CRUD, Photos browse/delete, Videos, Voice Notes
- *   Media Library album drill-down — open any album and see all its photos
+ * Revert Status flip any approved/rejected item back to pending or opposite
+ * Status History full audit trail in a slide-out drawer
+ * Media Library Albums CRUD, Photos browse/delete, Videos, Voice Notes
+ * Media Library album drill-down open any album and see all its photos
  */
 
 import { useEffect, useState, useCallback, useRef } from "react";
 import { createPortal } from "react-dom";
 import api from "../services/api";
 
-// ─── Design Tokens ────────────────────────────────────────────────────────────
+// Design Tokens
 const T = {
   bg:        "#f0f4ff",
   surface:   "#ffffff",
@@ -44,9 +44,9 @@ const T = {
   shadowLg:  "0 8px 40px rgba(15,23,41,.22)",
 };
 
-// ═══════════════════════════════════════════════════════════════════════════════
+
 // SHARED PRIMITIVES
-// ═══════════════════════════════════════════════════════════════════════════════
+
 
 const Skeleton = ({ w = "100%", h = 14, radius = 6, style = {} }) => (
   <div style={{
@@ -209,7 +209,7 @@ function Pagination({ meta, onPage }) {
   );
 }
 
-// ─── Toast ────────────────────────────────────────────────────────────────────
+// Toast
 function useToast() {
   const [toasts, setToasts] = useState([]);
   const push = useCallback((message, type = "success") => {
@@ -246,7 +246,7 @@ function Toast({ toasts }) {
   );
 }
 
-// ─── Confirm Modal ────────────────────────────────────────────────────────────
+// Confirm Modal
 function ConfirmModal({ open, title, message, onConfirm, onCancel, loading }) {
   if (!open) return null;
   return (
@@ -373,7 +373,7 @@ function ModerationDecisionButtons({ onReject, onApprove, disabled }) {
   );
 }
 
-// ─── Reject Modal ─────────────────────────────────────────────────────────────
+// Reject Modal
 function ApproveConfirmModal({ open, target, onConfirm, onCancel, loading }) {
   if (!open) return null;
   const label = target?.label || "this content";
@@ -454,7 +454,7 @@ function RejectModal({ open, onConfirm, onCancel, loading, title = "Reject Conte
   );
 }
 
-// ─── Revert Status Modal ──────────────────────────────────────────────────────
+// Revert Status Modal
 function RevertModal({ open, item, itemType, onConfirm, onCancel, loading }) {
   const [targetStatus, setTargetStatus] = useState("pending");
   const [note, setNote]                 = useState("");
@@ -556,7 +556,7 @@ function RevertModal({ open, item, itemType, onConfirm, onCancel, loading }) {
   );
 }
 
-// ─── Status History Drawer ────────────────────────────────────────────────────
+// Status History Drawer
 function StatusHistoryDrawer({ open, item, itemType, onClose }) {
   const [logs,    setLogs]    = useState([]);
   const [loading, setLoading] = useState(false);
@@ -653,7 +653,7 @@ function StatusHistoryDrawer({ open, item, itemType, onClose }) {
   );
 }
 
-// ─── Revert Button ────────────────────────────────────────────────────────────
+// Revert Button
 function RevertButton({ item, onRevert, onHistory, size = "sm" }) {
   const status = item?.status;
   if (!status || status === "pending") return null;
@@ -681,7 +681,7 @@ function RevertButton({ item, onRevert, onHistory, size = "sm" }) {
   );
 }
 
-// ─── Album Form Modal (Media Library) ────────────────────────────────────────
+// Album Form Modal (Media Library)
 function AlbumFormModal({ open, album, onSave, onCancel, loading }) {
   const [form, setForm] = useState({ title: "", description: "", type: "general", category: "photos", event_date: "" });
 
@@ -748,11 +748,11 @@ function AlbumFormModal({ open, album, onSave, onCancel, loading }) {
   );
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// MODERATION — SHARED COMPONENTS
-// ═══════════════════════════════════════════════════════════════════════════════
 
-// ─── Album Drill-Down Panel (Moderation) ──────────────────────────────────────
+// MODERATION SHARED COMPONENTS
+
+
+// Album Drill-Down Panel (Moderation)
 function AlbumDrillPanel({ album, onClose, onApproveAlbum, onRejectAlbum, onApprovePhoto, onRejectPhoto, onRevertPhoto, onHistoryPhoto, onFlagAvatar, loading }) {
   const [lightbox,    setLightbox]    = useState(null);
   const [lightboxIdx, setLightboxIdx] = useState(0);
@@ -904,7 +904,7 @@ function AlbumDrillPanel({ album, onClose, onApproveAlbum, onRejectAlbum, onAppr
   );
 }
 
-// ─── Album Card (Moderation queue) ───────────────────────────────────────────
+// Album Card (Moderation queue)
 function ModerationAlbumCard({ album, selected, onSelect, onOpen, onApprove, onReject, onRevert, onHistory }) {
   const photos    = album.photos ?? [];
   const isPending = album.status === "pending";
@@ -977,7 +977,7 @@ function ModerationAlbumCard({ album, selected, onSelect, onOpen, onApprove, onR
   );
 }
 
-// ─── Generic Content Card (video / voice / reported) ──────────────────────────
+// Generic Content Card (video / voice / reported)
 function ModerationContentCard({ item, type, selected, onSelect, onPreview, onApprove, onReject, onRevert, onHistory }) {
   const isAudio   = type === "voice";
   const isPending = !item.status || item.status === "pending";
@@ -1029,7 +1029,7 @@ function ModerationContentCard({ item, type, selected, onSelect, onPreview, onAp
   );
 }
 
-// ─── Generic Preview Modal ─────────────────────────────────────────────────────
+// Generic Preview Modal
 function GenericPreviewModal({ item, type, onClose, onApprove, onReject, onRevert, onHistory, loading }) {
   if (!item) return null;
 
@@ -1117,9 +1117,9 @@ function GenericPreviewModal({ item, type, onClose, onApprove, onReject, onRever
   );
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
+
 // MODERATION MODE
-// ═══════════════════════════════════════════════════════════════════════════════
+
 
 const MOD_TABS = [
   { key: "photo",    label: "Photos"      },
@@ -1480,13 +1480,13 @@ function ModerationMode({ toast }) {
   );
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// MEDIA LIBRARY — ALBUM DRILL-DOWN PANEL  ✅ NEW
-// ═══════════════════════════════════════════════════════════════════════════════
+
+// MEDIA LIBRARY ALBUM DRILL-DOWN PANEL
+
 
 /**
  * LibraryAlbumDrillPanel
- * ──────────────────────
+ *
  * Slide-out panel that opens when an admin clicks an album card in the Media
  * Library. Fetches all photos from GET /admin/media/albums/{id}/photos and
  * renders them in a grid with lightbox + per-photo delete.
@@ -1601,7 +1601,7 @@ function LibraryAlbumDrillPanel({ album, onClose, toast }) {
 
   return (
     <>
-      {/* ── Slide-out panel ──────────────────────────────────────────────── */}
+      {/* Slide-out panel */}
       <div
         style={{ position: "fixed", inset: 0, background: "rgba(15,23,41,.6)", zIndex: 1300, display: "flex", alignItems: "stretch", justifyContent: "flex-end" }}
         onClick={onClose}
@@ -1722,7 +1722,7 @@ function LibraryAlbumDrillPanel({ album, onClose, toast }) {
         </div>
       </div>
 
-      {/* ── Lightbox ─────────────────────────────────────────────────────── */}
+      {/* Lightbox */}
       {lightbox && (
         <div
           style={{ position: "fixed", inset: 0, background: "rgba(5,10,25,.94)", zIndex: 2200, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}
@@ -1777,7 +1777,7 @@ function LibraryAlbumDrillPanel({ album, onClose, toast }) {
         </div>
       )}
 
-      {/* ── Confirm delete ───────────────────────────────────────────────── */}
+      {/* Confirm delete */}
       <ConfirmModal
         open={!!deleteTarget}
         title="Delete Photo"
@@ -1790,9 +1790,9 @@ function LibraryAlbumDrillPanel({ album, onClose, toast }) {
   );
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
+
 // MEDIA LIBRARY MODE
-// ═══════════════════════════════════════════════════════════════════════════════
+
 
 function StatCard({ icon, label, value, color = T.primary }) {
   return (
@@ -1808,7 +1808,7 @@ function StatCard({ icon, label, value, color = T.primary }) {
   );
 }
 
-// ─── Albums Tab ───────────────────────────────────────────────────────────────
+// Albums Tab
 function LibraryAlbumsTab({ toast }) {
   const [items,        setItems]        = useState([]);
   const [meta,         setMeta]         = useState(null);
@@ -1819,7 +1819,7 @@ function LibraryAlbumsTab({ toast }) {
   const [albumModal,   setAlbumModal]   = useState(false);
   const [editTarget,   setEditTarget]   = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
-  // ✅ drill-down state
+  // drill-down state
   const [openAlbum,    setOpenAlbum]    = useState(null);
 
   const load = useCallback(async (p = 1, type = typeFilter) => {
@@ -1882,7 +1882,7 @@ function LibraryAlbumsTab({ toast }) {
           {items.map(album => {
             const tc = typeColor[album.type] ?? { color: T.muted, bg: T.border };
             return (
-              // ✅ whole card is clickable — opens drill-down panel
+              // whole card is clickable opens drill-down panel
               <div
                 key={album.id}
                 onClick={() => setOpenAlbum(album)}
@@ -1908,7 +1908,7 @@ function LibraryAlbumsTab({ toast }) {
                       {[album.category, album.event_date].filter(Boolean).join(" · ")}
                     </div>
                   )}
-                  {/* ✅ Stop propagation so Edit/Delete don't open the panel */}
+                  {/* Stop propagation so Edit/Delete don't open the panel */}
                   <div style={{ display: "flex", gap: 6 }} onClick={e => e.stopPropagation()}>
                     <button
                       onClick={() => { setEditTarget(album); setAlbumModal(true); }}
@@ -1945,7 +1945,7 @@ function LibraryAlbumsTab({ toast }) {
         loading={actLoading}
       />
 
-      {/* ✅ Album drill-down panel */}
+      {/* Album drill-down panel */}
       <LibraryAlbumDrillPanel
         album={openAlbum}
         onClose={() => setOpenAlbum(null)}
@@ -1955,7 +1955,7 @@ function LibraryAlbumsTab({ toast }) {
   );
 }
 
-// ─── Photos Tab (Library) ─────────────────────────────────────────────────────
+// Photos Tab (Library)
 function LibraryPhotosTab({ toast }) {
   const [items,        setItems]        = useState([]);
   const [meta,         setMeta]         = useState(null);
@@ -2076,7 +2076,7 @@ function LibraryPhotosTab({ toast }) {
   );
 }
 
-// ─── Videos Tab (Library) ─────────────────────────────────────────────────────
+// Videos Tab (Library)
 function LibraryVideosTab({ toast }) {
   const [items,        setItems]        = useState([]);
   const [meta,         setMeta]         = useState(null);
@@ -2182,7 +2182,7 @@ function LibraryVideosTab({ toast }) {
   );
 }
 
-// ─── Voice Notes Tab (Library) ────────────────────────────────────────────────
+// Voice Notes Tab (Library)
 function LibraryVoiceNotesTab({ toast }) {
   const [items,        setItems]        = useState([]);
   const [meta,         setMeta]         = useState(null);
@@ -2264,7 +2264,7 @@ function LibraryVoiceNotesTab({ toast }) {
   );
 }
 
-// ─── Media Library Mode ───────────────────────────────────────────────────────
+// Media Library Mode
 const LIB_TABS = [
   { key: "albums", label: "Albums"      },
   { key: "photos", label: "Photos"      },
@@ -2310,9 +2310,9 @@ function MediaLibraryMode({ toast }) {
   );
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
+
 // ROOT PAGE
-// ═══════════════════════════════════════════════════════════════════════════════
+
 
 const MODES = [
   { key: "moderation", icon: "moderation", label: "Moderation",   desc: "Review and approve user-uploaded content" },

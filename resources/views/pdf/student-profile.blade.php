@@ -20,7 +20,7 @@
             padding: 40px;
         }
 
-        /* ── Header bar ── */
+        /* Header bar */
         .header {
             background: #1d2b4b;
             color: white;
@@ -44,7 +44,7 @@
             color: #fdb813;
         }
 
-        /* ── Profile card ── */
+        /* Profile card */
         .profile-card {
             background: white;
             border-radius: 12px;
@@ -91,7 +91,7 @@
             font-size: 13px;
         }
 
-        /* ── Bio / Quote ── */
+        /* Bio / Quote */
         .quote-box {
             background: #f8f9ff;
             border-left: 4px solid #3f51b5;
@@ -102,7 +102,7 @@
             color: #555;
         }
 
-        /* ── Section heading ── */
+        /* Section heading */
         .section-heading {
             font-size: 13px;
             font-weight: bold;
@@ -114,7 +114,7 @@
             margin-bottom: 14px;
         }
 
-        /* ── Achievements ── */
+        /* Achievements */
         .achievement-card {
             background: white;
             border-radius: 10px;
@@ -143,7 +143,7 @@
             margin-top: 2px;
         }
 
-        /* ── Footer ── */
+        /* Footer */
         .footer {
             text-align: center;
             color: #aaa;

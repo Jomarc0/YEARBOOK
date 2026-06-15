@@ -9,7 +9,7 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('admins', function (Blueprint $table) {
-            // role column — default 'admin' so existing rows are unaffected
+            // role column default 'admin' so existing rows are unaffected
             if (! Schema::hasColumn('admins', 'role')) {
                 $table->enum('role', ['admin', 'super_admin'])
                       ->default('admin')

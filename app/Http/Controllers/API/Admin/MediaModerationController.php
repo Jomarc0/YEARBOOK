@@ -379,7 +379,7 @@ class MediaModerationController extends Controller
         return response()->json($items);
     }
 
-    // MODERATION — Show single item
+    // MODERATION Show single item
     public function show(string $type, int $id): JsonResponse
     {
         if ($type === 'photo') {
@@ -507,7 +507,7 @@ class MediaModerationController extends Controller
         return response()->json($data);
     }
 
-    // MODERATION — Album approve / reject / revert
+    // MODERATION Album approve / reject / revert
 
     public function approveAlbum(int $albumId): JsonResponse
     {
@@ -625,7 +625,7 @@ class MediaModerationController extends Controller
         ]);
     }
 
-    // MODERATION — Single photo approve / reject / revert
+    // MODERATION Single photo approve / reject / revert
 
     public function approvePhoto(int $id): JsonResponse
     {
@@ -752,7 +752,7 @@ class MediaModerationController extends Controller
         ]);
     }
 
-    // MODERATION — Generic item approve / reject / revert
+    // MODERATION Generic item approve / reject / revert
     public function approveItem(Request $request, string $type, int $id): JsonResponse
     {
         if ($type === 'video' && $request->input('source') === 'gallery') {
@@ -860,7 +860,7 @@ class MediaModerationController extends Controller
     }
 
 
-    // MODERATION — Bulk approve / reject
+    // MODERATION Bulk approve / reject
     private function approveGalleryVideo(int $id): JsonResponse
     {
         $item = Gallery::with(['album', 'media', 'user'])
@@ -1073,7 +1073,7 @@ class MediaModerationController extends Controller
         return response()->json(['message' => count($request->ids) . ' items rejected.']);
     }
 
-    // MODERATION — Status history
+    // MODERATION Status history
     public function statusHistory(string $type, int $id): JsonResponse
     {
         $rows = DB::table('audit_logs')
@@ -1122,7 +1122,7 @@ class MediaModerationController extends Controller
         return response()->json($logs);
     }
 
-    // MEDIA LIBRARY — Stats
+    // MEDIA LIBRARY Stats
     public function mediaStats(): JsonResponse
     {
         return response()->json([
@@ -1148,7 +1148,7 @@ class MediaModerationController extends Controller
         ]);
     }
 
-    // MEDIA LIBRARY — Albums
+    // MEDIA LIBRARY Albums
     public function mediaAlbums(Request $request): JsonResponse
     {
         $query = Album::query()
@@ -1288,7 +1288,7 @@ class MediaModerationController extends Controller
         return response()->json(['message' => 'Album moved to trash.']);
     }
 
-    // MEDIA LIBRARY — Photos
+    // MEDIA LIBRARY Photos
     public function mediaPhotos(Request $request): JsonResponse
     {
         $query = GalleryMedia::query()
@@ -1352,7 +1352,7 @@ class MediaModerationController extends Controller
         return response()->json(['message' => 'Photo moved to trash.']);
     }
 
-    // MEDIA LIBRARY — Videos
+    // MEDIA LIBRARY Videos
 
     public function updatePhotoVisibility(Request $request, int $id): JsonResponse
     {
@@ -1514,7 +1514,7 @@ class MediaModerationController extends Controller
         return response()->json(['message' => 'Video moved to trash.']);
     }
 
-    // MEDIA LIBRARY — Voice Notes
+    // MEDIA LIBRARY Voice Notes
 
     public function mediaVoiceNotes(Request $request): JsonResponse
     {
@@ -1558,7 +1558,7 @@ class MediaModerationController extends Controller
         return response()->json(['message' => 'Voice note moved to trash.']);
     }
 
-    // MEDIA LIBRARY — Tagged Photos
+    // MEDIA LIBRARY Tagged Photos
 
     public function mediaTaggedPhotos(Request $request): JsonResponse
     {

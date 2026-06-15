@@ -1,5 +1,5 @@
 // sinag-bughaw-web/src/features/yearbook/pages/YearbookHomePage.jsx
-// Extends the existing home page — adds batch cards that open the flipbook,
+// Extends the existing home page adds batch cards that open the flipbook,
 // and a PDF download shortcut per batch.
 
 import { useEffect, useState } from 'react';

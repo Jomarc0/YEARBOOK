@@ -1,10 +1,10 @@
 // src/features/yearbook/components/BulkUploadZone.jsx
 // Matches NU Lipa design: #1d2b4b navy + #fdb813 yellow, Tailwind + inline styles
-//
+
 // Fixed from previous version:
-//  - `limits` prop now has a safe default so the component never crashes
+// `limits` prop now has a safe default so the component never crashes
 //    when the hook hasn't resolved yet or is called without limits.
-//  - `queue` items now include a `type` field ('image' | 'video') so FileRow
+// `queue` items now include a `type` field ('image' | 'video') so FileRow
 //    renders the correct thumbnail / icon.
 
 import { useRef } from 'react';
@@ -23,7 +23,7 @@ const TIER_LABELS = {
   premium:          'Premium HD',
 };
 
-// ── Default limits (safe fallback while hook resolves) ────────────────────────
+// Default limits (safe fallback while hook resolves)
 const DEFAULT_LIMITS = {
   videoAllowed: false,
   maxFiles:     5,
@@ -31,7 +31,7 @@ const DEFAULT_LIMITS = {
   maxVideoMB:   0,
 };
 
-// ── Single queued file row ────────────────────────────────────────────────────
+// Single queued file row
 function FileRow({ item, onRemove }) {
   return (
     <div
@@ -88,7 +88,7 @@ function FileRow({ item, onRemove }) {
   );
 }
 
-// ── Main component ────────────────────────────────────────────────────────────
+// Main component
 /**
  * BulkUploadZone
  *
@@ -99,7 +99,7 @@ function FileRow({ item, onRemove }) {
  * Expected props from useMediaUpload (aliased in the hook):
  *   queue        {Array}    - file queue items
  *   uploading    {boolean}
- *   progress     {number}   - 0–100
+ * progress {number} - 0 100
  *   errors       {string[]} - array of error strings
  *   isDragging   {boolean}
  *   limits       {object}   - { videoAllowed, maxFiles, maxPhotoMB, maxVideoMB }
@@ -116,7 +116,7 @@ export default function BulkUploadZone({
   progress    = 0,
   errors      = [],
   isDragging  = false,
-  // Limits — safe default so component never crashes while hook resolves
+  // Limits safe default so component never crashes while hook resolves
   limits      = DEFAULT_LIMITS,
   // Actions
   addFiles,
@@ -139,7 +139,7 @@ export default function BulkUploadZone({
 
   return (
     <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-lg shadow-[#1d2b4b]/5">
-      {/* ── Header ── */}
+      {/* Header */}
       <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
         <div className="flex items-center gap-3">
           <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#1d2b4b]/5">
@@ -173,7 +173,7 @@ export default function BulkUploadZone({
 
       <div className="p-4 flex flex-col gap-4">
 
-        {/* ── Drop Zone ── */}
+        {/* Drop Zone */}
         <div
           {...dragHandlers}
           onClick={() => !uploading && inputRef.current?.click()}
@@ -231,7 +231,7 @@ export default function BulkUploadZone({
           )}
         </div>
 
-        {/* ── Plan info chips ── */}
+        {/* Plan info chips */}
         <div className="flex flex-wrap gap-2">
           {[
             { icon: 'fa-images', text: `${safelimits.maxFiles} files max` },
@@ -257,7 +257,7 @@ export default function BulkUploadZone({
           ))}
         </div>
 
-        {/* ── Errors ── */}
+        {/* Errors */}
         {errors.length > 0 && (
           <div
             className="rounded-2xl px-4 py-3"
@@ -276,7 +276,7 @@ export default function BulkUploadZone({
           </div>
         )}
 
-        {/* ── File queue ── */}
+        {/* File queue */}
         {queue.length > 0 && (
           <div className="flex flex-col gap-2 max-h-48 overflow-y-auto pr-1">
             {queue.map(item => (
@@ -285,7 +285,7 @@ export default function BulkUploadZone({
           </div>
         )}
 
-        {/* ── Progress bar ── */}
+        {/* Progress bar */}
         {uploading && (
           <div>
             <div className="flex items-center justify-between mb-1.5">
@@ -310,7 +310,7 @@ export default function BulkUploadZone({
           </div>
         )}
 
-        {/* ── Actions ── */}
+        {/* Actions */}
         {queue.length > 0 && !uploading && (
           <div
             className="flex items-center justify-between pt-2"

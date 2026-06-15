@@ -94,7 +94,7 @@ export default function PostLightbox({ post, initialIdx = 0, onClose }) {
           onClick={e => e.stopPropagation()}
         >
 
-          {/* ── LEFT: media ── */}
+          {/* LEFT: media */}
           <div className="relative flex-[0_0_62%] bg-black flex items-center justify-center overflow-hidden min-h-[260px] sm:min-h-[480px]">
 
             {/* Shimmer while loading */}
@@ -164,7 +164,7 @@ export default function PostLightbox({ post, initialIdx = 0, onClose }) {
             )}
           </div>
 
-          {/* ── RIGHT: sidebar ── */}
+          {/* RIGHT: sidebar */}
           <div className="flex-[0_0_38%] bg-white flex flex-col border-l border-[#dbdbdb] overflow-hidden max-h-[40vh] sm:max-h-none">
 
             {/* Header */}

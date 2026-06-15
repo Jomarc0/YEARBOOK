@@ -1,11 +1,11 @@
 // src/hooks/useMediaUpload.js
-//
+
 // Fixed from previous version:
-//  - Signature changed from options-object to positional args
+// Signature changed from options-object to positional args
 //    to match how GalleryPage.jsx calls it:
 //    useMediaUpload(albumId, tier, onSuccess)
-//  - mediaApi used for all API calls (consistent with gallery.api.js)
-//  - Added `limits`, `queue`, `errors`, `clearQueue`, `upload`, `dragHandlers`
+// mediaApi used for all API calls (consistent with gallery.api.js)
+// Added `limits`, `queue`, `errors`, `clearQueue`, `upload`, `dragHandlers`
 //    aliases in the return value so BulkUploadZone receives the exact prop
 //    names it expects without any adapter code in GalleryPage.
 
@@ -74,7 +74,7 @@ export function useMediaUpload(albumId = null, tierKey = 'free', onSuccess = nul
 
   const inputRef = useRef(null);
 
-  // ── Validation ─────────────────────────────────────────────────────────────
+  // Validation
 
   const validateFile = useCallback((file) => {
     const isPhoto = PHOTO_TYPES.includes(file.type);
@@ -96,7 +96,7 @@ export function useMediaUpload(albumId = null, tierKey = 'free', onSuccess = nul
     return null;
   }, [tier]);
 
-  // ── Add files ───────────────────────────────────────────────────────────────
+  // Add files
 
   const addFiles = useCallback((newFiles) => {
     const arr = Array.from(newFiles);
@@ -135,7 +135,7 @@ export function useMediaUpload(albumId = null, tierKey = 'free', onSuccess = nul
     setError(null);
   }, [files]);
 
-  // ── Submit ──────────────────────────────────────────────────────────────────
+  // Submit
 
   const submit = useCallback(async (options = {}) => {
     const caption = typeof options === 'string' ? options : (options.caption ?? '');
@@ -186,7 +186,7 @@ export function useMediaUpload(albumId = null, tierKey = 'free', onSuccess = nul
     }
   }, [files, albumId, clearFiles, onSuccess]);
 
-  // ── Delete ──────────────────────────────────────────────────────────────────
+  // Delete
 
   const remove = useCallback(async (photoId) => {
     try {
@@ -198,7 +198,7 @@ export function useMediaUpload(albumId = null, tierKey = 'free', onSuccess = nul
     }
   }, []);
 
-  // ── Drag and drop ───────────────────────────────────────────────────────────
+  // Drag and drop
 
   const dragProps = {
     onDragOver:  (e) => { e.preventDefault(); setIsDragging(true); },
@@ -217,13 +217,13 @@ export function useMediaUpload(albumId = null, tierKey = 'free', onSuccess = nul
     onChange: (e) => addFiles(e.target.files),
   };
 
-  // ── BulkUploadZone-compatible shape ────────────────────────────────────────
-  //
+  // BulkUploadZone-compatible shape
+
   // BulkUploadZone expects:
   //   queue, uploading, progress, errors, isDragging,
   //   limits { videoAllowed, maxFiles, maxPhotoMB, maxVideoMB },
   //   addFiles, removeFile, clearQueue, upload, dragHandlers
-  //
+
   // We build these as aliases so GalleryPage can keep doing {...uploadHook}.
 
   const limits = {
@@ -234,7 +234,7 @@ export function useMediaUpload(albumId = null, tierKey = 'free', onSuccess = nul
   };
 
   return {
-    // ── canonical names (internal / advanced usage) ──
+    // canonical names (internal / advanced usage)
     files,
     addFiles,
     removeFile,
@@ -258,7 +258,7 @@ export function useMediaUpload(albumId = null, tierKey = 'free', onSuccess = nul
     tier,
     tierKey,
 
-    // ── BulkUploadZone aliases ───────────────────────────────────────────────
+    // BulkUploadZone aliases
     queue:        files,           // BulkUploadZone prop: queue
     errors:       error ? [error] : [],  // BulkUploadZone prop: errors (array)
     clearQueue:   clearFiles,      // BulkUploadZone prop: clearQueue

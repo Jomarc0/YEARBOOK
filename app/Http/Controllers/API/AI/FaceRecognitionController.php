@@ -76,7 +76,7 @@ class FaceRecognitionController extends Controller
             $threshold = (float) Setting::getValue('face_recognition_threshold', '75');
             $file      = $request->file('face_image');
 
-            // Search Rekognition — returns ALL matches (student:X and photo:X)
+            // Search Rekognition returns ALL matches (student:X and photo:X)
             $rekognitionResult = $this->faceRecognition->searchIndexedFaces($file, 30, $threshold);
 
             $rawMatches   = collect($rekognitionResult['matches'] ?? []);

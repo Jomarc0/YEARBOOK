@@ -145,7 +145,7 @@ class SocialAuthController extends Controller
         $frontend = $this->frontendUrl();
         $mobileRedirect = $this->decodeMobileState($request->query('state'));
 
-    // ── 1. Exchange code for Google user ─────────────────────────────────
+    // 1. Exchange code for Google user
     try {
         $useStatelessProvider = $mobileRedirect || ! $request->filled('state');
 
@@ -165,14 +165,14 @@ class SocialAuthController extends Controller
         return $this->redirectToMobileOrWeb($request, 'error=sso_failed');
     }
 
-        // ── 2. Validate email is present ─────────────────────────────────────
+        // 2. Validate email is present
         $email = $googleUser->getEmail();
         if (! $email) {
             Log::warning('Google OAuth: no email returned from Google.');
             return $this->redirectToMobileOrWeb($request, 'error=sso_failed');
         }
 
-        // ── 3. Upsert user record ─────────────────────────────────────────────
+        // 3. Upsert user record
         try {
             $nameParts = explode(' ', trim($googleUser->getName()), 2);
             User::disableSearchSyncing();
@@ -182,7 +182,7 @@ class SocialAuthController extends Controller
                         ->first();
 
             if ($user) {
-                // Existing user — link Google account and refresh token/avatar
+                // Existing user link Google account and refresh token/avatar
                 $user->update([
                     'google_id'         => $googleUser->getId(),
                     'google_token'      => $googleUser->token,
@@ -191,7 +191,7 @@ class SocialAuthController extends Controller
                     'consent_accepted'  => true,
                 ]);
             } else {
-                // Brand new user — create full record
+                // Create full record for first-time SSO user
                 $user = User::create([
                     'google_id'         => $googleUser->getId(),
                     'name'              => $googleUser->getName(),
@@ -216,7 +216,7 @@ class SocialAuthController extends Controller
             return $this->redirectToMobileOrWeb($request, 'error=sso_failed');
         }
 
-        // ── 4. Auto-create consent log for new SSO users ──────────────────────
+        // 4. Auto-create consent log for SSO users
         try {
             Consent::updateOrCreate(
                 [
@@ -239,7 +239,7 @@ class SocialAuthController extends Controller
             ]);
         }
 
-        // ── 5. Issue Sanctum token ────────────────────────────────────────────
+        // 5. Issue Sanctum token
         try {
             $user->tokens()->where('name', 'google-sso')->delete();
             $token = $user->createToken('google-sso')->plainTextToken;
@@ -268,7 +268,7 @@ class SocialAuthController extends Controller
             ]);
         }
 
-        // ── 6. Send token to React via URL param ──────────────────────────────
+        // 6. Send token to React via URL param
         return $this->redirectToMobileOrWeb($request, http_build_query(['token' => $token]));
     }
 

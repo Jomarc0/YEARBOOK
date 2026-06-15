@@ -27,7 +27,7 @@
             min-height: 100vh;
         }
 
-        /* --- ANIMATIONS --- */
+        /* ANIMATIONS */
         @keyframes fadeInUp {
             from { opacity: 0; transform: translateY(20px); }
             to { opacity: 1; transform: translateY(0); }
@@ -78,7 +78,7 @@
         .login-card h2 { font-size: 2rem; color: #111; margin-bottom: 10px; font-weight: 700; }
         .login-card p.subtitle { color: #6c757d; font-size: 0.95rem; margin-bottom: 30px; }
 
-        /* --- ALERTS --- */
+        /* ALERTS */
         .alert {
             padding: 14px;
             border-radius: 10px;
@@ -103,7 +103,7 @@
             border-left: 4px solid var(--success-green);
         }
 
-        /* --- FORM STYLING --- */
+        /* FORM STYLING */
         form { text-align: left; }
         .form-group { margin-bottom: 20px; }
         label { display: block; font-size: 0.85rem; font-weight: 600; color: #495057; margin-bottom: 8px; }
@@ -125,7 +125,7 @@
             box-shadow: 0 0 0 4px rgba(59, 89, 152, 0.1);
         }
 
-        /* --- BUTTON LOADING STATE --- */
+        /* BUTTON LOADING STATE */
         .btn-signin {
             width: 100%;
             background: #3f51b5; 
@@ -166,7 +166,7 @@
         .register-link { text-align: center; margin-top: 35px; font-size: 0.9rem; color: #6c757d; }
         .register-link a { color: #3f51b5; text-decoration: none; font-weight: 700; }
 
-        /* --- FOOTER --- */
+        /* FOOTER */
         footer { background: #0e1628; color: white; padding: 60px 8% 30px; display: grid; grid-template-columns: 2fr 1fr 1fr 1.5fr; gap: 40px; }
         .f-info h3 { font-size: 1.5rem; margin-bottom: 15px; }
         .f-info p { color: #a0aabf; font-size: 0.85rem; line-height: 1.6; margin-bottom: 20px; }

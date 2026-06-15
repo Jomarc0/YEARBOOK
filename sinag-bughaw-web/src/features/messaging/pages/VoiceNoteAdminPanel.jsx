@@ -150,7 +150,7 @@ export default function VoiceNoteAdminPanel() {
                   </p>
                 </div>
 
-                {/* Actions — only for pending */}
+                {/* Actions only for pending */}
                 {tab === 'pending' && rejectId !== note.id && (
                   <div style={{ display: 'flex', gap: '8px', flexShrink: 0 }}>
                     <button

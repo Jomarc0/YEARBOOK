@@ -87,7 +87,7 @@ const shouldShowFeedPost = (post: any) => {
   return mediaItemsOf(post).length > 0 || meaningfulText(post?.caption || post?.body || post?.message);
 };
 
-// ─── Helper: deduplicate an array by a string key ───────────────────────────
+// Helper: deduplicate an array by a string key
 const deduplicateById = (list: any[]): any[] =>
   [...new Map(list.map((item) => [String(item?.id ?? item?.name ?? Math.random()), item])).values()];
 
@@ -710,13 +710,13 @@ export default function HomeScreen() {
 
     if (batchmatesResult.status === 'fulfilled') {
       const raw = (unwrap(batchmatesResult.value) || []).slice(0, 12);
-      // FIX: deduplicate at the data level — root cause of the duplicate key warning
+      // FIX: deduplicate at the data level root cause of the duplicate key warning
       setBatchmates(deduplicateById(raw));
     }
 
     if (trendingResult.status === 'fulfilled') {
       const raw = (unwrap(trendingResult.value) || []).slice(0, 12);
-      // FIX: deduplicate at the data level — root cause of the duplicate key warning
+      // FIX: deduplicate at the data level root cause of the duplicate key warning
       setTrending(deduplicateById(raw));
     }
   }, []);

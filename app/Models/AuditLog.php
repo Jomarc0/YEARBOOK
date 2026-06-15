@@ -74,7 +74,7 @@ class AuditLog extends Model
     const STATUS_FAILED            = 'Failed';
     const STATUS_CRITICAL          = 'Critical';
 
-    // ─────────────────────────────────────────────────────────────────────────
+
 
     protected $fillable = [
         'admin_id',

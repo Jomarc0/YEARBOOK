@@ -17,7 +17,7 @@ export function useYearbook(batchId, scope = {}) {
     loading:       true,
     error:         null,
     meta:          null,   // { title, school, year, coverUrl, theme, status, pdfReady }
-    pages:         [],     // ordered page descriptor array — built by backend
+    pages:         [],     // ordered page descriptor array built by backend
     toc:           [],     // table of contents entries derived from pages
     bookmarks:     [],     // user's saved page indices
     searchResults: null,   // null = idle | [] = no results | [...] = hits
@@ -39,8 +39,8 @@ export function useYearbook(batchId, scope = {}) {
 
     try {
       // Fetch pages manifest + bookmarks in parallel.
-      // yearbookApi.pages() returns { meta, pages[] } — fully built by the backend.
-      // yearbookApi.meta()  returns cover meta separately (pdfReady, theme, etc.)
+      // yearbookApi.pages() returns { meta, pages[] } fully built by the backend.
+      // yearbookApi.meta() returns cover meta separately (pdfReady, theme, etc.)
       const [metaRes, pagesRes, bookmarksRes] = await Promise.all([
         yearbookApi.meta(batchId),
         yearbookApi.pages(batchId, cleanScope),
@@ -107,7 +107,7 @@ export function useYearbook(batchId, scope = {}) {
     return () => abortRef.current?.abort();
   }, [load]);
 
-  // ── Actions ────────────────────────────────────────────────────────────────
+  // Actions
 
   const search = useCallback(async (q) => {
     if (!q?.trim()) {
@@ -151,7 +151,7 @@ export function useYearbook(batchId, scope = {}) {
   }, []);
 
   /**
-   * downloadPdf — delegates to DownloadYearbookButton for the main
+   * downloadPdf delegates to DownloadYearbookButton for the main
    * batch yearbook, but keeps the per-student & certificate flows here
    * for backward compatibility with onDownload prop in FlipbookViewer.
    */
@@ -174,7 +174,7 @@ export function useYearbook(batchId, scope = {}) {
   };
 }
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
+// Helpers
 
 /**
  * Build a flat TOC array from the server-returned page manifest.
@@ -185,7 +185,7 @@ function buildTOC(pages) {
   const toc = [];
 
   pages.forEach((page, idx) => {
-    // One TOC entry per spread — use the left page only
+    // One TOC entry per spread use the left page only
     if (page.side !== 'left') return;
 
     const entry = tocEntry(page, idx);

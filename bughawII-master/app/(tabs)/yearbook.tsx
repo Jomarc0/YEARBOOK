@@ -66,7 +66,7 @@ const FLIP_PREP_MS = 0;
 const FLIP_DURATION_MS = 1050;
 const FLIP_OPEN_DEG = 90;
 
-// Flip state â€” single atomic object
+// Flip state single atomic object
 type FlipPhase = 'idle' | 'animating';
 type FlipState = {
   phase: FlipPhase;
@@ -653,7 +653,7 @@ export default function YearbookScreen() {
     }, 50);
   }, [flipAnim, flipProg]);
 
-  // â”€â”€ startFlip: single setState â€” one render â€” no flicker â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // startFlip: single setState one render no flicker
   const startFlip = useCallback((dir: 1 | -1) => {
     if (isAnim.current) return;
     if (settleTimer.current) {
@@ -685,7 +685,7 @@ export default function YearbookScreen() {
     });
 
     if (flipTimer.current) clearTimeout(flipTimer.current);
-    // FIX 1: FLIP_PREP_MS is now 0 â€” animation starts immediately on mount
+    // FIX 1: FLIP_PREP_MS is now 0 animation starts immediately on mount
     // so the target page never has a visible window before animation begins.
     flipTimer.current = setTimeout(() => {
       flipTimer.current = null;
@@ -847,7 +847,7 @@ export default function YearbookScreen() {
     return Array.from(byKey.values()).filter(t => !term || `${t.kind} ${t.label} ${t.subtitle}`.toLowerCase().includes(term)).sort((a,b) => a.pageNumber - b.pageNumber).slice(0,30);
   }, [pages, jumpQ]);
 
-  // â”€â”€ Derived display values â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // Derived display values
   const displayIndex = flip.currentIndex;
   const displayPage  = flip.currentPage || visible[flip.currentIndex] || null;
 
@@ -858,8 +858,8 @@ export default function YearbookScreen() {
   const stageFromKey   = `${stageFromIndex}-${stageFromPage?.id ?? stageFromPage?.pageIndex ?? ptype(stageFromPage)}`;
   const stageToKey     = `${stageToIndex}-${stageToPage?.id ?? stageToPage?.pageIndex ?? ptype(stageToPage)}`;
 
-  // â”€â”€ FIX 2: Current page fades out only in the final 15% of the animation â”€â”€
-  // Previously the current page had no opacity control â€” it would snap-disappear
+  // FIX 2: Current page fades out only in the final 15% of the animation
+  // Previously the current page had no opacity control it would snap-disappear
   // when backfaceVisibility kicked in, causing a blank-frame flash.
   // Now it gently fades out at the very end, giving a seamless handoff.
   const curStyle = useAnimatedStyle(() => {
@@ -883,11 +883,11 @@ export default function YearbookScreen() {
     };
   });
 
-  // â”€â”€ FIX 3: Target page starts fully invisible (opacity: 0) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // FIX 3: Target page starts fully invisible (opacity: 0)
   // The old code set opacity:1 immediately on mount, causing a flash during
   // the FLIP_PREP_MS window and on the very first render frame.
   // Now the target is invisible at flipProg=0 and only begins revealing itself
-  // after the current page has rotated 45% of the way â€” by which point it's
+  // after the current page has rotated 45% of the way by which point it's
   // visually behind the rotating page anyway.
   const nxtStyle = useAnimatedStyle(() => {
     'worklet';
@@ -906,14 +906,14 @@ export default function YearbookScreen() {
     return { opacity: Math.max(0, Math.min(0.38, peak * 0.38)) };
   });
 
-  // â”€â”€ FIX 4: Shadow also keyed to revealProgress â€” no shadow flash on mount â”€
+  // FIX 4: Shadow also keyed to revealProgress no shadow flash on mount
   const nxtShadowStyle = useAnimatedStyle(() => {
     'worklet';
     const revealProgress = Math.max(0, (flipProg.value - 0.45) / 0.55);
     return { opacity: Math.max(0, 0.18 * revealProgress * (1 - flipProg.value)) };
   });
 
-  // â”€â”€ Pan gesture â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // Pan gesture
   const pan = useMemo(() => Gesture.Pan()
     .onUpdate(e => {
       if (flipAnim.value) return;
@@ -931,7 +931,7 @@ export default function YearbookScreen() {
     }),
   [flipAnim, flipDirSV, flipProg, flip.currentIndex, startFlip, visible.length]);
 
-  // â”€â”€ Unavailable â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // Unavailable
   if (!ybEnabled) return (
     <SafeAreaView style={s.root}>
       <StatusBar style="dark" />
@@ -946,7 +946,7 @@ export default function YearbookScreen() {
     </SafeAreaView>
   );
 
-  // â”€â”€ Batch list â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // Batch list
   return (
     <SafeAreaView style={s.root}>
       <StatusBar style="light" />
@@ -975,7 +975,7 @@ export default function YearbookScreen() {
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); loadBatches(); }} />}
       />
 
-      {/* â”€â”€ Batch detail modal â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+      {/* Batch detail modal */}
       <Modal visible={!!selBatch} animationType="slide" onRequestClose={() => setSelBatch(null)}>
         <SafeAreaView style={s.root}>
           <View style={s.dHeader}>
@@ -1059,7 +1059,7 @@ export default function YearbookScreen() {
             contentContainerStyle={s.listPad}
           />
 
-          {/* â”€â”€ Reader modal â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+          {/* Reader modal */}
           <Modal visible={readerOpen} animationType="slide" onRequestClose={closeReader}>
             <SafeAreaView style={s.rdRoot}>
               <StatusBar style="light" />
@@ -1076,10 +1076,10 @@ export default function YearbookScreen() {
                 </TouchableOpacity>
               </View>
 
-              {/* â”€â”€ Stage â”€â”€ */}
+              {/* Stage */}
               <GestureDetector gesture={pan}>
                 <View style={s.stage}>
-                  {/* Current (departing) page â€” always visible, fades out at the end of flip */}
+                  {/* Current (departing) page always visible, fades out at the end of flip */}
                   <Reanimated.View
                     key={`from-${stageFromKey}`}
                     renderToHardwareTextureAndroid={flip.phase === 'animating'}
@@ -1173,7 +1173,7 @@ export default function YearbookScreen() {
   );
 }
 
-// â”€â”€â”€ Styles â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Styles
 const s = StyleSheet.create({
   root:        { flex:1, backgroundColor:BG },
   centered:    { flex:1, alignItems:'center', justifyContent:'center', padding:28 },
@@ -1279,7 +1279,7 @@ const s = StyleSheet.create({
   jEmpty:  { color:MUTED, textAlign:'center', paddingVertical:24, fontSize:13 },
 });
 
-// â”€â”€â”€ Page styles â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Page styles
 const pg = StyleSheet.create({
   shell:     { flex:1, backgroundColor:PAPER, padding:20, overflow:'hidden', borderRadius:16 },
   shellDark: { backgroundColor:NAVY },

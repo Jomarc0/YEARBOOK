@@ -4,7 +4,7 @@
 
 @section('content')
 <style>
-    /* * Specific styling to match the Figma Figma prototype
+    /** Specific styling to match the Figma prototype
      * hortalezarp's team library design 
      */
     

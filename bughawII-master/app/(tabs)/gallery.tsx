@@ -48,7 +48,7 @@ import {
 } from '../../lib/api';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-// ─── Constants ───────────────────────────────────────────────────────────────
+// Constants
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
 
@@ -90,7 +90,7 @@ const VISIBILITY_OPTIONS = [
   { key: 'private', label: 'Private', desc: 'Only you and admins', icon: 'lock' },
 ] as const;
 
-// ─── Pure helpers (unchanged) ─────────────────────────────────────────────────
+// Pure helpers
 
 const albumId = (album: any) => album?.id || album?.album_id;
 
@@ -471,7 +471,7 @@ const dedupeFaceResults = (items: any[]) => {
   return [...byKey.values()].sort((a, b) => faceScore(b) - faceScore(a));
 };
 
-// ─── InAppMediaPlayer ─────────────────────────────────────────────────────────
+// InAppMediaPlayer
 // FIX: Accepts a stable `playerKey` so the player is only recreated when the
 //      source actually changes, not on every parent re-render.
 
@@ -512,7 +512,7 @@ function InAppMediaPlayer({
   );
 }
 
-// ─── Transcript status helper ─────────────────────────────────────────────────
+// Transcript status helper
 
 const transcriptStatus = (status?: string) => {
   const key = String(status || 'pending').toLowerCase();
@@ -522,7 +522,7 @@ const transcriptStatus = (status?: string) => {
   return { bg: '#f1f5f9', color: '#64748b', icon: 'clock-o', label: 'Pending' };
 };
 
-// ─── TranscriptModal (unchanged) ─────────────────────────────────────────────
+// TranscriptModal
 
 function TranscriptModal({
   visible,
@@ -735,7 +735,7 @@ function TranscriptModal({
   );
 }
 
-// ─── CarouselSlide ─────────────────────────────────────────────────────────────
+// CarouselSlide
 // Isolated so each slide manages its own media without re-rendering siblings.
 
 const CarouselSlide = React.memo(function CarouselSlide({
@@ -836,7 +836,7 @@ const CarouselSlide = React.memo(function CarouselSlide({
   );
 });
 
-// ─── Dot indicators ───────────────────────────────────────────────────────────
+// Dot indicators
 
 function CarouselDots({ total, active }: { total: number; active: number }) {
   if (total <= 1) return null;
@@ -860,7 +860,7 @@ function CarouselDots({ total, active }: { total: number; active: number }) {
   );
 }
 
-// ─── Main Screen ──────────────────────────────────────────────────────────────
+// Main Screen
 
 export default function GalleryScreen() {
   const router = useRouter();
@@ -875,7 +875,7 @@ export default function GalleryScreen() {
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState('');
 
-  // FIX: Viewer state consolidated — no more dual previewMedia/previewImage drift
+  // FIX: Viewer state consolidated no more dual previewMedia/previewImage drift
   const [viewerState, setViewerState] = useState<{
     visible: boolean;
     album: any;
@@ -915,14 +915,14 @@ export default function GalleryScreen() {
   // FIX: ref for the carousel FlatList to allow programmatic scroll (e.g. from thumbnail tap)
   const carouselRef = useRef<FlatList>(null);
 
-  // ─── Derived state ──────────────────────────────────────────────────────────
+  // Derived state
 
   const tab = useMemo(() => TABS.find((item) => item.key === activeTab) || TABS[0], [activeTab]);
   const isGraduation = tab.type === 'graduation';
   const schoolName = appConfig?.school_name || 'National University Lipa';
   const yearFilters = DEFAULT_YEAR_OPTIONS;
 
-  // Derive current preview from viewerState — single source of truth
+  // Derive current preview from viewerState single source of truth
   const currentMedia = viewerState.photos[viewerState.activeIndex] ?? viewerState.album;
   const previewUrl = mediaFileUrl(currentMedia);
   const previewKind = mediaKind(currentMedia, previewUrl);
@@ -997,9 +997,9 @@ export default function GalleryScreen() {
   const activeTypeLabel = TYPE_OPTIONS.find((item) => item.key === activeTab)?.label || tab.label;
   const userInitials = initials(user?.name || user?.student_record?.full_name || 'NU');
 
-  // ─── Data loading ───────────────────────────────────────────────────────────
+  // Data loading
 
-  // FIX: removed `refreshing` from useCallback deps — it was causing infinite reload loop.
+  // FIX: removed `refreshing` from useCallback deps it was causing infinite reload loop.
   // Use a local `isRefresh` param instead.
   const loadAlbums = useCallback(
     async (nextPage = 1, append = false, isRefresh = false) => {
@@ -1123,9 +1123,9 @@ export default function GalleryScreen() {
     };
   }, []);
 
-  // ─── Viewer helpers ─────────────────────────────────────────────────────────
+  // Viewer helpers
 
-  // FIX: All viewer state set in a single call — no more 5-setState render storm
+  // FIX: All viewer state set in a single call no more 5-setState render storm
   const openViewer = async (album: any) => {
     const itemTab = album?.__tab || tab;
     const itemIsGraduation = itemTab.type === 'graduation';
@@ -1183,7 +1183,7 @@ export default function GalleryScreen() {
     setIsGridVisible(false);
   };
 
-  // FIX: Carousel swipe handler — updates activeIndex from FlatList scroll position
+  // FIX: Carousel swipe handler updates activeIndex from FlatList scroll position
   const onCarouselMomentumEnd = useCallback(
     (e: any) => {
       const index = Math.round(
@@ -1204,7 +1204,7 @@ export default function GalleryScreen() {
     [],
   );
 
-  // ─── Route-driven album open ────────────────────────────────────────────────
+  // Route-driven album open
 
   useEffect(() => {
     const rawAlbumId = Array.isArray(targetAlbumId) ? targetAlbumId[0] : targetAlbumId;
@@ -1242,7 +1242,7 @@ export default function GalleryScreen() {
     };
   }, [targetAlbumId, targetPhotoId]);
 
-  // ─── Upload helpers ─────────────────────────────────────────────────────────
+  // Upload helpers
 
   const openUploadFlow = (album: any = null) => {
     if (!canUploadGallery) {
@@ -1422,7 +1422,7 @@ export default function GalleryScreen() {
     }
   };
 
-  // FIX: Renamed from "Delete Selected Media" — it deletes the *current* item, not a selection
+  // FIX: Renamed from "Delete Selected Media" it deletes the *current* item, not a selection
   const confirmDeleteMedia = (item = currentMedia) => {
     if (!item || isGraduation) return;
     if (!canDeleteMediaItem(item)) {
@@ -1661,7 +1661,7 @@ export default function GalleryScreen() {
     }
   };
 
-  // ─── Tab / filter helpers ───────────────────────────────────────────────────
+  // Tab / filter helpers
 
   const switchTab = (key: string) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -1683,7 +1683,7 @@ export default function GalleryScreen() {
     setFilterSheet(null);
   };
 
-  // ─── Render album card ──────────────────────────────────────────────────────
+  // Render album card
 
   const renderAlbum = ({ item }: { item: any }) => {
     const itemTab = item?.__tab || tab;
@@ -1743,7 +1743,7 @@ export default function GalleryScreen() {
     );
   };
 
-  // ─── JSX ────────────────────────────────────────────────────────────────────
+  // JSX
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
@@ -1896,7 +1896,7 @@ export default function GalleryScreen() {
         }}
       />
 
-      {/* ── Filter sheet modal ── */}
+      {/* Filter sheet modal */}
       <Modal
         transparent
         visible={Boolean(filterSheet)}
@@ -1946,7 +1946,7 @@ export default function GalleryScreen() {
         </View>
       </Modal>
 
-      {/* ── Viewer modal ── */}
+      {/* Viewer modal */}
       <Modal
         visible={viewerState.visible}
         animationType="fade"
@@ -1995,7 +1995,7 @@ export default function GalleryScreen() {
               contentContainerStyle={styles.detailContent}
               showsVerticalScrollIndicator={false}
             >
-              {/* ── CAROUSEL (replaces static imagePreviewPanel + inlinePhotoGrid) ── */}
+              {/* CAROUSEL (replaces static imagePreviewPanel + inlinePhotoGrid) */}
               <View>
                 <FlatList
                   ref={carouselRef}
@@ -2003,7 +2003,7 @@ export default function GalleryScreen() {
                   horizontal
                   pagingEnabled
                   showsHorizontalScrollIndicator={false}
-                  // FIX: stable keys — no more index-only keyExtractor
+                  // FIX: stable keys no more index-only keyExtractor
                   keyExtractor={(item, index) => mediaItemKey(item, index)}
                   initialScrollIndex={viewerState.activeIndex}
                   getItemLayout={(_, index) => ({
@@ -2054,7 +2054,7 @@ export default function GalleryScreen() {
                 </View>
               </View>
 
-              {/* Action row — FIX: delete is icon-only, not a giant red block */}
+              {/* Action row FIX: delete is icon-only, not a giant red block */}
               <View style={styles.viewerActionRow}>
                 <TouchableOpacity
                   style={styles.viewerActionBtn}
@@ -2086,7 +2086,7 @@ export default function GalleryScreen() {
                 ) : null}
               </View>
 
-              {/* Thumbnail strip — tap to jump carousel */}
+              {/* Thumbnail strip tap to jump carousel */}
               {photos.length > 1 && (
                 <ScrollView
                   horizontal
@@ -2131,11 +2131,11 @@ export default function GalleryScreen() {
               )}
             </ScrollView>
           ) : (
-            /* ── Grid view ── */
+            /* Grid view */
             <FlatList
               data={photos}
               numColumns={3}
-              // FIX: stable keys — no more index-only keyExtractor
+              // FIX: stable keys no more index-only keyExtractor
               keyExtractor={(item, index) => mediaItemKey(item, index)}
               renderItem={({ item, index }) => (
                 <TouchableOpacity
@@ -2185,7 +2185,7 @@ export default function GalleryScreen() {
         </View>
       </Modal>
 
-      {/* ── Transcript modal ── */}
+      {/* Transcript modal */}
       <TranscriptModal
         visible={transcriptModalOpen}
         onClose={() => setTranscriptModalOpen(false)}
@@ -2201,7 +2201,7 @@ export default function GalleryScreen() {
         onCopy={(text: string) => copyText(text)}
       />
 
-      {/* ── Create album modal ── */}
+      {/* Create album modal */}
       <Modal
         visible={albumModalOpen}
         transparent
@@ -2244,7 +2244,7 @@ export default function GalleryScreen() {
         </View>
       </Modal>
 
-      {/* ── Upload modal ── */}
+      {/* Upload modal */}
       <Modal
         visible={uploadModalOpen}
         transparent
@@ -2435,7 +2435,7 @@ export default function GalleryScreen() {
         </View>
       </Modal>
 
-      {/* ── Face search results modal ── */}
+      {/* Face search results modal */}
       <Modal
         visible={isFaceVisible}
         animationType="slide"
@@ -2495,7 +2495,7 @@ export default function GalleryScreen() {
   );
 }
 
-// ─── Styles ───────────────────────────────────────────────────────────────────
+// Styles
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.background },
@@ -2618,7 +2618,7 @@ const styles = StyleSheet.create({
   emptyTitle: { color: '#1d2b4b', fontSize: 18, fontWeight: '900', marginTop: 14 },
   emptyText: { color: '#8E8E93', fontSize: 14, textAlign: 'center', padding: 18 },
 
-  // ── Viewer ──
+  // Viewer
   viewerOverlay: { flex: 1, backgroundColor: '#ffffff' },
   viewerHeader: {
     flexDirection: 'row',
@@ -2634,7 +2634,7 @@ const styles = StyleSheet.create({
   shareButton: { width: 44, height: 44 },
   detailContent: { paddingBottom: 30 },
 
-  // ── Carousel ──
+  // Carousel
   carouselImageWrap: {
     width: SCREEN_WIDTH,
     height: 320,
@@ -2668,7 +2668,7 @@ const styles = StyleSheet.create({
   },
   carouselCounterText: { color: '#fff', fontSize: 11, fontWeight: '700' },
 
-  // ── Dot indicators ──
+  // Dot indicators
   dotsRow: {
     flexDirection: 'row',
     justifyContent: 'center',
@@ -2681,7 +2681,7 @@ const styles = StyleSheet.create({
   dotActive: { width: 18, height: 6, borderRadius: 3, backgroundColor: COLORS.gold },
   dotSmall: { width: 4, height: 4, borderRadius: 2, opacity: 0.5 },
 
-  // ── Viewer action row (FIX: replaces full-width delete button) ──
+  // Viewer action row (FIX: replaces full-width delete button)
   viewerActionRow: {
     flexDirection: 'row',
     gap: 10,
@@ -2707,7 +2707,7 @@ const styles = StyleSheet.create({
   viewerActionBtnText: { color: COLORS.navy, fontSize: 12, fontWeight: '700' },
   viewerActionBtnTextDanger: { color: '#dc2626', fontSize: 12, fontWeight: '700' },
 
-  // ── Thumbnail strip ──
+  // Thumbnail strip
   thumbStrip: { paddingHorizontal: 14, paddingVertical: 12, gap: 6 },
   thumbCell: {
     width: 58,
@@ -2738,7 +2738,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
 
-  // ── Media player ──
+  // Media player
   mediaPlaceholder: { height: 200, backgroundColor: COLORS.thumbnail, alignItems: 'center', justifyContent: 'center' },
   videoPreviewPanel: { height: 280, overflow: 'hidden', backgroundColor: '#07122D', position: 'relative', marginBottom: 14, borderBottomWidth: 1, borderBottomColor: '#0f1d3d' },
   videoPosterImage: { ...StyleSheet.absoluteFillObject, width: '100%', height: '100%', opacity: 0.18 },
@@ -2771,14 +2771,14 @@ const styles = StyleSheet.create({
   transcriptTime: { width: 44, color: COLORS.gold, fontSize: 11, fontWeight: '900' },
   transcriptText: { flex: 1, color: COLORS.muted, fontSize: 12, lineHeight: 18 },
 
-  // ── Album meta ──
+  // Album meta
   albumMetaRow: { padding: 14, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#FFFFFF' },
   photoCountBig: { color: COLORS.navy, fontSize: 15, fontWeight: '900', marginBottom: 4 },
   albumDate: { color: COLORS.muted, fontSize: 12 },
   contentTypePill: { borderRadius: 999, backgroundColor: '#F0F2F7', paddingHorizontal: 10, paddingVertical: 6 },
   contentTypePillText: { color: COLORS.muted, fontSize: 12, fontWeight: '900', textTransform: 'uppercase' },
 
-  // ── Grid view ──
+  // Grid view
   gridList: { padding: 3, backgroundColor: '#ffffff', flexGrow: 1 },
   gridItem: { flex: 1 / 3, aspectRatio: 1, padding: 1.5, position: 'relative' },
   gridImage: { width: '100%', height: '100%' },
@@ -2788,7 +2788,7 @@ const styles = StyleSheet.create({
   fileBadge: { position: 'absolute', left: 8, bottom: 8, borderRadius: 999, backgroundColor: '#1a2744', paddingHorizontal: 7, paddingVertical: 3 },
   videoBadgeText: { color: COLORS.navy, fontSize: 9, fontWeight: '900', textTransform: 'uppercase' },
 
-  // ── Sheets ──
+  // Sheets
   sheetOverlay: { flex: 1, justifyContent: 'flex-end' },
   sheetBackdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.35)' },
   filterSheet: { backgroundColor: '#FFFFFF', borderTopLeftRadius: 20, borderTopRightRadius: 20, paddingHorizontal: 18, paddingTop: 10, paddingBottom: 26, maxHeight: '82%' },
@@ -2805,7 +2805,7 @@ const styles = StyleSheet.create({
   formInput: { minHeight: 48, borderRadius: 14, borderWidth: 1, borderColor: '#e2e8f0', backgroundColor: '#f8fafc', color: COLORS.navy, paddingHorizontal: 14, fontSize: 14, fontWeight: '700', marginBottom: 10 },
   formTextArea: { minHeight: 92, paddingTop: 13 },
 
-  // ── Upload ──
+  // Upload
   filePickerButton: { minHeight: 76, borderRadius: 16, borderWidth: 1, borderColor: '#e2e8f0', backgroundColor: '#f8fafc', padding: 14, marginBottom: 12, flexDirection: 'row', alignItems: 'center', gap: 12 },
   filePickerTitle: { color: COLORS.navy, fontSize: 13, fontWeight: '900' },
   filePickerMeta: { color: '#94a3b8', fontSize: 11, lineHeight: 16, marginTop: 3 },
@@ -2840,7 +2840,7 @@ const styles = StyleSheet.create({
   uploadPreviewImage: { width: '100%', height: '100%' },
   uploadPreviewVideo: { width: '100%', height: '100%', backgroundColor: COLORS.navy, alignItems: 'center', justifyContent: 'center' },
 
-  // ── Transcript modal ──
+  // Transcript modal
   transcriptOverlay: { flex: 1, justifyContent: 'center', paddingHorizontal: 14, paddingVertical: 28 },
   transcriptBackdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(8,12,24,0.82)' },
   transcriptModal: { maxHeight: '88%', borderRadius: 22, backgroundColor: '#FFFFFF', overflow: 'hidden' },
@@ -2887,7 +2887,7 @@ const styles = StyleSheet.create({
   contentsTitle: { flex: 1, color: COLORS.muted, fontSize: 12, fontWeight: '700' },
   contentsPage: { color: '#94a3b8', fontSize: 12, fontWeight: '900', marginLeft: 12 },
 
-  // ── Face search ──
+  // Face search
   faceHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 20, borderBottomWidth: 1, borderBottomColor: '#E5E7EB', backgroundColor: '#ffffff' },
   faceTitleWrap: { flex: 1, alignItems: 'center', paddingHorizontal: 10 },
   faceTitle: { color: '#1C1C1E', fontSize: 18, fontWeight: 'bold' },

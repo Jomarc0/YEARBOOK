@@ -16,7 +16,7 @@ export function storageUrl(path) {
     return `https://res.cloudinary.com/${CLOUDINARY_CLOUD}/image/upload/${path}`;
   }
 
-  // Last resort fallback — local storage (development only)
+  // Last resort fallback local storage (development only)
   return `${STORAGE_ROOT}/storage/${path}`;
 }
 

@@ -9,7 +9,7 @@ const apiRoot = (import.meta.env.VITE_APP_URL
 ).replace(/\/+$/, '');
 
 function getToken() {
-  // ← Use whichever key YOUR app stores the token under
+  // Use whichever key YOUR app stores the token under
   return (
     localStorage.getItem('sb_token')    ??
     localStorage.getItem('token')       ??

@@ -75,7 +75,7 @@ export default function LoginPage() {
     setError("");
   };
 
-  /* ── Shared left panel ── */
+  /* Shared left panel */
   const LeftPanel = ({ desc }) => (
     <div
       style={{
@@ -172,7 +172,7 @@ export default function LoginPage() {
     </div>
   );
 
-  /* ── Shared input focus handlers ── */
+  /* Shared input focus handlers */
   const onFocus = (e) => {
     e.target.style.borderColor = "#3B82F6";
     e.target.style.boxShadow = "0 0 0 4px rgba(59,130,246,0.08)";
@@ -234,7 +234,7 @@ export default function LoginPage() {
     </div>
   ) : null;
 
-  /* ── Page ── */
+  /* Page */
   return (
     <div style={{
       minHeight: "100vh", display: "flex",
@@ -250,10 +250,10 @@ export default function LoginPage() {
 
         {!challenge ? (
           <>
-            {/* ── Left ── */}
+            {/* Left */}
             <LeftPanel desc="Secure administrative access for the NU Digital Yearbook system. Authorized personnel only." />
 
-            {/* ── Right: credentials ── */}
+            {/* Right: credentials */}
             <div style={{
               flex: 1, background: "#fff",
               display: "flex", flexDirection: "column", justifyContent: "center",
@@ -289,7 +289,7 @@ export default function LoginPage() {
                   </div>
                 </div>
 
-                {/* password */}
+                {/* New password */}
                 <div style={{ marginBottom: 32 }}>
                   <label style={labelStyle}>Password</label>
                   <div style={{ position: "relative" }}>
@@ -334,10 +334,10 @@ export default function LoginPage() {
           </>
         ) : (
           <>
-            {/* ── Left ── */}
+            {/* Left */}
             <LeftPanel desc="Open your Google Authenticator app and enter the 6-digit code shown for this account." />
 
-            {/* ── Right: TOTP ── */}
+            {/* Right: TOTP */}
             <div style={{
               flex: 1, background: "#fff",
               display: "flex", flexDirection: "column", justifyContent: "center",

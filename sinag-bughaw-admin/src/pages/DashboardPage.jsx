@@ -11,7 +11,7 @@ import {
 const fmt = (n) => (n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n));
 const cx  = (...v) => v.filter(Boolean).join(" ");
 
-// ─── Skeleton ─────────────────────────────────────────────────────────────────
+// Skeleton
 const Skeleton = ({ className = "", style }) => (
   <div
     style={style}
@@ -22,14 +22,14 @@ const Skeleton = ({ className = "", style }) => (
   />
 );
 
-// ─── Card shell ───────────────────────────────────────────────────────────────
+// Card shell
 const Card = ({ className = "", children }) => (
   <div className={cx("rounded-2xl border border-slate-200 bg-white", className)}>
     {children}
   </div>
 );
 
-// ─── Section heading ──────────────────────────────────────────────────────────
+// Section heading
 const SectionHeading = ({ icon, title, subtitle, action }) => (
   <div className="mb-4 flex items-center justify-between gap-3">
     <div className="flex items-center gap-2">
@@ -43,7 +43,7 @@ const SectionHeading = ({ icon, title, subtitle, action }) => (
   </div>
 );
 
-// ─── Metric Cards ─────────────────────────────────────────────────────────────
+// Metric Cards
 function MetricCard({ label, value, rawValue, sub, icon, iconBg, iconColor, subBg, subColor, cardType, loading }) {
   const isAlertCard = /alert|error/i.test(label ?? "");
   const isDanger = cardType === "danger" || (isAlertCard && Number(rawValue ?? 0) > 0);
@@ -79,7 +79,7 @@ function MetricCard({ label, value, rawValue, sub, icon, iconBg, iconColor, subB
   );
 }
 
-// ─── Enrollment Chart ─────────────────────────────────────────────────────────
+// Enrollment Chart
 function EnrollmentChart({ data, loading }) {
   const canvasRef = useRef(null);
   const chartRef  = useRef(null);
@@ -187,7 +187,7 @@ function EnrollmentChart({ data, loading }) {
   );
 }
 
-// ─── Trending Alumni ──────────────────────────────────────────────────────────
+// Trending Alumni
 function TrendingAlumni({ items, loading }) {
   return (
     <Card className="p-5">
@@ -238,7 +238,7 @@ function TrendingAlumni({ items, loading }) {
   );
 }
 
-// ─── Recent Uploads ───────────────────────────────────────────────────────────
+// Recent Uploads
 const TYPE_STYLES = {
   image: { bg: "#ede9fe", color: "#4338ca", icon: "fa-image",      label: "IMG" },
   video: { bg: "#fef3c7", color: "#92400e", icon: "fa-video",      label: "VID" },
@@ -291,7 +291,7 @@ function RecentUploads({ items, loading }) {
   );
 }
 
-// ─── Activity Feed ────────────────────────────────────────────────────────────
+// Activity Feed
 const ACTIVITY_COLORS = {
   register: { dot: "bg-emerald-500", bg: "bg-emerald-50",  text: "text-emerald-700", icon: "fa-user-plus"   },
   upload:   { dot: "bg-blue-500",    bg: "bg-blue-50",     text: "text-blue-700",    icon: "fa-upload"      },
@@ -370,7 +370,7 @@ function ActivityFeed({ items, loading, onViewAll }) {
   );
 }
 
-// ─── Engagement Card ──────────────────────────────────────────────────────────
+// Engagement Card
 function EngagementBar({ label, value, max, barColor, loading }) {
   const pct = max > 0 ? Math.min(100, Math.round((value / max) * 100)) : 0;
   return (
@@ -423,7 +423,7 @@ function EngagementCard({ data, loading }) {
   );
 }
 
-// ─── Page Header ──────────────────────────────────────────────────────────────
+// Page Header
 function PageHeader({ lastRefresh, onRefresh, refreshing }) {
   const today = new Date().toLocaleDateString("en-PH", {
     weekday: "long", year: "numeric", month: "long", day: "numeric",
@@ -451,7 +451,7 @@ function PageHeader({ lastRefresh, onRefresh, refreshing }) {
   );
 }
 
-// ─── Main Page ────────────────────────────────────────────────────────────────
+// Main Page
 export default function DashboardPage() {
   const navigate = useNavigate();
 

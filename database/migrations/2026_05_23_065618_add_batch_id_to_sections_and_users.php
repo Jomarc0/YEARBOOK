@@ -9,7 +9,7 @@ return new class extends Migration
     public function up(): void
     {
         // Add batch_id to sections
-        // NOTE: ->after() removed — 'adviser_id' does not exist in sections table yet
+        // NOTE: ->after() removed 'adviser_id' does not exist in sections table yet
         Schema::table('sections', function (Blueprint $table) {
             $table->foreignId('batch_id')
                   ->nullable()

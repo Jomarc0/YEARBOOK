@@ -3,8 +3,8 @@
  * src/features/yearbook/pages/FlipbookViewerPage.jsx
  *
  * FIXES applied:
- *   1. Passes batchId down to FlipbookViewer (was missing — alumni popup never worked).
- *   2. Passes pdfReady + isPremium to FlipbookViewer → ControlBar → DownloadYearbookButton.
+ * 1. Passes batchId down to FlipbookViewer (was missing alumni popup never worked).
+ * 2. Passes pdfReady + isPremium to FlipbookViewer ControlBar DownloadYearbookButton.
  *   3. Derives isPremium from the app auth context.
  *   4. Back button now goes to /yearbook/:batchId instead of -1 so the user
  *      always has a sensible escape route even after a hard refresh.
@@ -102,10 +102,10 @@ export default function FlipbookViewerPage() {
     }).catch(() => {});
   }, [batchId, meta, scopeLabel]);
 
-  // ── Loading ────────────────────────────────────────────────────────────────
+  // Loading
   if (loading) return <YearbookLoadingSkeleton />;
 
-  // ── Error ──────────────────────────────────────────────────────────────────
+  // Error
   if (error) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center gap-4"
@@ -124,14 +124,14 @@ export default function FlipbookViewerPage() {
     );
   }
 
-  // ── Viewer ─────────────────────────────────────────────────────────────────
+  // Viewer
   return (
     <div className="min-h-screen" style={{ background: BG }}>
 
       {/* Top meta bar */}
       <div className="flex items-center justify-between px-6 pt-4 pb-0">
 
-        {/* Back → /yearbook/:batchId (not history.back() to avoid loop) */}
+        {/* Back /yearbook/:batchId (not history.back() to avoid loop) */}
         <button
           onClick={() => navigate(`/yearbook/${batchId}`)}
           className="flex items-center gap-2 text-xs transition-opacity hover:opacity-80"

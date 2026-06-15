@@ -132,12 +132,12 @@ class ProfileSettingsController extends Controller
                     $existing->update($payload);
                     $keptIds[] = $existing->id;
                 } else {
-                    // Numeric id but not owned by this user — treat as new
+                    // Numeric id but not owned by this user treat as
                     $created   = $user->achievements()->create($payload);
                     $keptIds[] = $created->id;
                 }
             } else {
-                // New achievement (null id or Date.now() placeholder from React)
+                // achievement (null id or Date.now() placeholder from React)
                 $created   = $user->achievements()->create($payload);
                 $keptIds[] = $created->id; // track so it isn't deleted below
             }

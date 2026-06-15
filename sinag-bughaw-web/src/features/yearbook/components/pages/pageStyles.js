@@ -3,7 +3,7 @@
  * src/features/yearbook/components/pages/pageStyles.js
  *
  * Shared style constants and tiny helpers used across
- * all leaf page components. No Tailwind here — inline
+ * all leaf page components. No Tailwind here inline
  * styles so react-pageflip can SSR-render without class
  * purging issues.
  */
@@ -97,7 +97,7 @@ export function textOr(value, fallback = '') {
   return value == null || value === '' ? fallback : value;
 }
 
-/** Avatar palette — deterministic from student_id */
+/** Avatar palette deterministic from student_id */
 const PALETTE = [
   { bg: '#e4f0d8', tc: '#2a5618' },
   { bg: '#d8e8f5', tc: '#173660' },

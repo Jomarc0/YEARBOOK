@@ -26,7 +26,7 @@ class IntegrationServiceProvider extends ServiceProvider
             return new CloudinaryService();
         });
 
-        //Face Recognition ─
+        // Face Recognition
         $this->app->singleton(
             FaceRecognition::class,
             fn () => new AwsRekognitionFaceRecognition([

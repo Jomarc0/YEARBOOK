@@ -12,7 +12,7 @@ return new class extends Migration
             $table->dropForeign(['admin_id']);
             $table->foreign('admin_id')
                   ->references('id')
-                  ->on('users')        // ✅ was 'admins', now 'users'
+                  ->on('users')        // was 'admins', now 'users'
                   ->onDelete('set null');
         });
     }

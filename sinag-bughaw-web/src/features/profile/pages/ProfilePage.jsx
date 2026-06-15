@@ -18,7 +18,7 @@ import { useAppConfig } from '@/features/platform/AppConfigProvider';
 import { getCourseShort } from '@/utils/courseShort';
 import LoadingSkeleton from '@/components/ui/LoadingSkeleton';
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
+// Helpers
 const isGraduate = (student) => !!student?.graduation_year;
 const isMeaningfulText = (value, minLength = 10) => {
   const text = String(value || '').replace(/\s+/g, ' ').trim();
@@ -53,7 +53,7 @@ const TIER_CONFIG = {
 };
 const PROFILE_TABS = new Set(['posts', 'tagged', 'academic', 'achievements', 'voicenotes']);
 
-// ── Sub-components ────────────────────────────────────────────────────────────
+// Sub-components
 function TabCard({ icon, label, action, children }) {
   return (
     <div className="bg-white rounded-2xl p-5 shadow-sm border border-slate-100">
@@ -81,7 +81,7 @@ function InfoTile({ icon, label, value }) {
   );
 }
 
-// ── Main component ────────────────────────────────────────────────────────────
+// Main component
 const loadImage = (src) => new Promise((resolve, reject) => {
   const img = new Image();
   img.crossOrigin = 'anonymous';
@@ -272,7 +272,7 @@ export default function ProfilePage() {
   const isFree     = isOwn && premiumBilling && !isPremium;
   const tierConfig = TIER_CONFIG[userTier];
 
-  // Build tabs dynamically — only show Yearbook for graduates
+  // Build tabs dynamically only show Yearbook for graduates
   const TABS = [
     { key: 'posts',        icon: 'fas fa-th-large',      label: 'Posts'        },
     { key: 'tagged',       icon: 'fas fa-tag',            label: 'Tagged'       },
@@ -284,7 +284,7 @@ export default function ProfilePage() {
     { key: 'voicenotes',   icon: 'fas fa-microphone',     label: 'Voice Notes'  },
   ];
 
-  // ── Load student profile ──────────────────────────────────────────────────
+  // Load student profile
   useEffect(() => {
     if (!profileId) return;
     setLoading(true);
@@ -597,7 +597,7 @@ export default function ProfilePage() {
 
       <main className="flex-1 max-w-[900px] mx-auto w-full px-4 sm:px-6 py-8 animate-[fadeUp_0.35s_ease]">
 
-        {/* ── PROFILE CARD ── */}
+        {/* PROFILE CARD */}
         <div className="bg-white rounded-2xl overflow-hidden mb-3 shadow-sm border border-slate-100">
 
           {/* Cover */}
@@ -784,7 +784,7 @@ export default function ProfilePage() {
           </div>
         </div>
 
-        {/* ── TABS ── */}
+        {/* TABS */}
         <div id="profile-tabs" className="bg-white rounded-2xl mb-3 shadow-sm border border-slate-100 flex overflow-hidden scroll-mt-24">
           {TABS.map((tab, i) => (
             <button key={tab.key}
@@ -803,7 +803,7 @@ export default function ProfilePage() {
           ))}
         </div>
 
-        {/* ── POSTS TAB ── */}
+        {/* POSTS TAB */}
         {activeTab === 'posts' && (
           <div className="flex flex-col gap-3">
             {isOwn && postsEnabled && (
@@ -879,14 +879,14 @@ export default function ProfilePage() {
           </div>
         )}
 
-        {/* ── TAGGED TAB ── */}
+        {/* TAGGED TAB */}
         {activeTab === 'tagged' && (
           <TabCard icon="fas fa-tag" label="Tagged Photos">
             <StudentPhotosSection userId={Number(profileId)} compact />
           </TabCard>
         )}
 
-        {/* ── YEARBOOK TAB — graduates only ── */}
+        {/* YEARBOOK TAB graduates only */}
         {activeTab === 'yearbook' && graduate && (
           <div className="flex flex-col gap-3">
 
@@ -1017,7 +1017,7 @@ export default function ProfilePage() {
           </div>
         )}
 
-        {/* ── ACADEMIC TAB ── */}
+        {/* ACADEMIC TAB */}
         {activeTab === 'academic' && (
           <TabCard icon="fas fa-graduation-cap" label="Academic Info">
             {academicLoading ? (
@@ -1054,7 +1054,7 @@ export default function ProfilePage() {
           </TabCard>
         )}
 
-        {/* ── ACHIEVEMENTS TAB ── */}
+        {/* ACHIEVEMENTS TAB */}
         {activeTab === 'achievements' && (
           <TabCard icon="fas fa-award" label="Achievements">
             {achieveLoading ? (
@@ -1097,7 +1097,7 @@ export default function ProfilePage() {
           </TabCard>
         )}
 
-        {/* ── VOICE NOTES TAB ── */}
+        {/* VOICE NOTES TAB */}
         {activeTab === 'voicenotes' && (
           <TabCard
             icon="fas fa-microphone"

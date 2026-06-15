@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { authApi } from '@/api/auth.api';
 
-// ─── steps: 'email' → 'otp' → 'reset' → 'done' ───────────────────────────
+// steps: 'email' 'otp' 'reset' 'done'
 
 const STATS = [
   { value: '12,500+', label: 'Graduates' },
@@ -32,7 +32,7 @@ export default function ForgotPasswordPage() {
     return () => clearTimeout(t);
   }, [resendTimer]);
 
-  // ── Step 1: Send reset OTP ─────────────────────────────────────────────────
+  // Send reset OTP
   const handleEmailSubmit = async (e) => {
     e.preventDefault(); setError(''); setLoading(true);
     try {
@@ -43,7 +43,7 @@ export default function ForgotPasswordPage() {
     } finally { setLoading(false); }
   };
 
-  // ── OTP helpers ───────────────────────────────────────────────────────────
+  // OTP helpers
   const handleOtpChange = (i, value) => {
     if (!/^\d?$/.test(value)) return;
     const next = [...otp]; next[i] = value; setOtp(next);
@@ -57,7 +57,7 @@ export default function ForgotPasswordPage() {
     if (p.length === 6) { setOtp(p.split('')); otpRefs.current[5]?.focus(); }
   };
 
-  // ── Step 2: Verify OTP ────────────────────────────────────────────────────
+  // Verify OTP
   const handleVerifyOtp = async (e) => {
     e.preventDefault();
     const code = otp.join('');
@@ -82,7 +82,7 @@ export default function ForgotPasswordPage() {
     } catch { setError('Failed to resend code. Please try again.'); }
   };
 
-  // ── Step 3: Set new password ──────────────────────────────────────────────
+  // Set password
   const handleResetSubmit = async (e) => {
     e.preventDefault(); setError('');
     if (password.length < 8) { setError('Password must be at least 8 characters.'); return; }
@@ -96,14 +96,14 @@ export default function ForgotPasswordPage() {
     } finally { setLoading(false); }
   };
 
-  // ── Back logic ────────────────────────────────────────────────────────────
+  // Back logic
   const handleBack = () => {
     setError('');
     if (step === 'otp')   { setStep('email'); setOtp(['','','','','','']); }
     if (step === 'reset') { setStep('otp');   setOtp(['','','','','','']); }
   };
 
-  // ── Step meta ─────────────────────────────────────────────────────────────
+  // Step meta
   const stepIcon  = { email: 'fa-lock-open', otp: 'fa-envelope-open-text', reset: 'fa-key', done: 'fa-circle-check' };
   const stepColor = { email: 'bg-indigo-50 text-[#3f51b5]', otp: 'bg-emerald-50 text-emerald-600', reset: 'bg-amber-50 text-amber-600', done: 'bg-emerald-50 text-emerald-600' };
 
@@ -119,7 +119,7 @@ export default function ForgotPasswordPage() {
         @keyframes pop        { 0%{transform:scale(0.7);opacity:0} 70%{transform:scale(1.1)} 100%{transform:scale(1);opacity:1} }
       `}</style>
 
-      {/* ── LEFT PANEL ─────────────────────────────────────────────────────── */}
+      {/* LEFT PANEL */}
       <div
         className="hidden lg:flex lg:w-[45%] flex-col justify-between p-12 animate-[slideLeft_0.6s_ease]"
         style={{ background:"linear-gradient(160deg,rgba(29,43,75,0.93),rgba(63,81,181,0.87)),url('/images/NU-building.jpg') center/cover no-repeat" }}
@@ -155,7 +155,7 @@ export default function ForgotPasswordPage() {
         <p className="text-white/35 text-xs">© {new Date().getFullYear()} National University Lipa · Sinag-Bughaw</p>
       </div>
 
-      {/* ── RIGHT PANEL ────────────────────────────────────────────────────── */}
+      {/* RIGHT PANEL */}
       <div className="w-full lg:w-[55%] flex flex-col bg-[#f3f6fc] animate-[slideRight_0.6s_ease]">
 
         {/* Top bar */}
@@ -222,7 +222,7 @@ export default function ForgotPasswordPage() {
 
           <div className="w-full max-w-[440px] bg-white border border-slate-200 rounded-2xl p-6 sm:p-8 shadow-xl shadow-slate-200/70">
 
-            {/* ── STEP 1: Email ─────────────────────────────────────────────── */}
+            {/* Email */}
             {step === 'email' && (
               <div className="animate-[slideUp_0.35s_ease]">
                 <div className={`w-12 h-12 rounded-2xl flex items-center justify-center text-xl mb-5 shadow-sm ${stepColor.email}`}>
@@ -271,7 +271,7 @@ export default function ForgotPasswordPage() {
               </div>
             )}
 
-            {/* ── STEP 2: OTP ───────────────────────────────────────────────── */}
+            {/* OTP */}
             {step === 'otp' && (
               <div className="animate-[slideUp_0.35s_ease]">
                 <div className={`w-12 h-12 rounded-2xl flex items-center justify-center text-xl mb-5 shadow-sm ${stepColor.otp}`}>
@@ -340,7 +340,7 @@ export default function ForgotPasswordPage() {
               </div>
             )}
 
-            {/* ── STEP 3: New password ──────────────────────────────────────── */}
+            {/* New password */}
             {step === 'reset' && (
               <div className="animate-[slideUp_0.35s_ease]">
                 <div className={`w-12 h-12 rounded-2xl flex items-center justify-center text-xl mb-5 shadow-sm ${stepColor.reset}`}>
@@ -410,7 +410,7 @@ export default function ForgotPasswordPage() {
               </div>
             )}
 
-            {/* ── STEP 4: Done ──────────────────────────────────────────────── */}
+            {/* Done */}
             {step === 'done' && (
               <div className="animate-[slideUp_0.35s_ease] text-center">
                 <div className="w-20 h-20 rounded-full bg-emerald-50 text-emerald-500 flex items-center justify-center text-4xl mx-auto mb-6 shadow-sm animate-[pop_0.5s_ease]">
@@ -444,7 +444,7 @@ export default function ForgotPasswordPage() {
   );
 }
 
-// ── Password strength indicator ───────────────────────────────────────────────
+// Password strength indicator
 function PasswordStrength({ password }) {
   if (!password) return null;
   const checks = [
@@ -471,7 +471,7 @@ function PasswordStrength({ password }) {
   );
 }
 
-// ── Shared sub-components (same as LoginPage) ─────────────────────────────────
+// Shared sub-components
 function ErrorBanner({ message }) {
   return (
     <div className="flex items-center gap-3 bg-red-50 text-red-600 border-l-4 border-red-500 rounded-xl px-4 py-3 text-sm mb-5 animate-[shake_0.4s_ease]">

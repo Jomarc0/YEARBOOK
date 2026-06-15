@@ -56,7 +56,7 @@ class Photo extends Model implements AnalyzablePhoto
                     ->withTimestamps();
     }
 
-    // ── AI Helpers ─────────────────────────────────────────────────────────
+    // AI Helpers
 
     public function markAiQueued(): bool
     {
@@ -85,7 +85,7 @@ class Photo extends Model implements AnalyzablePhoto
         return $this->update(['ai_metadata' => $meta]);
     }
 
-    // ── Scopes ─────────────────────────────────────────────────────────────
+    // Scopes
 
     public function scopeProfilePosts($query)
     {

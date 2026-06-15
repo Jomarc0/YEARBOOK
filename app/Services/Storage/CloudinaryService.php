@@ -238,7 +238,7 @@ class CloudinaryService implements StorageServiceInterface
     }
 
 
-    // delete()  — generic delete used by VoiceNoteController and others
+    // delete() generic delete used by VoiceNoteController and others
 
     public function delete(string $publicId, string $resourceType = 'video'): array
     {
@@ -365,7 +365,7 @@ class CloudinaryService implements StorageServiceInterface
         int          $userId,
         string       $context = 'voice_notes'
     ): array {
-        $maxBytes = 25 * 1024 * 1024; // 25 MB — Groq free-tier limit
+        $maxBytes = 25 * 1024 * 1024; // 25 MB Groq free-tier limit
         if ($file->getSize() > $maxBytes) {
             throw new StorageUploadException(
                 'Audio file ' . $this->formatBytes($file->getSize()) .

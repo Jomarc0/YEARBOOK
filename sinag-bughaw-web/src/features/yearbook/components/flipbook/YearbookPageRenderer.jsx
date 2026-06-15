@@ -3,7 +3,7 @@
  * src/features/yearbook/components/flipbook/YearbookPageRenderer.jsx
  *
  * FIXES applied:
- *   1. DedicationPage no longer exports TOCPage/SectionHeader — each has its own file.
+ * 1. DedicationPage no longer exports TOCPage/SectionHeader each has its own file.
  *      Updated imports accordingly.
  *   2. BlankPage was previously imported from DedicationPage (wrong); now from GalleryPage.
  *   3. Passes onPortraitClick through to StudentGridPage

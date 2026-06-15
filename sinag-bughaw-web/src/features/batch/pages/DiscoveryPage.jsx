@@ -10,7 +10,7 @@ import Footer from '@/components/layout/Footer';
 import LoadingSkeleton from '@/components/ui/LoadingSkeleton';
 import { imageUrl } from '@/utils/imageUrl';
 
-// ── Constants ──────────────────────────────────────────────────────────────────
+// Constants
 
 const VIEW_MODES = [
   { key: 'batch',         label: 'My Batch',      icon: 'fa-graduation-cap', desc: 'Same course & year' },
@@ -19,7 +19,7 @@ const VIEW_MODES = [
   { key: 'cross_program', label: 'Cross-Program', icon: 'fa-shuffle',        desc: 'Other programs'     },
 ];
 
-// ── Helpers ────────────────────────────────────────────────────────────────────
+// Helpers
 
 function studentName(s) {
   if (s.name) return s.name;
@@ -60,7 +60,7 @@ function getInitials(name = '') {
   return name.trim().split(/\s+/).map(w => w[0]?.toUpperCase() || '').slice(0, 2).join('');
 }
 
-// ── GenerateYearbookButton ─────────────────────────────────────────────────────
+// GenerateYearbookButton
 
 async function findYearbookBatchId(year, course = null) {
   if (!year) return null;
@@ -125,7 +125,7 @@ function GenerateYearbookButton({ batchId, department, course, label }) {
   );
 }
 
-// ── useFaceSearch ──────────────────────────────────────────────────────────────
+// useFaceSearch
 
 function useFaceSearch() {
   const [faceSearching, setFaceSearching] = useState(false);
@@ -162,7 +162,7 @@ function useFaceSearch() {
   return { faceSearching, faceMatches, matchedIds, handleFaceFile, clearFace };
 }
 
-// ── FaceResultBanner ───────────────────────────────────────────────────────────
+// FaceResultBanner
 
 // eslint-disable-next-line no-unused-vars
 function FaceResultBanner({ matches, onClear }) {
@@ -195,7 +195,7 @@ function FaceResultBanner({ matches, onClear }) {
   );
 }
 
-// ── UpgradeBanner ──────────────────────────────────────────────────────────────
+// UpgradeBanner
 
 function UpgradeBanner() {
   return (
@@ -217,7 +217,7 @@ function UpgradeBanner() {
   );
 }
 
-// ── StudentCard ────────────────────────────────────────────────────────────────
+// StudentCard
 
 function StudentCard({ student, isPremium, index = 0, isMatched = false, matchSimilarity = null }) {
   const fullName    = studentName(student);
@@ -289,7 +289,7 @@ function StudentCard({ student, isPremium, index = 0, isMatched = false, matchSi
   );
 }
 
-// ── StudentGrid ────────────────────────────────────────────────────────────────
+// StudentGrid
 
 function StudentGrid({
   students,
@@ -331,7 +331,7 @@ function StudentGrid({
   );
 }
 
-// ── FiltersPanel ───────────────────────────────────────────────────────────────
+// FiltersPanel
 
 function FiltersPanel({ filters, onChange, showCourse = true, showYear = true, showDept = true }) {
   const cls = "text-xs font-semibold px-4 py-2 rounded-xl border-none outline-none bg-slate-100 text-slate-500 cursor-pointer hover:bg-slate-200 transition-colors";
@@ -374,7 +374,7 @@ function FiltersPanel({ filters, onChange, showCourse = true, showYear = true, s
   );
 }
 
-// ── SearchInput ────────────────────────────────────────────────────────────────
+// SearchInput
 
 function SearchInput({ value, onChange, placeholder, hasMatch, children }) {
   return (
@@ -395,7 +395,7 @@ function SearchInput({ value, onChange, placeholder, hasMatch, children }) {
   );
 }
 
-// ── ResultCount ────────────────────────────────────────────────────────────────
+// ResultCount
 
 function ResultCount({ matchedSize, total, hasQuery, resultsLength, isPremium, suffix = '' }) {
   if (matchedSize > 0) return null;
@@ -415,7 +415,7 @@ function ResultCount({ matchedSize, total, hasQuery, resultsLength, isPremium, s
   );
 }
 
-// ── BatchView ──────────────────────────────────────────────────────────────────
+// BatchView
 
 function BatchView({ isPremium, userYear, userCourse }) {
   const [students, setStudents] = useState([]);
@@ -494,7 +494,7 @@ function BatchView({ isPremium, userYear, userCourse }) {
   );
 }
 
-// ── SectionView ────────────────────────────────────────────────────────────────
+// SectionView
 
 function SectionView({ isPremium }) {
   const [students, setStudents] = useState([]);
@@ -556,7 +556,7 @@ function SectionView({ isPremium }) {
   );
 }
 
-// ── SchoolView ─────────────────────────────────────────────────────────────────
+// SchoolView
 
 function SchoolView({ isPremium }) {
   const [students,     setStudents]     = useState([]);
@@ -672,7 +672,7 @@ function SchoolView({ isPremium }) {
   );
 }
 
-// ── CrossProgramView ───────────────────────────────────────────────────────────
+// CrossProgramView
 
 function CrossProgramView({ isPremium }) {
   const [allStudents, setAllStudents] = useState([]);
@@ -841,7 +841,7 @@ function CrossProgramView({ isPremium }) {
   );
 }
 
-// ── DiscoveryPage ──────────────────────────────────────────────────────────────
+// DiscoveryPage
 
 export default function DiscoveryPage() {
   const { user }                = useAuth();
@@ -853,7 +853,7 @@ export default function DiscoveryPage() {
     <div className="min-h-screen flex flex-col bg-slate-50" style={{ fontFamily: "'Inter', sans-serif" }}>
       <Navbar />
 
-      {/* ── Hero ── */}
+      {/* Hero */}
       <header className="bg-gradient-to-br from-[#1d2b4b] to-[#2a3d66] px-[8%] pt-12 pb-20 rounded-b-[40px] text-white text-center relative overflow-hidden">
         <p className="text-xs font-semibold uppercase tracking-[0.2em] mb-3 opacity-60 relative">
           National University Lipa
@@ -884,7 +884,7 @@ export default function DiscoveryPage() {
         </div>
       </header>
 
-      {/* ── View mode tabs ── */}
+      {/* View mode tabs */}
       <div className="flex justify-center -mt-8 relative z-10 px-[8%]">
         <div className="flex flex-wrap gap-2 justify-center p-2 rounded-2xl bg-white shadow-[0_10px_40px_rgba(0,0,0,0.1)]">
           {VIEW_MODES.map(mode => (
@@ -908,7 +908,7 @@ export default function DiscoveryPage() {
         </div>
       </div>
 
-      {/* ── Main content ── */}
+      {/* Main content */}
       <main className="px-[8%] pt-10 pb-20 flex-1">
 
         {/* Section title */}

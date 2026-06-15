@@ -1,6 +1,6 @@
 // sinag-bughaw-web/src/features/yearbook/hooks/useFlipbook.js
-// Extends the existing yearbook feature — fetches flipbook data from
-// the new /api/yearbook/flipbook/{batchId} endpoint.
+// Extends the existing yearbook feature fetches flipbook data from
+// the /api/yearbook/flipbook/{batchId} endpoint.
 
 import { useState, useEffect, useCallback } from 'react';
 import apiClient from '../../../api/client';
@@ -43,7 +43,7 @@ export function useFlipbook(batchId) {
  * Uses the tokenized PDF route so the browser can download without CORS-heavy blob XHR.
  *
  * @param {number|string} batchId
- * @param {string}        batchYear  — used for filename
+ * @param {string} batchYear used for filename
  */
 export function useYearbookPdfDownload() {
     const [downloading, setDownloading] = useState(false);

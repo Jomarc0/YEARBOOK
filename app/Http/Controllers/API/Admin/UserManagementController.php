@@ -67,7 +67,7 @@ class UserManagementController extends Controller
     public function update(Request $request, User $user): JsonResponse
     {
         $validated = $request->validate([
-            'role'               => ['sometimes', Rule::in(['student', 'faculty', 'admin'])],
+            'role'               => ['sometimes', Rule::in([User::ROLE_STUDENT, User::ROLE_ALUMNI, User::ROLE_FACULTY, User::ROLE_ADMIN])],
             'profile_visibility' => ['sometimes', Rule::in(['public', 'batchmates', 'private'])],
             'first_name'         => 'sometimes|string|max:100',
             'last_name'          => 'sometimes|string|max:100',
@@ -144,6 +144,7 @@ class UserManagementController extends Controller
     public function verify(User $user): JsonResponse
     {
         $user->update([
+            'role'              => User::ROLE_ALUMNI,
             'email_verified'    => true,
             'email_verified_at' => now(),
         ]);

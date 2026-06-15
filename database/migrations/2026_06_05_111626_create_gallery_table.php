@@ -8,7 +8,7 @@ return new class extends Migration
 {
     public function up(): void
     {
-        // ── galleries ────────────────────────────────────────────────────────
+        // galleries
         // Central model: one row per uploaded item (replaces photos + post_media).
         // All gallery uploads land here; status gate controls public visibility.
         Schema::create('galleries', function (Blueprint $table) {
@@ -25,7 +25,7 @@ return new class extends Migration
 
             $table->string('caption')->nullable();
 
-            // Approval gate — only 'approved' rows are publicly visible
+            // Approval gate only 'approved' rows are publicly visible
             $table->enum('status', ['pending', 'approved', 'rejected'])
                   ->default('pending');
 
@@ -43,7 +43,7 @@ return new class extends Migration
             $table->index(['user_id',  'status']);
         });
 
-        // ── gallery_media ────────────────────────────────────────────────────
+        // gallery_media
         // Each Gallery row can have one or more physical files (multi-size,
         // video + poster thumbnail, etc.).
         Schema::create('gallery_media', function (Blueprint $table) {

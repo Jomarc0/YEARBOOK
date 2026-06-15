@@ -1,14 +1,14 @@
 /**
  * DashboardPage.jsx
- * ─────────────────────────────────────────────────────────────────────────────
+ *
  * Instagram-style feed dashboard.
  * - 3-column desktop layout: left sidebar | feed | right sidebar
  * - Posts fetched from GET /api/feed?filter=all|public|batchmates|mine
  * - Visibility: public posts + batchmates posts (same batch_id) + own posts
- * - No likes, no comments — view count + tag students only
- * - Tag modal → POST /api/students/profile/tagged-photos
+ * No likes, no comments view count + tag students only
+ * Tag modal POST /api/students/profile/tagged-photos
  * - Uses existing Navbar + Footer from your codebase
- * ─────────────────────────────────────────────────────────────────────────────
+ *
  */
 
 import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
@@ -23,7 +23,7 @@ import Navbar                                        from '@/components/layout/N
 import Footer                                        from '@/components/layout/Footer';
 import LoadingSkeleton                               from '@/components/ui/LoadingSkeleton';
 
-// ─── Tier helper ─────────────────────────────────────────────────────────────
+// Tier helper
 const getTier = (user) => {
   if (!user) return 'free';
   if (user.tier === 'premium' || user.is_premium) return 'premium';
@@ -96,7 +96,7 @@ const shouldShowFeedPost = (post) => {
   return postMedia(post).length > 0 || meaningfulText(post?.caption || post?.body || post?.message);
 };
 
-// ─── Visibility pill ─────────────────────────────────────────────────────────
+// Visibility pill
 function VisPill({ visibility }) {
   const map = {
     public:     { label: 'Public',     cls: 'bg-emerald-50 text-emerald-800 border-emerald-200',  icon: 'fa-globe'   },
@@ -112,7 +112,7 @@ function VisPill({ visibility }) {
   );
 }
 
-// ─── Post media grid (Instagram-style carousel) ───────────────────────────────
+// Post media grid (Instagram-style carousel)
 function PostMediaGrid({ media }) {
   const [current, setCurrent] = useState(0);
 
@@ -121,7 +121,7 @@ function PostMediaGrid({ media }) {
   const isVideo = (path) => /\.(mp4|mov|webm)(\?|$)/i.test(path ?? '');
   const getUrl  = (path) => path?.startsWith('http') ? path : (storageUrl(path) || path);
 
-  // Single item — no carousel needed
+  // Single item no carousel needed
   if (media.length === 1) {
     const m = media[0];
     return (
@@ -138,7 +138,7 @@ function PostMediaGrid({ media }) {
     );
   }
 
-  // Multiple items — Instagram-style carousel
+  // Multiple items Instagram-style carousel
   const prev = (e) => { e.stopPropagation(); setCurrent(i => (i - 1 + media.length) % media.length); };
   const next = (e) => { e.stopPropagation(); setCurrent(i => (i + 1) % media.length); };
 
@@ -199,7 +199,7 @@ function PostMediaGrid({ media }) {
         ))}
       </div>
 
-      {/* Counter badge — top right (like Instagram) */}
+      {/* Counter badge top right (like Instagram) */}
       <div className="absolute top-3 right-3 z-10
                       bg-black/50 backdrop-blur-sm text-white
                       text-[11px] font-semibold px-2.5 py-1 rounded-full">
@@ -209,14 +209,14 @@ function PostMediaGrid({ media }) {
   );
 }
 
-// ─── Tag modal ────────────────────────────────────────────────────────────────
-//
+// Tag modal
+
 // FIX: onSaved now receives the full tagged_students array returned by the
 // server (not just the locally-selected IDs). This ensures the feed reflects
-// the server's authoritative state — e.g. AI-tagged students are preserved.
-// ─────────────────────────────────────────────────────────────────────────────
+// the server's authoritative state e.g. AI-tagged students are preserved.
+
 function TagModal({ photoId, existingTags = [], batchmates = [], onClose, onSaved }) {
-  // Initialise selection from existing tag objects — always use .id
+  // Initialise selection from existing tag objects always use .id
   const [selected, setSelected] = useState(existingTags.map(t => t.id));
   const [query,    setQuery]    = useState('');
   const [saving,   setSaving]   = useState(false);
@@ -371,11 +371,11 @@ function TagModal({ photoId, existingTags = [], batchmates = [], onClose, onSave
   );
 }
 
-// ─── Single post card ─────────────────────────────────────────────────────────
-//
+// Single post card
+
 // FIX: onTagSaved now receives the full tagged_students array from the server,
 // not a list of IDs. Passed straight through to TagModal's onSaved prop.
-// ─────────────────────────────────────────────────────────────────────────────
+
 function PostCard({ post, currentUser, batchmates, onTagSaved, onViewed, onReport }) {
   const [tagOpen, setTagOpen] = useState(false);
   const cardRef = useRef(null);
@@ -529,7 +529,7 @@ function PostCard({ post, currentUser, batchmates, onTagSaved, onViewed, onRepor
   );
 }
 
-// ─── Left sidebar ─────────────────────────────────────────────────────────────
+// Left sidebar
 function LeftSidebar({ user, isOn }) {
   const tier = getTier(user);
   const isPremium = tier === 'premium' || tier === 'standard';
@@ -633,7 +633,7 @@ function LeftSidebar({ user, isOn }) {
   );
 }
 
-// ─── Right sidebar ────────────────────────────────────────────────────────────
+// Right sidebar
 function memoryTitle(memory) {
   return memory?.title || memory?.caption || memory?.label || 'Yearbook memory';
 }
@@ -844,8 +844,8 @@ function RightSidebar({ batchmates, batchStats, topViewed, currentUser, memories
   );
 }
 
-// ─── Feed skeleton ────────────────────────────────────────────────────────────
-// ─── Main page ────────────────────────────────────────────────────────────────
+// Feed skeleton
+// Main page
 export default function DashboardPage() {
   const { user }    = useAuth();
   const { isOn }    = useAppConfig();
@@ -862,13 +862,13 @@ export default function DashboardPage() {
   const [memories,    setMemories]    = useState([]);
   const [batchStats]  = useState(null);
 
-  // ── Search state ────────────────────────────────────────────────────────────
+  // Search state
   const [query,      setQuery]      = useState('');
   const [results,    setResults]    = useState(null);
   const [showDrop,   setShowDrop]   = useState(false);
   const searchRef = useRef();
 
-  // ── Fetch feed ──────────────────────────────────────────────────────────────
+  // Fetch feed
   const fetchFeed = useCallback(async (activeFilter, activePage) => {
     try {
       const { data } = await axios.get('/feed', {
@@ -897,7 +897,7 @@ export default function DashboardPage() {
     });
   }, [filter, fetchFeed]);
 
-  // ── Sidebar data ─────────────────────────────────────────────────────────────
+  // Sidebar data
   useEffect(() => {
     (async () => {
       try {
@@ -921,7 +921,7 @@ export default function DashboardPage() {
     })();
   }, [user]);
 
-  // ── Load more ─────────────────────────────────────────────────────────────
+  // Load more
   const loadMore = async () => {
     if (loadingMore || !hasMore) return;
     setLoadingMore(true);
@@ -931,7 +931,7 @@ export default function DashboardPage() {
     setLoadingMore(false);
   };
 
-  // ── Search ───────────────────────────────────────────────────────────────
+  // Search
   const onSearch = async (val) => {
     setQuery(val);
     if (val.length < 2) { setShowDrop(false); return; }
@@ -952,13 +952,13 @@ export default function DashboardPage() {
     return () => document.removeEventListener('mousedown', h);
   }, []);
 
-  // ── Update tags in local state ──────────────────────────────────────────────
-  //
+  // Update tags in local state
+
   // FIX: now receives the full tagged_students array returned by the server
   // instead of a flat list of IDs that we had to re-hydrate from batchmates.
   // This means AI-tagged students (who may not be in the batchmates sidebar
   // list) are correctly preserved in the feed card.
-  // ───────────────────────────────────────────────────────────────────────────
+
   const handleTagSaved = (postId, taggedStudents) => {
     setPosts(prev => prev.map(p =>
       p.id !== postId ? p : { ...p, tagged_students: taggedStudents }
@@ -1009,7 +1009,7 @@ export default function DashboardPage() {
 
       <main className="flex-1 max-w-[1400px] w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 lg:py-8">
 
-        {/* ── Top search bar ── */}
+        {/* Top search bar */}
         <div className="flex items-center gap-4 mb-6">
           <div className="flex-1 max-w-xl relative z-50" ref={searchRef}>
             <i className="fas fa-search absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 text-sm pointer-events-none" />
@@ -1077,7 +1077,7 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* ── 3-column layout ── */}
+        {/* 3-column layout */}
         <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,640px)_260px] xl:grid-cols-[minmax(0,680px)_280px] gap-6 items-start justify-center">
 
           {/* Left sidebar */}

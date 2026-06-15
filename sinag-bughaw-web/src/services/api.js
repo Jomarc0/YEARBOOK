@@ -43,7 +43,7 @@ api.interceptors.response.use(
   }
 );
 
-// ── Auth ──────────────────────────────────────────────────────────────────────
+// Auth
 export const authApi = {
   login:     (email, password) => api.post('/auth/login', { email, password }),
   register:  (data)            => api.post('/auth/register', data),
@@ -52,7 +52,7 @@ export const authApi = {
   verifyOtp: (email, otp)      => api.post('/auth/otp/verify', { email, otp }),
 };
 
-// ── Students ──────────────────────────────────────────────────────────────────
+// Students
 export const studentsApi = {
   list:              (params)  => api.get('/students', { params }),
   show:              (id)      => api.get(`/students/${id}`),
@@ -68,7 +68,7 @@ export const studentsApi = {
   updatePassword:    (payload) => api.put('/students/profile/password', payload),
 };
 
-// ── Face Recognition ──────────────────────────────────────────────────────────
+// Face Recognition
 export const faceApi = {
   syncStudents:  ()               => api.post('/face/sync'),
   search:        (fd)             => api.post('/face/search', fd, { headers: { 'Content-Type': 'multipart/form-data' } }),
@@ -78,14 +78,14 @@ export const faceApi = {
   studentPhotos: (userId, page=1) => api.get(`/face/students/${userId}/photos`, { params: { page } }),
 };
 
-// ── Gallery ───────────────────────────────────────────────────────────────────
+// Gallery
 export const galleryApi = {
   list:       ()   => api.get('/gallery'),
   show:       (id) => id ? api.get(`/gallery/${id}`) : Promise.reject(new Error('ID required')),
   faceSearch: (fd) => api.post('/gallery/face-search', fd, { headers: { 'Content-Type': 'multipart/form-data' } }),
 };
 
-// ── Albums ────────────────────────────────────────────────────────────────────
+// Albums
 export const albumsApi = {
   list:   ()         => api.get('/albums'),
   show:   (id)       => api.get(`/albums/${id}`),
@@ -94,24 +94,24 @@ export const albumsApi = {
   delete: (id)       => api.delete(`/albums/${id}`),
 };
 
-// ── Sections ──────────────────────────────────────────────────────────────────
+// Sections
 export const sectionsApi = {
   list: ()   => api.get('/sections'),
   show: (id) => api.get(`/sections/${id}`),
 };
 
-// ── Faculty ───────────────────────────────────────────────────────────────────
+// Faculty
 export const facultyApi = {
   list: ()   => api.get('/faculty'),
   show: (id) => api.get(`/faculty/${id}`),
 };
 
-// ── Search ────────────────────────────────────────────────────────────────────
+// Search
 export const searchApi = {
   search: (q, type='all') => api.get('/search', { params: { q, type } }),
 };
 
-// ── Messages ──────────────────────────────────────────────────────────────────
+// Messages
 export const messagesApi = {
   conversations: ()                 => api.get('/messages/conversations'),
   thread:        (userId)           => api.get(`/messages/${userId}`),
@@ -119,34 +119,34 @@ export const messagesApi = {
   markRead:      (id)               => api.patch(`/messages/${id}/read`),
 };
 
-// ── Transcripts ───────────────────────────────────────────────────────────────
+// Transcripts
 export const transcriptsApi = {
   list:   ()   => api.get('/transcripts'),
   show:   (id) => api.get(`/transcripts/${id}`),
   upload: (fd) => api.post('/transcripts', fd, { headers: { 'Content-Type': 'multipart/form-data' } }),
 };
 
-// ── Yearbook ──────────────────────────────────────────────────────────────────
+// Yearbook
 export const yearbookApi = {
   flipbookData:      ()       => api.get('/yearbook/flipbook'),
   exportStudentPdf:  (userId) => api.get(`/yearbook/export/${userId}`, { responseType: 'blob' }),
   exportCertificate: ()       => api.get('/yearbook/certificate', { responseType: 'blob' }),
 };
 
-// ── Payments ──────────────────────────────────────────────────────────────────
+// Payments
 export const paymentsApi = {
   createIntent:       (plan) => api.post('/payments/create-intent', { plan }),
   subscriptionStatus: ()     => api.get('/payments/status'),
   history:            ()     => api.get('/payments/history'),
 };
 
-// ── Announcements ─────────────────────────────────────────────────────────────
+// Announcements
 export const announcementsApi = {
   list:   ()     => api.get('/announcements'),
   create: (data) => api.post('/announcements', data),
 };
 
-// ── Notifications ─────────────────────────────────────────────────────────────
+// Notifications
 export const notificationsApi = {
   list:          ()         => api.get('/notifications'),
   registerToken: (fcmToken) => api.post('/notifications/register-token', { fcm_token: fcmToken }),
@@ -154,13 +154,13 @@ export const notificationsApi = {
   markAll:       ()         => api.post('/notifications/read-all'),
 };
 
-// ── Consent ───────────────────────────────────────────────────────────────────
+// Consent
 export const consentApi = {
   accept: (version) => api.post('/consent/accept', { version }),
   status: ()        => api.get('/consent/status'),
 };
 
-// ── Profile Settings ──────────────────────────────────────────────────────────
+// Profile Settings
 export const profileSettingsApi = {
   updateVisibility: (visibility) => api.post('/profile/visibility', { visibility }),
   updateMotto:      (motto)      => api.post('/profile/motto', { motto }),
@@ -168,14 +168,14 @@ export const profileSettingsApi = {
   topViewed:        ()           => api.get('/analytics/top-viewed'),
 };
 
-// ── Voice Notes ───────────────────────────────────────────────────────────────
+// Voice Notes
 export const voiceNotesApi = {
   list:   ()   => api.get('/voice-notes'),
   upload: (fd) => api.post('/voice-notes', fd, { headers: { 'Content-Type': 'multipart/form-data' } }),
   delete: (id) => api.delete(`/voice-notes/${id}`),
 };
 
-// ── Graduation ────────────────────────────────────────────────────────────────
+// Graduation
 export const graduationApi = {
   list:          (category) => api.get('/graduation', { params: { category } }),
   show:          (id)       => api.get(`/graduation/${id}`),
@@ -186,14 +186,14 @@ export const graduationApi = {
   delete:        (id)       => api.delete(`/graduation/${id}`),
 };
 
-// ── Media (Bulk Upload + HD Video) ────────────────────────────────────────────
+// Media (Bulk Upload + HD Video)
 export const mediaApi = {
   bulkUpload:  (fd)  => api.post('/media/bulk-upload', fd, { headers: { 'Content-Type': 'multipart/form-data' } }),
   uploadVideo: (fd)  => api.post('/media/upload-video', fd, { headers: { 'Content-Type': 'multipart/form-data' } }),
   deletePhoto: (id)  => api.delete(`/media/photo/${id}`),
 };
 
-// ── Analytics ─────────────────────────────────────────────────────────────────
+// Analytics
 export const analyticsApi = {
   summary:    () => api.get('/analytics'),
   myStats:    () => api.get('/analytics/my-stats'),

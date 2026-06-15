@@ -68,7 +68,7 @@ export default function LandingPage() {
   return (
     <div className="min-h-screen flex flex-col bg-white text-[#1d2b4b] antialiased">
 
-      {/* ── Navbar ──────────────────────────────────────────────────────────── */}
+      {/* Navbar */}
       <nav className={`fixed top-0 left-0 w-full z-50 transition-[background] duration-300 ease-in-out ${
         scrolled ? 'bg-[#1B2A4A] shadow-md' : 'bg-transparent'
       }`}>
@@ -146,7 +146,7 @@ export default function LandingPage() {
 
       <main className="flex-1">
 
-      {/* ── Hero ────────────────────────────────────────────────────────────── */}
+      {/* Hero */}
       <section
         className="relative min-h-screen flex flex-col items-center justify-center text-center text-white px-5 bg-[linear-gradient(to_bottom,rgba(29,43,75,0.82)_0%,rgba(29,43,75,0.65)_60%,rgba(29,43,75,0.9)_100%),url('/images/NU-building.jpg')] bg-cover bg-center bg-no-repeat"
       >
@@ -199,7 +199,7 @@ export default function LandingPage() {
         )}
       </section>
 
-      {/* ── Stats ───────────────────────────────────────────────────────────── */}
+      {/* Stats */}
       <section className="max-w-5xl mx-auto px-5 sm:px-8 w-full -mt-8 relative z-20">
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           {STATS.map(({ icon, value, label }) => (
@@ -216,7 +216,7 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* ── Explore ─────────────────────────────────────────────────────────── */}
+      {/* Explore */}
       <section className="max-w-7xl mx-auto px-5 sm:px-8 py-24 w-full">
         <div className="text-center mb-14">
           <span className="text-xs font-bold uppercase tracking-widest text-[#3f51b5]">Explore</span>
@@ -256,7 +256,7 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* ── Features ────────────────────────────────────────────────────────── */}
+      {/* Features */}
       <section className="bg-[#f4f7fe] py-20">
         <div className="max-w-7xl mx-auto px-5 sm:px-8">
           <div className="text-center mb-14">
@@ -279,7 +279,7 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* ── Testimonial / Quote ─────────────────────────────────────────────── */}
+      {/* Testimonial / Quote */}
       <section className="max-w-4xl mx-auto px-5 sm:px-8 py-24 text-center">
         <div className="relative">
           <i className="fas fa-quote-left text-6xl text-indigo-100 absolute -top-4 left-1/2 -translate-x-1/2" aria-hidden="true" />
@@ -304,7 +304,7 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* ── CTA Banner ──────────────────────────────────────────────────────── */}
+      {/* CTA Banner */}
       <section className="px-5 sm:px-8 pb-24 max-w-7xl mx-auto w-full">
         <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-[#1d2b4b] via-[#2a3b6b] to-[#3f51b5] text-white text-center py-20 px-6">
           {/* Decorative ring */}

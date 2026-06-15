@@ -302,7 +302,7 @@ class TrashController extends Controller
         ]);
     }
 
-    // ── Private helpers ───────────────────────────────────────────────────────
+    // Private helpers
 
     private function resolveType(string $type): array
     {

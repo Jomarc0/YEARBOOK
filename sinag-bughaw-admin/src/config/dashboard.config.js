@@ -45,7 +45,7 @@ export const METRIC_CARDS = [
     label:         "System Alerts",
     metricKey:     "system_alerts",
     // sub, subColorClass, subBgClass, iconBgClass are computed dynamically
-    // based on the value — see buildMetricCards() below
+    // based on the value see buildMetricCards() below
     icon:          "Alerts",
   },
 ];

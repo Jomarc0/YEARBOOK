@@ -1,15 +1,15 @@
-import { useState, useEffect, useCallback } from 'react';
+﻿import { useState, useEffect, useCallback } from 'react';
 import { batchApi, sectionsApi } from '@/api/batch.api';
 import { useAuth } from '@/features/auth/hooks/useAuth';
 
-// ── useBatch ──────────────────────────────────────────────────────────────────
+// useBatch
 
 export function useBatch() {
   const { user } = useAuth();
 
   // Derived directly from the auth user object (populated by authApi.me()).
   //    Never false while waiting for a separate API response.
-  //    user.is_premium is set by AuthController::me() → already in context.
+  // user.is_premium is set by AuthController::me() already in context.
   const isPremium = user?.is_premium === true || user?.tier === 'premium';
 
   const [batchmates,   setBatchmates]   = useState([]);
@@ -70,7 +70,7 @@ export function useBatch() {
 
   return {
     user,
-    isPremium,        // ← always correct from auth context, no delay
+    isPremium,        // always correct from auth context, no delay
     batchmates,
     batches,
     departments,
@@ -84,12 +84,12 @@ export function useBatch() {
   };
 }
 
-// ── useSection ────────────────────────────────────────────────────────────────
+// useSection
 
 export function useSection(sectionId = null) {
   const { user } = useAuth();
 
-  // ✅ Same fix — derived from auth context, not from API response state
+  // Derived from auth context, not API response state
   const isPremium = user?.is_premium === true || user?.tier === 'premium';
 
   const [sections,  setSections]  = useState([]);

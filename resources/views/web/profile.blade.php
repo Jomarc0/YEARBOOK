@@ -18,7 +18,7 @@
         * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Inter', sans-serif; }
         body { background-color: var(--bg-gray); color: #333; overflow-x: hidden; }
 
-        /* --- NAVIGATION --- */
+        /* NAVIGATION */
         nav {
             display: flex; justify-content: space-between; align-items: center;
             padding: 15px 8%; background: white; position: sticky; top: 0; z-index: 1000;
@@ -33,7 +33,7 @@
         .user-nav { display: flex; align-items: center; gap: 12px; font-size: 0.75rem; text-align: right; }
         .profile-small { width: 35px; height: 35px; border-radius: 50%; object-fit: cover; border: 2px solid var(--nu-blue-bright); }
 
-        /* --- HEADER & BANNER --- */
+        /* HEADER & BANNER */
         .banner { 
             width: 100%; height: 300px; 
             background: linear-gradient(rgba(29, 43, 75, 0.4), rgba(29, 43, 75, 0.8)), url('https://images.unsplash.com/photo-1541339907198-e08756ebafe1?auto=format&fit=crop&w=1200') center/cover; 
@@ -41,7 +41,7 @@
         
         .profile-container { max-width: 1100px; margin: -100px auto 50px; padding: 0 20px; position: relative; }
         
-        /* --- MAIN CARD --- */
+        /* MAIN CARD */
         .main-card { 
             background: white; border-radius: 24px; padding: 40px; 
             box-shadow: 0 20px 40px rgba(0,0,0,0.08); display: flex; gap: 40px; align-items: center;
@@ -122,7 +122,7 @@
         .btn-share { border: 1px solid #ddd; width: 45px; height: 45px; border-radius: 12px; color: #666; background: white; cursor: pointer; transition: 0.3s; }
         .btn-share:hover { background: #f9f9f9; color: var(--nu-blue); border-color: #ccc; }
 
-        /* --- DETAILS GRID --- */
+        /* DETAILS GRID */
         .details-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 30px; margin-top: 30px; }
         .detail-card { 
             background: white; border-radius: 20px; padding: 30px; 

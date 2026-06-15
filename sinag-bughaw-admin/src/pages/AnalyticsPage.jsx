@@ -48,7 +48,7 @@ function StatCard({ toneClass, label, value, sub }) {
   );
 }
 
-// ─── Mini Line Chart (SVG) ────────────────────────────────────────────────────
+// Mini Line Chart (SVG)
 function LineChart({ data = [], color = "#4f46e5", height = 180 }) {
   if (!data.length) return <div style={{ height }} className="flex items-center justify-center text-sm text-slate-500">No data</div>;
 
@@ -91,7 +91,7 @@ function LineChart({ data = [], color = "#4f46e5", height = 180 }) {
   );
 }
 
-// ─── Bar Chart (SVG) ──────────────────────────────────────────────────────────
+// Bar Chart (SVG)
 function BarChart({ data = [], color = "#7c3aed", height = 180 }) {
   if (!data.length) return <div style={{ height }} className="flex items-center justify-center text-sm text-slate-500">No data</div>;
 
@@ -127,7 +127,7 @@ function BarChart({ data = [], color = "#7c3aed", height = 180 }) {
   );
 }
 
-// ─── Top Profiles List ────────────────────────────────────────────────────────
+// Top Profiles List
 function TopProfilesList({ items, loading }) {
   if (loading) return (
     <div className="flex flex-col gap-2.5">
@@ -166,7 +166,7 @@ function TopProfilesList({ items, loading }) {
   );
 }
 
-// ─── Presence Panel ───────────────────────────────────────────────────────────
+// Presence Panel
 function PresencePanel({ data, loading }) {
   if (loading) return <div className="flex flex-col gap-2">{Array.from({ length: 5 }).map((_, i) => <div key={i} className="flex gap-2.5"><Skeleton className="h-8 w-8 rounded-full" /><div className="flex-1"><Skeleton className="mb-1.5 h-2.5 w-2/5" /><Skeleton className="h-2.5 w-1/4" /></div></div>)}</div>;
   const onlineUsers = data?.filter((u) => u.is_online) ?? [];
@@ -191,7 +191,7 @@ function PresencePanel({ data, loading }) {
   );
 }
 
-// ─── Main Page ────────────────────────────────────────────────────────────────
+// Main Page
 export default function AnalyticsPage() {
   const [overview,    setOverview]    = useState(null);
   const [viewsTrend,  setViewsTrend]  = useState([]);

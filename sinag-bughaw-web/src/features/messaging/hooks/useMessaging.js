@@ -20,7 +20,7 @@ export function useMessaging(recipientId = null) {
   // Track real message IDs we've already added (prevents WS duplicate)
   const seenIdsRef      = useRef(new Set());
 
-  // ── Conversations ──────────────────────────────────────────────────────────
+  // Conversations
 
   const fetchConversations = useCallback(async () => {
     try {
@@ -31,7 +31,7 @@ export function useMessaging(recipientId = null) {
     }
   }, []);
 
-  // ── Thread ─────────────────────────────────────────────────────────────────
+  // Thread
 
   const fetchThread = useCallback(async (id) => {
     if (!id) return;
@@ -49,7 +49,7 @@ export function useMessaging(recipientId = null) {
     }
   }, []);
 
-  // ── Send ───────────────────────────────────────────────────────────────────
+  // Send
 
   const sendMessage = useCallback(async (receiverId, body, image = null) => {
     const tempId = `opt-${Date.now()}`;
@@ -85,7 +85,7 @@ export function useMessaging(recipientId = null) {
     }
   }, [user?.id, fetchConversations]);
 
-  // ── Mark read ──────────────────────────────────────────────────────────────
+  // Mark read
 
   const markRead = useCallback(async (id) => {
     await messagesApi.markRead(id);
@@ -94,7 +94,7 @@ export function useMessaging(recipientId = null) {
     );
   }, []);
 
-  // ── Unread count ───────────────────────────────────────────────────────────
+  // Unread count
 
   const fetchUnreadCount = useCallback(async () => {
     try {
@@ -105,7 +105,7 @@ export function useMessaging(recipientId = null) {
     }
   }, []);
 
-  // ── Typing ─────────────────────────────────────────────────────────────────
+  // Typing
 
   const onKeystroke = useCallback((receiverId) => {
     if (!iAmTypingRef.current) {
@@ -119,7 +119,7 @@ export function useMessaging(recipientId = null) {
     }, TYPING_DEBOUNCE_MS);
   }, []);
 
-  // ── WebSocket: private chat channel ───────────────────────────────────────
+  // WebSocket: private chat channel
 
   useEffect(() => {
     if (!user?.id) return;
@@ -158,7 +158,7 @@ export function useMessaging(recipientId = null) {
     };
   }, [user?.id, recipientId, fetchConversations, fetchUnreadCount]);
 
-  // ── WebSocket: presence channel ───────────────────────────────────────────
+  // WebSocket: presence channel
 
   useEffect(() => {
     if (!user?.id) return;
@@ -190,7 +190,7 @@ export function useMessaging(recipientId = null) {
     };
   }, [user?.id]);
 
-  // ── Initial load ──────────────────────────────────────────────────────────
+  // Initial load
 
   useEffect(() => {
     queueMicrotask(() => {

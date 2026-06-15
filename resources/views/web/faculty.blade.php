@@ -18,7 +18,7 @@
         * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Plus Jakarta Sans', sans-serif; }
         body { background-color: var(--bg-canvas); color: var(--nu-blue); overflow-x: hidden; }
 
-        /* --- ENTRANCE ANIMATIONS --- */
+        /* ENTRANCE ANIMATIONS */
         @keyframes fadeInUp {
             from { opacity: 0; transform: translateY(30px); }
             to { opacity: 1; transform: translateY(0); }
@@ -38,7 +38,7 @@
         .animate-up[data-delay="1.1"] { animation-delay: 1.1s; }
         .animate-up[data-delay="1.2"] { animation-delay: 1.2s; }
 
-        /* --- NAVIGATION --- */
+        /* NAVIGATION */
         nav {
             display: flex; justify-content: space-between; align-items: center;
             padding: 15px 8%; background: white; position: sticky; top: 0; z-index: 1000;
@@ -68,7 +68,7 @@
             border: 2px solid white; background: #eee; 
         }
 
-        /* --- PREMIUM HERO HEADER --- */
+        /* PREMIUM HERO HEADER */
         .faculty-hero {
             background: linear-gradient(135deg, var(--nu-blue) 0%, var(--nu-blue-light) 100%);
             padding: 100px 8% 150px; color: white; border-radius: 0 0 80px 80px;
@@ -82,7 +82,7 @@
         .faculty-hero h1 span { color: var(--nu-gold); }
         .faculty-hero p { opacity: 0.8; font-size: 1.1rem; max-width: 600px; margin: 0 auto; font-weight: 300; }
 
-        /* --- SEARCH BOX --- */
+        /* SEARCH BOX */
         .search-container { max-width: 800px; margin: -40px auto 0; padding: 0 20px; position: relative; z-index: 10; }
         .search-bar-wrap { position: relative; }
         .search-bar {
@@ -93,7 +93,7 @@
         .search-bar:focus { transform: translateY(-5px); box-shadow: 0 25px 50px rgba(0,0,0,0.15); }
         .search-icon { position: absolute; left: 30px; top: 50%; transform: translateY(-50%); color: var(--nu-gold); font-size: 1.4rem; }
 
-        /* --- FACULTY GRID --- */
+        /* FACULTY GRID */
         .faculty-section { padding: 80px 8% 120px; }
         .faculty-grid { 
             display: grid; 
@@ -101,7 +101,7 @@
             gap: 35px; 
         }
 
-        /* --- FACULTY CARD --- */
+        /* FACULTY CARD */
         /* Palitan mo yung dating .faculty-card selector nito */
 .faculty-card {
     background: white; 
@@ -144,7 +144,7 @@
         }
         .faculty-card:hover .view-btn { background: var(--nu-blue); color: white; }
 
-        /* --- FOOTER --- */
+        /* FOOTER */
         footer { background: var(--nu-blue); color: white; padding: 80px 8% 40px; display: grid; grid-template-columns: 2fr 1fr 1fr 1.5fr; gap: 40px; }
         .footer-logo h3 { font-size: 1.5rem; margin-bottom: 20px; font-weight: 800; }
         .footer-logo span { color: var(--nu-gold); }
@@ -270,7 +270,7 @@
     </footer>
 
     <script>
-        // --- LIVE SEARCH LOGIC ---
+        // LIVE SEARCH LOGIC
         document.getElementById('facultySearch').addEventListener('input', function(e) {
             const searchTerm = e.target.value.toLowerCase();
             const cards = document.querySelectorAll('.faculty-item');

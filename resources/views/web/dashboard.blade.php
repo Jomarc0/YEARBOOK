@@ -19,7 +19,7 @@
         * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Plus Jakarta Sans', sans-serif; }
         body { background-color: var(--bg-gray); color: var(--nu-blue); overflow-x: hidden; transition: filter 0.3s ease; }
 
-        /* --- SECURITY & WATERMARK STYLES --- */
+        /* SECURITY & WATERMARK STYLES */
         @media print { body { display: none !important; } }
 
         #security-shield {
@@ -34,7 +34,7 @@
             pointer-events: none; z-index: 9999; user-select: none; white-space: nowrap;
         }
 
-        /* --- ANIMATIONS --- */
+        /* ANIMATIONS */
         @keyframes fadeInUp { from { opacity: 0; transform: translateY(30px); } to { opacity: 1; transform: translateY(0); } }
         .animate-up { opacity: 0; animation: fadeInUp 0.8s ease forwards; }
         .animate-scale { opacity: 0; animation: scaleIn 0.8s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards; }
@@ -42,7 +42,7 @@
 
         .delay-1 { animation-delay: 0.1s; } .delay-2 { animation-delay: 0.2s; }
 
-        /* --- UI COMPONENTS --- */
+        /* UI COMPONENTS */
         .top-nav { display: flex; justify-content: space-between; align-items: center; padding: 20px 8%; background: white; box-shadow: 0 4px 30px rgba(0,0,0,0.03); position: sticky; top: 0; z-index: 100; }
         .logo-text { font-weight: 800; font-size: 1.4rem; letter-spacing: -1px; text-transform: uppercase; }
         .logo-text span { color: var(--nu-blue-bright); }
@@ -165,7 +165,7 @@
     const searchInput = document.getElementById('liveSearch');
     const resultsBox = document.getElementById('resultsBox');
 
-    /* --- SEARCH LOGIC --- */
+    /* SEARCH LOGIC */
     searchInput.addEventListener('input', function() {
         let val = this.value;
         if (val.length < 2) { resultsBox.style.display = 'none'; return; }
@@ -200,7 +200,7 @@
             });
     });
 
-    /* --- SECURITY LOGIC --- */
+    /* SECURITY LOGIC */
     // 1. I-blur kapag inalis ang mouse sa screen (para mahirapan mag-Snipping Tool)
     document.addEventListener('mouseleave', () => { document.body.style.filter = "blur(25px)"; });
     document.addEventListener('mouseenter', () => { document.body.style.filter = "none"; });

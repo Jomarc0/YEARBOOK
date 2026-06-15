@@ -33,7 +33,7 @@ const Fallback = () => (
 
 const yearbookRoutes = (
   <>
-    {/* Yearbook home / generator — /yearbook or /yearbook/:batchId */}
+    {/* Yearbook home / generator /yearbook or /yearbook/:batchId */}
     <Route
       path="/yearbook"
       element={<Suspense fallback={<Fallback />}><YearbookHomePage /></Suspense>}
@@ -43,7 +43,7 @@ const yearbookRoutes = (
       element={<Suspense fallback={<Fallback />}><YearbookHomePage /></Suspense>}
     />
 
-    {/* Flipbook viewer — /yearbook/:batchId/view */}
+    {/* Flipbook viewer /yearbook/:batchId/view */}
     <Route
       path="/yearbook/:batchId/view"
       element={<Suspense fallback={<Fallback />}><FlipbookViewerPage /></Suspense>}

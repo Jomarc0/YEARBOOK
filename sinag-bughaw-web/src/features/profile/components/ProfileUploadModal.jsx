@@ -172,7 +172,7 @@ export default function ProfileUploadModal({ onClose, onSuccess }) {
         {/* Body */}
         <div className="p-4 max-h-[78vh] overflow-y-auto">
 
-          {/* ── FREE GATE ── */}
+          {/* FREE GATE */}
           {!canUpload ? (
             <div className="text-center py-4">
               <div className="w-16 h-16 rounded-full bg-gradient-to-br from-slate-100 to-slate-200 flex items-center justify-center mx-auto mb-4">
@@ -206,7 +206,7 @@ export default function ProfileUploadModal({ onClose, onSuccess }) {
             </div>
 
           ) : done ? (
-            /* ── SUCCESS ── */
+            /* SUCCESS */
             <div className="text-center py-10">
               <div className="w-16 h-16 rounded-full bg-gradient-to-br from-emerald-400 to-emerald-600 flex items-center justify-center mx-auto mb-4 shadow-xl shadow-emerald-200/50">
                 <i className="fas fa-check text-white text-2xl" />
@@ -218,7 +218,7 @@ export default function ProfileUploadModal({ onClose, onSuccess }) {
             </div>
 
           ) : (
-            /* ── UPLOAD FORM ── */
+            /* UPLOAD FORM */
             <>
               <input
                 ref={multiRef}

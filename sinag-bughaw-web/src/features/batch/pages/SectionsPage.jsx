@@ -177,7 +177,7 @@ export default function SectionsPage() {
     <div className="font-['Plus_Jakarta_Sans',sans-serif] min-h-screen flex flex-col bg-[#f0f2f8]">
       <Navbar />
 
-      {/* ── Hero ── */}
+      {/* Hero */}
       <header className="bg-[#1B2A4A] px-[8%] pt-14 pb-[52px] text-center text-white rounded-b-[48px]">
         <p className="text-[11px] font-semibold tracking-[0.15em] uppercase text-[#F5A623] mb-3.5">
           National University Lipa
@@ -209,7 +209,7 @@ export default function SectionsPage() {
         </div>
       </header>
 
-      {/* ── Stats Bar ── */}
+      {/* Stats Bar */}
       {!batchLoading && Object.keys(batches).length > 0 && (
         <div className="bg-white border-b border-[#e8eaf0] flex items-center justify-center gap-14 px-[8%] py-[18px]">
           {[
@@ -230,7 +230,7 @@ export default function SectionsPage() {
         </div>
       )}
 
-      {/* ── Main ── */}
+      {/* Main */}
       <main className="flex-1 px-[8%] pt-9 pb-16 min-h-[70vh]">
 
         {/* Student search results */}
@@ -284,7 +284,7 @@ export default function SectionsPage() {
           </section>
         )}
 
-        {/* ── Batch Cards ── */}
+        {/* Batch Cards */}
         {batchLoading ? (
           <LoadingSkeleton variant="card" count={6} />
 

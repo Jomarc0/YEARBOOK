@@ -13,7 +13,7 @@ const api = axios.create({
   },
 });
 
-// ─── Request: attach Bearer token if present ─────────────────────────────────
+// Request: attach Bearer token if present
 api.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem("admin_token");
@@ -23,7 +23,7 @@ api.interceptors.request.use(
   (error) => Promise.reject(error)
 );
 
-// ─── Response: handle errors globally ────────────────────────────────────────
+// Response: handle errors globally
 api.interceptors.response.use(
   (response) => response,
   (error) => {
@@ -32,7 +32,7 @@ api.interceptors.response.use(
     if (status === 401) {
       localStorage.removeItem("admin_token");
       localStorage.removeItem("admin_user");
-      // Redirect without reload loop — only if not already on /login
+      // Redirect without reload loop only if not already on /login
       if (window.location.pathname !== "/login") {
         window.location.href = "/login";
       }

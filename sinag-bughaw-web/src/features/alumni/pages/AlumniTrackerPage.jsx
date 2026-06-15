@@ -45,9 +45,9 @@ function usableFaceMatches(matches = []) {
   return Array.from(new Map(normalized.map((match) => [match.match_ids[0], match])).values());
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
+
 // Alumni Card
-// ─────────────────────────────────────────────────────────────────────────────
+
 
 function AlumniCard({ alumni }) {
   const { yearbookUrl, loading: linkLoading } = useYearbookDeepLink(alumni.id);
@@ -192,7 +192,7 @@ function AlumniCard({ alumni }) {
           View Profile
         </Link>
 
-        {/* Deep-link → Yearbook */}
+        {/* Deep-link Yearbook */}
         {yearbookUrl ? (
           <Link
             to={yearbookUrl}
@@ -224,9 +224,9 @@ function AlumniCard({ alumni }) {
   );
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
+
 // Filter Bar
-// ─────────────────────────────────────────────────────────────────────────────
+
 
 function FilterBar({ filters, onFilter, batches = [], onFaceFile, faceSearching = false }) {
   const FIELDS = ['Engineering', 'Business', 'Education', 'Health Sciences', 'Technology', 'Arts', 'Law', 'Other'];
@@ -283,9 +283,9 @@ function FilterBar({ filters, onFilter, batches = [], onFaceFile, faceSearching 
   );
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
+
 // Main Page
-// ─────────────────────────────────────────────────────────────────────────────
+
 
 export default function AlumniTrackerPage() {
   const [searchParams]   = useSearchParams();

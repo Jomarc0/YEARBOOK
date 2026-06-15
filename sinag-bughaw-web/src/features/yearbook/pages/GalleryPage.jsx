@@ -14,9 +14,9 @@ import ProtectedImage from '@/components/ui/ProtectedImage';
 import { ContentOwnershipBanner } from '@/components/ui/CopyrightLabel';
 import LoadingSkeleton from '@/components/ui/LoadingSkeleton';
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+// Helpers
 
-// REMOVED: safeGetToken() — no longer needed.
+// REMOVED: safeGetToken() no longer needed.
 // All API calls now go through the axios client which handles auth automatically.
 
 const getTier = (user) => {
@@ -26,7 +26,7 @@ const getTier = (user) => {
   return 'free';
 };
 
-// ─── Tab config ───────────────────────────────────────────────────────────────
+// Tab config
 const TABS = [
   { key: 'general',               label: 'Gallery',       icon: 'fa-photo-film'         },
   { key: 'graduation:photos',     label: 'Graduation',    icon: 'fa-graduation-cap'     },
@@ -196,7 +196,7 @@ const makeFaceSearchForm = (file, type) => {
   return fd;
 };
 
-// ─── Storage hook ─────────────────────────────────────────────────────────────
+// Storage hook
 function useStorageUsage() {
   const [storage, setStorage] = useState({ used_bytes: 0, limit_bytes: 524288000, tier: 'free' });
   const reload = () =>
@@ -213,7 +213,7 @@ function useStorageUsage() {
   return [storage, reload];
 }
 
-// ─── ProtectedDownloadButton ──────────────────────────────────────────────────
+// ProtectedDownloadButton
 function ProtectedDownloadButton({ href, label = 'Download', isPremium = false }) {
   const [showGate, setShowGate] = useState(false);
 
@@ -268,7 +268,7 @@ function ProtectedDownloadButton({ href, label = 'Download', isPremium = false }
   );
 }
 
-// ─── CreateAlbumStep ──────────────────────────────────────────────────────────
+// CreateAlbumStep
 function CreateAlbumStep({
   albums, activeAlbum, onSelect, onCreateNew, onProceed, onCancel,
   creating, newAlbumName, onNewAlbumNameChange,
@@ -368,7 +368,7 @@ function CreateAlbumStep({
   );
 }
 
-// ─── Transcript Modal ─────────────────────────────────────────────────────────
+// Transcript Modal
 function TranscriptModal({ photoId, albumId, videoTitle, onClose }) {
   const [transcripts, setTranscripts] = useState([]);
   const [loading,     setLoading]     = useState(true);
@@ -573,7 +573,7 @@ function TranscriptModal({ photoId, albumId, videoTitle, onClose }) {
   );
 }
 
-// ─── Grad content cards ───────────────────────────────────────────────────────
+// Grad content cards
 function GradAlbumCard({ album, onClick }) {
   return (
     <button type="button" onClick={() => onClick(album)} className="text-left w-full border-none bg-transparent p-0 block group cursor-pointer">
@@ -813,7 +813,7 @@ function AlbumPhotoGrid({ album, label, onBack, currentUser, onDeletePhoto }) {
   );
 }
 
-// ─── VideoAlbumCard ───────────────────────────────────────────────────────────
+// VideoAlbumCard
 function VideoAlbumCard({ album, onClick }) {
   const videoCount = albumMediaCount(album);
 
@@ -852,7 +852,7 @@ function VideoAlbumCard({ album, onClick }) {
   );
 }
 
-// ─── GradVideoCard ────────────────────────────────────────────────────────────
+// GradVideoCard
 function GradVideoCard({ video, photoId, albumId, albumTitle, badge, onOpen }) {
   const [playing,        setPlaying]        = useState(false);
   const [showTranscript, setShowTranscript] = useState(false);
@@ -1318,7 +1318,7 @@ function GradSongCard({ album }) {
   );
 }
 
-// ─── Face Search Results ──────────────────────────────────────────────────────
+// Face Search Results
 function FaceSearchResults({ matches, isGrad, onOpenAlbum }) {
   if (!matches.length) return null;
   return (
@@ -1350,7 +1350,7 @@ function FaceSearchResults({ matches, isGrad, onOpenAlbum }) {
   );
 }
 
-// ─── Main Page ────────────────────────────────────────────────────────────────
+// Main Page
 export default function GalleryPage() {
   const { user } = useAuth();
   const userTier  = getTier(user);
@@ -1575,7 +1575,7 @@ export default function GalleryPage() {
     }
   };
 
-  // ── FIX: replaced raw fetch() + safeGetToken() with galleryApi.createAlbum()
+  // FIX: replaced raw fetch() + safeGetToken() with galleryApi.createAlbum()
   //         so the axios interceptor handles the Authorization header correctly.
   const handleCreateAlbum = async () => {
     if (!newAlbumName.trim()) return;
@@ -1705,7 +1705,7 @@ export default function GalleryPage() {
     <div className="min-h-screen flex flex-col bg-[#f4f7fe] font-sans">
       <Navbar />
 
-      {/* ── Hero ── */}
+      {/* Hero */}
       <header className="min-h-[140px] bg-gradient-to-br from-[#1d2b4b] to-[#2a3d66] px-[8%] py-8 text-center text-white rounded-b-[28px]">
         <p className="text-[11px] font-bold tracking-[0.15em] uppercase text-white/50 mb-2.5">{heroLabel}</p>
         <h1 className="text-3xl sm:text-4xl font-black tracking-tight mb-2">{heroTitle}</h1>
@@ -1737,7 +1737,7 @@ export default function GalleryPage() {
         </div>
       </header>
 
-      {/* ── Tabs ── */}
+      {/* Tabs */}
       <div className="max-w-[1000px] mx-auto -mt-4 px-5 w-full relative z-10">
         <div className="bg-white flex gap-1 p-1.5 rounded-t-[20px] shadow-sm border-b border-slate-100">
           {primaryTabs.map(tab => (
@@ -1783,7 +1783,7 @@ export default function GalleryPage() {
         </div>
       )}
 
-      {/* ── Upload flow ── */}
+      {/* Upload flow */}
       {!isGrad && uploadStep && (
         <div className="max-w-[1000px] mx-auto mt-5 px-5 w-full flex flex-col gap-4">
           <div className="flex items-center gap-3">
@@ -1857,7 +1857,7 @@ export default function GalleryPage() {
         </div>
       )}
 
-      {/* ── Content ── */}
+      {/* Content */}
       <section className="px-[8%] pt-8 pb-24 flex-1">
         <div className="flex items-center justify-between mb-7">
           <h2 className="text-xl font-extrabold text-[#1d2b4b] m-0 flex items-center gap-2">
@@ -1970,7 +1970,7 @@ export default function GalleryPage() {
           </div>
         ) : (
           <>
-            {/* ── Photo grids ── */}
+            {/* Photo grids */}
             {(activeTab === 'general' || photoGradTabs.includes(activeTab)) && (
               <div className="grid grid-cols-[repeat(auto-fill,minmax(300px,1fr))] gap-7">
                 {albums.map(album => (
@@ -2016,7 +2016,7 @@ export default function GalleryPage() {
               </div>
             )}
 
-            {/* ── Videos / Baccalaureate Mass tabs ── */}
+            {/* Videos / Baccalaureate Mass tabs */}
             {isVideoTab && (
               <>
                 {!selectedVideoAlbum && (
@@ -2070,7 +2070,7 @@ export default function GalleryPage() {
               </>
             )}
 
-            {/* ── Program tab ── */}
+            {/* Program tab */}
             {activeTab === 'graduation:program' && (
               <div className="flex flex-col gap-8">
                 <div className="flex flex-col gap-4">
@@ -2097,9 +2097,9 @@ export default function GalleryPage() {
               </div>
             )}
 
-            {/* ── Invitation tab ── */}
+            {/* Invitation tab */}
 
-            {/* ── Grad Song tab ── */}
+            {/* Grad Song tab */}
             {activeTab === 'graduation:song' && (
               <div className="grid grid-cols-[repeat(auto-fill,minmax(300px,1fr))] gap-6">
                 {albums.map(a => <GradSongCard key={a.id} album={a} />)}

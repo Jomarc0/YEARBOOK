@@ -1,8 +1,8 @@
-// ─────────────────────────────────────────────────────────
-// Design tokens  —  sourced from Blade :root CSS variables
-//   --bg:#e9edf4  --nav:#131d35  --primary:#4254c5
-//   --border:#d9e1ef  --text:#1f2a44  --muted:#71809d
-// ─────────────────────────────────────────────────────────
+
+// Design tokens sourced from Blade :root CSS variables
+// bg:#e9edf4 nav:#131d35 primary:#4254c5
+// border:#d9e1ef text:#1f2a44 muted:#71809d
+
 export const T = {
   bg:        "#e9edf4",
   surface:   "#ffffff",
@@ -20,7 +20,7 @@ export const T = {
   redBg:     "#fee2e2",
 };
 
-// Shared input style — matches Blade .field input
+// Shared input style matches Blade .field input
 export const inputCss = {
   width:       "100%",
   border:      "1px solid #cfdaec",

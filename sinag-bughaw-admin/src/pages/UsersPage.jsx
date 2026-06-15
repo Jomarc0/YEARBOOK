@@ -47,6 +47,7 @@ function Badge({ label, tone = "default" }) {
 function roleBadge(role) {
   const map = {
     student: { label: "Student", tone: "indigo" },
+    alumni: { label: "Alumni", tone: "emerald" },
     faculty: { label: "Faculty", tone: "violet" },
     admin: { label: "Admin", tone: "amber" },
   };
@@ -232,6 +233,7 @@ function UserModal({ user, onClose, onSaved, toast }) {
               className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-200"
             >
               <option value="student">Student</option>
+              <option value="alumni">Alumni</option>
               <option value="faculty">Faculty</option>
               <option value="admin">Admin</option>
             </select>
@@ -481,6 +483,7 @@ export default function UsersPage() {
           <select value={roleFilter} onChange={(e) => handleFilter("role", e.target.value)} className="cursor-pointer rounded-lg border border-slate-200 bg-white px-3.5 py-2 text-sm text-slate-700 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-200">
             <option value="">All Roles</option>
             <option value="student">Student</option>
+            <option value="alumni">Alumni</option>
             <option value="faculty">Faculty</option>
             <option value="admin">Admin</option>
           </select>

@@ -1,16 +1,16 @@
 /**
- * GraduationContentPage.jsx  — Design-fixed version
+ * GraduationContentPage.jsx Design-fixed version
  *
  * Design fixes applied:
  *  1. ContentCard min-width raised to 240px; action row always fits on one line
  *  2. Action row: View button flex-shrink-0; icon buttons always visible (no clip)
  *  3. Title casing: stored title is rendered as-is (no uppercase transform on cards)
- *  4. Meta line: deduped — never shows "Batch 2025 — 2025"; batch name + date only
+ * 4. Meta line: deduped never shows "Batch 2025 2025"; batch name + date only
  *  5. File strip: per-type accent colors so video/audio/pdf slots are distinguishable
  *  6. Thumbnail fallback: type-icon is centered with a subtle gradient, not just floated
  *  7. Stats row: accent left-border replaces flat card to anchor each stat visually
  *  8. Card body padding/spacing tightened for a cleaner hierarchy
- *  9. All icon-only buttons are a consistent 32×32 with clear hover states
+ * 9. All icon-only buttons are a consistent 32 32 with clear hover states
  * 10. Truncated titles use title attribute so hovering reveals the full name
  */
 
@@ -19,7 +19,7 @@ import api from "../services/api";
 import { usePhotoFacesBroadcast } from "../hooks/usePhotoFacesBroadcast";
 import Icon from "../components/shared/Icon";
 
-// ─── Design Tokens ─────────────────────────────────────────────────────────
+// Design Tokens
 const T = {
   bg:        "#f0f4ff",
   surface:   "#ffffff",
@@ -58,7 +58,7 @@ const inputBase = {
   boxSizing: "border-box", background: "#fafbff",
 };
 
-// 32×32 icon button — consistent size, clear hover via CSS class
+// 32 32 icon button consistent size, clear hover via CSS class
 const iconBtnStyle = (color, bg, borderColor) => ({
   width: 32, height: 32, flexShrink: 0,
   display: "flex", alignItems: "center", justifyContent: "center",
@@ -73,7 +73,7 @@ const iconBtnStyle = (color, bg, borderColor) => ({
   transition: "filter .12s",
 });
 
-// ─── Helpers ────────────────────────────────────────────────────────────────
+// Helpers
 const Skeleton = ({ w = "100%", h = 14, radius = 6, style = {} }) => (
   <div
     style={{ width: w, height: h, borderRadius: radius, ...style }}
@@ -92,7 +92,7 @@ function detectFileType(photo) {
   return "file";
 }
 
-// Fix: never show "Batch YEAR — YEAR" duplication
+// Fix: never show "Batch YEAR YEAR" duplication
 function buildMetaLine(item) {
   const batchName = item.batch_name ?? null;
   const dateLabel = item.event_date
@@ -253,7 +253,7 @@ function ConfirmModal({ open, title, message, confirmLabel = "Confirm", confirmB
   );
 }
 
-// ─── File Thumbnail ─────────────────────────────────────────────────────────
+// File Thumbnail
 function EditFileModal({ open, file, form, setForm, onSave, onCancel, loading }) {
   if (!open) return null;
   return (
@@ -339,9 +339,9 @@ function FileThumb({ photo, idx, onLightbox, onEdit, onDelete, canManage = false
   );
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
+
 // ALBUM DETAIL MODAL
-// ═══════════════════════════════════════════════════════════════════════════
+
 function AlbumDetailModal({ open, albumId, album: albumProp, contentType, isAdmin, onClose, onAddFiles, toast }) {
   const [photos, setPhotos]               = useState([]);
   const [albumData, setAlbumData]         = useState(null);
@@ -564,8 +564,8 @@ function AlbumDetailModal({ open, albumId, album: albumProp, contentType, isAdmi
   );
 }
 
-// ─── File Drop Zone ─────────────────────────────────────────────────────────
-// fileTitles / setFileTitles: optional — only passed for video-type content
+// File Drop Zone
+// fileTitles / setFileTitles: optional only passed for video-type content
 // so each file gets its own editable title field before uploading.
 function FileDropZone({ cfg, files, setFiles, uploading, progress, fileTitles, setFileTitles }) {
   const fileRef = useRef(null);
@@ -694,7 +694,7 @@ function FileDropZone({ cfg, files, setFiles, uploading, progress, fileTitles, s
   );
 }
 
-// ─── Album Upload Modal ─────────────────────────────────────────────────────
+// Album Upload Modal
 const VIDEO_TYPES = ["videos", "songs", "mass", "speeches"];
 
 function AlbumUploadModal({ open, contentType, batches, onClose, onDone, toast }) {
@@ -839,7 +839,7 @@ function AlbumUploadModal({ open, contentType, batches, onClose, onDone, toast }
   );
 }
 
-// ─── Edit Modal ─────────────────────────────────────────────────────────────
+// Edit Modal
 function EditModal({ open, item, batches, onSave, onCancel, loading }) {
   const [form, setForm] = useState({});
   useEffect(() => {
@@ -883,7 +883,7 @@ function EditModal({ open, item, batches, onSave, onCancel, loading }) {
   );
 }
 
-// ─── Add Files Modal ─────────────────────────────────────────────────────────
+// Add Files Modal
 function AddFilesModal({ open, album, contentType, onClose, onDone, toast }) {
   const cfg         = CONTENT_TYPES.find(c => c.key === contentType) ?? CONTENT_TYPES[0];
   const isVideoType = VIDEO_TYPES.includes(contentType);
@@ -959,7 +959,7 @@ function AddFilesModal({ open, album, contentType, onClose, onDone, toast }) {
   );
 }
 
-// ─── Pagination ──────────────────────────────────────────────────────────────
+// Pagination
 function Pagination({ meta, onPage }) {
   if (!meta || meta.last_page <= 1) return null;
   const { current_page: cur, last_page: last } = meta;
@@ -981,7 +981,7 @@ function Pagination({ meta, onPage }) {
   );
 }
 
-// ─── Stats Row — FIXED: accent left-border, no more flat card look ──────────
+// Stats Row FIXED: accent left-border, no more flat card look
 function StatsRow({ stats, contentType }) {
   if (!stats || !stats[contentType]) return null;
   const s = stats[contentType];
@@ -1003,7 +1003,7 @@ function StatsRow({ stats, contentType }) {
   );
 }
 
-// ─── File Strip — FIXED: per-type background tints ───────────────────────────
+// File Strip FIXED: per-type background tints
 const STRIP_TYPE_STYLE = {
   image: { bg: "transparent",         icon: null,  label: null  },
   video: { bg: "rgba(66,84,197,.45)", icon: "▶",   label: null  },
@@ -1044,9 +1044,9 @@ function FileStrip({ photos }) {
   );
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-// CONTENT CARD — DESIGN FIXED
-// ═══════════════════════════════════════════════════════════════════════════
+
+// CONTENT CARD DESIGN FIXED
+
 function ContentCard({ item, isAdmin, onViewFiles, onEdit, onDelete, onPublish, onArchive, onAddFiles }) {
   const typeEmoji = {
     photos: "🖼️", videos: "🎬", program: "📄", invitations: "✉️",
@@ -1079,7 +1079,7 @@ function ContentCard({ item, isAdmin, onViewFiles, onEdit, onDelete, onPublish, 
       onMouseEnter={e => { e.currentTarget.style.boxShadow = T.shadowMd; e.currentTarget.style.borderColor = "#c7d2fe"; e.currentTarget.style.transform = "translateY(-1px)"; }}
       onMouseLeave={e => { e.currentTarget.style.boxShadow = T.shadow; e.currentTarget.style.borderColor = T.border; e.currentTarget.style.transform = "none"; }}
     >
-      {/* ── Thumbnail ── */}
+      {/* Thumbnail */}
       <div
         onClick={onViewFiles}
         style={{
@@ -1099,7 +1099,7 @@ function ContentCard({ item, isAdmin, onViewFiles, onEdit, onDelete, onPublish, 
           />
         )}
 
-        {/* FIXED: fallback type icon — centered, readable, not floating */}
+        {/* FIXED: fallback type icon centered, readable, not floating */}
         {!thumb && (
           <div style={{
             position: "absolute", inset: 0,
@@ -1115,19 +1115,19 @@ function ContentCard({ item, isAdmin, onViewFiles, onEdit, onDelete, onPublish, 
           </div>
         )}
 
-        {/* Status badge — top left */}
+        {/* Status badge top left */}
         <div style={{ position: "absolute", top: 8, left: 8 }}>
           <StatusBadge status={item.status} />
         </div>
 
-        {/* File count — top right */}
+        {/* File count top right */}
         {fileCount > 0 && (
           <div style={{ position: "absolute", top: 8, right: 8, background: "rgba(0,0,0,.6)", color: "#fff", fontSize: "0.67rem", fontWeight: 700, padding: "2px 8px", borderRadius: 5, letterSpacing: ".02em" }}>
             {fileCount} {fileCount === 1 ? "file" : "files"}
           </div>
         )}
 
-        {/* AI / Transcript pills — positioned above strip */}
+        {/* AI / Transcript pills positioned above strip */}
         {(hasFace || item.has_transcript) && (
           <div style={{ position: "absolute", bottom: hasStrip ? 38 : 8, left: 8, display: "flex", gap: 4 }}>
             {hasFace && <span style={{ fontSize: "0.6rem", fontWeight: 700, padding: "2px 7px", borderRadius: 4, background: "rgba(66,84,197,.9)", color: "#fff" }}>👤 AI</span>}
@@ -1139,7 +1139,7 @@ function ContentCard({ item, isAdmin, onViewFiles, onEdit, onDelete, onPublish, 
         {hasStrip && <FileStrip photos={photos} />}
       </div>
 
-      {/* ── Body — FIXED: no uppercase, proper overflow ── */}
+      {/* Body FIXED: no uppercase, proper overflow */}
       <div style={{ padding: "12px 13px 10px", flex: 1, minWidth: 0 }}>
         {/* Title: sentence-case, not uppercase; full text on hover */}
         <div
@@ -1175,7 +1175,7 @@ function ContentCard({ item, isAdmin, onViewFiles, onEdit, onDelete, onPublish, 
         )}
       </div>
 
-      {/* ── Actions row — FIXED: never clips, all items always visible ── */}
+      {/* Actions row FIXED: never clips, all items always visible */}
       <div style={{
         padding: "8px 10px",
         borderTop: `1px solid ${T.border}`,
@@ -1281,7 +1281,7 @@ function ContentCard({ item, isAdmin, onViewFiles, onEdit, onDelete, onPublish, 
   );
 }
 
-// ─── Content Tab ────────────────────────────────────────────────────────────
+// Content Tab
 function ContentTab({ contentType, isAdmin, batches, stats, toast }) {
   const [items, setItems]                   = useState([]);
   const [meta, setMeta]                     = useState(null);
@@ -1383,7 +1383,7 @@ function ContentTab({ contentType, isAdmin, batches, stats, toast }) {
         )}
       </div>
 
-      {/* Grid — FIXED: min card width 240px */}
+      {/* Grid FIXED: min card width 240px */}
       {loading ? (
         <div className="grid grid-cols-[repeat(auto-fill,minmax(240px,1fr))] gap-4">
           {Array.from({ length: 9 }).map((_, i) => (
@@ -1464,9 +1464,9 @@ function ContentTab({ contentType, isAdmin, batches, stats, toast }) {
   );
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
+
 // ROOT PAGE
-// ═══════════════════════════════════════════════════════════════════════════
+
 export default function GraduationContentPage({ isAdmin = false }) {
   const [activeTab, setActiveTab] = useState("photos");
   const [batches, setBatches]     = useState([]);

@@ -8,7 +8,7 @@ return new class extends Migration
 {
     public function up(): void
     {
-        // ── Add moderation audit columns to existing galleries table ──────────
+        // Add moderation audit columns to existing galleries table
         Schema::table('galleries', function (Blueprint $table) {
             if (!Schema::hasColumn('galleries', 'rejection_reason')) {
                 $table->string('rejection_reason')->nullable()->after('sort_order');

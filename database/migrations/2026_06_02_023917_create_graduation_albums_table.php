@@ -35,7 +35,7 @@ return new class extends Migration
             // Lifecycle status
             $table->string('status')->default('draft'); // draft | published | archived
 
-            // Primary media (quick preview URL — first file uploaded)
+            // Primary media (quick preview URL first file uploaded)
             $table->text('media_url')->nullable();
             $table->string('cover_image')->nullable();
             $table->string('cloudinary_public_id')->nullable();

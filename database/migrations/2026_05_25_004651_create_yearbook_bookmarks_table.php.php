@@ -1,5 +1,5 @@
 <?php
-// ─── Migration ─────────────────────────────────────────────────────────────
+// Migration
 // database/migrations/2025_xx_xx_create_yearbook_bookmarks_table.php
 
 use Illuminate\Database\Migrations\Migration;

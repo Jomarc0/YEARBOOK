@@ -309,7 +309,7 @@ export default function AnnouncementManagementPage({ showToast }) {
         .ann-input:focus { border-color:#3f51b5; }
       `}</style>
 
-      {/* ── Page Title Bar ── */}
+      {/* Page Title Bar */}
       <div style={{
         padding: '20px 32px 0',
         maxWidth: '1280px',
@@ -351,7 +351,7 @@ export default function AnnouncementManagementPage({ showToast }) {
 
       <div style={{ padding: '20px 32px 28px', maxWidth: '1280px', margin: '0 auto' }}>
 
-        {/* ── Stats Row ── */}
+        {/* Stats Row */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px', marginBottom: '28px' }}>
           <StatCard icon="fa-bullhorn"    value={stats.total}    label="Total"     color="#3f51b5" />
           <StatCard icon="fa-calendar"    value={stats.events}   label="Events"    color="#3f51b5" />
@@ -359,10 +359,10 @@ export default function AnnouncementManagementPage({ showToast }) {
           <StatCard icon="fa-bell"        value={stats.pushSent} label="Push Sent" color="#059669" />
         </div>
 
-        {/* ── Main Grid ── */}
+        {/* Main Grid */}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 420px', gap: '24px', alignItems: 'flex-start' }}>
 
-          {/* ── LEFT — Compose ── */}
+          {/* LEFT Compose */}
           <div style={{
             background: '#fff', borderRadius: '20px', padding: '28px',
             boxShadow: '0 8px 30px rgba(0,0,0,0.05)', border: '1px solid rgba(0,0,0,0.04)',
@@ -446,7 +446,7 @@ export default function AnnouncementManagementPage({ showToast }) {
                 </label>
                 <input
                   className="ann-input"
-                  placeholder="https://…"
+                  placeholder="https:// "
                   value={form.action_url}
                   onChange={e => setField('action_url', e.target.value)}
                 />
@@ -548,7 +548,7 @@ export default function AnnouncementManagementPage({ showToast }) {
             </button>
           </div>
 
-          {/* ── RIGHT — List ── */}
+          {/* RIGHT List */}
           <div style={{
             background: '#fff', borderRadius: '20px', padding: '24px',
             boxShadow: '0 8px 30px rgba(0,0,0,0.05)', border: '1px solid rgba(0,0,0,0.04)',

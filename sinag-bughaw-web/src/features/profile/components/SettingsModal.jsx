@@ -15,7 +15,7 @@ export default function SettingsModal({ onClose, showToast }) {
   });
   const [pwErrors, setPwErrors] = useState({});
 
-  // ── Client-side validation ────────────────────────────────────────────────
+  // Client-side validation
   const validate = () => {
     const errs = {};
     if (!pwForm.current_password)
@@ -50,7 +50,7 @@ export default function SettingsModal({ onClose, showToast }) {
     }
   };
 
-  // ── Reusable password input ───────────────────────────────────────────────
+  // Reusable password input
   const PwInput = ({ label, field, show, onToggle }) => (
     <div>
       <label className="block text-xs font-bold text-[#1d2b4b] mb-1.5">{label}</label>
@@ -87,7 +87,7 @@ export default function SettingsModal({ onClose, showToast }) {
   ];
 
   return (
-    // ── Backdrop ─────────────────────────────────────────────────────────────
+    // Backdrop
     <div
       className="fixed inset-0 z-[9998] flex items-center justify-center p-4"
       style={{ background: 'rgba(15,23,42,0.55)', backdropFilter: 'blur(4px)', animation: 'fadeIn .2s ease' }}
@@ -98,7 +98,7 @@ export default function SettingsModal({ onClose, showToast }) {
         @keyframes slideUp { from{opacity:0;transform:translateY(24px)} to{opacity:1;transform:translateY(0)} }
       `}</style>
 
-      {/* ── Modal Box ──────────────────────────────────────────────────────── */}
+      {/* Modal Box */}
       <div
         className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden"
         style={{ animation: 'slideUp .25s ease' }}
@@ -139,7 +139,7 @@ export default function SettingsModal({ onClose, showToast }) {
         {/* Body */}
         <div className="px-6 py-5">
 
-          {/* ── Password Tab ──────────────────────────────────────────────── */}
+          {/* Password Tab */}
           {tab === 'password' && (
             <form onSubmit={handlePasswordChange} className="space-y-4">
               <p className="text-xs text-slate-400 mb-1">
@@ -198,7 +198,7 @@ export default function SettingsModal({ onClose, showToast }) {
             </form>
           )}
 
-          {/* ── Privacy Tab ───────────────────────────────────────────────── */}
+          {/* Privacy Tab */}
           {tab === 'privacy' && (
             <div className="space-y-4">
               <p className="text-xs text-slate-400">Control who can see your profile information.</p>
@@ -226,7 +226,7 @@ export default function SettingsModal({ onClose, showToast }) {
             </div>
           )}
 
-          {/* ── About Tab ─────────────────────────────────────────────────── */}
+          {/* About Tab */}
           {tab === 'about' && (
             <div className="space-y-3 text-center py-2">
               <div className="w-16 h-16 rounded-2xl bg-[#1d2b4b] flex items-center justify-center mx-auto mb-2">

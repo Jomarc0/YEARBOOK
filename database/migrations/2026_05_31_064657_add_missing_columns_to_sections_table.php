@@ -11,10 +11,10 @@ return new class extends Migration
      *   id, name, course, created_at, updated_at, batch_id
      *
      * This migration adds the missing columns needed for the full hierarchy:
-     *   department  — links section to a college/department
-     *   batch_year  — the school/graduation year for this section
-     *   adviser_id  — optional FK to faculty table
-     *   description — optional notes
+     * department links section to a college/department
+     * batch_year the school/graduation year for this section
+     * adviser_id optional FK to faculty table
+     * description optional notes
      */
     public function up(): void
     {

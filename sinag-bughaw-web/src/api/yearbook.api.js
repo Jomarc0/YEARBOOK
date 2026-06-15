@@ -36,29 +36,29 @@ export const getYearbookBatches = () =>
     return { ...res, data: batches };
   });
 
-// ─────────────────────────────────────────────────────────────────────────────
-// YEARBOOK
-// ─────────────────────────────────────────────────────────────────────────────
-export const yearbookApi = {
-  // ── Legacy / existing endpoints ──────────────────────────────────────────
 
-  /** GET /api/yearbook/flipbook → flat student array */
+// YEARBOOK
+
+export const yearbookApi = {
+  // Legacy / existing endpoints
+
+  /** GET /api/yearbook/flipbook flat student array */
   flipbookData: () =>
     api.get('/yearbook/flipbook'),
 
-  /** GET /api/yearbook/export/:userId → PDF blob */
+  /** GET /api/yearbook/export/:userId PDF blob */
   exportStudentPdf: (userId) =>
     api.get(`/yearbook/export/${userId}`, { responseType: 'blob' }),
 
-  /** GET /api/yearbook/certificate → PDF blob (premium) */
+  /** GET /api/yearbook/certificate PDF blob (premium) */
   exportCertificate: () =>
     api.get('/yearbook/certificate', { responseType: 'blob' }),
 
-  /** GET /api/yearbook/search?batchId=&q= → [{ pageIndex, label, excerpt }] */
+  /** GET /api/yearbook/search?batchId=&q= [{ pageIndex, label, excerpt }] */
   search: (batchId, q, params = {}) =>
     api.get('/yearbook/search', { params: { batchId, q, ...params } }),
 
-  /** GET /api/yearbook/bookmarks/:batchId → user's bookmarked pages */
+  /** GET /api/yearbook/bookmarks/:batchId user's bookmarked pages */
   getBookmarks: (batchId) =>
     api.get(`/yearbook/bookmarks/${batchId}`),
 
@@ -70,7 +70,7 @@ export const yearbookApi = {
   removeBookmark: (id) =>
     api.delete(`/yearbook/bookmark/${id}`),
 
-  // ── Batch-scoped endpoints (/api/yearbooks/{batch}/…) ────────────────────
+  // Batch-scoped endpoints (/api/yearbooks/{batch}/ )
 
   /**
    * GET /api/yearbooks/:batchId
@@ -88,15 +88,15 @@ export const yearbookApi = {
    * Maps to: YearbookController@pages
    *
    * Replaces (all broken):
-   *   tableOfContents → /yearbook/toc/:batchId
-   *   sectionPages    → /yearbook/sections/:batchId
-   *   facultyPage     → /yearbook/faculty/:batchId
+   * tableOfContents /yearbook/toc/:batchId
+   * sectionPages /yearbook/sections/:batchId
+   * facultyPage /yearbook/faculty/:batchId
    */
   pages: (batchId, params = {}) =>
     api.get(`/yearbooks/${batchId}/pages`, { params }),
 
   /**
-   * GET /api/yearbooks/:batchId/download → watermarked PDF blob (premium)
+   * GET /api/yearbooks/:batchId/download watermarked PDF blob (premium)
    * Maps to: YearbookController@download
    */
   download: (batchId) =>
@@ -106,14 +106,14 @@ export const yearbookApi = {
     api.get(`/yearbook/export/pdf/${batchId}`, { params, responseType: 'blob' }),
 
   /**
-   * POST /api/yearbooks/:batchId/generate → queue PDF generation (admin)
+   * POST /api/yearbooks/:batchId/generate queue PDF generation (admin)
    * Maps to: YearbookController@generate
    */
   generate: (batchId) =>
     api.post(`/yearbooks/${batchId}/generate`),
 
   /**
-   * POST /api/yearbooks/:batchId/photos → upload a photo
+   * POST /api/yearbooks/:batchId/photos upload a photo
    * Maps to: YearbookController@uploadPhoto
    */
   uploadPhoto: (batchId, formData) =>
@@ -121,7 +121,7 @@ export const yearbookApi = {
       headers: { 'Content-Type': 'multipart/form-data' },
     }),
 
-  // ── Gallery endpoints scoped to a batch ──────────────────────────────────
+  // Gallery endpoints scoped to a batch
 
   /**
    * GET /api/yearbooks/:batchId/galleries
@@ -140,9 +140,9 @@ export const yearbookApi = {
     api.get(`/yearbooks/${batchId}/galleries/${galleryId}`),
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// GALLERY  (standalone — Visual Archive, All Photos + Face Search)
-// ─────────────────────────────────────────────────────────────────────────────
+
+// GALLERY (standalone Visual Archive, All Photos + Face Search)
+
 export const galleryApi = {
   /** GET /api/gallery?type=&category= */
   index: (type = 'general', category = null) =>
@@ -158,9 +158,9 @@ export const galleryApi = {
     }),
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
+
 // GRADUATION
-// ─────────────────────────────────────────────────────────────────────────────
+
 export const graduationApi = {
   /** GET /api/graduation?category= */
   list: (category) => api.get('/graduation', { params: { category } }),
@@ -199,37 +199,37 @@ export const graduationApi = {
   delete: (id) => api.delete(`/graduation/${id}`),
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// TRANSCRIPTS  (premium — Groq Whisper speeches & AI notes)
-// ─────────────────────────────────────────────────────────────────────────────
+
+// TRANSCRIPTS (premium Groq Whisper speeches & AI notes)
+
 export const transcriptApi = {
   /** GET /api/transcripts?q=&page=&lang=&status= */
   list: (params = {}) => api.get('/transcripts', { params }),
 
-  /** GET /api/transcripts/:id → transcript + notes + segments */
+  /** GET /api/transcripts/:id transcript + notes + segments */
   show: (id) => api.get(`/transcripts/${id}`),
 
-  /** POST /api/transcripts — upload audio, queue Whisper job */
+  /** POST /api/transcripts upload audio, queue Whisper job */
   store: (fd) =>
     api.post('/transcripts', fd, { headers: { 'Content-Type': 'multipart/form-data' } }),
 
   /** DELETE /api/transcripts/:id */
   delete: (id) => api.delete(`/transcripts/${id}`),
 
-  /** GET /api/transcripts/:id/subtitles?format=srt|vtt → blob */
+  /** GET /api/transcripts/:id/subtitles?format=srt|vtt blob */
   subtitles: (id, format = 'srt') =>
     api.get(`/transcripts/${id}/subtitles`, { params: { format }, responseType: 'blob' }),
 
-  /** POST /api/transcripts/:id/notes — regenerate AI notes via Groq LLaMA */
+  /** POST /api/transcripts/:id/notes regenerate AI notes via Groq LLaMA */
   regenerateNotes: (id) => api.post(`/transcripts/${id}/notes`),
 };
 
 // Legacy alias so any file importing `transcriptsApi` (plural) still works
 export const transcriptsApi = transcriptApi;
 
-// ─────────────────────────────────────────────────────────────────────────────
-// MEDIA  (bulk upload, video, delete, storage, bandwidth)
-// ─────────────────────────────────────────────────────────────────────────────
+
+// MEDIA (bulk upload, video, delete, storage, bandwidth)
+
 export const mediaApi = {
   /** GET /api/profile/storage-usage */
   storageUsage: () => api.get('/profile/storage-usage'),
@@ -285,9 +285,9 @@ export const mediaApi = {
   deletePhoto: (photoId) => api.delete(`/gallery/media/${photoId}`),
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
+
 // FACE RECOGNITION
-// ─────────────────────────────────────────────────────────────────────────────
+
 export const faceApi = {
   /** GET /api/face/students/:userId/photos */
   studentPhotos: (userId, page = 1) =>
@@ -307,9 +307,9 @@ export const faceApi = {
   photoTags: (photoId) => api.get(`/face/photos/${photoId}/tags`),
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
+
 // PROFILE
-// ─────────────────────────────────────────────────────────────────────────────
+
 export const profileApi = {
   /** GET /api/students/:userId/posts */
   getPosts: (userId) => api.get(`/students/${userId}/posts`),
@@ -335,17 +335,17 @@ export const profileSettingsApi = {
   updateMotto:      (motto)      => api.post('/profile/motto', { motto }),
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
+
 // ANNOUNCEMENTS
-// ─────────────────────────────────────────────────────────────────────────────
+
 export const announcementsApi = {
   list:   ()     => api.get('/announcements'),
   create: (data) => api.post('/announcements', data),
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
+
 // ANALYTICS
-// ─────────────────────────────────────────────────────────────────────────────
+
 export const analyticsApi = {
   summary:    () => api.get('/analytics/summary'),
   myStats:    () => api.get('/analytics/my-stats'),
@@ -353,9 +353,9 @@ export const analyticsApi = {
   batchmates: () => api.get('/analytics/batchmates'),
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
+
 // NOTIFICATIONS
-// ─────────────────────────────────────────────────────────────────────────────
+
 export const notificationsApi = {
   list:          ()         => api.get('/notifications'),
   registerToken: (fcmToken) => api.post('/notifications/register-token', { fcm_token: fcmToken }),
@@ -363,9 +363,9 @@ export const notificationsApi = {
   markAll:       ()         => api.post('/notifications/read-all'),
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
+
 // SECTIONS & FACULTY
-// ─────────────────────────────────────────────────────────────────────────────
+
 export const sectionsApi = {
   list: ()   => api.get('/sections'),
   show: (id) => api.get(`/sections/${id}`),

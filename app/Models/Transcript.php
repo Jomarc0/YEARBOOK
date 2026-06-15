@@ -18,8 +18,8 @@ class Transcript extends Model
         'notes',
         'status',
         'source',             
-        'album_id',             // nullable FK → albums.id
-        'graduation_photo_id',  // nullable FK → graduation_photos.id
+        'album_id',             // nullable FK albums.id
+        'graduation_photo_id',  // nullable FK graduation_photos.id
         'uploaded_by',
     ];
 
